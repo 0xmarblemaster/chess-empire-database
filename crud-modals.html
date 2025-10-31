@@ -1,0 +1,565 @@
+<!-- CRUD Modal Forms for Students, Coaches, and Branches -->
+
+<!-- Student Modal (Create/Edit) -->
+<div id="studentModal" class="modal">
+    <div class="modal-content" style="max-width: 600px;">
+        <div class="modal-header">
+            <h2 id="studentModalTitle">Add New Student</h2>
+            <button class="modal-close" onclick="closeStudentModal()">
+                <i data-lucide="x"></i>
+            </button>
+        </div>
+        <form id="studentForm" onsubmit="saveStudent(event)">
+            <div class="modal-body">
+                <input type="hidden" id="studentId">
+
+                <div class="form-row">
+                    <div class="form-group">
+                        <label class="form-label">
+                            <i data-lucide="user"></i>
+                            First Name *
+                        </label>
+                        <input type="text" id="studentFirstName" class="form-input" required maxlength="50">
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">
+                            <i data-lucide="user"></i>
+                            Last Name *
+                        </label>
+                        <input type="text" id="studentLastName" class="form-input" required maxlength="50">
+                    </div>
+                </div>
+
+                <div class="form-row">
+                    <div class="form-group">
+                        <label class="form-label">
+                            <i data-lucide="calendar"></i>
+                            Age *
+                        </label>
+                        <input type="number" id="studentAge" class="form-input" required min="5" max="18">
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">
+                            <i data-lucide="award"></i>
+                            Status *
+                        </label>
+                        <select id="studentStatus" class="form-input" required>
+                            <option value="active">Active</option>
+                            <option value="frozen">Frozen</option>
+                            <option value="left">Left</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div class="form-row">
+                    <div class="form-group">
+                        <label class="form-label">
+                            <i data-lucide="building"></i>
+                            Branch *
+                        </label>
+                        <select id="studentBranch" class="form-input" required onchange="updateCoachOptions()">
+                            <option value="">Select branch...</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">
+                            <i data-lucide="user-check"></i>
+                            Coach *
+                        </label>
+                        <select id="studentCoach" class="form-input" required>
+                            <option value="">Select coach...</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div class="form-row">
+                    <div class="form-group">
+                        <label class="form-label">
+                            <i data-lucide="layers"></i>
+                            Current Level *
+                        </label>
+                        <input type="number" id="studentLevel" class="form-input" required min="1" max="8" value="1">
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">
+                            <i data-lucide="trophy"></i>
+                            Razryad
+                        </label>
+                        <select id="studentRazryad" class="form-input">
+                            <option value="">No Razryad</option>
+                            <option value="3rd">3rd Razryad</option>
+                            <option value="2nd">2nd Razryad</option>
+                            <option value="1st">1st Razryad</option>
+                            <option value="KMS">KMS</option>
+                            <option value="MS">MS</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div class="form-row">
+                    <div class="form-group">
+                        <label class="form-label">
+                            <i data-lucide="book-open"></i>
+                            Current Lesson *
+                        </label>
+                        <input type="number" id="studentLesson" class="form-input" required min="1" max="40" value="1">
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">
+                            <i data-lucide="bookmark"></i>
+                            Total Lessons *
+                        </label>
+                        <input type="number" id="studentTotalLessons" class="form-input" required min="1" max="100" value="40">
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" onclick="closeStudentModal()">
+                    Cancel
+                </button>
+                <button type="submit" class="btn btn-primary">
+                    <i data-lucide="save"></i>
+                    Save Student
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Coach Modal (Create/Edit) -->
+<div id="coachModal" class="modal">
+    <div class="modal-content" style="max-width: 500px;">
+        <div class="modal-header">
+            <h2 id="coachModalTitle">Add New Coach</h2>
+            <button class="modal-close" onclick="closeCoachModal()">
+                <i data-lucide="x"></i>
+            </button>
+        </div>
+        <form id="coachForm" onsubmit="saveCoach(event)">
+            <div class="modal-body">
+                <input type="hidden" id="coachId">
+
+                <div class="form-row">
+                    <div class="form-group">
+                        <label class="form-label">
+                            <i data-lucide="user"></i>
+                            First Name *
+                        </label>
+                        <input type="text" id="coachFirstName" class="form-input" required maxlength="50">
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">
+                            <i data-lucide="user"></i>
+                            Last Name *
+                        </label>
+                        <input type="text" id="coachLastName" class="form-input" required maxlength="50">
+                    </div>
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label">
+                        <i data-lucide="building"></i>
+                        Branch *
+                    </label>
+                    <select id="coachBranch" class="form-input" required>
+                        <option value="">Select branch...</option>
+                    </select>
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label">
+                        <i data-lucide="mail"></i>
+                        Email *
+                    </label>
+                    <input type="email" id="coachEmail" class="form-input" required maxlength="100">
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label">
+                        <i data-lucide="phone"></i>
+                        Phone *
+                    </label>
+                    <input type="tel" id="coachPhone" class="form-input" required maxlength="20"
+                           placeholder="+7 (777) 123-45-67">
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" onclick="closeCoachModal()">
+                    Cancel
+                </button>
+                <button type="submit" class="btn btn-primary">
+                    <i data-lucide="save"></i>
+                    Save Coach
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Branch Modal (Create/Edit) -->
+<div id="branchModal" class="modal">
+    <div class="modal-content" style="max-width: 500px;">
+        <div class="modal-header">
+            <h2 id="branchModalTitle">Add New Branch</h2>
+            <button class="modal-close" onclick="closeBranchModal()">
+                <i data-lucide="x"></i>
+            </button>
+        </div>
+        <form id="branchForm" onsubmit="saveBranch(event)">
+            <div class="modal-body">
+                <input type="hidden" id="branchId">
+
+                <div class="form-group">
+                    <label class="form-label">
+                        <i data-lucide="building"></i>
+                        Branch Name *
+                    </label>
+                    <input type="text" id="branchName" class="form-input" required maxlength="100">
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label">
+                        <i data-lucide="map-pin"></i>
+                        Location *
+                    </label>
+                    <input type="text" id="branchLocation" class="form-input" required maxlength="200">
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label">
+                        <i data-lucide="phone"></i>
+                        Phone *
+                    </label>
+                    <input type="tel" id="branchPhone" class="form-input" required maxlength="20"
+                           placeholder="+7 (727) 123-45-67">
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label">
+                        <i data-lucide="mail"></i>
+                        Email *
+                    </label>
+                    <input type="email" id="branchEmail" class="form-input" required maxlength="100">
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" onclick="closeBranchModal()">
+                    Cancel
+                </button>
+                <button type="submit" class="btn btn-primary">
+                    <i data-lucide="save"></i>
+                    Save Branch
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Delete Confirmation Modal -->
+<div id="deleteModal" class="modal">
+    <div class="modal-content" style="max-width: 400px;">
+        <div class="modal-header">
+            <h2>Confirm Delete</h2>
+            <button class="modal-close" onclick="closeDeleteModal()">
+                <i data-lucide="x"></i>
+            </button>
+        </div>
+        <div class="modal-body">
+            <div style="text-align: center; padding: 1rem 0;">
+                <div style="display: inline-flex; align-items: center; justify-content: center; width: 64px; height: 64px; background: #fee2e2; border-radius: 50%; margin-bottom: 1rem;">
+                    <i data-lucide="alert-triangle" style="width: 32px; height: 32px; color: #dc2626;"></i>
+                </div>
+                <p id="deleteMessage" style="font-size: 1rem; color: #475569; margin-bottom: 1rem;">
+                    Are you sure you want to delete this item?
+                </p>
+                <p style="font-size: 0.875rem; color: #94a3b8;">
+                    This action cannot be undone.
+                </p>
+            </div>
+        </div>
+        <div class="modal-footer">
+            <button type="button" class="btn btn-secondary" onclick="closeDeleteModal()">
+                Cancel
+            </button>
+            <button type="button" class="btn btn-danger" id="confirmDeleteBtn">
+                <i data-lucide="trash-2"></i>
+                Delete
+            </button>
+        </div>
+    </div>
+</div>
+
+<!-- Success Toast Notification -->
+<div id="successToast" class="toast toast-success">
+    <i data-lucide="check-circle"></i>
+    <span id="successMessage">Action completed successfully!</span>
+</div>
+
+<!-- Error Toast Notification -->
+<div id="errorToast" class="toast toast-error">
+    <i data-lucide="alert-circle"></i>
+    <span id="errorMessage">An error occurred!</span>
+</div>
+
+<style>
+/* Modal Styles */
+.modal {
+    display: none;
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0, 0, 0, 0.5);
+    backdrop-filter: blur(4px);
+    z-index: 1000;
+    align-items: center;
+    justify-content: center;
+    animation: fadeIn 0.2s ease;
+}
+
+.modal.active {
+    display: flex;
+}
+
+.modal-content {
+    background: white;
+    border-radius: 12px;
+    box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1);
+    max-height: 90vh;
+    overflow-y: auto;
+    animation: slideUp 0.3s ease;
+    width: 90%;
+}
+
+.modal-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 1.5rem;
+    border-bottom: 1px solid #e2e8f0;
+}
+
+.modal-header h2 {
+    font-size: 1.25rem;
+    font-weight: 600;
+    color: #1e293b;
+    margin: 0;
+}
+
+.modal-close {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 32px;
+    height: 32px;
+    border: none;
+    background: #f1f5f9;
+    border-radius: 6px;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.modal-close:hover {
+    background: #e2e8f0;
+}
+
+.modal-body {
+    padding: 1.5rem;
+}
+
+.modal-footer {
+    display: flex;
+    gap: 0.75rem;
+    justify-content: flex-end;
+    padding: 1.5rem;
+    border-top: 1px solid #e2e8f0;
+}
+
+/* Form Styles */
+.form-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 1rem;
+    margin-bottom: 1rem;
+}
+
+.form-group {
+    margin-bottom: 1rem;
+}
+
+.form-label {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    font-size: 0.875rem;
+    font-weight: 500;
+    color: #475569;
+    margin-bottom: 0.5rem;
+}
+
+.form-label i {
+    width: 16px;
+    height: 16px;
+    color: #94a3b8;
+}
+
+.form-input {
+    width: 100%;
+    padding: 0.625rem 0.875rem;
+    border: 1.5px solid #e2e8f0;
+    border-radius: 8px;
+    font-size: 0.9375rem;
+    color: #1e293b;
+    transition: all 0.2s;
+    background: white;
+}
+
+.form-input:focus {
+    outline: none;
+    border-color: #3b82f6;
+    box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+}
+
+.form-input:disabled {
+    background: #f8fafc;
+    color: #94a3b8;
+    cursor: not-allowed;
+}
+
+/* Button Styles */
+.btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.625rem 1.25rem;
+    border: none;
+    border-radius: 8px;
+    font-size: 0.9375rem;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.btn i {
+    width: 18px;
+    height: 18px;
+}
+
+.btn-primary {
+    background: #3b82f6;
+    color: white;
+}
+
+.btn-primary:hover {
+    background: #2563eb;
+    transform: translateY(-1px);
+    box-shadow: 0 4px 6px -1px rgba(59, 130, 246, 0.3);
+}
+
+.btn-secondary {
+    background: #f1f5f9;
+    color: #475569;
+}
+
+.btn-secondary:hover {
+    background: #e2e8f0;
+}
+
+.btn-danger {
+    background: #dc2626;
+    color: white;
+}
+
+.btn-danger:hover {
+    background: #b91c1c;
+    transform: translateY(-1px);
+    box-shadow: 0 4px 6px -1px rgba(220, 38, 38, 0.3);
+}
+
+/* Toast Notifications */
+.toast {
+    position: fixed;
+    top: 2rem;
+    right: 2rem;
+    display: none;
+    align-items: center;
+    gap: 0.75rem;
+    padding: 1rem 1.25rem;
+    border-radius: 8px;
+    font-size: 0.9375rem;
+    font-weight: 500;
+    box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1);
+    z-index: 2000;
+    animation: slideInRight 0.3s ease;
+}
+
+.toast.active {
+    display: flex;
+}
+
+.toast i {
+    width: 20px;
+    height: 20px;
+}
+
+.toast-success {
+    background: #10b981;
+    color: white;
+}
+
+.toast-error {
+    background: #dc2626;
+    color: white;
+}
+
+/* Animations */
+@keyframes fadeIn {
+    from {
+        opacity: 0;
+    }
+    to {
+        opacity: 1;
+    }
+}
+
+@keyframes slideUp {
+    from {
+        opacity: 0;
+        transform: translateY(20px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+@keyframes slideInRight {
+    from {
+        opacity: 0;
+        transform: translateX(100px);
+    }
+    to {
+        opacity: 1;
+        transform: translateX(0);
+    }
+}
+
+/* Mobile Responsive */
+@media (max-width: 768px) {
+    .form-row {
+        grid-template-columns: 1fr;
+    }
+
+    .modal-content {
+        width: 95%;
+        max-height: 95vh;
+    }
+
+    .toast {
+        top: 1rem;
+        right: 1rem;
+        left: 1rem;
+    }
+}
+</style>

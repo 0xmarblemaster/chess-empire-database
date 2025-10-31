@@ -1,0 +1,80 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Chess Empire - Student Database</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=Outfit:wght@600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/clear-sans-webfont@1.0.1/css/clear-sans.min.css" />
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <script src="i18n.js?v=1"></script>
+    <link rel="stylesheet" href="styles.css?v=5">
+    <script src="i18n.js"></script>
+    <style>
+        /* Override styles for desktop - ensure this loads after Tailwind */
+        @media screen and (min-width: 769px) {
+            #search-wrapper {
+                padding-left: 0.25rem !important;
+                padding-right: 0.25rem !important;
+            }
+            
+            .search-container {
+                max-width: min(2560px, calc(100vw - 0.5rem)) !important;
+                width: 100% !important;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="min-h-screen flex items-center justify-center">
+        <div class="w-full px-4" id="search-wrapper">
+            <div style="display: flex; flex-direction: column; align-items: center; margin-bottom: 2rem;">
+                <img src="chess-empire-logo.png" alt="Chess Empire" class="logo-image" style="width: 56px; height: 92px; object-fit: contain; margin-bottom: 1rem;">
+                <h1 class="logo-text logo-text-gradient" style="font-family: 'Clear Sans', sans-serif; margin-bottom: 0;">Chess Empire</h1>
+            </div>
+
+            <div class="search-container" style="max-width: 640px;">
+                <div class="search-input-wrapper" style="width: 640px; max-width: 100%;">
+                    <i data-lucide="search" class="search-icon" style="width: 22px; height: 22px;"></i>
+                    <input
+                        type="text"
+                        class="search-input"
+                        data-i18n-placeholder="index.searchPlaceholder"
+                        id="searchInput"
+                    >
+                    <button class="clear-button" id="clearButton">
+                        <i data-lucide="x" style="width: 16px; height: 16px; color: #64748b;"></i>
+                    </button>
+                </div>
+
+                <div class="dropdown" id="dropdown"></div>
+            </div>
+        </div>
+    </div>
+
+    <button class="login-button" onclick="window.location.href='admin.html'" style="background: #C2A580;">
+        <i data-lucide="shield-check" style="width: 18px; height: 18px;"></i>
+        <span data-i18n="common.login"></span>
+    </button>
+
+    <div class="chess-pattern"></div>
+
+    <script src="data.js"></script>
+    <script src="app.js?v=2"></script>
+    <script>
+        function updateIndexTitle() {
+            document.title = t('index.title');
+        }
+
+        document.addEventListener('languagechange', updateIndexTitle);
+
+        document.addEventListener('DOMContentLoaded', () => {
+            updateIndexTitle();
+            lucide.createIcons();
+        });
+    </script>
+</body>
+</html>

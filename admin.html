@@ -1,0 +1,749 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title data-i18n="admin.title">Admin Dashboard - Chess Empire</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=Outfit:wght@600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/clear-sans-webfont@1.0.1/css/clear-sans.min.css" />
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <link rel="stylesheet" href="admin-styles.css">
+    <link rel="stylesheet" href="modal-styles.css">
+    <script src="i18n.js?v=1"></script>
+</head>
+<body>
+    <div class="dashboard-container">
+        <!-- Sidebar -->
+        <aside class="sidebar">
+            <div class="sidebar-logo">
+                <a href="index.html" style="display: flex; align-items: flex-end; gap: 0.75rem; text-decoration: none; cursor: pointer; transition: opacity 0.3s ease;" onmouseover="this.style.opacity='0.8'" onmouseout="this.style.opacity='1'">
+                    <img src="chess-empire-logo.png" alt="Chess Empire" class="logo-image" style="width: 22px; height: 36px; object-fit: contain;">
+                    <span class="logo-text-gradient" style="font-family: 'Clear Sans', sans-serif; font-size: 1.25rem; letter-spacing: 0.025em; font-weight: 600; padding-bottom: 1px;">Chess Empire</span>
+                </a>
+            </div>
+
+            <nav class="nav-section">
+                <div class="nav-section-title" data-i18n="admin.sidebar.main"></div>
+                <div class="nav-item active" onclick="showSection('students')">
+                    <i data-lucide="users" style="width: 20px; height: 20px;"></i>
+                    <span data-i18n="admin.sidebar.students"></span>
+                    <span class="nav-badge" id="studentCount">10</span>
+                </div>
+                <div class="nav-item nav-item-with-dropdown" onclick="toggleBranchDropdown(event)">
+                    <i data-lucide="building" style="width: 20px; height: 20px;"></i>
+                    <span data-i18n="admin.sidebar.branches"></span>
+                    <i data-lucide="chevron-down" class="dropdown-chevron" style="width: 16px; height: 16px; margin-left: auto;"></i>
+                </div>
+                <div class="nav-dropdown" id="branchDropdown">
+                    <!-- Branches will be populated by JavaScript -->
+                </div>
+                <div class="nav-item nav-item-with-dropdown" onclick="toggleCoachDropdown(event)">
+                    <i data-lucide="user-check" style="width: 20px; height: 20px;"></i>
+                    <span data-i18n="admin.sidebar.coaches"></span>
+                    <i data-lucide="chevron-down" class="dropdown-chevron" style="width: 16px; height: 16px; margin-left: auto;"></i>
+                </div>
+                <div class="nav-dropdown" id="coachDropdown">
+                    <!-- Coaches will be populated by JavaScript -->
+                </div>
+
+                <div class="nav-section-title" style="margin-top: 1.5rem;">Management</div>
+                <div class="nav-item" onclick="showCoachesManagement()">
+                    <i data-lucide="user-check" style="width: 20px; height: 20px;"></i>
+                    <span>Manage Coaches</span>
+                </div>
+                <div class="nav-item" onclick="showBranchesManagement()">
+                    <i data-lucide="building" style="width: 20px; height: 20px;"></i>
+                    <span>Manage Branches</span>
+                </div>
+                <div class="nav-item" onclick="showDataManagement()">
+                    <i data-lucide="database" style="width: 20px; height: 20px;"></i>
+                    <span>Data Management</span>
+                </div>
+            </nav>
+        </aside>
+
+        <!-- Main Content -->
+        <main class="main-content">
+            <!-- Students Section -->
+            <div id="studentsSection" class="content-section active">
+                <!-- Header -->
+                <div class="header">
+                    <h1 class="header-title" data-i18n="admin.header.students"></h1>
+                    <div class="header-actions">
+                        <button class="btn btn-primary" onclick="addNewStudent()">
+                            <i data-lucide="plus" style="width: 18px; height: 18px;"></i>
+                            <span data-i18n="admin.actions.addStudent"></span>
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Stats -->
+            <div class="stats-grid">
+                <div class="stat-card">
+                    <div class="stat-header">
+                        <div>
+                            <div class="stat-value" id="totalStudents">10</div>
+                            <div class="stat-label" data-i18n="common.totalStudents"></div>
+                        </div>
+                        <div class="stat-icon blue">
+                            <i data-lucide="users" style="width: 24px; height: 24px;"></i>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="stat-card">
+                    <div class="stat-header">
+                        <div>
+                            <div class="stat-value" id="activeStudents">10</div>
+                            <div class="stat-label" data-i18n="common.activeStudents"></div>
+                        </div>
+                        <div class="stat-icon green">
+                            <i data-lucide="user-check" style="width: 24px; height: 24px;"></i>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="stat-card">
+                    <div class="stat-header">
+                        <div>
+                            <div class="stat-value" id="totalCoaches">5</div>
+                            <div class="stat-label" data-i18n="common.totalCoaches"></div>
+                        </div>
+                        <div class="stat-icon amber">
+                            <i data-lucide="award" style="width: 24px; height: 24px;"></i>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="stat-card">
+                    <div class="stat-header">
+                        <div>
+                            <div class="stat-value" id="totalBranches">1</div>
+                            <div class="stat-label" data-i18n="admin.stats.branches"></div>
+                        </div>
+                        <div class="stat-icon purple">
+                            <i data-lucide="building" style="width: 24px; height: 24px;"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Filters -->
+            <div class="filters">
+                <div class="filters-grid">
+                    <div class="filter-group">
+                        <label class="filter-label" data-i18n="admin.filters.status"></label>
+                        <select class="filter-select" id="statusFilter">
+                            <option value="all" data-i18n="admin.filters.status.all"></option>
+                            <option value="active" data-i18n="admin.filters.status.active"></option>
+                            <option value="frozen" data-i18n="admin.filters.status.frozen"></option>
+                            <option value="left" data-i18n="admin.filters.status.left"></option>
+                        </select>
+                    </div>
+                    <div class="filter-group">
+                        <label class="filter-label" data-i18n="admin.filters.branch"></label>
+                        <select class="filter-select" id="branchFilter">
+                            <option value="all" data-i18n="admin.filters.branch.all"></option>
+                        </select>
+                    </div>
+                    <div class="filter-group">
+                        <label class="filter-label" data-i18n="admin.filters.coach"></label>
+                        <select class="filter-select" id="coachFilter">
+                            <option value="all" data-i18n="admin.filters.coach.all"></option>
+                        </select>
+                    </div>
+                    <div class="filter-group">
+                        <label class="filter-label" data-i18n="admin.filters.level"></label>
+                        <select class="filter-select" id="levelFilter">
+                            <option value="all" data-i18n="admin.filters.level.all"></option>
+                            <option value="1" data-i18n="admin.filters.level.option" data-level="1"></option>
+                            <option value="2" data-i18n="admin.filters.level.option" data-level="2"></option>
+                            <option value="3" data-i18n="admin.filters.level.option" data-level="3"></option>
+                            <option value="4" data-i18n="admin.filters.level.option" data-level="4"></option>
+                            <option value="5" data-i18n="admin.filters.level.option" data-level="5"></option>
+                            <option value="6" data-i18n="admin.filters.level.option" data-level="6"></option>
+                            <option value="7" data-i18n="admin.filters.level.option" data-level="7"></option>
+                            <option value="8" data-i18n="admin.filters.level.option" data-level="8"></option>
+                        </select>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Table -->
+            <div class="table-container">
+                <div class="table-header">
+                    <h2 class="table-title" data-i18n="admin.table.title"></h2>
+                    <div class="search-box">
+                        <i data-lucide="search" style="width: 18px; height: 18px; color: #94a3b8;"></i>
+                        <input type="text" data-i18n-placeholder="common.searchStudentsPlaceholder" id="searchInput">
+                        <button id="clearSearch" style="background: none; border: none; cursor: pointer; display: none;">
+                            <i data-lucide="x" style="width: 18px; height: 18px; color: #94a3b8;"></i>
+                        </button>
+                    </div>
+                </div>
+
+                <div class="table-wrapper">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th data-i18n="admin.table.student"></th>
+                                <th data-i18n="admin.table.age"></th>
+                                <th data-i18n="admin.table.branch"></th>
+                                <th data-i18n="admin.table.coach"></th>
+                                <th data-i18n="admin.table.level"></th>
+                                <th data-i18n="admin.table.razryad"></th>
+                                <th data-i18n="admin.table.status"></th>
+                                <th data-i18n="admin.table.actions"></th>
+                            </tr>
+                        </thead>
+                        <tbody id="studentTableBody">
+                            <!-- Content will be loaded by JavaScript -->
+                        </tbody>
+                    </table>
+                </div>
+
+                <div class="pagination">
+                    <div class="pagination-info" id="resultCount"></div>
+                </div>
+            </div>
+            </div>
+            <!-- End Students Section -->
+
+            <!-- Branch View Section -->
+            <div id="branchSection" class="content-section">
+                <!-- Branch Header -->
+                <div class="branch-view-header">
+                    <div class="branch-view-info">
+                        <div class="branch-view-name">
+                            <div class="branch-view-icon">
+                                <i data-lucide="building" style="width: 32px; height: 32px;"></i>
+                            </div>
+                            <div>
+                                <h1 class="header-title" id="branchViewName" data-i18n="admin.branch.title"></h1>
+                                <div class="branch-view-meta" id="branchViewLocation" data-i18n="admin.branch.location"></div>
+                            </div>
+                        </div>
+                        <div class="branch-view-contact">
+                            <div class="contact-item">
+                                <i data-lucide="phone" style="width: 16px; height: 16px;"></i>
+                                <span id="branchViewPhone" data-i18n="admin.branch.phone"></span>
+                            </div>
+                            <div class="contact-item">
+                                <i data-lucide="mail" style="width: 16px; height: 16px;"></i>
+                                <span id="branchViewEmail" data-i18n="admin.branch.email"></span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Branch Stats -->
+                <div class="stats-grid">
+                    <div class="stat-card">
+                        <div class="stat-header">
+                            <div>
+                                <div class="stat-value" id="branchTotalStudents">0</div>
+                                <div class="stat-label" data-i18n="common.totalStudents"></div>
+                            </div>
+                            <div class="stat-icon blue">
+                                <i data-lucide="users" style="width: 24px; height: 24px;"></i>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="stat-card">
+                        <div class="stat-header">
+                            <div>
+                                <div class="stat-value" id="branchActiveStudents">0</div>
+                                <div class="stat-label" data-i18n="common.activeStudents"></div>
+                            </div>
+                            <div class="stat-icon green">
+                                <i data-lucide="user-check" style="width: 24px; height: 24px;"></i>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="stat-card">
+                        <div class="stat-header">
+                            <div>
+                                <div class="stat-value" id="branchTotalCoaches">0</div>
+                                <div class="stat-label" data-i18n="common.totalCoaches"></div>
+                            </div>
+                            <div class="stat-icon amber">
+                                <i data-lucide="award" style="width: 24px; height: 24px;"></i>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="stat-card">
+                        <div class="stat-header">
+                            <div>
+                                <div class="stat-value" id="branchAvgLevel">0</div>
+                                <div class="stat-label" data-i18n="common.avgLevel"></div>
+                            </div>
+                            <div class="stat-icon purple">
+                                <i data-lucide="bar-chart" style="width: 24px; height: 24px;"></i>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Branch Content Grid -->
+                <div class="branch-content-grid">
+                    <!-- Coaches List -->
+                    <div class="branch-card">
+                        <div class="card-header-inline">
+                            <h2 class="card-title-inline">
+                                <i data-lucide="users" style="width: 20px; height: 20px;"></i>
+                                <span data-i18n="branch.coaches"></span>
+                            </h2>
+                        </div>
+                        <div class="branch-coaches-list" id="branchCoachesList">
+                            <!-- Coaches will be loaded here -->
+                        </div>
+                    </div>
+
+                    <!-- Razryad Distribution -->
+                    <div class="branch-card">
+                        <div class="card-header-inline">
+                            <h2 class="card-title-inline">
+                                <i data-lucide="trophy" style="width: 20px; height: 20px;"></i>
+                                <span data-i18n="branch.razryadDistribution"></span>
+                            </h2>
+                        </div>
+                        <div class="branch-chart-container">
+                            <canvas id="branchRazryadChart"></canvas>
+                        </div>
+                    </div>
+
+                    <!-- Level Distribution -->
+                    <div class="branch-card">
+                        <div class="card-header-inline">
+                            <h2 class="card-title-inline">
+                                <i data-lucide="bar-chart-2" style="width: 20px; height: 20px;"></i>
+                                <span data-i18n="branch.levelDistribution"></span>
+                            </h2>
+                        </div>
+                        <div class="branch-chart-container">
+                            <canvas id="branchLevelChart"></canvas>
+                        </div>
+                    </div>
+
+                    <!-- Students List -->
+                    <div class="branch-card">
+                        <div class="card-header-inline">
+                            <h2 class="card-title-inline">
+                                <i data-lucide="clock" style="width: 20px; height: 20px;"></i>
+                                <span data-i18n="branch.students"></span>
+                            </h2>
+                        </div>
+                        <div class="branch-students-list" id="branchStudentsList">
+                            <!-- Students will be loaded here -->
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <!-- End Branch Section -->
+
+            <!-- Coach View Section -->
+            <div id="coachSection" class="content-section">
+                <!-- Coach Header -->
+                <div class="branch-view-header">
+                    <div class="branch-view-info">
+                        <div class="branch-view-name">
+                            <div class="branch-view-icon">
+                                <i data-lucide="user-check" style="width: 32px; height: 32px;"></i>
+                            </div>
+                            <div>
+                                <h1 class="header-title" id="coachViewName" data-i18n="admin.coach.placeholder"></h1>
+                                <div class="branch-view-meta" id="coachViewBranch" data-i18n="common.branch"></div>
+                            </div>
+                        </div>
+                        <div class="branch-view-contact">
+                            <div class="contact-item">
+                                <i data-lucide="phone" style="width: 16px; height: 16px;"></i>
+                                <span id="coachViewPhone" data-i18n="admin.branch.phone"></span>
+                            </div>
+                            <div class="contact-item">
+                                <i data-lucide="mail" style="width: 16px; height: 16px;"></i>
+                                <span id="coachViewEmail" data-i18n="admin.branch.email"></span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Coach Stats -->
+                <div class="stats-grid">
+                    <div class="stat-card">
+                        <div class="stat-header">
+                            <div>
+                                <div class="stat-value" id="coachTotalStudents">0</div>
+                                <div class="stat-label" data-i18n="common.totalStudents"></div>
+                            </div>
+                            <div class="stat-icon blue">
+                                <i data-lucide="users" style="width: 24px; height: 24px;"></i>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="stat-card">
+                        <div class="stat-header">
+                            <div>
+                                <div class="stat-value" id="coachActiveStudents">0</div>
+                                <div class="stat-label" data-i18n="common.activeStudents"></div>
+                            </div>
+                            <div class="stat-icon green">
+                                <i data-lucide="user-check" style="width: 24px; height: 24px;"></i>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="stat-card">
+                        <div class="stat-header">
+                            <div>
+                                <div class="stat-value" id="coachAvgLevel">0</div>
+                                <div class="stat-label" data-i18n="common.avgLevel"></div>
+                            </div>
+                            <div class="stat-icon amber">
+                                <i data-lucide="bar-chart" style="width: 24px; height: 24px;"></i>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="stat-card">
+                        <div class="stat-header">
+                            <div>
+                                <div class="stat-value" id="coachKMSStudents">0</div>
+                                <div class="stat-label" data-i18n="admin.coach.kms"></div>
+                            </div>
+                            <div class="stat-icon purple">
+                                <i data-lucide="trophy" style="width: 24px; height: 24px;"></i>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Coach Content Grid -->
+                <div class="branch-content-grid">
+                    <!-- Razryad Distribution -->
+                    <div class="branch-card">
+                        <div class="card-header-inline">
+                            <h2 class="card-title-inline">
+                                <i data-lucide="trophy" style="width: 20px; height: 20px;"></i>
+                                <span data-i18n="branch.razryadDistribution"></span>
+                            </h2>
+                        </div>
+                        <div class="branch-chart-container">
+                            <canvas id="coachRazryadChart"></canvas>
+                        </div>
+                    </div>
+
+                    <!-- Level Distribution -->
+                    <div class="branch-card">
+                        <div class="card-header-inline">
+                            <h2 class="card-title-inline">
+                                <i data-lucide="bar-chart-2" style="width: 20px; height: 20px;"></i>
+                                <span data-i18n="branch.levelDistribution"></span>
+                            </h2>
+                        </div>
+                        <div class="branch-chart-container">
+                            <canvas id="coachLevelChart"></canvas>
+                        </div>
+                    </div>
+
+                    <!-- Students List -->
+                    <div class="branch-card" style="grid-column: 1 / -1;">
+                        <div class="card-header-inline">
+                            <h2 class="card-title-inline">
+                                <i data-lucide="users" style="width: 20px; height: 20px;"></i>
+                                <span data-i18n="branch.students"></span>
+                            </h2>
+                        </div>
+                        <div class="branch-students-list" id="coachStudentsList">
+                            <!-- Students will be loaded here -->
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <!-- End Coach Section -->
+
+        </main>
+    </div>
+
+    <!-- Add Student Modal -->
+    <div id="addStudentModal" class="modal">
+        <div class="modal-overlay" onclick="closeAddStudentModal()"></div>
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2 class="modal-title" data-i18n="admin.modals.add.title"></h2>
+                <button class="modal-close" onclick="closeAddStudentModal()">
+                    <i data-lucide="x" style="width: 24px; height: 24px;"></i>
+                </button>
+            </div>
+
+            <form id="addStudentForm" class="modal-body">
+                <!-- Student Information -->
+                <div class="form-section">
+                    <h3 class="form-section-title" data-i18n="admin.modals.add.studentInfo"></h3>
+
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="firstName" class="form-label" data-i18n="admin.modals.add.firstName"></label>
+                            <input type="text" id="firstName" name="firstName" class="form-input" required data-i18n-placeholder="admin.modals.add.firstNamePlaceholder">
+                        </div>
+                        <div class="form-group">
+                            <label for="lastName" class="form-label" data-i18n="admin.modals.add.lastName"></label>
+                            <input type="text" id="lastName" name="lastName" class="form-input" required data-i18n-placeholder="admin.modals.add.lastNamePlaceholder">
+                        </div>
+                    </div>
+
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="dateOfBirth" class="form-label" data-i18n="admin.modals.add.dateOfBirth"></label>
+                            <input type="date" id="dateOfBirth" name="dateOfBirth" class="form-input" required>
+                        </div>
+                        <div class="form-group">
+                            <label for="gender" class="form-label" data-i18n="admin.modals.add.gender"></label>
+                            <select id="gender" name="gender" class="form-input" required>
+                                <option value="" data-i18n="admin.modals.add.genderSelect"></option>
+                                <option value="Male" data-i18n="admin.modals.add.genderMale"></option>
+                                <option value="Female" data-i18n="admin.modals.add.genderFemale"></option>
+                            </select>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Photo Upload -->
+                <div class="form-section">
+                    <h3 class="form-section-title" data-i18n="admin.modals.add.photo"></h3>
+                    <div class="photo-upload-container">
+                        <div class="photo-preview" id="photoPreview">
+                            <i data-lucide="user" style="width: 64px; height: 64px; color: #94a3b8;"></i>
+                        </div>
+                        <div class="photo-upload-actions">
+                            <label for="photoUpload" class="btn-upload">
+                                <i data-lucide="upload" style="width: 18px; height: 18px;"></i>
+                                <span data-i18n="admin.modals.add.uploadPhoto"></span>
+                            </label>
+                            <input type="file" id="photoUpload" accept="image/*" style="display: none;" onchange="previewPhoto(event)">
+                            <p class="upload-hint" data-i18n="admin.modals.add.uploadHint"></p>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Branch and Coach Assignment -->
+                <div class="form-section">
+                    <h3 class="form-section-title" data-i18n="admin.modals.add.branchCoach"></h3>
+
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="branchSelect" class="form-label" data-i18n="admin.modals.add.branch"></label>
+                            <select id="branchSelect" name="branch" class="form-input" required onchange="updateCoachOptions()">
+                                <option value="" data-i18n="admin.modals.add.branchSelect"></option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label for="coachSelect" class="form-label" data-i18n="admin.modals.add.coach"></label>
+                            <select id="coachSelect" name="coach" class="form-input" required>
+                                <option value="" data-i18n="admin.modals.add.coachSelect"></option>
+                            </select>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Level Placement -->
+                <div class="form-section">
+                    <h3 class="form-section-title" data-i18n="admin.modals.add.levelPlacement"></h3>
+
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="razryadSelect" class="form-label" data-i18n="admin.modals.add.razryad"></label>
+                            <select id="razryadSelect" name="razryad" class="form-input">
+                                <option value="" data-i18n="admin.razryad.none"></option>
+                                <option value="3rd" data-i18n="admin.razryad.3rd"></option>
+                                <option value="2nd" data-i18n="admin.razryad.2nd"></option>
+                                <option value="1st" data-i18n="admin.razryad.1st"></option>
+                                <option value="KMS" data-i18n="admin.razryad.kms"></option>
+                                <option value="Master" data-i18n="admin.razryad.master"></option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label for="statusSelect" class="form-label" data-i18n="admin.modals.add.status"></label>
+                            <select id="statusSelect" name="status" class="form-input" required>
+                                <option value="Active" selected data-i18n="admin.modals.add.statusActive"></option>
+                                <option value="Inactive" data-i18n="admin.modals.add.statusInactive"></option>
+                            </select>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Contact Information -->
+                <div class="form-section">
+                    <h3 class="form-section-title" data-i18n="admin.modals.add.contact"></h3>
+
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="parentName" class="form-label" data-i18n="admin.modals.add.parentName"></label>
+                            <input type="text" id="parentName" name="parentName" class="form-input" data-i18n-placeholder="admin.modals.add.parentPlaceholder">
+                        </div>
+                        <div class="form-group">
+                            <label for="phoneNumber" class="form-label" data-i18n="admin.modals.add.phone"></label>
+                            <input type="tel" id="phoneNumber" name="phoneNumber" class="form-input" data-i18n-placeholder="admin.modals.add.phonePlaceholder">
+                        </div>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="email" class="form-label" data-i18n="admin.modals.add.email"></label>
+                        <input type="email" id="email" name="email" class="form-input" data-i18n-placeholder="admin.modals.add.emailPlaceholder">
+                    </div>
+                </div>
+            </form>
+
+            <div class="modal-footer">
+                <button type="button" class="btn-secondary" onclick="closeAddStudentModal()" data-i18n="admin.modals.add.cancel"></button>
+                <button type="submit" form="addStudentForm" class="btn-primary" onclick="submitAddStudent(event)">
+                    <i data-lucide="plus" style="width: 18px; height: 18px;"></i>
+                    <span data-i18n="admin.modals.add.submit"></span>
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Edit Student Modal -->
+    <div id="editStudentModal" class="modal">
+        <div class="modal-overlay" onclick="closeEditStudentModal()"></div>
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2 class="modal-title" data-i18n="admin.modals.edit.title"></h2>
+                <button class="modal-close" onclick="closeEditStudentModal()">
+                    <i data-lucide="x" style="width: 24px; height: 24px;"></i>
+                </button>
+            </div>
+
+            <form id="editStudentForm" class="modal-body">
+                <input type="hidden" id="editStudentId" name="studentId">
+
+                <!-- Student Information -->
+                <div class="form-section">
+                    <h3 class="form-section-title" data-i18n="admin.modals.add.studentInfo"></h3>
+
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="editFirstName" class="form-label" data-i18n="admin.modals.add.firstName"></label>
+                            <input type="text" id="editFirstName" name="firstName" class="form-input" required data-i18n-placeholder="admin.modals.add.firstNamePlaceholder">
+                        </div>
+                        <div class="form-group">
+                            <label for="editLastName" class="form-label" data-i18n="admin.modals.add.lastName"></label>
+                            <input type="text" id="editLastName" name="lastName" class="form-input" required data-i18n-placeholder="admin.modals.add.lastNamePlaceholder">
+                        </div>
+                    </div>
+
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="editAge" class="form-label" data-i18n="student.age"></label>
+                            <input type="number" id="editAge" name="age" class="form-input" required min="5" max="18" data-i18n-placeholder="admin.modals.edit.agePlaceholder">
+                        </div>
+                        <div class="form-group">
+                            <label for="editGender" class="form-label" data-i18n="admin.modals.add.gender"></label>
+                            <select id="editGender" name="gender" class="form-input">
+                                <option value="" data-i18n="admin.modals.edit.genderUnknown"></option>
+                                <option value="Male" data-i18n="admin.modals.add.genderMale"></option>
+                                <option value="Female" data-i18n="admin.modals.add.genderFemale"></option>
+                            </select>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Branch and Coach Assignment -->
+                <div class="form-section">
+                    <h3 class="form-section-title" data-i18n="admin.modals.add.branchCoach"></h3>
+
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="editBranchSelect" class="form-label" data-i18n="admin.modals.add.branch"></label>
+                            <select id="editBranchSelect" name="branch" class="form-input" required onchange="updateEditCoachOptions()">
+                                <option value="" data-i18n="admin.modals.add.branchSelect"></option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label for="editCoachSelect" class="form-label" data-i18n="admin.modals.add.coach"></label>
+                            <select id="editCoachSelect" name="coach" class="form-input" required>
+                                <option value="" data-i18n="admin.modals.add.coachSelect"></option>
+                            </select>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Level & Progress -->
+                <div class="form-section">
+                    <h3 class="form-section-title" data-i18n="admin.modals.edit.level"></h3>
+
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="editRazryadSelect" class="form-label" data-i18n="admin.modals.add.razryad"></label>
+                            <select id="editRazryadSelect" name="razryad" class="form-input">
+                                <option value="" data-i18n="admin.razryad.none"></option>
+                                <option value="3rd" data-i18n="admin.razryad.3rd"></option>
+                                <option value="2nd" data-i18n="admin.razryad.2nd"></option>
+                                <option value="1st" data-i18n="admin.razryad.1st"></option>
+                                <option value="KMS" data-i18n="admin.razryad.kms"></option>
+                                <option value="Master" data-i18n="admin.razryad.master"></option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label for="editStatusSelect" class="form-label" data-i18n="admin.modals.add.status"></label>
+                            <select id="editStatusSelect" name="status" class="form-input" required>
+                                <option value="active" data-i18n="admin.modals.add.statusActive"></option>
+                                <option value="inactive" data-i18n="admin.modals.add.statusInactive"></option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="editCurrentLevel" class="form-label" data-i18n="admin.modals.edit.currentLevel"></label>
+                            <input type="number" id="editCurrentLevel" name="currentLevel" class="form-input" min="1" max="10" data-i18n-placeholder="admin.modals.edit.levelPlaceholder">
+                        </div>
+                        <div class="form-group">
+                            <label for="editCurrentLesson" class="form-label" data-i18n="admin.modals.edit.currentLesson"></label>
+                            <input type="number" id="editCurrentLesson" name="currentLesson" class="form-input" min="1" max="40" data-i18n-placeholder="admin.modals.edit.lessonPlaceholder">
+                        </div>
+                    </div>
+                </div>
+            </form>
+
+            <div class="modal-footer">
+                <button type="button" class="btn-secondary" onclick="closeEditStudentModal()" data-i18n="admin.modals.add.cancel"></button>
+                <button type="submit" form="editStudentForm" class="btn-primary" onclick="submitEditStudent(event)">
+                    <i data-lucide="save" style="width: 18px; height: 18px;"></i>
+                    <span data-i18n="admin.modals.edit.save"></span>
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Include CRUD Modals -->
+    <div id="crud-modals-container"></div>
+
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="data.js"></script>
+    <script src="crud.js"></script>
+    <script src="crud-handlers.js"></script>
+    <script src="crud-management.js"></script>
+    <script src="admin.js?v=6"></script>
+    <script>
+        // Load CRUD modals
+        fetch('crud-modals.html')
+            .then(response => response.text())
+            .then(html => {
+                document.getElementById('crud-modals-container').innerHTML = html;
+                lucide.createIcons();
+            });
+
+        // Initialize icons
+        lucide.createIcons();
+    </script>
+</body>
+</html>
