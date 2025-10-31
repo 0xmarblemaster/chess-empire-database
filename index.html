@@ -70,16 +70,16 @@
 
         document.addEventListener('languagechange', updateIndexTitle);
 
-        document.addEventListener('DOMContentLoaded', () => {
+        // Use window.onload instead of DOMContentLoaded to ensure all scripts are fully loaded
+        window.addEventListener('load', () => {
             updateIndexTitle();
 
-            // Wait for i18n system to fully initialize, then apply translations and create icons
-            setTimeout(() => {
-                if (window.i18n && window.i18n.translatePage) {
-                    window.i18n.translatePage();
-                }
-                lucide.createIcons();
-            }, 100);
+            // Apply translations after everything is loaded
+            if (window.i18n && window.i18n.translatePage) {
+                window.i18n.translatePage();
+            }
+
+            lucide.createIcons();
         });
     </script>
 </body>
