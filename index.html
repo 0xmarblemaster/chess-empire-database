@@ -72,6 +72,12 @@
 
         document.addEventListener('DOMContentLoaded', () => {
             updateIndexTitle();
+
+            // Ensure translations are applied before creating icons
+            if (window.i18n && window.i18n.translatePage) {
+                window.i18n.translatePage();
+            }
+
             lucide.createIcons();
         });
     </script>
