@@ -109,23 +109,50 @@ VALUES ('<user-uuid>', 'admin');
 
 ---
 
-## Step 8: Configure Vercel Environment Variables
+## Step 8: Configure Local Development
 
-1. Go to your Vercel project dashboard
-2. Navigate to **Settings** > **Environment Variables**
-3. Add the following variables:
+For local development, create a configuration file:
 
-```bash
-VITE_SUPABASE_URL=https://your-project.supabase.co
-VITE_SUPABASE_ANON_KEY=your-anon-key-here
-```
+1. Copy the example config file:
+   ```bash
+   cp supabase-config.example.js supabase-config.js
+   ```
 
-4. Apply to: **Production, Preview, and Development**
-5. Click "Save"
+2. Edit `supabase-config.js` with your credentials:
+   ```javascript
+   window.supabaseConfig = {
+       url: 'https://your-project.supabase.co',
+       anonKey: 'your-anon-key-here'
+   };
+   ```
+
+3. **Important**: Never commit `supabase-config.js` to git (it's in .gitignore)
 
 ---
 
-## Step 9: Verify Database Setup
+## Step 9: Configure Vercel for Production
+
+For production deployment on Vercel, you have two options:
+
+### Option A: Environment Variables (Recommended for Vercel)
+1. Go to your Vercel project dashboard
+2. Navigate to **Settings** > **Environment Variables**
+3. Add these variables:
+   ```bash
+   VITE_SUPABASE_URL=https://your-project.supabase.co
+   VITE_SUPABASE_ANON_KEY=your-anon-key-here
+   ```
+4. Apply to: **Production, Preview, and Development**
+5. Vercel will inject these during build
+
+### Option B: Config File (Simpler, but less secure)
+1. Create `supabase-config.js` in your repository root
+2. Deploy with config file included
+3. **Note**: Public keys are safe to expose, but consider using Option A for better security
+
+---
+
+## Step 10: Verify Database Setup
 
 Run these queries in SQL Editor to verify:
 
@@ -148,7 +175,7 @@ WHERE ur.role = 'admin';
 
 ---
 
-## Step 10: Test Authentication
+## Step 11: Test Authentication
 
 Before deploying, test the authentication:
 

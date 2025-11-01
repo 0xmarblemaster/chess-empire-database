@@ -28,3 +28,6 @@ build/
 .env
 .env.local
 .env*.local
+
+# Supabase credentials (use supabase-config.example.js as template)
+supabase-config.js

@@ -9,15 +9,14 @@ if (typeof supabase === 'undefined') {
 }
 
 // Initialize Supabase client
-// IMPORTANT: These values should be set via environment variables in production
-const SUPABASE_URL = import.meta.env?.VITE_SUPABASE_URL || '';
-const SUPABASE_ANON_KEY = import.meta.env?.VITE_SUPABASE_ANON_KEY || '';
-
-// For development, you can temporarily hardcode the values here
+// IMPORTANT: Replace these with your actual Supabase project credentials
+// For production, these values should be injected during build/deploy
 // DO NOT commit actual credentials to git
-// Replace these with your actual Supabase project credentials
-const supabaseUrl = SUPABASE_URL || 'YOUR_SUPABASE_PROJECT_URL';
-const supabaseAnonKey = SUPABASE_ANON_KEY || 'YOUR_SUPABASE_ANON_KEY';
+
+// Check if window.supabaseConfig exists (can be set in a separate config.js file)
+// Otherwise use placeholder values
+const supabaseUrl = window.supabaseConfig?.url || 'YOUR_SUPABASE_PROJECT_URL';
+const supabaseAnonKey = window.supabaseConfig?.anonKey || 'YOUR_SUPABASE_ANON_KEY';
 
 // Create Supabase client
 let supabaseClient = null;
