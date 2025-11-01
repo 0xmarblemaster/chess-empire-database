@@ -81,12 +81,31 @@ const supabaseAnonKey = 'your-anon-key-here';
 3. **Sign Out** → Supabase ends session
 4. **Redirect** → `index.html`
 
+### App Access Management (Admin Only)
+
+1. **Access Page** → Admin clicks "App Access" in Management section
+2. **Invite Coach**:
+   - Enter coach email
+   - Select coach from dropdown
+   - Click "Send Invite"
+   - System generates invitation token (7-day expiry)
+   - Coach receives email with special link
+3. **Manage Permissions**:
+   - View list of all users with roles
+   - Toggle permissions for each user:
+     - View All Students
+     - Edit Students
+     - Manage Branches
+     - Manage Coaches
+   - Changes save immediately to database
+
 ### Protected Routes
 
 Pages with authentication checks:
 - ✅ `admin.html` - Requires admin or coach role
+- ✅ `app-access.html` - Requires admin role only
 - ✅ `branch.html` - Will require authentication (Phase 7)
-- ✅ Future: Coach invitation pages
+- ✅ Future: Coach invitation acceptance page
 
 ---
 
@@ -97,6 +116,7 @@ Pages with authentication checks:
 ```
 chess-empire-database/
 ├── login.html                      # Login page UI
+├── app-access.html                # App Access management page (admin-only)
 ├── supabase-client.js             # Supabase client initialization
 ├── supabase-schema.sql            # Database schema with RLS
 ├── supabase-data-migration.sql    # Initial data migration
@@ -108,9 +128,9 @@ chess-empire-database/
 
 ```
 chess-empire-database/
-├── admin.html                     # Added logout + auth check
+├── admin.html                     # Added logout, auth check, App Access link
 ├── index.html                     # Login button redirects to login.html
-└── i18n.js                        # Added login/logout translations
+└── i18n.js                        # Added login/logout/access translations
 ```
 
 ---
@@ -255,6 +275,16 @@ if (window.supabaseAuth) {
    - [ ] Close tab and reopen → still logged in
    - [ ] Logout → session cleared
 
+6. **App Access Management**:
+   - [ ] Login as admin
+   - [ ] Click "App Access" in Management section
+   - [ ] Page loads with invite form
+   - [ ] Coach dropdown populated with coaches
+   - [ ] Try inviting a coach (demo mode shows success)
+   - [ ] User list shows demo users (admin + coach)
+   - [ ] Permission toggles work (in demo mode, logs to console)
+   - [ ] Admin user shows "full access" text
+
 ---
 
 ## 🐛 Troubleshooting
@@ -312,14 +342,9 @@ if (window.supabaseAuth) {
 
 ---
 
-## 🔮 Next Steps (Phases 6-8)
+## 🔮 Next Steps (Phases 7-8)
 
-### Phase 6: App Access Management
-- Create admin page to manage user permissions
-- Interface to grant/revoke coach permissions
-- Coach invitation system UI
-
-### Phase 7: Supabase Integration
+### Phase 7: Supabase Integration (Remaining Work)
 - Replace `data.js` localStorage with Supabase queries
 - Update all CRUD operations to use Supabase
 - Add real-time subscriptions (optional)

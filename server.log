@@ -182,3 +182,9 @@
 127.0.0.1 - - [01/Nov/2025 13:52:04] "GET / HTTP/1.1" 200 -
 127.0.0.1 - - [01/Nov/2025 13:52:06] "GET /login.html HTTP/1.1" 200 -
 127.0.0.1 - - [01/Nov/2025 13:52:06] "GET /supabase-client.js HTTP/1.1" 200 -
+127.0.0.1 - - [01/Nov/2025 14:00:35] "GET /admin.html HTTP/1.1" 200 -
+127.0.0.1 - - [01/Nov/2025 14:00:35] "GET /supabase-client.js HTTP/1.1" 304 -
+127.0.0.1 - - [01/Nov/2025 14:00:52] "GET /admin.html HTTP/1.1" 304 -
+127.0.0.1 - - [01/Nov/2025 14:00:55] "GET /app-access.html HTTP/1.1" 200 -
+127.0.0.1 - - [01/Nov/2025 14:01:09] "GET /admin.html HTTP/1.1" 304 -
+127.0.0.1 - - [01/Nov/2025 14:01:46] "GET /admin.html HTTP/1.1" 304 -
