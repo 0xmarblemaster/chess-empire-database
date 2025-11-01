@@ -13,8 +13,8 @@
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/clear-sans-webfont@1.0.1/css/clear-sans.min.css" />
     <script src="https://unpkg.com/lucide@latest"></script>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-    <script src="supabase-config.js?v=5" onerror="console.log('Supabase config not found - using demo mode')"></script>
-    <script src="i18n.js?v=5"></script>
+    <script src="supabase-config.js?v=9" onerror="console.log('Supabase config not found - using demo mode')"></script>
+    <script src="i18n.js?v=9"></script>
     <link rel="stylesheet" href="styles.css?v=6">
     <style>
         .login-container {
@@ -301,7 +301,7 @@
         </div>
     </div>
 
-    <script src="supabase-client.js?v=5"></script>
+    <script src="supabase-client.js?v=8"></script>
     <script>
         // Prevent infinite redirect loops
         let isRedirecting = false;
@@ -322,65 +322,114 @@
             }
         });
 
-        // Check if already logged in
-        if (window.supabaseClient) {
+        // TEMPORARILY DISABLED: Check if already logged in
+        // This is causing an infinite loop - we need to fix the RLS policies first
+        if (false && window.supabaseClient) {
             supabaseClient.auth.getSession().then(async ({ data: { session } }) => {
-                if (session && !isRedirecting) {
-                    isRedirecting = true;
-                    console.log('Found existing session for user:', session.user.id);
+                if (!session) {
+                    // No session, clear any loop prevention flags
+                    localStorage.removeItem('login_loop_prevention');
+                    return;
+                }
 
-                    // Check if we already have a valid role in sessionStorage
-                    const cachedRole = sessionStorage.getItem('userRole');
-                    if (cachedRole) {
-                        console.log('Using cached role, redirecting to admin...');
-                        window.location.href = 'admin.html';
+                if (isRedirecting) {
+                    console.log('Already redirecting, skipping...');
+                    return;
+                }
+
+                // Check if we're in a loop (tried to sign out recently)
+                const loopPrevention = localStorage.getItem('login_loop_prevention');
+                const now = Date.now();
+
+                if (loopPrevention) {
+                    const lastAttempt = parseInt(loopPrevention);
+                    const timeSinceLastAttempt = now - lastAttempt;
+
+                    // If we tried to sign out less than 5 seconds ago, we're in a loop
+                    if (timeSinceLastAttempt < 5000) {
+                        console.error('LOOP DETECTED: Attempted sign out too recently. Stopping execution.');
+                        // Keep the loop prevention flag, clear everything else
+                        sessionStorage.clear();
+                        showError('Authentication loop detected. Click here to reset.');
+
+                        // Add click handler to reset
+                        const errorDiv = document.getElementById('errorMessage');
+                        errorDiv.style.cursor = 'pointer';
+                        errorDiv.onclick = async () => {
+                            localStorage.clear();
+                            sessionStorage.clear();
+                            await supabaseClient.auth.signOut();
+                            window.location.reload();
+                        };
+
+                        // STOP EXECUTION - don't continue
+                        return;
+                    }
+                }
+
+                isRedirecting = true;
+                console.log('Found existing session for user:', session.user.id);
+
+                // Check if we already have a valid role in sessionStorage
+                const cachedRole = sessionStorage.getItem('userRole');
+                if (cachedRole) {
+                    console.log('Using cached role, redirecting to admin...');
+                    localStorage.removeItem('login_loop_prevention');
+                    window.location.href = 'admin.html';
+                    return;
+                }
+
+                // Test if we can fetch role before redirecting
+                try {
+                    console.log('Attempting to fetch role for user_id:', session.user.id);
+
+                    const { data: userRole, error: roleError } = await supabaseClient
+                        .from('user_roles')
+                        .select('role')
+                        .eq('user_id', session.user.id)
+                        .single();
+
+                    console.log('Pre-redirect role check:', {
+                        userRole,
+                        roleError,
+                        errorCode: roleError?.code,
+                        errorMessage: roleError?.message,
+                        errorDetails: roleError?.details
+                    });
+
+                    if (roleError) {
+                        console.error('Cannot fetch role:', roleError.message);
+                        // Mark that we're attempting to sign out to prevent loop
+                        localStorage.setItem('login_loop_prevention', now.toString());
+                        sessionStorage.clear();
+                        await supabaseClient.auth.signOut();
+                        showError('Session error: ' + roleError.message);
                         return;
                     }
 
-                    // Test if we can fetch role before redirecting
-                    try {
-                        const { data: userRole, error: roleError } = await supabaseClient
-                            .from('user_roles')
-                            .select('role')
-                            .eq('user_id', session.user.id)
-                            .single();
-
-                        console.log('Pre-redirect role check:', { userRole, roleError });
-
-                        if (roleError) {
-                            console.error('Cannot fetch role, signing out to prevent loop:', roleError);
-                            // Clear everything
-                            sessionStorage.clear();
-                            localStorage.clear();
-                            await supabaseClient.auth.signOut();
-                            showError('Session error. Please refresh and login again.');
-                            return;
-                        }
-
-                        if (userRole) {
-                            // Cache the role before redirecting
-                            sessionStorage.setItem('userRole', JSON.stringify(userRole));
-                            console.log('Role fetched successfully, redirecting...');
-                            window.location.href = 'admin.html';
-                        } else {
-                            console.error('No role found for user');
-                            sessionStorage.clear();
-                            localStorage.clear();
-                            await supabaseClient.auth.signOut();
-                            showError('No role assigned. Please contact administrator.');
-                        }
-                    } catch (err) {
-                        console.error('Exception during role check:', err);
+                    if (userRole) {
+                        // Cache the role before redirecting
+                        sessionStorage.setItem('userRole', JSON.stringify(userRole));
+                        console.log('Role fetched successfully, redirecting...');
+                        localStorage.removeItem('login_loop_prevention');
+                        window.location.href = 'admin.html';
+                    } else {
+                        console.error('No role found for user');
+                        localStorage.setItem('login_loop_prevention', now.toString());
                         sessionStorage.clear();
-                        localStorage.clear();
                         await supabaseClient.auth.signOut();
-                        showError('Authentication error. Please login again.');
+                        showError('No role assigned. Please contact administrator.');
                     }
+                } catch (err) {
+                    console.error('Exception during role check:', err);
+                    localStorage.setItem('login_loop_prevention', now.toString());
+                    sessionStorage.clear();
+                    await supabaseClient.auth.signOut();
+                    showError('Authentication error: ' + err.message);
                 }
             }).catch(err => {
                 console.error('Session check failed:', err);
                 sessionStorage.clear();
-                localStorage.clear();
             });
         }
 

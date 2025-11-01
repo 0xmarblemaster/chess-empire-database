@@ -740,7 +740,8 @@
     <div id="crud-modals-container"></div>
 
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-    <script src="supabase-client.js"></script>
+    <script src="supabase-config.js?v=9"></script>
+    <script src="supabase-client.js?v=9"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script src="data.js"></script>
     <script src="crud.js"></script>
@@ -749,20 +750,28 @@
     <script src="admin.js?v=6"></script>
     <script>
         // Check authentication on page load
+        console.log('Admin page loaded, checking auth...');
         if (window.supabaseAuth) {
             window.supabaseAuth.requireAuth().then(isAuth => {
+                console.log('requireAuth result:', isAuth);
                 if (!isAuth) {
+                    console.log('Not authenticated, redirecting to login...');
                     // Will be redirected to login by requireAuth
                     return;
                 }
 
                 // Check if user has admin or coach role
                 const role = window.supabaseAuth.getCurrentUserRole();
+                console.log('User role:', role);
                 if (role && role.role !== 'admin' && role.role !== 'coach') {
                     alert('Access denied. Admin or coach privileges required.');
                     window.location.href = 'index.html';
+                } else {
+                    console.log('✅ Admin/Coach access granted');
                 }
             });
+        } else {
+            console.error('supabaseAuth not available!');
         }
 
         // Logout handler

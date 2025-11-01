@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Reset Authentication - Chess Empire</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="supabase-config.js"></script>
+</head>
+<body class="bg-gray-100 min-h-screen flex items-center justify-center">
+    <div class="bg-white p-8 rounded-lg shadow-lg max-w-md w-full">
+        <h1 class="text-2xl font-bold text-gray-800 mb-4">Reset Authentication</h1>
+        <p class="text-gray-600 mb-6">This will clear all authentication data and sign you out.</p>
+
+        <button onclick="resetAuth()" class="w-full bg-red-600 text-white py-3 px-4 rounded-lg hover:bg-red-700 transition">
+            Reset Authentication
+        </button>
+
+        <div id="status" class="mt-4 text-center"></div>
+    </div>
+
+    <script src="supabase-client.js"></script>
+    <script>
+        async function resetAuth() {
+            const statusDiv = document.getElementById('status');
+            statusDiv.innerHTML = '<p class="text-blue-600">Clearing authentication...</p>';
+
+            try {
+                // Clear all storage
+                localStorage.clear();
+                sessionStorage.clear();
+
+                // Sign out from Supabase
+                if (window.supabaseClient) {
+                    await window.supabaseClient.auth.signOut();
+                }
+
+                statusDiv.innerHTML = '<p class="text-green-600">✅ Authentication cleared!</p>';
+
+                // Redirect to login after 2 seconds
+                setTimeout(() => {
+                    window.location.href = 'login.html';
+                }, 2000);
+
+            } catch (error) {
+                statusDiv.innerHTML = '<p class="text-red-600">Error: ' + error.message + '</p>';
+            }
+        }
+    </script>
+</body>
+</html>
