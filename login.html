@@ -13,8 +13,8 @@
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/clear-sans-webfont@1.0.1/css/clear-sans.min.css" />
     <script src="https://unpkg.com/lucide@latest"></script>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-    <script src="supabase-config.js?v=2" onerror="console.log('Supabase config not found - using demo mode')"></script>
-    <script src="i18n.js?v=2"></script>
+    <script src="supabase-config.js?v=4" onerror="console.log('Supabase config not found - using demo mode')"></script>
+    <script src="i18n.js?v=4"></script>
     <link rel="stylesheet" href="styles.css?v=6">
     <style>
         .login-container {
@@ -301,7 +301,7 @@
         </div>
     </div>
 
-    <script src="supabase-client.js?v=2"></script>
+    <script src="supabase-client.js?v=4"></script>
     <script>
         // Initialize Lucide icons
         lucide.createIcons();
@@ -321,8 +321,24 @@
 
         // Check if already logged in
         if (window.supabaseClient) {
-            supabaseClient.auth.getSession().then(({ data: { session } }) => {
+            supabaseClient.auth.getSession().then(async ({ data: { session } }) => {
                 if (session) {
+                    // Test if we can fetch role before redirecting
+                    const { data: userRole, error: roleError } = await supabaseClient
+                        .from('user_roles')
+                        .select('role')
+                        .eq('user_id', session.user.id)
+                        .single();
+
+                    console.log('Pre-redirect role check:', { userRole, roleError });
+
+                    if (roleError) {
+                        console.error('Cannot fetch role, signing out to prevent loop:', roleError);
+                        await supabaseClient.auth.signOut();
+                        showError('Session error. Please login again.');
+                        return;
+                    }
+
                     window.location.href = 'admin.html';
                 }
             });
@@ -373,6 +389,8 @@
 
                 if (error) throw error;
 
+                console.log('✅ Authentication successful for user:', data.user.id);
+
                 // Check user role
                 const { data: userRole, error: roleError } = await supabaseClient
                     .from('user_roles')
@@ -380,8 +398,11 @@
                     .eq('user_id', data.user.id)
                     .single();
 
+                console.log('Role query result:', { userRole, roleError });
+
                 if (roleError && roleError.code !== 'PGRST116') {
-                    throw new Error('Failed to fetch user role');
+                    console.error('Role fetch error:', roleError);
+                    throw new Error(`Failed to fetch user role: ${roleError.message}`);
                 }
 
                 // Store role in session storage
