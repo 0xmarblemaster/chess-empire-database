@@ -234,7 +234,23 @@ const translations = {
         "login.emailPlaceholder": "Enter your email",
         "login.passwordLabel": "Password",
         "login.passwordPlaceholder": "Enter your password",
-        "login.signInButton": "Sign In"
+        "login.signInButton": "Sign In",
+
+        // App Access Management
+        "access.sidebar.appAccess": "App Access",
+        "access.header.title": "App Access Management",
+        "access.header.subtitle": "Manage user roles and permissions",
+        "access.invite.title": "Invite New Coach",
+        "access.invite.description": "Send an invitation email to a coach to grant them access to the system",
+        "access.invite.emailLabel": "Coach Email",
+        "access.invite.emailPlaceholder": "coach@example.com",
+        "access.invite.coachLabel": "Assign to Coach",
+        "access.invite.coachPlaceholder": "Select coach...",
+        "access.invite.sendButton": "Send Invite",
+        "access.users.title": "User Management",
+        "access.users.description": "Manage existing user roles and permissions",
+        "access.users.loading": "Loading users...",
+        "access.users.empty": "No users found"
     },
     kk: {
         "common.brand": "Chess Empire",
@@ -422,7 +438,23 @@ const translations = {
         "login.emailPlaceholder": "Email енгізіңіз",
         "login.passwordLabel": "Құпия сөз",
         "login.passwordPlaceholder": "Құпия сөзді енгізіңіз",
-        "login.signInButton": "Кіру"
+        "login.signInButton": "Кіру",
+
+        // App Access Management
+        "access.sidebar.appAccess": "Қолданба қол жетімділігі",
+        "access.header.title": "Қолданба қол жетімділігін басқару",
+        "access.header.subtitle": "Пайдаланушы рөлдері мен рұқсаттарын басқару",
+        "access.invite.title": "Жаңа жаттықтырушыны шақыру",
+        "access.invite.description": "Жаттықтырушыға жүйеге қол жеткізу үшін шақыру хатын жіберіңіз",
+        "access.invite.emailLabel": "Жаттықтырушы Email",
+        "access.invite.emailPlaceholder": "coach@example.com",
+        "access.invite.coachLabel": "Жаттықтырушыға тағайындау",
+        "access.invite.coachPlaceholder": "Жаттықтырушыны таңдаңыз...",
+        "access.invite.sendButton": "Шақыруды жіберу",
+        "access.users.title": "Пайдаланушыларды басқару",
+        "access.users.description": "Қолданыстағы пайдаланушы рөлдері мен рұқсаттарын басқару",
+        "access.users.loading": "Пайдаланушылар жүктелуде...",
+        "access.users.empty": "Пайдаланушылар табылмады"
     },
     ru: {
         // Common
@@ -642,7 +674,23 @@ const translations = {
         "login.emailPlaceholder": "Введите ваш e-mail",
         "login.passwordLabel": "Пароль",
         "login.passwordPlaceholder": "Введите ваш пароль",
-        "login.signInButton": "Войти"
+        "login.signInButton": "Войти",
+
+        // App Access Management
+        "access.sidebar.appAccess": "Доступ к приложению",
+        "access.header.title": "Управление доступом",
+        "access.header.subtitle": "Управление ролями и правами пользователей",
+        "access.invite.title": "Пригласить нового тренера",
+        "access.invite.description": "Отправьте приглашение тренеру для предоставления доступа к системе",
+        "access.invite.emailLabel": "E-mail тренера",
+        "access.invite.emailPlaceholder": "coach@example.com",
+        "access.invite.coachLabel": "Назначить тренеру",
+        "access.invite.coachPlaceholder": "Выберите тренера...",
+        "access.invite.sendButton": "Отправить приглашение",
+        "access.users.title": "Управление пользователями",
+        "access.users.description": "Управление ролями и правами существующих пользователей",
+        "access.users.loading": "Загрузка пользователей...",
+        "access.users.empty": "Пользователи не найдены"
     }
 };
 
