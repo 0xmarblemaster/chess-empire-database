@@ -176,6 +176,21 @@
             display: block;
         }
 
+        .info-message {
+            background: #dbeafe;
+            border: 1px solid #93c5fd;
+            color: #1e40af;
+            padding: 0.875rem;
+            border-radius: 12px;
+            margin-bottom: 1.5rem;
+            display: none;
+            font-size: 0.95rem;
+        }
+
+        .info-message.show {
+            display: block;
+        }
+
         .password-toggle {
             position: absolute;
             right: 1rem;
@@ -242,6 +257,7 @@
             <h1 class="login-title">Chess Empire</h1>
             <p class="login-subtitle" data-i18n="login.subtitle">Sign in to your account</p>
 
+            <div class="info-message" id="infoMessage"></div>
             <div class="error-message" id="errorMessage"></div>
             <div class="success-message" id="successMessage"></div>
 
@@ -293,6 +309,11 @@
                 window.i18n.translatePage();
             }
             lucide.createIcons();
+
+            // Show info message if Supabase not configured
+            if (!window.supabaseClient) {
+                showInfo('⚙️ Demo Mode: Supabase authentication not configured. See SUPABASE_SETUP_GUIDE.md to connect your database.');
+            }
         });
 
         // Check if already logged in
@@ -320,6 +341,7 @@
         // Login form submission
         const loginForm = document.getElementById('loginForm');
         const loginButton = document.getElementById('loginButton');
+        const infoMessage = document.getElementById('infoMessage');
         const errorMessage = document.getElementById('errorMessage');
         const successMessage = document.getElementById('successMessage');
 
@@ -327,7 +349,7 @@
             e.preventDefault();
 
             if (!window.supabaseClient) {
-                showError('Supabase client not initialized. Please check configuration.');
+                showError('Authentication service not available. Please configure Supabase credentials in supabase-client.js or set environment variables.');
                 return;
             }
 
@@ -389,19 +411,29 @@
             }
         });
 
+        function showInfo(message) {
+            infoMessage.textContent = message;
+            infoMessage.classList.add('show');
+            errorMessage.classList.remove('show');
+            successMessage.classList.remove('show');
+        }
+
         function showError(message) {
             errorMessage.textContent = message;
             errorMessage.classList.add('show');
+            infoMessage.classList.remove('show');
             successMessage.classList.remove('show');
         }
 
         function showSuccess(message) {
             successMessage.textContent = message;
             successMessage.classList.add('show');
+            infoMessage.classList.remove('show');
             errorMessage.classList.remove('show');
         }
 
         function hideMessages() {
+            infoMessage.classList.remove('show');
             errorMessage.classList.remove('show');
             successMessage.classList.remove('show');
         }
