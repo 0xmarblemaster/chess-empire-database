@@ -32,6 +32,7 @@ const translations = {
         "common.cancel": "Cancel",
         "common.saveChanges": "Save Changes",
         "common.addStudent": "Add Student",
+        "common.logout": "Logout",
         "common.students": "Students",
         "common.level": "Level",
         "common.razryad": "Razryad",
@@ -218,10 +219,22 @@ const translations = {
         "admin.studentCard.view": "View",
         "admin.studentCard.edit": "Edit",
 
+        // Admin Logout
+        "admin.logout.confirm": "Are you sure you want to logout?",
+
         // Language toggle
         "language.toggle.label": "Language",
         "language.toggle.english": "EN",
-        "language.toggle.russian": "RU"
+        "language.toggle.russian": "RU",
+
+        // Login Page
+        "login.backToHome": "Back to Home",
+        "login.subtitle": "Sign in to your account",
+        "login.emailLabel": "Email",
+        "login.emailPlaceholder": "Enter your email",
+        "login.passwordLabel": "Password",
+        "login.passwordPlaceholder": "Enter your password",
+        "login.signInButton": "Sign In"
     },
     kk: {
         "common.brand": "Chess Empire",
@@ -238,6 +251,7 @@ const translations = {
         "common.cancel": "Бас тарту",
         "common.saveChanges": "Өзгерістерді сақтау",
         "common.addStudent": "Оқушы қосу",
+        "common.logout": "Шығу",
         "common.students": "Оқушылар",
         "common.level": "Деңгей",
         "common.razryad": "Разряд",
@@ -393,9 +407,22 @@ const translations = {
         "admin.studentCard.level": "Деңгей {{level}}",
         "admin.studentCard.view": "Ашу",
         "admin.studentCard.edit": "Өңдеу",
+
+        // Admin Logout
+        "admin.logout.confirm": "Шығуды растайсыз ба?",
+
         "language.toggle.label": "Тіл",
         "language.toggle.english": "EN",
-        "language.toggle.russian": "RU"
+        "language.toggle.russian": "RU",
+
+        // Login Page
+        "login.backToHome": "Басты бетке",
+        "login.subtitle": "Аккаунтқа кіру",
+        "login.emailLabel": "Email",
+        "login.emailPlaceholder": "Email енгізіңіз",
+        "login.passwordLabel": "Құпия сөз",
+        "login.passwordPlaceholder": "Құпия сөзді енгізіңіз",
+        "login.signInButton": "Кіру"
     },
     ru: {
         // Common
@@ -413,6 +440,7 @@ const translations = {
         "common.cancel": "Отмена",
         "common.saveChanges": "Сохранить изменения",
         "common.addStudent": "Добавить ученика",
+        "common.logout": "Выйти",
         "common.students": "Ученики",
         "common.level": "Ступень",
         "common.razryad": "Разряд",
@@ -599,10 +627,22 @@ const translations = {
         "admin.studentCard.view": "Открыть",
         "admin.studentCard.edit": "Редактировать",
 
+        // Admin Logout
+        "admin.logout.confirm": "Вы уверены, что хотите выйти?",
+
         // Language toggle
         "language.toggle.label": "Язык",
         "language.toggle.english": "EN",
-        "language.toggle.russian": "RU"
+        "language.toggle.russian": "RU",
+
+        // Login Page
+        "login.backToHome": "Назад на главную",
+        "login.subtitle": "Войдите в свой аккаунт",
+        "login.emailLabel": "E-mail",
+        "login.emailPlaceholder": "Введите ваш e-mail",
+        "login.passwordLabel": "Пароль",
+        "login.passwordPlaceholder": "Введите ваш пароль",
+        "login.signInButton": "Войти"
     }
 };
 

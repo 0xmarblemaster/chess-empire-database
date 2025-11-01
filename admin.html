@@ -63,6 +63,14 @@
                     <span>Data Management</span>
                 </div>
             </nav>
+
+            <!-- Logout Button -->
+            <div style="padding: 1rem; margin-top: auto; border-top: 1px solid #e2e8f0;">
+                <button class="nav-item" onclick="handleLogout()" style="width: 100%; border: none; background: none; cursor: pointer; padding: 0.75rem; display: flex; align-items: center; gap: 0.75rem; color: #dc2626; border-radius: 8px; transition: background 0.2s;">
+                    <i data-lucide="log-out" style="width: 20px; height: 20px;"></i>
+                    <span data-i18n="common.logout">Logout</span>
+                </button>
+            </div>
         </aside>
 
         <!-- Main Content -->
@@ -727,6 +735,8 @@
     <!-- Include CRUD Modals -->
     <div id="crud-modals-container"></div>
 
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="supabase-client.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script src="data.js"></script>
     <script src="crud.js"></script>
@@ -734,6 +744,40 @@
     <script src="crud-management.js"></script>
     <script src="admin.js?v=6"></script>
     <script>
+        // Check authentication on page load
+        if (window.supabaseAuth) {
+            window.supabaseAuth.requireAuth().then(isAuth => {
+                if (!isAuth) {
+                    // Will be redirected to login by requireAuth
+                    return;
+                }
+
+                // Check if user has admin or coach role
+                const role = window.supabaseAuth.getCurrentUserRole();
+                if (role && role.role !== 'admin' && role.role !== 'coach') {
+                    alert('Access denied. Admin or coach privileges required.');
+                    window.location.href = 'index.html';
+                }
+            });
+        }
+
+        // Logout handler
+        async function handleLogout() {
+            if (confirm(window.t ? window.t('admin.logout.confirm') : 'Are you sure you want to logout?')) {
+                if (window.supabaseAuth) {
+                    const { error } = await window.supabaseAuth.signOut();
+                    if (error) {
+                        console.error('Logout error:', error);
+                        alert('Error logging out. Please try again.');
+                    } else {
+                        window.location.href = 'index.html';
+                    }
+                } else {
+                    window.location.href = 'index.html';
+                }
+            }
+        }
+
         // Load CRUD modals
         fetch('crud-modals.html')
             .then(response => response.text())
