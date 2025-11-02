@@ -3,13 +3,27 @@ const clearButton = document.getElementById('clearButton');
 const dropdown = document.getElementById('dropdown');
 
 let latestResults = [];
+let searchTimeout;
 
-function searchStudents(query) {
+// Search students - uses Supabase if available, otherwise local cache
+async function searchStudents(query) {
     if (!query) {
         return [];
     }
 
     const searchTerm = query.toLowerCase().trim();
+
+    // Try Supabase search first for more efficient queries
+    if (window.supabaseData && typeof window.supabaseData.searchStudents === 'function') {
+        try {
+            const results = await window.supabaseData.searchStudents(searchTerm);
+            return results.slice(0, 10);
+        } catch (error) {
+            console.error('Supabase search error, falling back to local search:', error);
+        }
+    }
+
+    // Fallback to local search
     return students
         .filter(student => `${student.firstName} ${student.lastName}`.toLowerCase().includes(searchTerm))
         .slice(0, 10);
@@ -49,14 +63,30 @@ function renderDropdown(results) {
     lucide.createIcons();
 }
 
-searchInput.addEventListener('input', (e) => {
+searchInput.addEventListener('input', async (e) => {
     const value = e.target.value;
+
+    // Clear any pending search
+    if (searchTimeout) {
+        clearTimeout(searchTimeout);
+    }
 
     if (value.length > 0) {
         clearButton.classList.add('visible');
-        const results = searchStudents(value);
-        renderDropdown(results);
+
+        // Show loading state
+        dropdown.innerHTML = `
+            <div class="dropdown-item" style="cursor: default; border-left: none;">
+                <div style="color: #64748b;">${t('common.loading') || 'Searching...'}</div>
+            </div>
+        `;
         dropdown.classList.add('active');
+
+        // Debounce search for Supabase queries
+        searchTimeout = setTimeout(async () => {
+            const results = await searchStudents(value);
+            renderDropdown(results);
+        }, 300);
     } else {
         clearButton.classList.remove('visible');
         dropdown.classList.remove('active');
@@ -81,10 +111,10 @@ function viewStudent(studentId) {
     window.location.href = 'student.html';
 }
 
-document.addEventListener('languagechange', () => {
+document.addEventListener('languagechange', async () => {
     if (searchInput.value.trim().length > 0) {
         if (!latestResults.length) {
-            latestResults = searchStudents(searchInput.value);
+            latestResults = await searchStudents(searchInput.value);
         }
         renderDropdown(latestResults);
         dropdown.classList.add('active');

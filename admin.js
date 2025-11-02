@@ -34,9 +34,84 @@ function updateResultCount(count = null) {
     });
 }
 
+// Update menu visibility based on user permissions
+function updateMenuVisibility() {
+    const userRole = window.supabaseAuth?.getCurrentUserRole();
+
+    if (!userRole) {
+        console.warn('No user role found, hiding all management menus');
+        return;
+    }
+
+    console.log('User role:', userRole);
+
+    // Show/hide menu items based on permissions
+    const menuAppAccess = document.getElementById('menuAppAccess');
+    const menuManageCoaches = document.getElementById('menuManageCoaches');
+    const menuManageBranches = document.getElementById('menuManageBranches');
+    const menuDataManagement = document.getElementById('menuDataManagement');
+    const managementSectionTitle = document.getElementById('managementSectionTitle');
+
+    // Admins see everything
+    if (userRole.role === 'admin') {
+        if (menuAppAccess) menuAppAccess.style.display = 'flex';
+        if (menuManageCoaches) menuManageCoaches.style.display = 'flex';
+        if (menuManageBranches) menuManageBranches.style.display = 'flex';
+        if (menuDataManagement) menuDataManagement.style.display = 'flex';
+        if (managementSectionTitle) managementSectionTitle.style.display = 'block';
+        return;
+    }
+
+    // For non-admins, show based on specific permissions
+    let hasAnyManagementAccess = false;
+
+    // App Access management
+    if (userRole.can_manage_app_access === true) {
+        if (menuAppAccess) {
+            menuAppAccess.style.display = 'flex';
+            hasAnyManagementAccess = true;
+        }
+    }
+
+    // Coach management
+    if (userRole.can_manage_coaches === true) {
+        if (menuManageCoaches) {
+            menuManageCoaches.style.display = 'flex';
+            hasAnyManagementAccess = true;
+        }
+    }
+
+    // Branch management
+    if (userRole.can_manage_branches === true) {
+        if (menuManageBranches) {
+            menuManageBranches.style.display = 'flex';
+            hasAnyManagementAccess = true;
+        }
+    }
+
+    // Data management - only for admins
+    // Can be extended with specific permission later if needed
+
+    // Show/hide Management section title based on whether user has any management access
+    if (managementSectionTitle) {
+        managementSectionTitle.style.display = hasAnyManagementAccess ? 'block' : 'none';
+    }
+
+    console.log('Menu visibility updated. Has management access:', hasAnyManagementAccess);
+}
+
 // Initialize dashboard
-document.addEventListener('DOMContentLoaded', () => {
+document.addEventListener('DOMContentLoaded', async () => {
     document.title = t('admin.title');
+
+    // Wait for data to load from Supabase
+    if (typeof initializeData === 'function') {
+        await initializeData();
+    }
+
+    // Update menu visibility based on user permissions
+    updateMenuVisibility();
+
     loadStatistics();
     populateFilterDropdowns();
     populateBranchDropdown();

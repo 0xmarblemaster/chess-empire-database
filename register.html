@@ -1,0 +1,443 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Register - Chess Empire</title>
+    <link rel="icon" type="image/png" href="chess-empire-logo.png">
+    <link rel="shortcut icon" href="chess-empire-logo.png">
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=Outfit:wght@600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/clear-sans-webfont@1.0.1/css/clear-sans.min.css" />
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="supabase-config.js?v=9" onerror="console.log('Supabase config not found - using demo mode')"></script>
+    <script src="i18n.js?v=12"></script>
+    <link rel="stylesheet" href="styles.css?v=6">
+    <style>
+        body.login-page {
+            margin: 0;
+            background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: clamp(2rem, 6vh, 4rem) 1.5rem;
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+        }
+
+        .login-container {
+            position: relative;
+            width: 100%;
+            max-width: 1040px;
+            min-height: clamp(480px, 70vh, 720px);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: clamp(2rem, 5vw, 4rem);
+        }
+
+        .chess-pattern {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            width: min(820px, 90vw);
+            height: min(620px, 80vh);
+            transform: translate(-50%, -50%);
+            display: block;
+            z-index: 1;
+            pointer-events: none;
+            border-radius: 48px;
+            background:
+                radial-gradient(circle at 50% 35%, rgba(102, 126, 234, 0.3), transparent 65%),
+                radial-gradient(circle at 50% 70%, rgba(118, 75, 162, 0.28), transparent 68%),
+                radial-gradient(circle at 12% 50%, rgba(255, 255, 255, 0.38), transparent 65%),
+                radial-gradient(circle at 88% 52%, rgba(255, 255, 255, 0.32), transparent 65%);
+            filter: blur(75px);
+            opacity: 0.9;
+        }
+
+        .login-card {
+            background: white;
+            border-radius: 20px;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.1);
+            padding: 3rem;
+            width: 100%;
+            max-width: 450px;
+            position: relative;
+            z-index: 10;
+        }
+
+        .login-logo {
+            width: 56px;
+            height: 92px;
+            margin: 0 auto 1rem;
+            display: block;
+        }
+
+        .login-title {
+            font-family: 'Clear Sans', sans-serif;
+            font-size: 2.5rem;
+            font-weight: 700;
+            text-align: center;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            margin-bottom: 0.5rem;
+        }
+
+        .login-subtitle {
+            text-align: center;
+            color: #64748b;
+            margin-bottom: 2rem;
+            font-size: 0.95rem;
+        }
+
+        .form-group {
+            margin-bottom: 1.5rem;
+        }
+
+        .form-actions {
+            margin-top: 2rem;
+            display: flex;
+            flex-direction: column;
+            gap: 1rem;
+        }
+
+        .form-label {
+            display: block;
+            font-weight: 600;
+            color: #1e293b;
+            margin-bottom: 0.5rem;
+            font-size: 0.95rem;
+        }
+
+        .form-input {
+            width: 100%;
+            padding: 0.875rem 1rem;
+            border: 2px solid #e2e8f0;
+            border-radius: 12px;
+            font-size: 1rem;
+            transition: all 0.2s;
+            background: #f8fafc;
+        }
+
+        .form-input:focus {
+            outline: none;
+            border-color: #667eea;
+            background: white;
+            box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+        }
+
+        .form-input:disabled {
+            background: #f1f5f9;
+            cursor: not-allowed;
+        }
+
+        .login-button {
+            position: relative;
+            top: auto;
+            right: auto;
+            width: 100%;
+            min-height: 52px;
+            padding: 0.95rem 1.25rem;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            border-radius: 14px;
+            font-size: 1rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 0.65rem;
+            box-shadow: 0 10px 30px rgba(102, 126, 234, 0.25);
+        }
+
+        .login-button .button-icon {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .login-button .spinner {
+            width: 18px;
+            height: 18px;
+            border-width: 2px;
+        }
+
+        .login-button:hover:not(:disabled) {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 25px rgba(102, 126, 234, 0.3);
+        }
+
+        .login-button:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        .back-button {
+            position: absolute;
+            top: 2rem;
+            left: 2rem;
+            background: white;
+            border: 2px solid #e2e8f0;
+            border-radius: 12px;
+            padding: 0.75rem 1.5rem;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            color: #475569;
+            text-decoration: none;
+            font-weight: 600;
+            transition: all 0.2s;
+            z-index: 20;
+        }
+
+        .back-button:hover {
+            background: #f8fafc;
+            border-color: #cbd5e1;
+            transform: translateX(-2px);
+        }
+
+        .error-message {
+            background: #fee2e2;
+            border: 1px solid #fecaca;
+            color: #dc2626;
+            padding: 0.875rem;
+            border-radius: 12px;
+            margin-bottom: 1.5rem;
+            display: none;
+            font-size: 0.95rem;
+        }
+
+        .error-message.show {
+            display: block;
+        }
+
+        .success-message {
+            background: #d1fae5;
+            border: 1px solid #a7f3d0;
+            color: #059669;
+            padding: 0.875rem;
+            border-radius: 12px;
+            margin-bottom: 1.5rem;
+            display: none;
+            font-size: 0.95rem;
+        }
+
+        .success-message.show {
+            display: block;
+        }
+
+        .info-message {
+            background: #dbeafe;
+            border: 1px solid #93c5fd;
+            color: #1e40af;
+            padding: 0.875rem;
+            border-radius: 12px;
+            margin-bottom: 1.5rem;
+            display: none;
+            font-size: 0.95rem;
+        }
+
+        .info-message.show {
+            display: block;
+        }
+
+        .password-toggle {
+            position: absolute;
+            right: 1rem;
+            top: 50%;
+            transform: translateY(-50%);
+            background: none;
+            border: none;
+            color: #64748b;
+            cursor: pointer;
+            padding: 0.25rem;
+        }
+
+        .password-toggle:hover {
+            color: #334155;
+        }
+
+        .password-wrapper {
+            position: relative;
+        }
+
+        .password-requirements {
+            margin-top: 0.5rem;
+            padding: 0.75rem;
+            background: #f8fafc;
+            border-radius: 8px;
+            font-size: 0.85rem;
+            color: #64748b;
+        }
+
+        .password-requirements ul {
+            margin: 0.5rem 0 0 0;
+            padding-left: 1.5rem;
+        }
+
+        .password-requirements li {
+            margin: 0.25rem 0;
+        }
+
+        .password-requirements li.valid {
+            color: #059669;
+        }
+
+        .spinner {
+            border: 2px solid rgba(255, 255, 255, 0.3);
+            border-radius: 50%;
+            border-top-color: white;
+            width: 20px;
+            height: 20px;
+            animation: spin 0.6s linear infinite;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
+        @media (max-width: 640px) {
+            body.login-page {
+                padding: 1.5rem 1rem;
+            }
+
+            body.login-page .login-container {
+                min-height: auto;
+                padding: 2.5rem 1.5rem;
+            }
+
+            .chess-pattern {
+                width: min(560px, 92vw);
+                height: min(520px, 78vh);
+                border-radius: 32px;
+                filter: blur(60px);
+            }
+
+            .login-card {
+                margin: 1rem;
+                padding: 2rem 1.5rem;
+            }
+
+            .back-button {
+                top: 1rem;
+                left: 1rem;
+                padding: 0.5rem 1rem;
+                font-size: 0.9rem;
+            }
+
+            .login-title {
+                font-size: 2rem;
+            }
+
+            .login-button {
+                min-height: 48px;
+                padding: 0.875rem 1rem;
+                font-size: 0.95rem;
+            }
+        }
+    </style>
+</head>
+<body class="login-page">
+    <div class="login-container">
+        <a href="index.html" class="back-button">
+            <i data-lucide="arrow-left" style="width: 18px; height: 18px;"></i>
+            <span data-i18n="register.backToHome">Back to Home</span>
+        </a>
+
+        <div class="chess-pattern"></div>
+
+        <div class="login-card">
+            <img src="chess-empire-logo.png" alt="Chess Empire" class="login-logo">
+            <h1 class="login-title">Chess Empire</h1>
+            <p class="login-subtitle" data-i18n="register.subtitle">Create your account</p>
+
+            <div class="info-message" id="infoMessage"></div>
+            <div class="error-message" id="errorMessage"></div>
+            <div class="success-message" id="successMessage"></div>
+
+            <form id="registerForm">
+                <div class="form-group">
+                    <label for="email" class="form-label" data-i18n="register.emailLabel">Email</label>
+                    <input
+                        type="email"
+                        id="email"
+                        class="form-input"
+                        data-i18n-placeholder="register.emailPlaceholder"
+                        placeholder="Enter your email"
+                        required
+                        readonly
+                        autocomplete="email"
+                    >
+                </div>
+
+                <div class="form-group">
+                    <label for="password" class="form-label" data-i18n="register.passwordLabel">Password</label>
+                    <div class="password-wrapper">
+                        <input
+                            type="password"
+                            id="password"
+                            class="form-input"
+                            data-i18n-placeholder="register.passwordPlaceholder"
+                            placeholder="Create a strong password"
+                            required
+                            autocomplete="new-password"
+                        >
+                        <button type="button" class="password-toggle" id="togglePassword">
+                            <i data-lucide="eye" style="width: 20px; height: 20px;"></i>
+                        </button>
+                    </div>
+                    <div class="password-requirements">
+                        <strong>Password must contain:</strong>
+                        <ul id="passwordChecklist">
+                            <li id="length-check">At least 8 characters</li>
+                            <li id="uppercase-check">One uppercase letter</li>
+                            <li id="lowercase-check">One lowercase letter</li>
+                            <li id="number-check">One number</li>
+                        </ul>
+                    </div>
+                </div>
+
+                <div class="form-group">
+                    <label for="confirmPassword" class="form-label" data-i18n="register.confirmPasswordLabel">Confirm Password</label>
+                    <div class="password-wrapper">
+                        <input
+                            type="password"
+                            id="confirmPassword"
+                            class="form-input"
+                            data-i18n-placeholder="register.confirmPasswordPlaceholder"
+                            placeholder="Re-enter your password"
+                            required
+                            autocomplete="new-password"
+                        >
+                        <button type="button" class="password-toggle" id="toggleConfirmPassword">
+                            <i data-lucide="eye" style="width: 20px; height: 20px;"></i>
+                        </button>
+                    </div>
+                </div>
+
+                <div class="form-actions">
+                    <button type="submit" class="login-button" id="registerButton">
+                        <span class="button-icon" aria-hidden="true">
+                            <i data-lucide="user-plus" style="width: 18px; height: 18px;"></i>
+                        </span>
+                        <span data-i18n="register.createAccountButton">Create Account</span>
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <script src="supabase-client.js?v=9"></script>
+    <script src="register.js?v=1"></script>
+</body>
+</html>

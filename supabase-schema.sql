@@ -356,6 +356,37 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
 
+-- New simplified function for sending invitations to anyone (not just coaches)
+-- This uses Supabase Auth to send invitation emails
+CREATE OR REPLACE FUNCTION create_user_invitation(
+    p_email TEXT
+)
+RETURNS JSONB AS $$
+DECLARE
+    invitation_token TEXT;
+    invitation_id UUID;
+BEGIN
+    -- Generate random token
+    invitation_token := encode(gen_random_bytes(32), 'hex');
+
+    -- Insert invitation without coach_id (NULL by default)
+    INSERT INTO coach_invitations (email, token, expires_at)
+    VALUES (
+        p_email,
+        invitation_token,
+        NOW() + INTERVAL '7 days'
+    )
+    RETURNING id INTO invitation_id;
+
+    -- Return invitation details for email sending via frontend/API
+    RETURN jsonb_build_object(
+        'invitation_id', invitation_id,
+        'token', invitation_token,
+        'email', p_email
+    );
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
 -- ============================================
 -- 6. CREATE INITIAL ADMIN USER (Run this after authentication is set up)
 -- ============================================

@@ -54,13 +54,16 @@
         </div>
     </div>
 
-    <button class="login-button" onclick="window.location.href='login.html'" style="background: #C2A580;">
-        <i data-lucide="shield-check" style="width: 18px; height: 18px;"></i>
-        <span data-i18n="common.login"></span>
+    <button class="login-button" id="authButton" onclick="handleAuthButtonClick()" style="background: #C2A580;">
+        <i data-lucide="shield-check" id="authButtonIcon" style="width: 18px; height: 18px;"></i>
+        <span data-i18n="common.login" class="login-button-label" id="authButtonLabel">Login</span>
     </button>
 
     <div class="chess-pattern"></div>
 
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="supabase-config.js?v=9" onerror="console.log('Supabase config not found')"></script>
+    <script src="supabase-client.js?v=9" onerror="console.log('Supabase client not found')"></script>
     <script src="data.js"></script>
     <script src="app.js?v=2"></script>
     <script>
@@ -68,10 +71,61 @@
             document.title = t('index.title');
         }
 
-        document.addEventListener('languagechange', updateIndexTitle);
+        function updateLoginButtonLabel() {
+            const label = document.querySelector('.login-button-label');
+            if (label) {
+                label.textContent = t('common.login');
+            }
+        }
+
+        // Handle auth button click (Login or Dashboard)
+        function handleAuthButtonClick() {
+            const isLoggedIn = sessionStorage.getItem('userRole');
+            if (isLoggedIn) {
+                window.location.href = 'admin.html';
+            } else {
+                window.location.href = 'login.html';
+            }
+        }
+
+        // Check if user is logged in and update button
+        async function checkAuthState() {
+            try {
+                if (!window.supabaseClient) {
+                    console.log('Supabase client not available');
+                    return;
+                }
+
+                const { data: { session }, error } = await window.supabaseClient.auth.getSession();
+
+                if (session && session.user) {
+                    console.log('User is logged in:', session.user.email);
+
+                    // Update button to show "Dashboard"
+                    const button = document.getElementById('authButton');
+                    const label = document.getElementById('authButtonLabel');
+                    const icon = document.getElementById('authButtonIcon');
+
+                    if (label) label.textContent = 'Dashboard';
+                    if (icon) icon.setAttribute('data-lucide', 'layout-dashboard');
+                    if (button) button.style.background = '#059669'; // Green color for logged-in state
+
+                    lucide.createIcons();
+                } else {
+                    console.log('No active session');
+                }
+            } catch (error) {
+                console.error('Error checking auth state:', error);
+            }
+        }
+
+        document.addEventListener('languagechange', () => {
+            updateIndexTitle();
+            updateLoginButtonLabel();
+        });
 
         // Use window.onload instead of DOMContentLoaded to ensure all scripts are fully loaded
-        window.addEventListener('load', () => {
+        window.addEventListener('load', async () => {
             updateIndexTitle();
 
             // Apply translations after everything is loaded
@@ -80,6 +134,10 @@
             }
 
             lucide.createIcons();
+            updateLoginButtonLabel();
+
+            // Check if user is logged in and update button
+            await checkAuthState();
         });
     </script>
 </body>

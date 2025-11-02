@@ -1,4 +1,6 @@
-// Coaches and Branches Management UI Functions
+// Coaches, Branches, and App Access Management UI Functions
+
+let appAccessInitialized = false;
 
 // ==================== COACHES MANAGEMENT ====================
 
@@ -45,6 +47,239 @@ function loadCoaches() {
     }).join('');
 
     lucide.createIcons();
+}
+
+// View coach details
+function viewCoach(coachName) {
+    const coach = coaches.find(c => `${c.firstName} ${c.lastName}` === coachName);
+    if (!coach) {
+        alert('Coach not found');
+        return;
+    }
+
+    const coachStudents = students.filter(s => s.coach === coachName);
+    const studentsList = coachStudents.length > 0
+        ? coachStudents.map(s => `• ${s.firstName} ${s.lastName} (Level ${s.level})`).join('\n')
+        : 'No students assigned';
+
+    alert(`Coach Details\n\nName: ${coachName}\nBranch: ${coach.branch}\nEmail: ${coach.email}\nPhone: ${coach.phone}\nStudents (${coachStudents.length}):\n${studentsList}`);
+}
+
+// Open edit coach modal
+function editCoach(coachId) {
+    const coach = coaches.find(c => c.id === coachId);
+    if (!coach) {
+        alert('Coach not found');
+        return;
+    }
+
+    // Populate form fields
+    document.getElementById('editCoachId').value = coach.id;
+    document.getElementById('editCoachFirstName').value = coach.firstName;
+    document.getElementById('editCoachLastName').value = coach.lastName;
+    document.getElementById('editCoachEmail').value = coach.email;
+    document.getElementById('editCoachPhone').value = coach.phone;
+
+    // Populate branch dropdown
+    const branchSelect = document.getElementById('editCoachBranchSelect');
+    branchSelect.innerHTML = '<option value="">Select Branch</option>';
+    branches.forEach(branch => {
+        const option = document.createElement('option');
+        option.value = branch.name;
+        option.textContent = branch.name;
+        if (branch.name === coach.branch) {
+            option.selected = true;
+        }
+        branchSelect.appendChild(option);
+    });
+
+    // Show modal
+    document.getElementById('editCoachModal').classList.add('active');
+    lucide.createIcons();
+}
+
+// Delete coach with confirmation
+function deleteCoachConfirm(coachId) {
+    const coach = coaches.find(c => c.id === coachId);
+    if (!coach) {
+        alert('Coach not found');
+        return;
+    }
+
+    const coachName = `${coach.firstName} ${coach.lastName}`;
+    const coachStudents = students.filter(s => s.coach === coachName);
+
+    let confirmMsg = `Are you sure you want to delete coach "${coachName}"?`;
+    if (coachStudents.length > 0) {
+        confirmMsg += `\n\nWarning: This coach has ${coachStudents.length} student(s) assigned. These students will need to be reassigned.`;
+    }
+
+    if (confirm(confirmMsg)) {
+        deleteCoach(coachId);
+    }
+}
+
+// Delete coach
+function deleteCoach(coachId) {
+    const index = coaches.findIndex(c => c.id === coachId);
+    if (index === -1) {
+        alert('Coach not found');
+        return;
+    }
+
+    // Delete from Supabase if available
+    if (window.supabaseClient) {
+        deleteCoachFromSupabase(coachId);
+    }
+
+    coaches.splice(index, 1);
+    loadCoaches();
+    alert('Coach deleted successfully!');
+}
+
+// Open add coach modal
+function addNewCoach() {
+    // Reset form
+    document.getElementById('addCoachForm').reset();
+
+    // Populate branch dropdown
+    const branchSelect = document.getElementById('coachBranchSelect');
+    branchSelect.innerHTML = '<option value="">Select Branch</option>';
+    branches.forEach(branch => {
+        const option = document.createElement('option');
+        option.value = branch.name;
+        option.textContent = branch.name;
+        branchSelect.appendChild(option);
+    });
+
+    // Show modal
+    document.getElementById('addCoachModal').classList.add('active');
+    lucide.createIcons();
+}
+
+// Supabase helper functions for coaches
+async function updateCoachInSupabase(coach) {
+    try {
+        const { error } = await window.supabaseClient
+            .from('coaches')
+            .update({
+                first_name: coach.firstName,
+                last_name: coach.lastName,
+                email: coach.email,
+                phone: coach.phone,
+                branch: coach.branch
+            })
+            .eq('id', coach.id);
+
+        if (error) {
+            console.error('Error updating coach in Supabase:', error);
+        }
+    } catch (error) {
+        console.error('Error updating coach:', error);
+    }
+}
+
+async function deleteCoachFromSupabase(coachId) {
+    try {
+        const { error } = await window.supabaseClient
+            .from('coaches')
+            .delete()
+            .eq('id', coachId);
+
+        if (error) {
+            console.error('Error deleting coach from Supabase:', error);
+        }
+    } catch (error) {
+        console.error('Error deleting coach:', error);
+    }
+}
+
+async function addCoachToSupabase(coach) {
+    try {
+        const { error } = await window.supabaseClient
+            .from('coaches')
+            .insert({
+                first_name: coach.firstName,
+                last_name: coach.lastName,
+                email: coach.email,
+                phone: coach.phone,
+                branch: coach.branch
+            });
+
+        if (error) {
+            console.error('Error adding coach to Supabase:', error);
+        }
+    } catch (error) {
+        console.error('Error adding coach:', error);
+    }
+}
+
+// Close add coach modal
+function closeAddCoachModal() {
+    document.getElementById('addCoachModal').classList.remove('active');
+}
+
+// Close edit coach modal
+function closeEditCoachModal() {
+    document.getElementById('editCoachModal').classList.remove('active');
+}
+
+// Submit add coach form
+function submitAddCoach(event) {
+    event.preventDefault();
+
+    const firstName = document.getElementById('coachFirstName').value;
+    const lastName = document.getElementById('coachLastName').value;
+    const email = document.getElementById('coachEmail').value;
+    const phone = document.getElementById('coachPhone').value;
+    const branch = document.getElementById('coachBranchSelect').value;
+
+    const newCoach = {
+        id: coaches.length > 0 ? Math.max(...coaches.map(c => c.id)) + 1 : 1,
+        firstName,
+        lastName,
+        email,
+        phone,
+        branch
+    };
+
+    // Add to Supabase if available
+    if (window.supabaseClient) {
+        addCoachToSupabase(newCoach);
+    }
+
+    coaches.push(newCoach);
+    loadCoaches();
+    closeAddCoachModal();
+    alert('Coach added successfully!');
+}
+
+// Submit edit coach form
+function submitEditCoach(event) {
+    event.preventDefault();
+
+    const coachId = parseInt(document.getElementById('editCoachId').value);
+    const coach = coaches.find(c => c.id === coachId);
+
+    if (!coach) {
+        alert('Coach not found');
+        return;
+    }
+
+    coach.firstName = document.getElementById('editCoachFirstName').value;
+    coach.lastName = document.getElementById('editCoachLastName').value;
+    coach.email = document.getElementById('editCoachEmail').value;
+    coach.phone = document.getElementById('editCoachPhone').value;
+    coach.branch = document.getElementById('editCoachBranchSelect').value;
+
+    // Update in Supabase if available
+    if (window.supabaseClient) {
+        updateCoachInSupabase(coach);
+    }
+
+    loadCoaches();
+    closeEditCoachModal();
+    alert('Coach updated successfully!');
 }
 
 // Show coaches management section
@@ -176,6 +411,215 @@ function loadBranches() {
     }).join('');
 
     lucide.createIcons();
+}
+
+// View branch details
+function viewBranch(branchName) {
+    // Redirect to branch.html page
+    window.location.href = `branch.html?branch=${encodeURIComponent(branchName)}`;
+}
+
+// Open edit branch modal
+function editBranch(branchId) {
+    const branch = branches.find(b => b.id === branchId);
+    if (!branch) {
+        alert('Branch not found');
+        return;
+    }
+
+    // Populate form fields
+    document.getElementById('editBranchId').value = branch.id;
+    document.getElementById('editBranchName').value = branch.name;
+    document.getElementById('editBranchLocation').value = branch.location;
+    document.getElementById('editBranchEmail').value = branch.email;
+    document.getElementById('editBranchPhone').value = branch.phone;
+
+    // Show modal
+    document.getElementById('editBranchModal').classList.add('active');
+    lucide.createIcons();
+}
+
+// Delete branch with confirmation
+function deleteBranchConfirm(branchId) {
+    const branch = branches.find(b => b.id === branchId);
+    if (!branch) {
+        alert('Branch not found');
+        return;
+    }
+
+    const branchStudents = students.filter(s => s.branch === branch.name);
+    const branchCoaches = coaches.filter(c => c.branch === branch.name);
+
+    let confirmMsg = `Are you sure you want to delete branch "${branch.name}"?`;
+    if (branchStudents.length > 0 || branchCoaches.length > 0) {
+        confirmMsg += `\n\nWarning: This branch has:`;
+        if (branchStudents.length > 0) confirmMsg += `\n- ${branchStudents.length} student(s)`;
+        if (branchCoaches.length > 0) confirmMsg += `\n- ${branchCoaches.length} coach(es)`;
+        confirmMsg += `\n\nThese will need to be reassigned.`;
+    }
+
+    if (confirm(confirmMsg)) {
+        deleteBranch(branchId);
+    }
+}
+
+// Delete branch
+function deleteBranch(branchId) {
+    const index = branches.findIndex(b => b.id === branchId);
+    if (index === -1) {
+        alert('Branch not found');
+        return;
+    }
+
+    // Delete from Supabase if available
+    if (window.supabaseClient) {
+        deleteBranchFromSupabase(branchId);
+    }
+
+    branches.splice(index, 1);
+    loadBranches();
+    alert('Branch deleted successfully!');
+}
+
+// Open add branch modal
+function addNewBranch() {
+    // Reset form
+    document.getElementById('addBranchForm').reset();
+
+    // Show modal
+    document.getElementById('addBranchModal').classList.add('active');
+    lucide.createIcons();
+}
+
+// Supabase helper functions for branches
+async function updateBranchInSupabase(branch) {
+    try {
+        const { error } = await window.supabaseClient
+            .from('branches')
+            .update({
+                name: branch.name,
+                location: branch.location,
+                email: branch.email,
+                phone: branch.phone
+            })
+            .eq('id', branch.id);
+
+        if (error) {
+            console.error('Error updating branch in Supabase:', error);
+        }
+    } catch (error) {
+        console.error('Error updating branch:', error);
+    }
+}
+
+async function deleteBranchFromSupabase(branchId) {
+    try {
+        const { error } = await window.supabaseClient
+            .from('branches')
+            .delete()
+            .eq('id', branchId);
+
+        if (error) {
+            console.error('Error deleting branch from Supabase:', error);
+        }
+    } catch (error) {
+        console.error('Error deleting branch:', error);
+    }
+}
+
+async function addBranchToSupabase(branch) {
+    try {
+        const { error } = await window.supabaseClient
+            .from('branches')
+            .insert({
+                name: branch.name,
+                location: branch.location,
+                email: branch.email,
+                phone: branch.phone
+            });
+
+        if (error) {
+            console.error('Error adding branch to Supabase:', error);
+        }
+    } catch (error) {
+        console.error('Error adding branch:', error);
+    }
+}
+
+// Close add branch modal
+function closeAddBranchModal() {
+    document.getElementById('addBranchModal').classList.remove('active');
+}
+
+// Close edit branch modal
+function closeEditBranchModal() {
+    document.getElementById('editBranchModal').classList.remove('active');
+}
+
+// Submit add branch form
+function submitAddBranch(event) {
+    event.preventDefault();
+
+    const name = document.getElementById('branchName').value;
+    const location = document.getElementById('branchLocation').value;
+    const email = document.getElementById('branchEmail').value;
+    const phone = document.getElementById('branchPhone').value;
+
+    const newBranch = {
+        id: branches.length > 0 ? Math.max(...branches.map(b => b.id)) + 1 : 1,
+        name,
+        location,
+        email,
+        phone
+    };
+
+    // Add to Supabase if available
+    if (window.supabaseClient) {
+        addBranchToSupabase(newBranch);
+    }
+
+    branches.push(newBranch);
+    loadBranches();
+    closeAddBranchModal();
+    alert('Branch added successfully!');
+}
+
+// Submit edit branch form
+function submitEditBranch(event) {
+    event.preventDefault();
+
+    const branchId = parseInt(document.getElementById('editBranchId').value);
+    const branch = branches.find(b => b.id === branchId);
+
+    if (!branch) {
+        alert('Branch not found');
+        return;
+    }
+
+    const oldName = branch.name;
+    branch.name = document.getElementById('editBranchName').value;
+    branch.location = document.getElementById('editBranchLocation').value;
+    branch.email = document.getElementById('editBranchEmail').value;
+    branch.phone = document.getElementById('editBranchPhone').value;
+
+    // Update students and coaches if branch name changed
+    if (oldName !== branch.name) {
+        students.forEach(s => {
+            if (s.branch === oldName) s.branch = branch.name;
+        });
+        coaches.forEach(c => {
+            if (c.branch === oldName) c.branch = branch.name;
+        });
+    }
+
+    // Update in Supabase if available
+    if (window.supabaseClient) {
+        updateBranchInSupabase(branch);
+    }
+
+    loadBranches();
+    closeEditBranchModal();
+    alert('Branch updated successfully!');
 }
 
 // Show branches management section
@@ -353,6 +797,507 @@ function showDataManagement() {
 
     dataSection.classList.add('active');
     lucide.createIcons();
+}
+
+// ==================== APP ACCESS MANAGEMENT ====================
+
+// Check if current user has permission to manage app access
+async function checkAppAccessPermission() {
+    try {
+        const client = window.supabaseClient;
+        if (!client) {
+            console.error('Supabase client not available');
+            return false;
+        }
+
+        // Get current user session
+        const { data: { session }, error: sessionError } = await client.auth.getSession();
+        if (sessionError || !session || !session.user) {
+            console.error('No active session:', sessionError);
+            return false;
+        }
+
+        // Get user's role and permissions
+        const { data: userRole, error: roleError } = await client
+            .from('user_roles')
+            .select('role, can_manage_app_access')
+            .eq('user_id', session.user.id)
+            .single();
+
+        if (roleError) {
+            console.error('Error fetching user role:', roleError);
+            return false;
+        }
+
+        // Admin always has access, otherwise check the permission
+        if (userRole.role === 'admin') {
+            return true;
+        }
+
+        return userRole.can_manage_app_access === true;
+    } catch (error) {
+        console.error('Error checking app access permission:', error);
+        return false;
+    }
+}
+
+async function showAppAccessManagement() {
+    // Check if user has permission to access this page
+    if (!await checkAppAccessPermission()) {
+        alert('You do not have permission to access this page.');
+        showStudents(); // Redirect to Students page
+        return;
+    }
+
+    // Hide all sections
+    document.querySelectorAll('.content-section').forEach(section => {
+        section.classList.remove('active');
+    });
+
+    // Update nav items first
+    const navItem = document.querySelector('.nav-item[onclick*="showAppAccessManagement"]');
+    if (navItem) {
+        document.querySelectorAll('.nav-item').forEach(item => item.classList.remove('active'));
+        navItem.classList.add('active');
+    }
+
+    let appAccessSection = document.getElementById('appAccessSection');
+
+    if (!appAccessSection) {
+        const mainContent = document.querySelector('.main-content');
+        if (!mainContent) {
+            console.error('Main content container not found.');
+            return;
+        }
+
+        const appAccessHTML = `
+            <div id="appAccessSection" class="content-section app-access-section">
+                <div class="header">
+                    <div>
+                        <h1 class="header-title" data-i18n="access.header.title">App Access Management</h1>
+                        <p class="section-subtitle" data-i18n="access.header.subtitle">Manage user roles and permissions</p>
+                    </div>
+                </div>
+
+                <div class="table-card app-access-invite">
+                    <h2 data-i18n="access.invite.title">Invite New User</h2>
+                    <p class="app-access-subtitle" data-i18n="access.invite.description">Send an invitation email to grant access to the system</p>
+
+                    <form id="appAccessInviteForm" class="app-access-form">
+                        <div class="app-access-form-group">
+                            <label for="appAccessInviteEmail" data-i18n="access.invite.emailLabel">Email Address</label>
+                            <input type="email" id="appAccessInviteEmail" class="form-input" placeholder="user@example.com" data-i18n-placeholder="access.invite.emailPlaceholder" required>
+                        </div>
+                        <button type="submit" id="appAccessInviteButton" class="btn btn-primary app-access-submit">
+                            <i data-lucide="send" style="width: 18px; height: 18px;"></i>
+                            <span data-i18n="access.invite.sendButton">Send Invite</span>
+                        </button>
+                    </form>
+                    <div id="appAccessInviteMessage" class="app-access-message" hidden></div>
+                </div>
+
+                <div class="table-card app-access-users">
+                    <h2 data-i18n="access.users.title">User Management</h2>
+                    <p class="app-access-subtitle" data-i18n="access.users.description">Manage existing user roles and permissions</p>
+                    <div id="appAccessUsersList" class="app-access-users-list">
+                        <div class="app-access-empty" data-i18n="access.users.loading">Loading users...</div>
+                    </div>
+                </div>
+            </div>
+        `;
+
+        mainContent.insertAdjacentHTML('beforeend', appAccessHTML);
+        appAccessSection = document.getElementById('appAccessSection');
+
+        setupAppAccessSection();
+    }
+
+    // Show the section
+    appAccessSection.classList.add('active');
+    
+    // Load data asynchronously
+    loadAppAccessData().catch(err => console.error('Error loading app access data:', err));
+
+    lucide.createIcons();
+
+    if (window.i18n && window.i18n.translatePage) {
+        window.i18n.translatePage(appAccessSection);
+    }
+}
+
+function setupAppAccessSection() {
+    if (appAccessInitialized) {
+        return;
+    }
+
+    const inviteForm = document.getElementById('appAccessInviteForm');
+    if (inviteForm) {
+        inviteForm.addEventListener('submit', handleAppAccessInviteSubmit);
+    }
+
+    appAccessInitialized = true;
+}
+
+async function loadAppAccessData() {
+    if (window.supabaseClient) {
+        await loadSupabaseAppAccessUsers();
+    } else {
+        loadDemoAppAccessUsers();
+    }
+}
+
+// DEPRECATED: No longer needed since coach assignment was removed from invitation form
+// function populateAppAccessCoachOptions() {
+//     const select = document.getElementById('appAccessInviteCoach');
+//     if (!select) return;
+//
+//     const previousValue = select.value;
+//     select.innerHTML = '<option value="" data-i18n="access.invite.coachPlaceholder">Select coach...</option>';
+//
+//     const coachList = Array.isArray(window.coaches) ? window.coaches : [];
+//
+//     coachList.forEach(coach => {
+//         const option = document.createElement('option');
+//         option.value = coach.id;
+//         option.textContent = `${coach.firstName} ${coach.lastName}`;
+//         select.appendChild(option);
+//     });
+//
+//     if (previousValue && select.querySelector(`option[value="${previousValue}"]`)) {
+//         select.value = previousValue;
+//     }
+//
+//     if (window.i18n && window.i18n.translatePage) {
+//         window.i18n.translatePage(select);
+//     }
+// }
+
+async function loadSupabaseAppAccessUsers() {
+    const client = window.supabaseClient;
+    if (!client) return;
+
+    try {
+        console.log('Calling get_user_roles_with_emails function...');
+
+        // Use the database function to get user roles with emails
+        const { data: userRoles, error } = await client
+            .rpc('get_user_roles_with_emails');
+
+        console.log('RPC response:', { data: userRoles, error });
+
+        if (error) {
+            console.error('RPC error details:', error);
+            throw error;
+        }
+
+        if (!userRoles || userRoles.length === 0) {
+            console.warn('No users returned from database');
+            displayAppAccessUsers([]);
+            return;
+        }
+
+        // Transform the data to match expected format
+        const formattedUsers = userRoles.map(user => ({
+            ...user,
+            coach: user.coach_first_name && user.coach_last_name
+                ? { first_name: user.coach_first_name, last_name: user.coach_last_name }
+                : null
+        }));
+
+        console.log('Loaded users:', formattedUsers);
+        displayAppAccessUsers(formattedUsers);
+    } catch (error) {
+        console.error('Error loading app access users:', error);
+        console.error('Error details:', {
+            message: error.message,
+            code: error.code,
+            details: error.details,
+            hint: error.hint
+        });
+        showAppAccessMessage('error', error.message || 'Error loading users.');
+        // Don't fall back to demo data - show the error
+        displayAppAccessUsers([]);
+    }
+}
+
+function loadDemoAppAccessUsers() {
+    const demoUsers = [
+        {
+            user_id: '1',
+            role: 'admin',
+            email: '0xmarblemaster@gmail.com',
+            can_view_all_students: true,
+            can_edit_students: true,
+            can_manage_branches: true,
+            can_manage_coaches: true
+        },
+        {
+            user_id: '2',
+            role: 'coach',
+            email: 'chingis@chessempire.kz',
+            coach: { first_name: 'Nurgalimov', last_name: 'Chingis' },
+            can_view_all_students: false,
+            can_edit_students: true,
+            can_manage_branches: false,
+            can_manage_coaches: false
+        }
+    ];
+
+    displayAppAccessUsers(demoUsers);
+}
+
+function displayAppAccessUsers(users) {
+    const container = document.getElementById('appAccessUsersList');
+    if (!container) {
+        console.error('Container #appAccessUsersList not found!');
+        return;
+    }
+
+    if (!users || users.length === 0) {
+        container.innerHTML = '<div class="app-access-empty" data-i18n="access.users.empty">No users found</div>';
+        if (window.i18n && window.i18n.translatePage) {
+            window.i18n.translatePage(container);
+        }
+        lucide.createIcons();
+        return;
+    }
+
+    container.innerHTML = users.map(user => {
+        const roleLabel = getAppAccessRoleLabel(user.role);
+        const emailText = user.email || (window.t ? window.t('access.users.noEmail') : 'Email not available');
+        const adminHint = window.t ? window.t('access.users.adminHint') : 'Administrators have full access to all features';
+
+        return `
+            <div class="app-access-card">
+                <div class="app-access-card-header">
+                    <div class="app-access-user-info">
+                        <div class="app-access-user-avatar">${getAppAccessInitials(user)}</div>
+                        <div class="app-access-user-details">
+                            <h3>${getAppAccessUserName(user)}</h3>
+                            <p>${emailText}</p>
+                        </div>
+                    </div>
+                    <span class="app-access-role-badge app-access-role-${user.role}">${roleLabel}</span>
+                </div>
+                ${user.role !== 'admin'
+                    ? `<div class="app-access-permission-grid">
+                            ${createAppAccessPermissionToggle(user, 'can_manage_app_access')}
+                            ${createAppAccessPermissionToggle(user, 'can_edit_students')}
+                            ${createAppAccessPermissionToggle(user, 'can_manage_branches')}
+                            ${createAppAccessPermissionToggle(user, 'can_manage_coaches')}
+                        </div>`
+                    : `<p class="app-access-admin-hint">${adminHint}</p>`
+                }
+            </div>
+        `;
+    }).join('');
+
+    if (window.supabaseClient) {
+        container.querySelectorAll('.app-access-toggle input').forEach(input => {
+            input.addEventListener('change', handleAppAccessPermissionChange);
+        });
+    }
+
+    lucide.createIcons();
+
+    if (window.i18n && window.i18n.translatePage) {
+        window.i18n.translatePage(container);
+    }
+}
+
+function getAppAccessInitials(user) {
+    if (user.coach) {
+        return `${user.coach.first_name?.[0] || ''}${user.coach.last_name?.[0] || ''}`.toUpperCase() || '?';
+    }
+    if (user.email) {
+        return user.email[0].toUpperCase();
+    }
+    return '?';
+}
+
+function getAppAccessUserName(user) {
+    if (user.coach) {
+        return `${user.coach.first_name || ''} ${user.coach.last_name || ''}`.trim();
+    }
+    if (user.email) {
+        return user.email.split('@')[0];
+    }
+    return window.t ? window.t('access.users.unknownUser') : 'Unknown User';
+}
+
+function getAppAccessRoleLabel(role) {
+    const keyMap = {
+        admin: 'access.roles.admin',
+        coach: 'access.roles.coach',
+        viewer: 'access.roles.viewer'
+    };
+
+    if (window.t && keyMap[role]) {
+        return window.t(keyMap[role]);
+    }
+
+    const fallback = {
+        admin: 'Administrator',
+        coach: 'Coach',
+        viewer: 'Viewer'
+    };
+
+    return fallback[role] || role;
+}
+
+function getAppAccessPermissionLabel(permissionKey) {
+    const keyMap = {
+        can_manage_app_access: 'access.permissions.manageAppAccess',
+        can_edit_students: 'access.permissions.editStudents',
+        can_manage_branches: 'access.permissions.manageBranches',
+        can_manage_coaches: 'access.permissions.manageCoaches'
+    };
+
+    if (window.t && keyMap[permissionKey]) {
+        return window.t(keyMap[permissionKey]);
+    }
+
+    const fallback = {
+        can_manage_app_access: 'App Access',
+        can_edit_students: 'Edit Students',
+        can_manage_branches: 'Manage Branches',
+        can_manage_coaches: 'Manage Coaches'
+    };
+
+    return fallback[permissionKey] || permissionKey;
+}
+
+function createAppAccessPermissionToggle(user, permission) {
+    const isChecked = user[permission] ? 'checked' : '';
+    const disabled = user.role === 'admin' ? 'disabled' : '';
+    const label = getAppAccessPermissionLabel(permission);
+
+    return `
+        <div class="app-access-permission-item">
+            <div class="app-access-permission-label">
+                <i data-lucide="check-circle" style="width: 16px; height: 16px;"></i>
+                <span>${label}</span>
+            </div>
+            <label class="app-access-toggle">
+                <input type="checkbox" ${isChecked} ${disabled}
+                    data-user-id="${user.user_id}"
+                    data-permission="${permission}">
+                <span class="app-access-toggle-slider"></span>
+            </label>
+        </div>
+    `;
+}
+
+async function handleAppAccessPermissionChange(event) {
+    if (!window.supabaseClient) {
+        return;
+    }
+
+    const input = event.target;
+    const userId = input.dataset.userId;
+    const permission = input.dataset.permission;
+    const newValue = input.checked;
+
+    try {
+        const { error } = await window.supabaseClient
+            .from('user_roles')
+            .update({ [permission]: newValue })
+            .eq('user_id', userId);
+
+        if (error) {
+            throw error;
+        }
+
+        showAppAccessMessage('success', window.t ? window.t('access.permissions.updated') : 'Permission updated successfully.');
+    } catch (error) {
+        console.error('Error updating permission:', error);
+        input.checked = !newValue;
+        showAppAccessMessage('error', error.message || 'Error updating permission.');
+    }
+}
+
+async function handleAppAccessInviteSubmit(event) {
+    event.preventDefault();
+
+    const emailInput = document.getElementById('appAccessInviteEmail');
+    const button = document.getElementById('appAccessInviteButton');
+
+    if (!emailInput || !button) {
+        return;
+    }
+
+    const email = emailInput.value;
+
+    if (!window.supabaseClient) {
+        showAppAccessMessage('success', window.t
+            ? window.t('access.invite.demoSuccess', { email })
+            : `Demo mode: Invitation would be sent to ${email}`);
+        event.target.reset();
+        return;
+    }
+
+    button.disabled = true;
+    button.innerHTML = '<div class="spinner"></div><span>Sending...</span>';
+
+    try {
+        // Call Supabase Edge Function to send invitation email
+        const { data, error } = await window.supabaseClient.functions.invoke('send-invitation', {
+            body: { email: email }
+        });
+
+        if (error) {
+            console.error('Edge Function error:', error);
+            throw new Error(error.message || 'Failed to send invitation email');
+        }
+
+        if (data.error) {
+            console.error('Invitation error:', data.error);
+            throw new Error(data.details || data.error);
+        }
+
+        console.log('✅ Invitation sent successfully:', data);
+
+        // Show success message
+        const messageDiv = document.getElementById('appAccessInviteMessage');
+        messageDiv.innerHTML = `
+            <div style="margin-bottom: 1rem;">
+                <strong style="color: #059669;">✅ Invitation sent successfully!</strong>
+            </div>
+            <div style="font-size: 0.9rem; color: #475569;">
+                An invitation email has been sent to <strong>${email}</strong>.<br/>
+                The user will receive a link to create their account.
+            </div>
+        `;
+        messageDiv.hidden = false;
+
+        event.target.reset();
+        await loadSupabaseAppAccessUsers();
+    } catch (error) {
+        console.error('Error sending invitation:', error);
+        showAppAccessMessage('error', error.message || 'Error sending invitation.');
+    } finally {
+        button.disabled = false;
+        button.innerHTML = '<i data-lucide="send" style="width: 18px; height: 18px;"></i><span data-i18n="access.invite.sendButton">Send Invite</span>';
+        lucide.createIcons();
+        if (window.i18n && window.i18n.translatePage) {
+            window.i18n.translatePage(button);
+        }
+    }
+}
+
+function showAppAccessMessage(type, message) {
+    const element = document.getElementById('appAccessInviteMessage');
+    if (!element) return;
+
+    element.textContent = message;
+    element.hidden = false;
+    element.classList.remove('app-access-message-success', 'app-access-message-error');
+    element.classList.add(type === 'success' ? 'app-access-message-success' : 'app-access-message-error');
+
+    clearTimeout(element._hideTimer);
+    element._hideTimer = setTimeout(() => {
+        element.hidden = true;
+    }, 5000);
 }
 
 // Show section (generic function)

@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Test Login</title>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+</head>
+<body>
+    <h1>Testing Supabase Login</h1>
+    <div id="output"></div>
+    
+    <script>
+        const output = document.getElementById('output');
+        
+        async function testLogin() {
+            output.innerHTML = '<p>Starting test...</p>';
+            
+            const supabaseUrl = 'https://papgcizhfkngubwofjuo.supabase.co';
+            const supabaseAnonKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InBhcGdjaXpoZmtuZ3Vid29manVvIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjE5MzAzNTEsImV4cCI6MjA3NzUwNjM1MX0.lN94-p4L3gUTU1vw_odZt6ruv_K40lOIKXXE80LIS_U';
+            
+            const client = supabase.createClient(supabaseUrl, supabaseAnonKey);
+            
+            output.innerHTML += '<p>Supabase client created</p>';
+            
+            try {
+                output.innerHTML += '<p>Attempting to sign in with dagamavasco210@gmail.com...</p>';
+                
+                const { data, error } = await client.auth.signInWithPassword({
+                    email: 'dagamavasco210@gmail.com',
+                    password: 'ChessEmpire2025'
+                });
+                
+                if (error) {
+                    output.innerHTML += `<p style="color: red;"><strong>Error:</strong> ${error.message}</p>`;
+                    output.innerHTML += `<p style="color: red;"><strong>Error Code:</strong> ${error.code || 'N/A'}</p>`;
+                    output.innerHTML += `<p style="color: red;"><strong>Error Status:</strong> ${error.status || 'N/A'}</p>`;
+                    output.innerHTML += `<p style="color: red;"><strong>Full Error:</strong> <pre>${JSON.stringify(error, null, 2)}</pre></p>`;
+                } else {
+                    output.innerHTML += `<p style="color: green;"><strong>Success!</strong> User ID: ${data.user.id}</p>`;
+                    output.innerHTML += `<p style="color: green;">Email: ${data.user.email}</p>`;
+                    output.innerHTML += `<p style="color: green;">Session: <pre>${JSON.stringify(data.session, null, 2)}</pre></p>`;
+                }
+            } catch (err) {
+                output.innerHTML += `<p style="color: red;"><strong>Exception:</strong> ${err.message}</p>`;
+                console.error('Exception:', err);
+            }
+        }
+        
+        testLogin();
+    </script>
+</body>
+</html>

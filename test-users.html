@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Test Users Query</title>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+</head>
+<body>
+    <h1>Testing User Roles Query</h1>
+    <div id="output"></div>
+    
+    <script>
+        const output = document.getElementById('output');
+        
+        async function testQuery() {
+            output.innerHTML = '<p>Starting test...</p>';
+            
+            const supabaseUrl = 'https://papgcizhfkngubwofjuo.supabase.co';
+            const supabaseAnonKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InBhcGdjaXpoZmtuZ3Vid29manVvIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjE5MzAzNTEsImV4cCI6MjA3NzUwNjM1MX0.lN94-p4L3gUTU1vw_odZt6ruv_K40lOIKXXE80LIS_U';
+            
+            const client = supabase.createClient(supabaseUrl, supabaseAnonKey);
+            
+            output.innerHTML += '<p>Supabase client created</p>';
+            
+            try {
+                output.innerHTML += '<p>Querying user_roles table...</p>';
+                
+                const { data, error } = await client
+                    .from('user_roles')
+                    .select('*');
+                
+                if (error) {
+                    output.innerHTML += `<p style="color: red;"><strong>Error:</strong> ${error.message}</p>`;
+                    output.innerHTML += `<p style="color: red;"><strong>Full Error:</strong> <pre>${JSON.stringify(error, null, 2)}</pre></p>`;
+                } else {
+                    output.innerHTML += `<p style="color: green;"><strong>Success!</strong> Found ${data.length} users</p>`;
+                    output.innerHTML += `<p>Users: <pre>${JSON.stringify(data, null, 2)}</pre></p>`;
+                }
+            } catch (err) {
+                output.innerHTML += `<p style="color: red;"><strong>Exception:</strong> ${err.message}</p>`;
+                console.error('Exception:', err);
+            }
+        }
+        
+        testQuery();
+    </script>
+</body>
+</html>
