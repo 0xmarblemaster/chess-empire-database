@@ -118,7 +118,7 @@ function saveStudent(event) {
         loadStudents();
         loadStatistics();
         populateFilterDropdowns();
-        showSuccess(studentId ? 'Student updated successfully!' : 'Student created successfully!');
+        showSuccess(studentId ? 'admin.form.editSuccess' : 'admin.form.addSuccess');
     } else {
         showError(result.error);
     }
@@ -145,7 +145,7 @@ function deleteStudentConfirm(studentId) {
                 loadStudents();
                 loadStatistics();
                 populateFilterDropdowns();
-                showSuccess('Student deleted successfully!');
+                showSuccess('admin.form.deleteSuccess');
             } else {
                 showError(result.error);
             }
@@ -236,7 +236,7 @@ function saveCoach(event) {
         }
         populateCoachDropdown();
         populateFilterDropdowns();
-        showSuccess(coachId ? 'Coach updated successfully!' : 'Coach created successfully!');
+        showSuccess(coachId ? 'admin.modals.coach.editSuccess' : 'admin.modals.coach.addSuccess');
     } else {
         showError(result.error);
     }
@@ -273,7 +273,7 @@ function deleteCoachConfirm(coachId) {
                 }
                 populateCoachDropdown();
                 populateFilterDropdowns();
-                showSuccess('Coach deleted successfully!');
+                showSuccess('admin.modals.coach.deleteSuccess');
             } else {
                 showError(result.error);
             }
@@ -340,7 +340,7 @@ function saveBranch(event) {
         populateBranchDropdown();
         populateFilterDropdowns();
         loadStatistics();
-        showSuccess(branchId ? 'Branch updated successfully!' : 'Branch created successfully!');
+        showSuccess(branchId ? 'admin.modals.branch.editSuccess' : 'admin.modals.branch.addSuccess');
     } else {
         showError(result.error);
     }
@@ -378,7 +378,7 @@ function deleteBranchConfirm(branchId) {
                 populateBranchDropdown();
                 populateFilterDropdowns();
                 loadStatistics();
-                showSuccess('Branch deleted successfully!');
+                showSuccess('admin.modals.branch.deleteSuccess');
             } else {
                 showError(result.error);
             }
@@ -436,36 +436,54 @@ function closeDeleteModal() {
 
 // Show success notification
 function showSuccess(message) {
+    // Use custom notification modal if available
+    if (typeof window.showNotification === 'function') {
+        window.showNotification(message, 'success');
+        return;
+    }
+
+    // Fallback to toast
     const toast = document.getElementById('successToast');
     const messageEl = document.getElementById('successMessage');
 
-    messageEl.textContent = message;
-    toast.classList.add('active');
+    if (toast && messageEl) {
+        messageEl.textContent = message;
+        toast.classList.add('active');
 
-    setTimeout(() => {
-        lucide.createIcons();
-    }, 50);
+        setTimeout(() => {
+            lucide.createIcons();
+        }, 50);
 
-    setTimeout(() => {
-        toast.classList.remove('active');
-    }, 3000);
+        setTimeout(() => {
+            toast.classList.remove('active');
+        }, 3000);
+    }
 }
 
 // Show error notification
 function showError(message) {
+    // Use custom notification modal if available
+    if (typeof window.showNotification === 'function') {
+        window.showNotification(message, 'error');
+        return;
+    }
+
+    // Fallback to toast
     const toast = document.getElementById('errorToast');
     const messageEl = document.getElementById('errorMessage');
 
-    messageEl.textContent = message;
-    toast.classList.add('active');
+    if (toast && messageEl) {
+        messageEl.textContent = message;
+        toast.classList.add('active');
 
-    setTimeout(() => {
-        lucide.createIcons();
-    }, 50);
+        setTimeout(() => {
+            lucide.createIcons();
+        }, 50);
 
-    setTimeout(() => {
-        toast.classList.remove('active');
-    }, 3000);
+        setTimeout(() => {
+            toast.classList.remove('active');
+        }, 3000);
+    }
 }
 
 // ==================== DATA MANAGEMENT FUNCTIONS ====================

@@ -1005,16 +1005,27 @@
     <div id="crud-modals-container"></div>
 
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-    <script src="supabase-config.js?v=9"></script>
-    <script src="supabase-client.js?v=9"></script>
-    <script src="supabase-data.js?v=3"></script>
+    <script src="supabase-config.js?v=1762345505"></script>
+    <script src="supabase-client.js?v=1762345505"></script>
+    <script src="supabase-data.js?v=1762345505"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-    <script src="data.js?v=20250105019"></script>
-    <script src="crud.js?v=20250105019"></script>
-    <script src="crud-handlers.js?v=13"></script>
-    <script src="crud-management.js?v=20250105019"></script>
-    <script src="admin.js?v=20250105019"></script>
+    <script src="data.js?v=1762345505"></script>
+    <script src="crud.js?v=1762345505"></script>
+    <script src="crud-handlers.js?v=1762345505"></script>
+    <script src="crud-management.js?v=1762345505"></script>
+    <script src="admin.js?v=1762345806"></script>
     <script>
+        // DEBUG: Check DOM values after 3 seconds
+        setTimeout(() => {
+            const totalStudentsElement = document.getElementById('totalStudents');
+            const activeStudentsElement = document.getElementById('activeStudents');
+            console.log('🔍 DOM CHECK (3 seconds after load):');
+            console.log('  totalStudents element:', totalStudentsElement);
+            console.log('  totalStudents.textContent:', totalStudentsElement?.textContent);
+            console.log('  activeStudents.textContent:', activeStudentsElement?.textContent);
+            console.log('  students array length:', window.students?.length);
+        }, 3000);
+
         // Mobile menu functions
         function toggleMobileMenu() {
             const sidebar = document.getElementById('sidebar');

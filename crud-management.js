@@ -350,11 +350,11 @@ function showCoachesManagement() {
             <div id="coachesSection" class="content-section active">
                 <!-- Header -->
                 <div class="header">
-                    <h1 class="header-title">Coaches Management</h1>
+                    <h1 class="header-title" data-i18n="admin.coaches.management">Coaches Management</h1>
                     <div class="header-actions">
                         <button class="btn btn-primary" onclick="addNewCoach()">
                             <i data-lucide="plus" style="width: 18px; height: 18px;"></i>
-                            <span>Add Coach</span>
+                            <span data-i18n="admin.coaches.addCoach">Add Coach</span>
                         </button>
                     </div>
                 </div>
@@ -365,7 +365,7 @@ function showCoachesManagement() {
                         <div class="stat-header">
                             <div>
                                 <div class="stat-value" id="totalCoachesManage">${coachCount}</div>
-                                <div class="stat-label">Total Coaches</div>
+                                <div class="stat-label" data-i18n="admin.coaches.totalCoaches">Total Coaches</div>
                             </div>
                             <div class="stat-icon amber">
                                 <i data-lucide="user-check" style="width: 24px; height: 24px;"></i>
@@ -376,7 +376,7 @@ function showCoachesManagement() {
                         <div class="stat-header">
                             <div>
                                 <div class="stat-value" id="totalBranchesCoach">${branchCount}</div>
-                                <div class="stat-label">Total Branches</div>
+                                <div class="stat-label" data-i18n="admin.branches.totalBranches">Total Branches</div>
                             </div>
                             <div class="stat-icon purple">
                                 <i data-lucide="building" style="width: 24px; height: 24px;"></i>
@@ -390,12 +390,12 @@ function showCoachesManagement() {
                     <table class="student-table">
                         <thead>
                             <tr>
-                                <th>Coach</th>
-                                <th>Branch</th>
-                                <th>Email</th>
-                                <th>Phone</th>
-                                <th>Students</th>
-                                <th>Actions</th>
+                                <th data-i18n="admin.coaches.tableCoach">Coach</th>
+                                <th data-i18n="admin.table.branch">Branch</th>
+                                <th data-i18n="admin.branch.email">Email</th>
+                                <th data-i18n="admin.branch.phone">Phone</th>
+                                <th data-i18n="admin.branches.tableStudents">Students</th>
+                                <th data-i18n="admin.table.actions">Actions</th>
                             </tr>
                         </thead>
                         <tbody id="coachTableBody">
@@ -412,7 +412,14 @@ function showCoachesManagement() {
 
     coachesSection.classList.add('active');
     loadCoaches();
+
+    // Apply translations (moved outside to always apply)
     lucide.createIcons();
+
+    // Apply translations after icons are created
+    if (typeof i18n !== 'undefined' && typeof i18n.applyTranslations === 'function') {
+        i18n.applyTranslations();
+    }
 }
 window.showCoachesManagement = showCoachesManagement;
 
@@ -690,7 +697,15 @@ function submitEditBranch(event) {
 
     loadBranches();
     closeEditBranchModal();
-    alert('Branch updated successfully!');
+
+    // Use custom notification if available
+    if (typeof window.showNotification === 'function') {
+        window.showNotification('admin.modals.branch.editSuccess', 'success');
+    } else if (typeof showSuccess === 'function') {
+        showSuccess(t ? t('admin.modals.branch.editSuccess') : 'Branch updated successfully!');
+    } else {
+        alert(t ? t('admin.modals.branch.editSuccess') : 'Branch updated successfully!');
+    }
 }
 
 // Show branches management section
@@ -710,11 +725,11 @@ function showBranchesManagement() {
             <div id="branchesSection" class="content-section active">
                 <!-- Header -->
                 <div class="header">
-                    <h1 class="header-title">Branches Management</h1>
+                    <h1 class="header-title" data-i18n="admin.branches.management">Branches Management</h1>
                     <div class="header-actions">
                         <button class="btn btn-primary" onclick="addNewBranch()">
                             <i data-lucide="plus" style="width: 18px; height: 18px;"></i>
-                            <span>Add Branch</span>
+                            <span data-i18n="admin.branches.addBranch">Add Branch</span>
                         </button>
                     </div>
                 </div>
@@ -725,7 +740,7 @@ function showBranchesManagement() {
                         <div class="stat-header">
                             <div>
                                 <div class="stat-value" id="totalBranchesManage">${branches.length}</div>
-                                <div class="stat-label">Total Branches</div>
+                                <div class="stat-label" data-i18n="admin.branches.totalBranches">Total Branches</div>
                             </div>
                             <div class="stat-icon purple">
                                 <i data-lucide="building" style="width: 24px; height: 24px;"></i>
@@ -735,8 +750,8 @@ function showBranchesManagement() {
                     <div class="stat-card">
                         <div class="stat-header">
                             <div>
-                                <div class="stat-value" id="totalStudentsBranch">${students.length}</div>
-                                <div class="stat-label">Total Students</div>
+                                <div class="stat-value" id="totalStudentsBranch">${branches.reduce((total, branch) => total + students.filter(s => s.branch === branch.name).length, 0)}</div>
+                                <div class="stat-label" data-i18n="admin.branches.totalStudents">Total Students</div>
                             </div>
                             <div class="stat-icon blue">
                                 <i data-lucide="users" style="width: 24px; height: 24px;"></i>
@@ -750,13 +765,13 @@ function showBranchesManagement() {
                     <table class="student-table">
                         <thead>
                             <tr>
-                                <th>Branch</th>
-                                <th>Location</th>
-                                <th>Phone</th>
-                                <th>Email</th>
-                                <th>Students</th>
-                                <th>Coaches</th>
-                                <th>Actions</th>
+                                <th data-i18n="admin.table.branch">Branch</th>
+                                <th data-i18n="admin.branch.location">Location</th>
+                                <th data-i18n="admin.branch.phone">Phone</th>
+                                <th data-i18n="admin.branch.email">Email</th>
+                                <th data-i18n="admin.branches.tableStudents">Students</th>
+                                <th data-i18n="admin.branches.tableCoaches">Coaches</th>
+                                <th data-i18n="admin.table.actions">Actions</th>
                             </tr>
                         </thead>
                         <tbody id="branchTableBody">
@@ -773,7 +788,14 @@ function showBranchesManagement() {
 
     branchesSection.classList.add('active');
     loadBranches();
+
+    // Apply translations (moved outside to always apply)
     lucide.createIcons();
+
+    // Apply translations after icons are created
+    if (typeof i18n !== 'undefined' && typeof i18n.applyTranslations === 'function') {
+        i18n.applyTranslations();
+    }
 }
 
 // ==================== DATA MANAGEMENT ====================
@@ -795,7 +817,7 @@ function showDataManagement() {
             <div id="dataManagementSection" class="content-section active">
                 <!-- Header -->
                 <div class="header">
-                    <h1 class="header-title">Data Management</h1>
+                    <h1 class="header-title" data-i18n="admin.data.management">Data Management</h1>
                 </div>
 
                 <!-- Data Management Cards -->
@@ -803,8 +825,8 @@ function showDataManagement() {
                     <div class="stat-card" style="cursor: pointer;" onclick="exportData()">
                         <div class="stat-header">
                             <div>
-                                <div style="font-size: 1.125rem; font-weight: 600; margin-bottom: 0.5rem;">Export Data</div>
-                                <div class="stat-label">Download all data as JSON</div>
+                                <div style="font-size: 1.125rem; font-weight: 600; margin-bottom: 0.5rem;" data-i18n="admin.data.export">Export Data</div>
+                                <div class="stat-label" data-i18n="admin.data.exportDesc">Download all data as JSON</div>
                             </div>
                             <div class="stat-icon blue">
                                 <i data-lucide="download" style="width: 24px; height: 24px;"></i>
@@ -815,8 +837,8 @@ function showDataManagement() {
                     <div class="stat-card" style="cursor: pointer;" onclick="importData()">
                         <div class="stat-header">
                             <div>
-                                <div style="font-size: 1.125rem; font-weight: 600; margin-bottom: 0.5rem;">Import Data</div>
-                                <div class="stat-label">Upload JSON data file</div>
+                                <div style="font-size: 1.125rem; font-weight: 600; margin-bottom: 0.5rem;" data-i18n="admin.data.import">Import Data</div>
+                                <div class="stat-label" data-i18n="admin.data.importDesc">Upload JSON data file</div>
                             </div>
                             <div class="stat-icon green">
                                 <i data-lucide="upload" style="width: 24px; height: 24px;"></i>
@@ -827,8 +849,8 @@ function showDataManagement() {
                     <div class="stat-card" style="cursor: pointer;" onclick="resetData()">
                         <div class="stat-header">
                             <div>
-                                <div style="font-size: 1.125rem; font-weight: 600; margin-bottom: 0.5rem;">Reset Data</div>
-                                <div class="stat-label">Restore default data</div>
+                                <div style="font-size: 1.125rem; font-weight: 600; margin-bottom: 0.5rem;" data-i18n="admin.data.reset">Reset Data</div>
+                                <div class="stat-label" data-i18n="admin.data.resetDesc">Restore default data</div>
                             </div>
                             <div class="stat-icon" style="background: #fee2e2; color: #dc2626;">
                                 <i data-lucide="refresh-ccw" style="width: 24px; height: 24px;"></i>
@@ -839,23 +861,23 @@ function showDataManagement() {
 
                 <!-- Statistics -->
                 <div class="table-card">
-                    <h3 style="font-size: 1.25rem; font-weight: 600; margin-bottom: 1.5rem; color: #1e293b;">Current Database Statistics</h3>
+                    <h3 style="font-size: 1.25rem; font-weight: 600; margin-bottom: 1.5rem; color: #1e293b;" data-i18n="admin.data.statistics">Current Database Statistics</h3>
                     <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1.5rem;">
                         <div style="padding: 1.25rem; background: #f8fafc; border-radius: 12px;">
                             <div style="font-size: 2rem; font-weight: 700; color: #3b82f6;">${students.length}</div>
-                            <div style="font-size: 0.875rem; color: #64748b; margin-top: 0.25rem;">Total Students</div>
+                            <div style="font-size: 0.875rem; color: #64748b; margin-top: 0.25rem;" data-i18n="common.totalStudents">Total Students</div>
                         </div>
                         <div style="padding: 1.25rem; background: #f8fafc; border-radius: 12px;">
                             <div style="font-size: 2rem; font-weight: 700; color: #f59e0b;">${coaches.length}</div>
-                            <div style="font-size: 0.875rem; color: #64748b; margin-top: 0.25rem;">Total Coaches</div>
+                            <div style="font-size: 0.875rem; color: #64748b; margin-top: 0.25rem;" data-i18n="common.totalCoaches">Total Coaches</div>
                         </div>
                         <div style="padding: 1.25rem; background: #f8fafc; border-radius: 12px;">
                             <div style="font-size: 2rem; font-weight: 700; color: #8b5cf6;">${branches.length}</div>
-                            <div style="font-size: 0.875rem; color: #64748b; margin-top: 0.25rem;">Total Branches</div>
+                            <div style="font-size: 0.875rem; color: #64748b; margin-top: 0.25rem;" data-i18n="admin.branches.totalBranches">Total Branches</div>
                         </div>
                         <div style="padding: 1.25rem; background: #f8fafc; border-radius: 12px;">
                             <div style="font-size: 2rem; font-weight: 700; color: #10b981;">${students.filter(s => s.status === 'active').length}</div>
-                            <div style="font-size: 0.875rem; color: #64748b; margin-top: 0.25rem;">Active Students</div>
+                            <div style="font-size: 0.875rem; color: #64748b; margin-top: 0.25rem;" data-i18n="common.activeStudents">Active Students</div>
                         </div>
                     </div>
                 </div>
@@ -867,7 +889,14 @@ function showDataManagement() {
     }
 
     dataSection.classList.add('active');
+
+    // Apply translations (moved outside to always apply)
     lucide.createIcons();
+
+    // Apply translations after icons are created
+    if (typeof i18n !== 'undefined' && typeof i18n.applyTranslations === 'function') {
+        i18n.applyTranslations();
+    }
 }
 
 // ==================== APP ACCESS MANAGEMENT ====================

@@ -42,7 +42,7 @@ function renderDropdown(results) {
     }
 
     dropdown.innerHTML = results.map(student => `
-        <div class="dropdown-item" onclick="viewStudent(${student.id})">
+        <div class="dropdown-item" onclick="viewStudent('${student.id}')">
             <div>
                 <div class="student-name">${student.firstName} ${student.lastName}</div>
                 <div class="student-meta">

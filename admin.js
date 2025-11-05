@@ -104,12 +104,24 @@ function updateMenuVisibility() {
 document.addEventListener('DOMContentLoaded', async () => {
     document.title = t('admin.title');
 
+    // DEBUG: Check Supabase availability
+    console.log('🔧 Admin Dashboard Initialization');
+    console.log('  window.supabaseClient:', typeof window.supabaseClient);
+    console.log('  window.supabaseData:', typeof window.supabaseData);
+    console.log('  typeof initializeData:', typeof initializeData);
+    console.log('  window.initializeData:', typeof window.initializeData);
+
     // Wait for data to load from Supabase
-    if (typeof initializeData === 'function') {
-        await initializeData();
+    const initFn = (typeof window.initializeData === 'function') ? window.initializeData :
+                   (typeof initializeData === 'function') ? initializeData : null;
+
+    if (initFn) {
+        console.log('✅ Calling initializeData...');
+        await initFn();
         // initializeData() already calls refreshAllUIComponents()
         // which populates dropdowns and loads students
     } else {
+        console.error('❌ initializeData not found, using fallback');
         // Fallback if initializeData doesn't exist
         loadStatistics();
         populateFilterDropdowns();
@@ -120,11 +132,11 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     // Update menu visibility based on user permissions
     updateMenuVisibility();
-    
+
     // Apply translations and setup
     applyAdminTranslations();
     setupEventListeners();
-    lucide.createIcons();
+    // Note: lucide.createIcons() is called by loadStudents() - no need to call here
 });
 
 document.addEventListener('languagechange', () => {
@@ -146,11 +158,32 @@ function loadStatistics() {
     const totalBranches = uniqueBranches.length;
     const activeStudents = students.filter(s => s.status === 'active').length;
 
+    // DEBUG: Log student counts and data types
+    console.log('📊 loadStatistics()');
+    console.log('  Total students:', totalStudents);
+    console.log('  Active students:', activeStudents);
+    console.log('  Students array:', students);
+    console.log('  First student:', students[0]);
+    if (students.length > 0) {
+        console.log('  Student ID type:', typeof students[0].id, students[0].id);
+    }
+
     // Update main stats
-    document.getElementById('totalStudents').textContent = totalStudents;
-    document.getElementById('totalCoaches').textContent = totalCoaches;
-    document.getElementById('totalBranches').textContent = totalBranches;
-    document.getElementById('activeStudents').textContent = activeStudents;
+    const totalStudentsElement = document.getElementById('totalStudents');
+    const totalCoachesElement = document.getElementById('totalCoaches');
+    const totalBranchesElement = document.getElementById('totalBranches');
+    const activeStudentsElement = document.getElementById('activeStudents');
+
+    console.log('📝 Updating DOM elements:');
+    console.log('  totalStudentsElement:', totalStudentsElement);
+    console.log('  Setting totalStudents to:', totalStudents);
+
+    totalStudentsElement.textContent = totalStudents;
+    totalCoachesElement.textContent = totalCoaches;
+    totalBranchesElement.textContent = totalBranches;
+    activeStudentsElement.textContent = activeStudents;
+
+    console.log('  After update, totalStudentsElement.textContent:', totalStudentsElement.textContent);
 
     // Update nav badge
     const studentCountBadge = document.getElementById('studentCount');
@@ -256,7 +289,7 @@ function loadStudents() {
                 <td>
                     <div class="student-cell">
                         <div class="student-avatar">${student.firstName[0]}${student.lastName[0]}</div>
-                        <div class="student-name">${student.firstName} ${student.lastName}</div>
+                        <div class="student-name clickable" onclick="viewStudent('${student.id}')" style="cursor: pointer; color: #d97706;" onmouseover="this.style.textDecoration='underline'" onmouseout="this.style.textDecoration='none'">${student.firstName} ${student.lastName}</div>
                     </div>
                 </td>
                 <td>${student.age}</td>
@@ -292,16 +325,19 @@ function loadStudents() {
     // Update result count
     updateResultCount(filteredStudents.length);
 
-    // Initialize icons for desktop table immediately
-    lucide.createIcons();
-
-    // Defer mobile cards rendering to next animation frame for better performance
-    // Only render if mobile container exists and might be visible
-    requestAnimationFrame(() => {
-        renderMobileStudentCards(filteredStudents);
-        // Re-initialize icons after mobile cards are rendered
+    // Only render mobile cards on mobile/tablet devices (performance optimization)
+    // Check viewport width to avoid unnecessary rendering on desktop
+    if (window.innerWidth <= 768) {
+        // Defer mobile cards rendering to next animation frame for better performance
+        requestAnimationFrame(() => {
+            renderMobileStudentCards(filteredStudents);
+            // Initialize icons once after all rendering is complete
+            lucide.createIcons();
+        });
+    } else {
+        // On desktop, just initialize icons for the table
         lucide.createIcons();
-    });
+    }
 }
 
 // Render mobile student cards
@@ -323,7 +359,7 @@ function renderMobileStudentCards(students) {
                 <div class="mobile-card-header">
                     <div class="mobile-card-avatar">${student.firstName[0]}${student.lastName[0]}</div>
                     <div class="mobile-card-info">
-                        <div class="mobile-card-name">${student.firstName} ${student.lastName}</div>
+                        <div class="mobile-card-name clickable" onclick="viewStudent('${student.id}')" style="cursor: pointer; color: #d97706;" onmouseover="this.style.textDecoration='underline'" onmouseout="this.style.textDecoration='none'">${student.firstName} ${student.lastName}</div>
                         <div class="mobile-card-meta">${student.age} ${t('common.years')} • ${student.coach}</div>
                     </div>
                     <span class="mobile-card-status ${student.status}">${translateStatus(student.status)}</span>

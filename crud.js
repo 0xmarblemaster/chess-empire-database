@@ -2,16 +2,27 @@
 // This module handles Create, Read, Update, Delete operations for students, coaches, and branches
 // IMPORTANT: Uses global variables from data.js (students, coaches, branches)
 
-// Flag to check if Supabase is available
-const useSupabase = typeof window !== 'undefined' && window.supabaseClient && window.supabaseData;
+console.log('✅ crud.js loaded and executing - initializeData will be defined');
 
 // Initialize data - load from Supabase or fallback to localStorage
 async function initializeData() {
+    // Check if Supabase is available at runtime (not at module load time)
+    console.log('🔧 Checking Supabase availability...');
+    console.log('  window.supabaseClient:', typeof window.supabaseClient);
+    console.log('  window.supabaseData:', typeof window.supabaseData);
+
+    const useSupabase = typeof window !== 'undefined' && window.supabaseClient && window.supabaseData;
+
+    console.log('  useSupabase:', useSupabase);
+
     if (useSupabase) {
         console.log('📊 Initializing data from Supabase...');
         await loadDataFromSupabase();
     } else {
         console.log('📊 Supabase not available, using localStorage fallback...');
+        console.log('  window:', typeof window);
+        console.log('  window.supabaseClient:', window.supabaseClient);
+        console.log('  window.supabaseData:', window.supabaseData);
         loadDataFromStorage();
     }
 }
@@ -58,13 +69,12 @@ async function loadDataFromSupabase() {
 
 // Refresh all UI components after data loads
 function refreshAllUIComponents() {
-    // Priority 1: Critical UI updates (synchronous)
-    // Load students list first (most important)
+    // Load students list first (most important) - synchronous
     if (typeof loadStudents === 'function') {
         loadStudents();
     }
 
-    // Priority 2: Defer non-critical updates to next frame
+    // Defer all other updates to a single animation frame (removed excessive nesting)
     requestAnimationFrame(() => {
         // Load statistics
         if (typeof loadStatistics === 'function') {
@@ -76,63 +86,52 @@ function refreshAllUIComponents() {
         if (totalCoaches) {
             totalCoaches.textContent = window.coaches.length;
         }
-    });
 
-    // Priority 3: Defer dropdowns to next frame after stats
-    requestAnimationFrame(() => {
-        requestAnimationFrame(() => {
-            // Populate sidebar dropdowns with Supabase data
-            if (typeof populateCoachDropdown === 'function') {
-                populateCoachDropdown();
-            }
+        // Populate sidebar dropdowns with Supabase data
+        if (typeof populateCoachDropdown === 'function') {
+            populateCoachDropdown();
+        }
 
-            if (typeof populateBranchDropdown === 'function') {
-                populateBranchDropdown();
-            }
+        if (typeof populateBranchDropdown === 'function') {
+            populateBranchDropdown();
+        }
 
-            // Update filter dropdowns
-            if (typeof populateFilterDropdowns === 'function') {
-                populateFilterDropdowns();
-            }
-        });
-    });
+        // Update filter dropdowns
+        if (typeof populateFilterDropdowns === 'function') {
+            populateFilterDropdowns();
+        }
 
-    // Priority 4: Only refresh section-specific views if they're visible
-    requestAnimationFrame(() => {
-        requestAnimationFrame(() => {
-            requestAnimationFrame(() => {
-                // Refresh coaches management if it's visible
-                if (typeof loadCoaches === 'function') {
-                    const coachesSection = document.getElementById('coachesSection');
-                    if (coachesSection && coachesSection.classList.contains('active')) {
-                        loadCoaches();
-                        // Update stats
-                        const totalCoachesManage = document.getElementById('totalCoachesManage');
-                        if (totalCoachesManage) {
-                            totalCoachesManage.textContent = window.coaches.length;
-                        }
-                    }
+        // Only refresh section-specific views if they're visible
+        // Refresh coaches management if it's visible
+        if (typeof loadCoaches === 'function') {
+            const coachesSection = document.getElementById('coachesSection');
+            if (coachesSection && coachesSection.classList.contains('active')) {
+                loadCoaches();
+                // Update stats
+                const totalCoachesManage = document.getElementById('totalCoachesManage');
+                if (totalCoachesManage) {
+                    totalCoachesManage.textContent = window.coaches.length;
                 }
+            }
+        }
 
-                // Refresh coaches list view (Main menu) if it's visible
-                if (typeof refreshCoachesListView === 'function') {
-                    const coachesListSection = document.getElementById('coachesListSection');
-                    if (coachesListSection && coachesListSection.classList.contains('active')) {
-                        refreshCoachesListView();
-                    }
-                }
+        // Refresh coaches list view (Main menu) if it's visible
+        if (typeof refreshCoachesListView === 'function') {
+            const coachesListSection = document.getElementById('coachesListSection');
+            if (coachesListSection && coachesListSection.classList.contains('active')) {
+                refreshCoachesListView();
+            }
+        }
 
-                // Refresh branches management if it's visible
-                if (typeof loadBranches === 'function') {
-                    const branchesSection = document.getElementById('branchesSection');
-                    if (branchesSection && branchesSection.classList.contains('active')) {
-                        loadBranches();
-                    }
-                }
+        // Refresh branches management if it's visible
+        if (typeof loadBranches === 'function') {
+            const branchesSection = document.getElementById('branchesSection');
+            if (branchesSection && branchesSection.classList.contains('active')) {
+                loadBranches();
+            }
+        }
 
-                console.log('🔄 UI components refreshed with Supabase data');
-            });
-        });
+        console.log('🔄 UI components refreshed with Supabase data');
     });
 }
 
@@ -857,6 +856,21 @@ async function importDataFromJSON(fileInput) {
         }
     };
     reader.readAsText(file);
+}
+
+// ==========================================
+// EXPOSE FUNCTIONS TO GLOBAL SCOPE
+// ==========================================
+// CRITICAL: Functions must be exposed to window for access from other scripts
+// (student.js, admin.js, app.js, etc.)
+if (typeof window !== 'undefined') {
+    window.initializeData = initializeData;
+    window.loadDataFromSupabase = loadDataFromSupabase;
+    window.loadDataFromStorage = loadDataFromStorage;
+    window.refreshAllUIComponents = refreshAllUIComponents;
+    console.log('✅ CRUD functions exposed to global scope');
+    console.log('  window.initializeData:', typeof window.initializeData);
+    console.log('  window.loadDataFromSupabase:', typeof window.loadDataFromSupabase);
 }
 
 // Initialize data on page load

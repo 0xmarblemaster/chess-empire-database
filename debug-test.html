@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>DOM Debug Test</title>
+</head>
+<body>
+    <h1>Admin Dashboard DOM Debugger</h1>
+    <button onclick="runDebug()">Run Debug Check</button>
+    <pre id="output"></pre>
+
+    <script>
+        async function runDebug() {
+            const output = document.getElementById('output');
+            output.textContent = 'Opening admin page and debugging...\n';
+
+            // Open admin page in new window
+            const adminWindow = window.open('http://localhost:8000/chess-empire-database/admin.html', '_blank');
+
+            // Wait for page to load
+            await new Promise(resolve => setTimeout(resolve, 5000));
+
+            // Check DOM values
+            const results = {
+                timestamp: new Date().toISOString(),
+                totalStudentsElement: adminWindow.document.getElementById('totalStudents'),
+                activeStudentsElement: adminWindow.document.getElementById('activeStudents'),
+                studentsArrayLength: adminWindow.students?.length,
+                studentsArray: adminWindow.students?.slice(0, 3)
+            };
+
+            output.textContent += '\n=== DEBUG RESULTS ===\n';
+            output.textContent += `Total Students DOM: ${results.totalStudentsElement?.textContent}\n`;
+            output.textContent += `Active Students DOM: ${results.activeStudentsElement?.textContent}\n`;
+            output.textContent += `Students Array Length: ${results.studentsArrayLength}\n`;
+            output.textContent += `First 3 Students: ${JSON.stringify(results.studentsArray, null, 2)}\n`;
+
+            console.log('Debug Results:', results);
+        }
+    </script>
+</body>
+</html>

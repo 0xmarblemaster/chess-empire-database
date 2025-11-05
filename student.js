@@ -1,23 +1,82 @@
-const studentId = localStorage.getItem('selectedStudentId');
+// Wait for data to load from Supabase before rendering
+async function initializeStudentProfile() {
+    const studentId = localStorage.getItem('selectedStudentId');
 
-if (!studentId) {
-    window.location.href = 'index.html';
-}
+    console.log('🔍 Student ID from localStorage:', studentId);
 
-// Student IDs from Supabase are strings (UUIDs), keep as string - don't use parseInt!
-const student = students.find(s => String(s.id) === String(studentId));
+    if (!studentId) {
+        console.log('❌ No student ID in localStorage, redirecting to index');
+        window.location.href = 'index.html';
+        return;
+    }
 
-if (!student) {
-    window.location.href = 'index.html';
-}
+    let student = null;
 
-const levelProgress = Math.round((student.currentLevel / 8) * 100);
-const lessonProgress = Math.round((student.currentLesson / student.totalLessons) * 100);
-const initials = `${student.firstName[0]}${student.lastName[0]}`;
+    // APPROACH 1: Load student directly from Supabase (bypasses all caching/initialization issues)
+    if (window.supabaseData && typeof window.supabaseData.getStudentById === 'function') {
+        console.log('✅ Loading student directly from Supabase...');
+        try {
+            student = await window.supabaseData.getStudentById(studentId);
+            console.log('🎯 Student loaded from Supabase:', student);
+        } catch (error) {
+            console.error('❌ Error loading student from Supabase:', error);
+        }
+    } else {
+        console.warn('⚠️ Supabase direct query not available');
+    }
 
-window.currentStudentName = `${student.firstName} ${student.lastName}`;
-if (typeof window.updateStudentTitle === 'function') {
-    window.updateStudentTitle(window.currentStudentName);
+    // APPROACH 2: Fallback to initializeData + students array (if approach 1 failed)
+    if (!student) {
+        console.log('📥 Falling back to students array approach...');
+
+        // Clear old student data from localStorage to force fresh Supabase load
+        console.log('🧹 Clearing old student data from localStorage');
+        localStorage.removeItem('students');
+        localStorage.removeItem('coaches');
+        localStorage.removeItem('branches');
+
+        // Try to call initializeData (check both global and window scope)
+        const initFn = (typeof window.initializeData === 'function') ? window.initializeData :
+                       (typeof initializeData === 'function') ? initializeData : null;
+
+        if (initFn) {
+            console.log('✅ Calling initializeData...');
+            await initFn();
+            console.log('✅ Data loaded. Students array length:', students.length);
+            console.log('📋 Students in array:', students.map(s => `${s.firstName} ${s.lastName} (${s.id})`).slice(0, 5));
+
+            student = students.find(s => String(s.id) === String(studentId));
+        } else {
+            console.error('❌ initializeData function not found!');
+            console.error('  typeof initializeData:', typeof initializeData);
+            console.error('  window.initializeData:', typeof window.initializeData);
+            console.error('  window.supabaseData:', typeof window.supabaseData);
+        }
+    }
+
+    console.log('🔎 Final lookup - Student ID:', studentId);
+    console.log('🎯 Found student:', student);
+
+    if (!student) {
+        console.error('❌ Student not found with ID:', studentId);
+        if (students && students.length > 0) {
+            console.error('Available student IDs:', students.map(s => s.id).slice(0, 10));
+        }
+        alert('Student not found. Redirecting to home page.');
+        window.location.href = 'index.html';
+        return;
+    }
+
+    // Store student reference globally for rendering
+    window.currentStudent = student;
+    window.currentStudentName = `${student.firstName} ${student.lastName}`;
+
+    if (typeof window.updateStudentTitle === 'function') {
+        window.updateStudentTitle(window.currentStudentName);
+    }
+
+    // Render the profile
+    renderProfile();
 }
 
 function animateProgressBars() {
@@ -30,6 +89,17 @@ function animateProgressBars() {
 }
 
 function renderProfile() {
+    const student = window.currentStudent;
+
+    if (!student) {
+        console.error('No student data available for rendering');
+        return;
+    }
+
+    const levelProgress = Math.round((student.currentLevel / 8) * 100);
+    const lessonProgress = Math.round((student.currentLesson / student.totalLessons) * 100);
+    const initials = `${student.firstName[0]}${student.lastName[0]}`;
+
     const statusLabel = translateStatus(student.status || 'active') || t('student.statusActive');
     const razryadLabel = student.razryad
         ? translateRazryad(student.razryad)
@@ -132,11 +202,18 @@ function renderProfile() {
     animateProgressBars();
 }
 
-renderProfile();
+// Initialize on page load - use window.onload to ensure all scripts loaded
+window.addEventListener('load', async () => {
+    console.log('🚀 Page fully loaded, all scripts ready');
+    await initializeStudentProfile();
+});
 
+// Re-render on language change
 document.addEventListener('languagechange', () => {
     if (typeof window.updateStudentTitle === 'function') {
         window.updateStudentTitle(window.currentStudentName);
     }
-    renderProfile();
+    if (window.currentStudent) {
+        renderProfile();
+    }
 });
