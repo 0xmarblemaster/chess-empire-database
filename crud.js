@@ -645,25 +645,107 @@ function exportDataAsJSON() {
 }
 
 // Import data from JSON
-function importDataFromJSON(fileInput) {
+async function importDataFromJSON(fileInput) {
     const file = fileInput.files[0];
     if (!file) return;
 
     const reader = new FileReader();
-    reader.onload = function(e) {
+    reader.onload = async function(e) {
         try {
             const data = JSON.parse(e.target.result);
 
-            if (confirm('⚠️ This will replace all current data with imported data. Continue?')) {
-                if (data.students) window.students = data.students;
-                if (data.coaches) window.coaches = data.coaches;
-                if (data.branches) window.branches = data.branches;
+            if (useSupabase && window.supabaseData) {
+                // Supabase import - add students to database
+                if (!data.students || !Array.isArray(data.students)) {
+                    alert('❌ Invalid JSON format. Expected {"students": [...]}');
+                    return;
+                }
 
-                saveDataToStorage();
-                window.location.reload();
+                if (!confirm(`⚠️ This will import ${data.students.length} students into Supabase. Continue?`)) {
+                    return;
+                }
+
+                console.log(`📥 Starting import of ${data.students.length} students...`);
+                let successCount = 0;
+                let errorCount = 0;
+                const errors = [];
+
+                for (let i = 0; i < data.students.length; i++) {
+                    const studentData = data.students[i];
+                    try {
+                        // Find branch by name
+                        let branchId = studentData.branchId;
+                        if (!branchId && studentData.branch) {
+                            const branch = window.branches.find(b => b.name === studentData.branch);
+                            branchId = branch ? branch.id : null;
+                        }
+
+                        // Find coach by name
+                        let coachId = studentData.coachId;
+                        if (!coachId && studentData.coach) {
+                            const coach = window.coaches.find(c => `${c.firstName} ${c.lastName}` === studentData.coach);
+                            coachId = coach ? coach.id : null;
+                        }
+
+                        // Prepare student data for Supabase
+                        const supabaseStudentData = {
+                            firstName: studentData.firstName,
+                            lastName: studentData.lastName,
+                            age: studentData.age,
+                            dateOfBirth: studentData.dateOfBirth,
+                            gender: studentData.gender,
+                            photoUrl: studentData.photoUrl,
+                            branchId: branchId,
+                            coachId: coachId,
+                            razryad: studentData.razryad || 'none',
+                            status: studentData.status || 'active',
+                            currentLevel: studentData.currentLevel || 1,
+                            currentLesson: studentData.currentLesson || 1,
+                            totalLessons: studentData.totalLessons || 40,
+                            parentName: studentData.parentName,
+                            parentPhone: studentData.parentPhone,
+                            parentEmail: studentData.parentEmail
+                        };
+
+                        // Add student to Supabase
+                        await window.supabaseData.addStudent(supabaseStudentData);
+                        successCount++;
+                        console.log(`✅ Imported student ${i + 1}/${data.students.length}: ${studentData.firstName} ${studentData.lastName}`);
+                    } catch (error) {
+                        errorCount++;
+                        errors.push({
+                            student: `${studentData.firstName} ${studentData.lastName}`,
+                            error: error.message
+                        });
+                        console.error(`❌ Failed to import student ${i + 1}:`, studentData, error);
+                    }
+                }
+
+                console.log(`📊 Import complete: ${successCount} success, ${errorCount} errors`);
+
+                if (errorCount > 0) {
+                    console.error('Import errors:', errors);
+                    alert(`⚠️ Import completed with errors:\n✅ ${successCount} students imported\n❌ ${errorCount} students failed\n\nCheck console for details.`);
+                } else {
+                    alert(`✅ Successfully imported ${successCount} students!`);
+                }
+
+                // Reload data from Supabase to refresh UI
+                await initializeData();
+            } else {
+                // Fallback localStorage import
+                if (confirm('⚠️ This will replace all current data with imported data. Continue?')) {
+                    if (data.students) window.students = data.students;
+                    if (data.coaches) window.coaches = data.coaches;
+                    if (data.branches) window.branches = data.branches;
+
+                    saveDataToStorage();
+                    window.location.reload();
+                }
             }
         } catch (error) {
             alert('❌ Error importing data: ' + error.message);
+            console.error('Import error:', error);
         }
     };
     reader.readAsText(file);
