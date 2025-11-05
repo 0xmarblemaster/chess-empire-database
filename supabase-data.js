@@ -115,7 +115,11 @@ const supabaseData = {
                 parent_phone: studentData.parentPhone,
                 parent_email: studentData.parentEmail
             }])
-            .select()
+            .select(`
+                *,
+                branch:branches(id, name, location),
+                coach:coaches(id, first_name, last_name)
+            `)
             .single();
 
         if (error) {
@@ -123,7 +127,28 @@ const supabaseData = {
             throw error;
         }
 
-        return data;
+        // Transform to match data.js format
+        return {
+            id: data.id,
+            firstName: data.first_name,
+            lastName: data.last_name,
+            age: data.age,
+            dateOfBirth: data.date_of_birth,
+            gender: data.gender,
+            photoUrl: data.photo_url,
+            branch: data.branch?.name || '',
+            branchId: data.branch_id,
+            coach: data.coach ? `${data.coach.first_name} ${data.coach.last_name}` : '',
+            coachId: data.coach_id,
+            razryad: data.razryad,
+            status: data.status,
+            currentLevel: data.current_level,
+            currentLesson: data.current_lesson,
+            totalLessons: data.total_lessons,
+            parentName: data.parent_name,
+            parentPhone: data.parent_phone,
+            parentEmail: data.parent_email
+        };
     },
 
     // Update student
@@ -149,7 +174,11 @@ const supabaseData = {
                 parent_email: studentData.parentEmail
             })
             .eq('id', id)
-            .select()
+            .select(`
+                *,
+                branch:branches(id, name, location),
+                coach:coaches(id, first_name, last_name)
+            `)
             .single();
 
         if (error) {
@@ -157,7 +186,28 @@ const supabaseData = {
             throw error;
         }
 
-        return data;
+        // Transform to match data.js format
+        return {
+            id: data.id,
+            firstName: data.first_name,
+            lastName: data.last_name,
+            age: data.age,
+            dateOfBirth: data.date_of_birth,
+            gender: data.gender,
+            photoUrl: data.photo_url,
+            branch: data.branch?.name || '',
+            branchId: data.branch_id,
+            coach: data.coach ? `${data.coach.first_name} ${data.coach.last_name}` : '',
+            coachId: data.coach_id,
+            razryad: data.razryad,
+            status: data.status,
+            currentLevel: data.current_level,
+            currentLesson: data.current_lesson,
+            totalLessons: data.total_lessons,
+            parentName: data.parent_name,
+            parentPhone: data.parent_phone,
+            parentEmail: data.parent_email
+        };
     },
 
     // Delete student
@@ -216,7 +266,14 @@ const supabaseData = {
             throw error;
         }
 
-        return data;
+        // Transform to match data.js format
+        return {
+            id: data.id,
+            name: data.name,
+            location: data.location,
+            phone: data.phone,
+            email: data.email
+        };
     },
 
     async updateBranch(id, branchData) {
@@ -237,7 +294,14 @@ const supabaseData = {
             throw error;
         }
 
-        return data;
+        // Transform to match data.js format
+        return {
+            id: data.id,
+            name: data.name,
+            location: data.location,
+            phone: data.phone,
+            email: data.email
+        };
     },
 
     async deleteBranch(id) {
@@ -294,7 +358,10 @@ const supabaseData = {
                 email: coachData.email,
                 branch_id: coachData.branchId
             }])
-            .select()
+            .select(`
+                *,
+                branch:branches(id, name)
+            `)
             .single();
 
         if (error) {
@@ -302,7 +369,17 @@ const supabaseData = {
             throw error;
         }
 
-        return data;
+        // Transform to match data.js format
+        return {
+            id: data.id,
+            firstName: data.first_name,
+            lastName: data.last_name,
+            fullName: `${data.first_name} ${data.last_name}`,
+            phone: data.phone,
+            email: data.email,
+            branch: data.branch?.name || '',
+            branchId: data.branch_id
+        };
     },
 
     async updateCoach(id, coachData) {
@@ -316,7 +393,10 @@ const supabaseData = {
                 branch_id: coachData.branchId
             })
             .eq('id', id)
-            .select()
+            .select(`
+                *,
+                branch:branches(id, name)
+            `)
             .single();
 
         if (error) {
@@ -324,7 +404,17 @@ const supabaseData = {
             throw error;
         }
 
-        return data;
+        // Transform to match data.js format
+        return {
+            id: data.id,
+            firstName: data.first_name,
+            lastName: data.last_name,
+            fullName: `${data.first_name} ${data.last_name}`,
+            phone: data.phone,
+            email: data.email,
+            branch: data.branch?.name || '',
+            branchId: data.branch_id
+        };
     },
 
     async deleteCoach(id) {

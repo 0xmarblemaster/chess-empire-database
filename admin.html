@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0, user-scalable=yes">
     <title data-i18n="admin.title">Admin Dashboard - Chess Empire</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -228,6 +228,11 @@
                             <!-- Content will be loaded by JavaScript -->
                         </tbody>
                     </table>
+                </div>
+
+                <!-- Mobile Student Cards -->
+                <div class="mobile-student-cards" id="mobileStudentCards">
+                    <!-- Cards will be populated by JavaScript -->
                 </div>
 
                 <div class="pagination">
@@ -495,6 +500,26 @@
             <!-- End Coach Section -->
 
         </main>
+
+        <!-- Mobile Bottom Navigation -->
+        <nav class="mobile-bottom-nav" id="mobileBottomNav">
+            <div class="mobile-nav-item active" onclick="showSection('students')" data-section="students">
+                <i data-lucide="users"></i>
+                <span data-i18n="admin.sidebar.students">Students</span>
+            </div>
+            <div class="mobile-nav-item" onclick="showSection('branches')" data-section="branches">
+                <i data-lucide="building"></i>
+                <span data-i18n="admin.sidebar.branches">Branches</span>
+            </div>
+            <div class="mobile-nav-item" onclick="showSection('coaches')" data-section="coaches">
+                <i data-lucide="user-check"></i>
+                <span data-i18n="admin.sidebar.coaches">Coaches</span>
+            </div>
+            <div class="mobile-nav-item" onclick="toggleMobileMenu()" data-section="more">
+                <i data-lucide="menu"></i>
+                <span data-i18n="common.more">More</span>
+            </div>
+        </nav>
     </div>
 
     <!-- Add Student Modal -->
@@ -1001,13 +1026,13 @@
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script src="supabase-config.js?v=9"></script>
     <script src="supabase-client.js?v=9"></script>
-    <script src="supabase-data.js?v=1"></script>
+    <script src="supabase-data.js?v=3"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-    <script src="data.js"></script>
+    <script src="data.js?v=cleared"></script>
     <script src="crud.js"></script>
-    <script src="crud-handlers.js"></script>
+    <script src="crud-handlers.js?v=4"></script>
     <script src="crud-management.js?v=4"></script>
-    <script src="admin.js?v=7"></script>
+    <script src="admin.js?v=9"></script>
     <script>
         // Mobile menu functions
         function toggleMobileMenu() {
