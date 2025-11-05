@@ -13,9 +13,27 @@ function loadCoaches() {
     const tbody = document.getElementById('coachTableBody');
     if (!tbody) return;
 
-    tbody.innerHTML = coaches.map(coach => {
+    // Safely access global coaches array
+    const coachesArray = window.coaches || [];
+    const studentsArray = window.students || [];
+
+    if (coachesArray.length === 0) {
+        tbody.innerHTML = `
+            <tr>
+                <td colspan="6" style="text-align: center; padding: 2rem; color: #94a3b8;">
+                    <i data-lucide="users" style="width: 48px; height: 48px; margin-bottom: 1rem;"></i>
+                    <p style="margin: 0; font-size: 1.1rem; font-weight: 500;">No coaches found</p>
+                    <p style="margin: 0.5rem 0 0; font-size: 0.9rem;">Click "Add Coach" to create your first coach</p>
+                </td>
+            </tr>
+        `;
+        lucide.createIcons();
+        return;
+    }
+
+    tbody.innerHTML = coachesArray.map(coach => {
         const coachFullName = `${coach.firstName} ${coach.lastName}`;
-        const studentCount = students.filter(s => s.coach === coachFullName).length;
+        const studentCount = studentsArray.filter(s => s.coach === coachFullName).length;
 
         return `
             <tr>
@@ -295,6 +313,10 @@ function showCoachesManagement() {
     // Create section if it doesn't exist
     if (!coachesSection) {
         const mainContent = document.querySelector('.main-content');
+        // Use window.coaches to safely access global variable
+        const coachCount = (window.coaches && window.coaches.length) || 0;
+        const branchCount = (window.branches && window.branches.length) || 0;
+
         const coachesSectionHTML = `
             <div id="coachesSection" class="content-section active">
                 <!-- Header -->
@@ -313,7 +335,7 @@ function showCoachesManagement() {
                     <div class="stat-card">
                         <div class="stat-header">
                             <div>
-                                <div class="stat-value" id="totalCoachesManage">${coaches.length}</div>
+                                <div class="stat-value" id="totalCoachesManage">${coachCount}</div>
                                 <div class="stat-label">Total Coaches</div>
                             </div>
                             <div class="stat-icon amber">
@@ -324,7 +346,7 @@ function showCoachesManagement() {
                     <div class="stat-card">
                         <div class="stat-header">
                             <div>
-                                <div class="stat-value" id="totalBranchesCoach">${branches.length}</div>
+                                <div class="stat-value" id="totalBranchesCoach">${branchCount}</div>
                                 <div class="stat-label">Total Branches</div>
                             </div>
                             <div class="stat-icon purple">

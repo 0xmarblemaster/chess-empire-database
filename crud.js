@@ -30,11 +30,46 @@ async function loadDataFromSupabase() {
             branches: window.branches.length
         });
         console.log('👥 Coaches loaded:', window.coaches.map(c => `${c.firstName} ${c.lastName}`).join(', '));
+
+        // Trigger UI refresh after data is loaded
+        refreshAllUIComponents();
     } catch (error) {
         console.error('❌ Error loading data from Supabase:', error);
         // Fallback to localStorage on error
         loadDataFromStorage();
     }
+}
+
+// Refresh all UI components after data loads
+function refreshAllUIComponents() {
+    // Refresh coaches management if it's visible
+    if (typeof loadCoaches === 'function') {
+        const coachesSection = document.getElementById('coachesSection');
+        if (coachesSection && coachesSection.classList.contains('active')) {
+            loadCoaches();
+            // Update stats
+            const totalCoachesManage = document.getElementById('totalCoachesManage');
+            if (totalCoachesManage) {
+                totalCoachesManage.textContent = window.coaches.length;
+            }
+        }
+    }
+
+    // Refresh branches management if it's visible
+    if (typeof loadBranches === 'function') {
+        const branchesSection = document.getElementById('branchesSection');
+        if (branchesSection && branchesSection.classList.contains('active')) {
+            loadBranches();
+        }
+    }
+
+    // Refresh dashboard stats
+    const totalCoaches = document.querySelector('.stat-card:has([data-lucide="users"]) .stat-value');
+    if (totalCoaches) {
+        totalCoaches.textContent = window.coaches.length;
+    }
+
+    console.log('🔄 UI components refreshed with Supabase data');
 }
 
 // Load data from localStorage (fallback)
