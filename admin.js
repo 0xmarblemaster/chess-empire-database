@@ -1661,71 +1661,97 @@ function updateEditCoachOptions() {
 }
 
 // Submit Edit Student Form
-function submitEditStudent(event) {
+async function submitEditStudent(event) {
     event.preventDefault();
-    
+
     // Get form data
     const form = document.getElementById('editStudentForm');
     const formData = new FormData(form);
     // Student IDs from Supabase are strings (UUIDs), keep as string - don't use parseInt!
     const studentId = document.getElementById('editStudentId').value;
 
-    // Find student in array
-    const studentIndex = students.findIndex(s => String(s.id) === String(studentId));
-    if (studentIndex === -1) {
+    // Validate student exists
+    const student = window.students.find(s => String(s.id) === String(studentId));
+    if (!student) {
         console.error('❌ Student not found with ID:', studentId);
         alert(t('admin.error.studentNotFound'));
         return;
     }
-    
-    // Update student object
-    students[studentIndex] = {
-        ...students[studentIndex],
+
+    // Get branch and coach names from form
+    const branchName = formData.get('branch');
+    const coachName = formData.get('coach');
+
+    // Convert branch name to ID
+    const branch = window.branches.find(b => b.name === branchName);
+    const branchId = branch ? branch.id : null;
+
+    // Convert coach name to ID
+    const coach = window.coaches.find(c => `${c.firstName} ${c.lastName}` === coachName);
+    const coachId = coach ? coach.id : null;
+
+    // Prepare student data with IDs (Supabase format)
+    const studentData = {
         firstName: formData.get('firstName'),
         lastName: formData.get('lastName'),
-        age: parseInt(formData.get('age')),
+        age: parseInt(formData.get('age')) || null,
         gender: formData.get('gender') || null,
-        branch: formData.get('branch'),
-        coach: formData.get('coach'),
-        razryad: formData.get('razryad') || null,
-        status: formData.get('status'),
-        currentLevel: parseInt(formData.get('currentLevel')) || students[studentIndex].currentLevel,
-        currentLesson: parseInt(formData.get('currentLesson')) || students[studentIndex].currentLesson
+        branchId: branchId,
+        coachId: coachId,
+        razryad: formData.get('razryad') || 'none',
+        status: formData.get('status') || 'active',
+        currentLevel: parseInt(formData.get('currentLevel')) || student.currentLevel,
+        currentLesson: parseInt(formData.get('currentLesson')) || student.currentLesson,
+        parentName: formData.get('parentName') || null,
+        parentPhone: formData.get('parentPhone') || null,
+        parentEmail: formData.get('parentEmail') || null
     };
-    
+
     // Validate required fields
-    if (!students[studentIndex].firstName || !students[studentIndex].lastName || 
-        !students[studentIndex].branch || !students[studentIndex].coach) {
+    if (!studentData.firstName || !studentData.lastName) {
         alert(t('admin.form.requiredFields'));
         return;
     }
-    
-    // Close modal
-    closeEditStudentModal();
-    
-    // Show success message
-    showSuccessMessage(t('admin.form.editSuccess'));
-    
-    // Refresh the UI
-    renderTable();
-    updateStats();
-    
-    // If viewing a specific branch or coach, refresh that view
-    const branchSection = document.getElementById('branchSection');
-    const coachSection = document.getElementById('coachSection');
-    
-    if (branchSection && branchSection.classList.contains('active')) {
-        const currentBranch = document.querySelector('.branch-view-title')?.textContent;
-        if (currentBranch) {
-            viewBranch(currentBranch);
+
+    try {
+        // Update student in Supabase
+        const result = await updateStudent(studentId, studentData);
+
+        if (result.success) {
+            // Close modal
+            closeEditStudentModal();
+
+            // Show success message
+            showSuccessMessage(t('admin.form.editSuccess'));
+
+            // Refresh the UI
+            loadStudents();
+            loadStatistics();
+
+            // If viewing a specific branch or coach, refresh that view
+            const branchSection = document.getElementById('branchSection');
+            const coachSection = document.getElementById('coachSection');
+
+            if (branchSection && branchSection.classList.contains('active')) {
+                const currentBranch = document.querySelector('.branch-view-title')?.textContent;
+                if (currentBranch) {
+                    viewBranch(currentBranch);
+                }
+            }
+
+            if (coachSection && coachSection.classList.contains('active')) {
+                const currentCoach = document.querySelector('.coach-view-title')?.textContent;
+                if (currentCoach) {
+                    viewCoach(currentCoach);
+                }
+            }
+        } else {
+            // Show error message
+            alert(result.error || t('admin.error.updateFailed'));
         }
-    }
-    
-    if (coachSection && coachSection.classList.contains('active')) {
-        const currentCoach = document.querySelector('.coach-view-title')?.textContent;
-        if (currentCoach) {
-            viewCoach(currentCoach);
-        }
+    } catch (error) {
+        console.error('❌ Error updating student:', error);
+        alert(t('admin.error.updateFailed') + ': ' + error.message);
     }
 }
 
