@@ -31,20 +31,36 @@ firstName: "Lopatin"
 lastName: "Fedor"
 ```
 
-### 2. Branch Fuzzy Matching
+### 2. Branch Fuzzy Matching & Auto-Creation
 The system handles spelling variations:
 - "Khalyk arena" → Matches "Halyk Arena" ✅
 - "halyk arena" → Matches "Halyk Arena" ✅
 - "Gagarin" → Matches "Gagarin Park" ✅
 - Case-insensitive matching
 
-### 3. Coach Fuzzy Matching
+**NEW: Auto-Create Missing Branches**
+- If no match found, automatically creates new branch
+- Example: "New Branch Location" → Creates branch with name "New Branch Location"
+- Location set to "Auto-created from import"
+
+### 3. Coach Fuzzy Matching & Auto-Creation
 Matches by partial name:
 - "Aleksandr Olegovich" → Finds any coach with "Aleksandr" ✅
 - "Alinur" → Finds any coach with "Alinur" ✅
 - Case-insensitive matching
 
-### 4. Default Values
+**NEW: Auto-Create Missing Coaches**
+- If no match found, automatically creates new coach
+- Parses name: "Aleksandr Olegovich" → firstName: "Aleksandr", lastName: "Olegovich"
+- Assigns coach to same branch as student
+
+### 4. Duplicate Prevention
+**NEW: Skip Duplicate Students**
+- Checks if student already exists (by first name + last name)
+- Skips import if student found
+- Prevents duplicate entries when importing same file multiple times
+
+### 5. Default Values
 Missing fields get sensible defaults:
 - age: null (can be added later)
 - dateOfBirth: null
@@ -77,8 +93,10 @@ Click "Data Management" in the sidebar
 ### Step 4: Monitor Import
 Watch the browser console (F12) for:
 - Format detection: "📋 Detected simplified format, converting..."
+- Duplicate detection: "⏭️ Skipping duplicate student 5/70: Lopatin Fedor"
+- Auto-creation: "➕ Creating new branch: Halyk Arena"
+- Auto-creation: "➕ Creating new coach: Aleksandr Olegovich"
 - Progress: "✅ Imported student 1/70: Lopatin Fedor"
-- Warnings: "⚠️ Branch not found for: ..."
 - Final count: "📊 Import complete: 70 success, 0 errors"
 
 ### Step 5: Verify Results
@@ -153,25 +171,35 @@ The system will recognize both formats:
 📥 Starting import of 70 students...
 ✅ Imported student 1/70: Lopatin Fedor
 ✅ Imported student 2/70: Ernar Aisulu
-⚠️ Coach not found for: "Aleksandr Olegovich". Student will be imported without coach.
+➕ Creating new coach: Aleksandr Olegovich
 ✅ Imported student 3/70: Malik Ilyas
+⏭️ Skipping duplicate student 4/70: Lopatin Fedor
+➕ Creating new branch: New Branch Name
+✅ Imported student 5/70: New Student
 ...
 ✅ Imported student 70/70: Ospan Alan
 📊 Import complete: 70 success, 0 errors
 ✅ Successfully imported 70 students!
 ```
 
-## Warnings You Might See
+## Auto-Creation Behavior
 
-### "Branch not found"
-- The branch name didn't match any existing branch
-- Student is still imported, but without branch_id
-- Fix: Edit student after import to assign correct branch
+### Branches
+- If branch not found by fuzzy matching, system automatically creates it
+- New branch gets name from JSON file
+- Location set to "Auto-created from import"
+- You can edit branch details after import
 
-### "Coach not found"
-- The coach name didn't match any existing coach
-- Student is still imported, but without coach_id
-- Fix: Edit student after import to assign correct coach
+### Coaches
+- If coach not found by fuzzy matching, system automatically creates it
+- Name parsed from JSON: "Aleksandr Olegovich" → firstName: "Aleksandr", lastName: "Olegovich"
+- Coach assigned to same branch as student
+- You can edit coach details after import
+
+### Students
+- Duplicate check by first name + last name (case-insensitive)
+- If student already exists, import skipped
+- Safe to import same file multiple times - no duplicates created
 
 ## All Supported JSON Formats
 
@@ -248,7 +276,9 @@ Import this first to verify everything works, then import the full file.
 - 70 students from "Halyk Arena" / "Khalyk arena"
 - Automatic name parsing
 - Fuzzy branch/coach matching
+- **Auto-create missing branches and coaches**
+- **Duplicate prevention - safe to re-import**
 - Missing info filled with defaults
 - Students can be edited after import to add parent details
 
-Just click Import Data and select the file!
+Just click Import Data and select the file! The system handles everything automatically.

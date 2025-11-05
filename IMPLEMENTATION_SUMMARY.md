@@ -22,12 +22,15 @@
 - Automatic UUID generation
 - Branch and coach selection via dropdowns
 
-### 4. Bulk JSON Import
+### 4. Bulk JSON Import (Enhanced with Auto-Create)
 - Enhanced importDataFromJSON() function
 - Supabase-compatible batch import
-- Automatic branch/coach lookup by name
+- Automatic branch/coach lookup by name (fuzzy matching)
+- **Auto-create missing branches and coaches**
+- **Duplicate student prevention (by first + last name)**
 - Progress tracking and error reporting
 - Sample JSON file with 10 test students
+- Support for 3 different JSON formats
 
 ## How to Use
 

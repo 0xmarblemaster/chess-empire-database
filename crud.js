@@ -705,11 +705,25 @@ async function importDataFromJSON(fileInput) {
                 for (let i = 0; i < studentsArray.length; i++) {
                     const studentData = studentsArray[i];
                     try {
+                        // Check for duplicate student (by first name + last name)
+                        const existingStudent = window.students.find(s =>
+                            s.firstName.toLowerCase() === studentData.firstName.toLowerCase() &&
+                            s.lastName.toLowerCase() === studentData.lastName.toLowerCase()
+                        );
+
+                        if (existingStudent) {
+                            console.log(`⏭️ Skipping duplicate student ${i + 1}/${studentsArray.length}: ${studentData.firstName} ${studentData.lastName}`);
+                            successCount++; // Count as success since student exists
+                            continue;
+                        }
+
                         // Find branch by name (fuzzy matching for common variations)
                         let branchId = studentData.branchId;
+                        let branch = null;
+
                         if (!branchId && studentData.branch) {
                             const searchName = studentData.branch.toLowerCase().trim();
-                            const branch = window.branches.find(b => {
+                            branch = window.branches.find(b => {
                                 const branchName = b.name.toLowerCase().trim();
                                 // Exact match
                                 if (branchName === searchName) return true;
@@ -726,18 +740,31 @@ async function importDataFromJSON(fileInput) {
                                 if (searchName.includes('almaty 1') && branchName.includes('almaty 1')) return true;
                                 return false;
                             });
-                            branchId = branch ? branch.id : null;
 
-                            if (!branch) {
-                                console.warn(`⚠️ Branch not found for: "${studentData.branch}". Student will be imported without branch.`);
+                            // Auto-create branch if not found
+                            if (!branch && studentData.branch.trim()) {
+                                console.log(`➕ Creating new branch: ${studentData.branch}`);
+                                const newBranch = await window.supabaseData.addBranch({
+                                    name: studentData.branch.trim(),
+                                    location: 'Auto-created from import',
+                                    phone: null,
+                                    email: null
+                                });
+                                window.branches.push(newBranch);
+                                branch = newBranch;
+                                branchId = newBranch.id;
+                            } else {
+                                branchId = branch ? branch.id : null;
                             }
                         }
 
                         // Find coach by name (fuzzy matching)
                         let coachId = studentData.coachId;
+                        let coach = null;
+
                         if (!coachId && studentData.coach && studentData.coach.trim()) {
                             const searchCoach = studentData.coach.toLowerCase().trim();
-                            const coach = window.coaches.find(c => {
+                            coach = window.coaches.find(c => {
                                 const fullName = `${c.firstName} ${c.lastName}`.toLowerCase();
                                 // Exact match
                                 if (fullName === searchCoach) return true;
@@ -747,10 +774,24 @@ async function importDataFromJSON(fileInput) {
                                 if (searchCoach.includes(c.lastName.toLowerCase())) return true;
                                 return false;
                             });
-                            coachId = coach ? coach.id : null;
 
+                            // Auto-create coach if not found
                             if (!coach && studentData.coach.trim()) {
-                                console.warn(`⚠️ Coach not found for: "${studentData.coach}". Student will be imported without coach.`);
+                                console.log(`➕ Creating new coach: ${studentData.coach}`);
+                                // Parse coach name (could be "FirstName LastName" or "FirstName Patronymic")
+                                const coachParts = studentData.coach.trim().split(/\s+/);
+                                const newCoach = await window.supabaseData.addCoach({
+                                    firstName: coachParts[0] || studentData.coach.trim(),
+                                    lastName: coachParts.slice(1).join(" ") || "",
+                                    phone: null,
+                                    email: null,
+                                    branchId: branchId // Assign to same branch as student
+                                });
+                                window.coaches.push(newCoach);
+                                coach = newCoach;
+                                coachId = newCoach.id;
+                            } else {
+                                coachId = coach ? coach.id : null;
                             }
                         }
 
