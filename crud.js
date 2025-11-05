@@ -652,39 +652,106 @@ async function importDataFromJSON(fileInput) {
     const reader = new FileReader();
     reader.onload = async function(e) {
         try {
-            const data = JSON.parse(e.target.result);
+            let data = JSON.parse(e.target.result);
 
             if (useSupabase && window.supabaseData) {
-                // Supabase import - add students to database
-                if (!data.students || !Array.isArray(data.students)) {
-                    alert('❌ Invalid JSON format. Expected {"students": [...]}');
+                // Detect and normalize JSON format
+                let studentsArray = [];
+
+                // Format 1: {"students": [...]}
+                if (data.students && Array.isArray(data.students)) {
+                    studentsArray = data.students;
+                }
+                // Format 2: Direct array with "Student Name", "Branch", "Coach" keys
+                else if (Array.isArray(data) && data.length > 0 && data[0]["Student Name"]) {
+                    console.log('📋 Detected simplified format, converting...');
+                    studentsArray = data.map(item => {
+                        // Split "Student Name" into first and last name
+                        const nameParts = (item["Student Name"] || "").trim().split(/\s+/);
+                        const firstName = nameParts[0] || "Unknown";
+                        const lastName = nameParts.slice(1).join(" ") || "Unknown";
+
+                        return {
+                            firstName: firstName,
+                            lastName: lastName,
+                            branch: item.Branch || item.branch,
+                            coach: item.Coach || item.coach
+                        };
+                    });
+                }
+                // Format 3: Direct array [{firstName, lastName, ...}]
+                else if (Array.isArray(data)) {
+                    studentsArray = data;
+                }
+                else {
+                    alert('❌ Invalid JSON format. Expected:\n- {"students": [...]}\n- [{Student Name, Branch, Coach}]\n- [{firstName, lastName, ...}]');
                     return;
                 }
 
-                if (!confirm(`⚠️ This will import ${data.students.length} students into Supabase. Continue?`)) {
+                if (studentsArray.length === 0) {
+                    alert('❌ No students found in JSON file');
                     return;
                 }
 
-                console.log(`📥 Starting import of ${data.students.length} students...`);
+                if (!confirm(`⚠️ This will import ${studentsArray.length} students into Supabase. Continue?`)) {
+                    return;
+                }
+
+                console.log(`📥 Starting import of ${studentsArray.length} students...`);
                 let successCount = 0;
                 let errorCount = 0;
                 const errors = [];
 
-                for (let i = 0; i < data.students.length; i++) {
-                    const studentData = data.students[i];
+                for (let i = 0; i < studentsArray.length; i++) {
+                    const studentData = studentsArray[i];
                     try {
-                        // Find branch by name
+                        // Find branch by name (fuzzy matching for common variations)
                         let branchId = studentData.branchId;
                         if (!branchId && studentData.branch) {
-                            const branch = window.branches.find(b => b.name === studentData.branch);
+                            const searchName = studentData.branch.toLowerCase().trim();
+                            const branch = window.branches.find(b => {
+                                const branchName = b.name.toLowerCase().trim();
+                                // Exact match
+                                if (branchName === searchName) return true;
+                                // Handle common variations (Khalyk/Halyk)
+                                if (searchName.includes('khalyk') && branchName.includes('halyk')) return true;
+                                if (searchName.includes('halyk') && branchName.includes('halyk')) return true;
+                                // Partial match for unique names
+                                if (searchName.includes('gagarin') && branchName.includes('gagarin')) return true;
+                                if (searchName.includes('debut') && branchName.includes('debut')) return true;
+                                if (searchName.includes('arena') && branchName.includes('arena') &&
+                                    (searchName.includes('almaty') && branchName.includes('almaty'))) return true;
+                                if (searchName.includes('zhandosov') && branchName.includes('zhandosov')) return true;
+                                if (searchName.includes('abaya') && branchName.includes('abaya')) return true;
+                                if (searchName.includes('almaty 1') && branchName.includes('almaty 1')) return true;
+                                return false;
+                            });
                             branchId = branch ? branch.id : null;
+
+                            if (!branch) {
+                                console.warn(`⚠️ Branch not found for: "${studentData.branch}". Student will be imported without branch.`);
+                            }
                         }
 
-                        // Find coach by name
+                        // Find coach by name (fuzzy matching)
                         let coachId = studentData.coachId;
-                        if (!coachId && studentData.coach) {
-                            const coach = window.coaches.find(c => `${c.firstName} ${c.lastName}` === studentData.coach);
+                        if (!coachId && studentData.coach && studentData.coach.trim()) {
+                            const searchCoach = studentData.coach.toLowerCase().trim();
+                            const coach = window.coaches.find(c => {
+                                const fullName = `${c.firstName} ${c.lastName}`.toLowerCase();
+                                // Exact match
+                                if (fullName === searchCoach) return true;
+                                // Check if search contains coach's first name
+                                if (searchCoach.includes(c.firstName.toLowerCase())) return true;
+                                // Check if search contains coach's last name
+                                if (searchCoach.includes(c.lastName.toLowerCase())) return true;
+                                return false;
+                            });
                             coachId = coach ? coach.id : null;
+
+                            if (!coach && studentData.coach.trim()) {
+                                console.warn(`⚠️ Coach not found for: "${studentData.coach}". Student will be imported without coach.`);
+                            }
                         }
 
                         // Prepare student data for Supabase
@@ -710,7 +777,7 @@ async function importDataFromJSON(fileInput) {
                         // Add student to Supabase
                         await window.supabaseData.addStudent(supabaseStudentData);
                         successCount++;
-                        console.log(`✅ Imported student ${i + 1}/${data.students.length}: ${studentData.firstName} ${studentData.lastName}`);
+                        console.log(`✅ Imported student ${i + 1}/${studentsArray.length}: ${studentData.firstName} ${studentData.lastName}`);
                     } catch (error) {
                         errorCount++;
                         errors.push({
