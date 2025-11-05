@@ -654,6 +654,8 @@ function importDataFromJSON(fileInput) {
 }
 
 // Initialize data on page load
-if (typeof window !== 'undefined') {
-    window.addEventListener('DOMContentLoaded', initializeData);
-}
+// NOTE: Do NOT auto-initialize here - admin.js handles initialization explicitly
+// to ensure proper sequencing with authentication and UI setup.
+// if (typeof window !== 'undefined') {
+//     window.addEventListener('DOMContentLoaded', initializeData);
+// }
