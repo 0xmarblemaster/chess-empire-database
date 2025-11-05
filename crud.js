@@ -1,10 +1,6 @@
 // CRUD Operations Module with Supabase Integration
 // This module handles Create, Read, Update, Delete operations for students, coaches, and branches
-
-// Global variables for data cache
-let students = [];
-let coaches = [];
-let branches = [];
+// IMPORTANT: Uses global variables from data.js (students, coaches, branches)
 
 // Flag to check if Supabase is available
 const useSupabase = typeof window !== 'undefined' && window.supabaseClient && window.supabaseData;
@@ -20,13 +16,20 @@ async function initializeData() {
     }
 }
 
-// Load data from Supabase
+// Load data from Supabase and update global variables
 async function loadDataFromSupabase() {
     try {
-        students = await window.supabaseData.getStudents();
-        coaches = await window.supabaseData.getCoaches();
-        branches = await window.supabaseData.getBranches();
-        console.log('✅ Loaded from Supabase:', { students: students.length, coaches: coaches.length, branches: branches.length });
+        // Update global variables directly (defined in data.js)
+        window.students = await window.supabaseData.getStudents();
+        window.coaches = await window.supabaseData.getCoaches();
+        window.branches = await window.supabaseData.getBranches();
+
+        console.log('✅ Loaded from Supabase:', {
+            students: window.students.length,
+            coaches: window.coaches.length,
+            branches: window.branches.length
+        });
+        console.log('👥 Coaches loaded:', window.coaches.map(c => `${c.firstName} ${c.lastName}`).join(', '));
     } catch (error) {
         console.error('❌ Error loading data from Supabase:', error);
         // Fallback to localStorage on error
@@ -41,9 +44,9 @@ function loadDataFromStorage() {
         const storedCoaches = localStorage.getItem('coaches');
         const storedBranches = localStorage.getItem('branches');
 
-        if (storedStudents) students = JSON.parse(storedStudents);
-        if (storedCoaches) coaches = JSON.parse(storedCoaches);
-        if (storedBranches) branches = JSON.parse(storedBranches);
+        if (storedStudents) window.students = JSON.parse(storedStudents);
+        if (storedCoaches) window.coaches = JSON.parse(storedCoaches);
+        if (storedBranches) window.branches = JSON.parse(storedBranches);
     } catch (error) {
         console.error('Error loading data from localStorage:', error);
     }
@@ -52,9 +55,9 @@ function loadDataFromStorage() {
 // Save data to localStorage (fallback only)
 function saveDataToStorage() {
     try {
-        localStorage.setItem('students', JSON.stringify(students));
-        localStorage.setItem('coaches', JSON.stringify(coaches));
-        localStorage.setItem('branches', JSON.stringify(branches));
+        localStorage.setItem('students', JSON.stringify(window.students));
+        localStorage.setItem('coaches', JSON.stringify(window.coaches));
+        localStorage.setItem('branches', JSON.stringify(window.branches));
     } catch (error) {
         console.error('Error saving data to localStorage:', error);
     }
@@ -78,11 +81,11 @@ async function createStudent(studentData) {
         if (useSupabase) {
             // Use Supabase
             const newStudent = await window.supabaseData.addStudent(studentData);
-            students.push(newStudent);
+            window.students.push(newStudent);
             return { success: true, student: newStudent };
         } else {
             // Fallback to localStorage
-            const maxId = students.length > 0 ? Math.max(...students.map(s => s.id)) : 0;
+            const maxId = window.students.length > 0 ? Math.max(...window.students.map(s => s.id)) : 0;
             const newStudent = {
                 id: maxId + 1,
                 firstName: studentData.firstName,
@@ -104,7 +107,7 @@ async function createStudent(studentData) {
                 parentEmail: studentData.parentEmail
             };
 
-            students.push(newStudent);
+            window.students.push(newStudent);
             saveDataToStorage();
             return { success: true, student: newStudent };
         }
@@ -116,7 +119,7 @@ async function createStudent(studentData) {
 
 // Read student by ID
 function getStudentById(id) {
-    return students.find(s => s.id === parseInt(id));
+    return window.students.find(s => s.id === parseInt(id));
 }
 
 // Update student
@@ -127,21 +130,21 @@ async function updateStudent(id, studentData) {
             const updatedStudent = await window.supabaseData.updateStudent(id, studentData);
 
             // Update local cache
-            const index = students.findIndex(s => s.id === parseInt(id));
+            const index = window.students.findIndex(s => s.id === parseInt(id));
             if (index !== -1) {
-                students[index] = updatedStudent;
+                window.students[index] = updatedStudent;
             }
 
             return { success: true, student: updatedStudent };
         } else {
             // Fallback to localStorage
-            const index = students.findIndex(s => s.id === parseInt(id));
+            const index = window.students.findIndex(s => s.id === parseInt(id));
             if (index === -1) {
                 return { success: false, error: 'Student not found' };
             }
 
-            students[index] = {
-                ...students[index],
+            window.students[index] = {
+                ...window.students[index],
                 firstName: studentData.firstName,
                 lastName: studentData.lastName,
                 age: parseInt(studentData.age),
@@ -162,7 +165,7 @@ async function updateStudent(id, studentData) {
             };
 
             saveDataToStorage();
-            return { success: true, student: students[index] };
+            return { success: true, student: window.students[index] };
         }
     } catch (error) {
         console.error('Error updating student:', error);
@@ -178,23 +181,23 @@ async function deleteStudent(id) {
             await window.supabaseData.deleteStudent(id);
 
             // Update local cache
-            const index = students.findIndex(s => s.id === parseInt(id));
+            const index = window.students.findIndex(s => s.id === parseInt(id));
             if (index !== -1) {
-                const deletedStudent = students[index];
-                students.splice(index, 1);
+                const deletedStudent = window.students[index];
+                window.students.splice(index, 1);
                 return { success: true, student: deletedStudent };
             }
 
             return { success: true };
         } else {
             // Fallback to localStorage
-            const index = students.findIndex(s => s.id === parseInt(id));
+            const index = window.students.findIndex(s => s.id === parseInt(id));
             if (index === -1) {
                 return { success: false, error: 'Student not found' };
             }
 
-            const deletedStudent = students[index];
-            students.splice(index, 1);
+            const deletedStudent = window.students[index];
+            window.students.splice(index, 1);
             saveDataToStorage();
             return { success: true, student: deletedStudent };
         }
@@ -212,11 +215,12 @@ async function createCoach(coachData) {
         if (useSupabase) {
             // Use Supabase
             const newCoach = await window.supabaseData.addCoach(coachData);
-            coaches.push(newCoach);
+            window.coaches.push(newCoach);
+            console.log('✅ Coach created:', newCoach);
             return { success: true, coach: newCoach };
         } else {
             // Fallback to localStorage
-            const maxId = coaches.length > 0 ? Math.max(...coaches.map(c => c.id)) : 0;
+            const maxId = window.coaches.length > 0 ? Math.max(...window.coaches.map(c => c.id)) : 0;
             const newCoach = {
                 id: maxId + 1,
                 firstName: coachData.firstName,
@@ -227,7 +231,7 @@ async function createCoach(coachData) {
                 phone: coachData.phone
             };
 
-            coaches.push(newCoach);
+            window.coaches.push(newCoach);
             saveDataToStorage();
             return { success: true, coach: newCoach };
         }
@@ -239,7 +243,7 @@ async function createCoach(coachData) {
 
 // Read coach by ID
 function getCoachById(id) {
-    return coaches.find(c => c.id === parseInt(id));
+    return window.coaches.find(c => c.id === parseInt(id));
 }
 
 // Update coach
@@ -250,21 +254,22 @@ async function updateCoach(id, coachData) {
             const updatedCoach = await window.supabaseData.updateCoach(id, coachData);
 
             // Update local cache
-            const index = coaches.findIndex(c => c.id === parseInt(id));
+            const index = window.coaches.findIndex(c => c.id === parseInt(id));
             if (index !== -1) {
-                coaches[index] = updatedCoach;
+                window.coaches[index] = updatedCoach;
+                console.log('✅ Coach updated:', updatedCoach);
             }
 
             return { success: true, coach: updatedCoach };
         } else {
             // Fallback to localStorage
-            const index = coaches.findIndex(c => c.id === parseInt(id));
+            const index = window.coaches.findIndex(c => c.id === parseInt(id));
             if (index === -1) {
                 return { success: false, error: 'Coach not found' };
             }
 
-            coaches[index] = {
-                ...coaches[index],
+            window.coaches[index] = {
+                ...window.coaches[index],
                 firstName: coachData.firstName,
                 lastName: coachData.lastName,
                 branch: coachData.branch,
@@ -274,7 +279,7 @@ async function updateCoach(id, coachData) {
             };
 
             saveDataToStorage();
-            return { success: true, coach: coaches[index] };
+            return { success: true, coach: window.coaches[index] };
         }
     } catch (error) {
         console.error('Error updating coach:', error);
@@ -290,24 +295,25 @@ async function deleteCoach(id) {
             await window.supabaseData.deleteCoach(id);
 
             // Update local cache
-            const index = coaches.findIndex(c => c.id === parseInt(id));
+            const index = window.coaches.findIndex(c => c.id === parseInt(id));
             if (index !== -1) {
-                const deletedCoach = coaches[index];
-                coaches.splice(index, 1);
+                const deletedCoach = window.coaches[index];
+                window.coaches.splice(index, 1);
+                console.log('✅ Coach deleted:', deletedCoach);
                 return { success: true, coach: deletedCoach };
             }
 
             return { success: true };
         } else {
             // Fallback to localStorage
-            const index = coaches.findIndex(c => c.id === parseInt(id));
+            const index = window.coaches.findIndex(c => c.id === parseInt(id));
             if (index === -1) {
                 return { success: false, error: 'Coach not found' };
             }
 
             // Check if coach has students
-            const coachName = `${coaches[index].firstName} ${coaches[index].lastName}`;
-            const hasStudents = students.some(s => s.coach === coachName);
+            const coachName = `${window.coaches[index].firstName} ${window.coaches[index].lastName}`;
+            const hasStudents = window.students.some(s => s.coach === coachName);
 
             if (hasStudents) {
                 return {
@@ -316,8 +322,8 @@ async function deleteCoach(id) {
                 };
             }
 
-            const deletedCoach = coaches[index];
-            coaches.splice(index, 1);
+            const deletedCoach = window.coaches[index];
+            window.coaches.splice(index, 1);
             saveDataToStorage();
             return { success: true, coach: deletedCoach };
         }
@@ -335,11 +341,11 @@ async function createBranch(branchData) {
         if (useSupabase) {
             // Use Supabase
             const newBranch = await window.supabaseData.addBranch(branchData);
-            branches.push(newBranch);
+            window.branches.push(newBranch);
             return { success: true, branch: newBranch };
         } else {
             // Fallback to localStorage
-            const maxId = branches.length > 0 ? Math.max(...branches.map(b => b.id)) : 0;
+            const maxId = window.branches.length > 0 ? Math.max(...window.branches.map(b => b.id)) : 0;
             const newBranch = {
                 id: maxId + 1,
                 name: branchData.name,
@@ -348,7 +354,7 @@ async function createBranch(branchData) {
                 email: branchData.email
             };
 
-            branches.push(newBranch);
+            window.branches.push(newBranch);
             saveDataToStorage();
             return { success: true, branch: newBranch };
         }
@@ -360,12 +366,12 @@ async function createBranch(branchData) {
 
 // Read branch by ID
 function getBranchById(id) {
-    return branches.find(b => b.id === parseInt(id));
+    return window.branches.find(b => b.id === parseInt(id));
 }
 
 // Read branch by name
 function getBranchByName(name) {
-    return branches.find(b => b.name === name);
+    return window.branches.find(b => b.name === name);
 }
 
 // Update branch
@@ -376,24 +382,24 @@ async function updateBranch(id, branchData) {
             const updatedBranch = await window.supabaseData.updateBranch(id, branchData);
 
             // Update local cache
-            const index = branches.findIndex(b => b.id === parseInt(id));
+            const index = window.branches.findIndex(b => b.id === parseInt(id));
             if (index !== -1) {
-                branches[index] = updatedBranch;
+                window.branches[index] = updatedBranch;
             }
 
             return { success: true, branch: updatedBranch };
         } else {
             // Fallback to localStorage
-            const index = branches.findIndex(b => b.id === parseInt(id));
+            const index = window.branches.findIndex(b => b.id === parseInt(id));
             if (index === -1) {
                 return { success: false, error: 'Branch not found' };
             }
 
-            const oldName = branches[index].name;
+            const oldName = window.branches[index].name;
             const newName = branchData.name;
 
-            branches[index] = {
-                ...branches[index],
+            window.branches[index] = {
+                ...window.branches[index],
                 name: newName,
                 location: branchData.location,
                 phone: branchData.phone,
@@ -402,13 +408,13 @@ async function updateBranch(id, branchData) {
 
             // Update branch name in students and coaches if changed
             if (oldName !== newName) {
-                students.forEach(student => {
+                window.students.forEach(student => {
                     if (student.branch === oldName) {
                         student.branch = newName;
                     }
                 });
 
-                coaches.forEach(coach => {
+                window.coaches.forEach(coach => {
                     if (coach.branch === oldName) {
                         coach.branch = newName;
                     }
@@ -416,7 +422,7 @@ async function updateBranch(id, branchData) {
             }
 
             saveDataToStorage();
-            return { success: true, branch: branches[index] };
+            return { success: true, branch: window.branches[index] };
         }
     } catch (error) {
         console.error('Error updating branch:', error);
@@ -432,26 +438,26 @@ async function deleteBranch(id) {
             await window.supabaseData.deleteBranch(id);
 
             // Update local cache
-            const index = branches.findIndex(b => b.id === parseInt(id));
+            const index = window.branches.findIndex(b => b.id === parseInt(id));
             if (index !== -1) {
-                const deletedBranch = branches[index];
-                branches.splice(index, 1);
+                const deletedBranch = window.branches[index];
+                window.branches.splice(index, 1);
                 return { success: true, branch: deletedBranch };
             }
 
             return { success: true };
         } else {
             // Fallback to localStorage
-            const index = branches.findIndex(b => b.id === parseInt(id));
+            const index = window.branches.findIndex(b => b.id === parseInt(id));
             if (index === -1) {
                 return { success: false, error: 'Branch not found' };
             }
 
-            const branchName = branches[index].name;
+            const branchName = window.branches[index].name;
 
             // Check if branch has students or coaches
-            const hasStudents = students.some(s => s.branch === branchName);
-            const hasCoaches = coaches.some(c => c.branch === branchName);
+            const hasStudents = window.students.some(s => s.branch === branchName);
+            const hasCoaches = window.coaches.some(c => c.branch === branchName);
 
             if (hasStudents || hasCoaches) {
                 return {
@@ -460,8 +466,8 @@ async function deleteBranch(id) {
                 };
             }
 
-            const deletedBranch = branches[index];
-            branches.splice(index, 1);
+            const deletedBranch = window.branches[index];
+            window.branches.splice(index, 1);
             saveDataToStorage();
             return { success: true, branch: deletedBranch };
         }
@@ -475,40 +481,40 @@ async function deleteBranch(id) {
 
 // Get all branches
 function getAllBranches() {
-    return branches;
+    return window.branches;
 }
 
 // Get all coaches
 function getAllCoaches() {
-    return coaches;
+    return window.coaches;
 }
 
 // Get all students
 function getAllStudents() {
-    return students;
+    return window.students;
 }
 
 // Get coaches by branch
 function getCoachesByBranch(branchName) {
-    return coaches.filter(c => c.branch === branchName);
+    return window.coaches.filter(c => c.branch === branchName);
 }
 
 // Get students by branch
 function getStudentsByBranch(branchName) {
-    return students.filter(s => s.branch === branchName);
+    return window.students.filter(s => s.branch === branchName);
 }
 
 // Get students by coach
 function getStudentsByCoach(coachName) {
-    return students.filter(s => s.coach === coachName);
+    return window.students.filter(s => s.coach === coachName);
 }
 
 // Export data as JSON
 function exportDataAsJSON() {
     const data = {
-        students: students,
-        coaches: coaches,
-        branches: branches,
+        students: window.students,
+        coaches: window.coaches,
+        branches: window.branches,
         exportDate: new Date().toISOString()
     };
 
@@ -535,9 +541,9 @@ function importDataFromJSON(fileInput) {
             const data = JSON.parse(e.target.result);
 
             if (confirm('⚠️ This will replace all current data with imported data. Continue?')) {
-                if (data.students) students = data.students;
-                if (data.coaches) coaches = data.coaches;
-                if (data.branches) branches = data.branches;
+                if (data.students) window.students = data.students;
+                if (data.coaches) window.coaches = data.coaches;
+                if (data.branches) window.branches = data.branches;
 
                 saveDataToStorage();
                 window.location.reload();

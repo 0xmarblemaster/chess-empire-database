@@ -1,89 +1,19 @@
-// Sample student data for Chess Empire - Database cleared
-// NOTE: These are now declared with 'let' so they can be overwritten by Supabase data
-// If Supabase is unavailable, these will serve as fallback defaults
-let students = [
-    // Empty array - ready for real student data
-];
+// ==========================================
+// CHESS EMPIRE DATABASE - GLOBAL DATA VARIABLES
+// ==========================================
+// IMPORTANT: This file only declares EMPTY global variables.
+// All data is loaded from Supabase database via crud.js
+// DO NOT add hardcoded data here - it will prevent Supabase sync!
+// ==========================================
 
-// Coach data - 9 coaches across 7 branches
-// Will be overwritten by Supabase data when available
-let coaches = [
-    {
-        id: 1,
-        firstName: "Asylkhan",
-        lastName: "Akbaevich",
-        branch: "Debut",
-        email: "asylkhan@chessempire.kz",
-        phone: "+7 (777) 111-11-11"
-    },
-    {
-        id: 2,
-        firstName: "Tanibergen",
-        lastName: "Aibekovich",
-        branch: "Almaty Arena",
-        email: "tanibergen@chessempire.kz",
-        phone: "+7 (777) 222-22-22"
-    },
-    {
-        id: 3,
-        firstName: "Alinur",
-        lastName: "Serikovich",
-        branch: "Halyk Arena",
-        email: "alinur@chessempire.kz",
-        phone: "+7 (777) 333-33-33"
-    },
-    {
-        id: 4,
-        firstName: "Zakir",
-        lastName: "Anvarovich",
-        branch: "Zhandosova",
-        email: "zakir@chessempire.kz",
-        phone: "+7 (777) 444-44-44"
-    },
-    {
-        id: 5,
-        firstName: "Arman",
-        lastName: "Ermekovich",
-        branch: "Zhandosova",
-        email: "arman@chessempire.kz",
-        phone: "+7 (777) 555-55-55"
-    },
-    {
-        id: 6,
-        firstName: "Khantuev",
-        lastName: "Alexander",
-        branch: "Halyk Arena",
-        email: "alexander@chessempire.kz",
-        phone: "+7 (777) 666-66-66"
-    },
-    {
-        id: 7,
-        firstName: "Nurgalimov",
-        lastName: "Chingis",
-        branch: "Gagarin Park",
-        email: "chingis@chessempire.kz",
-        phone: "+7 (777) 777-77-77"
-    },
-    {
-        id: 8,
-        firstName: "Karmenov",
-        lastName: "Berik",
-        branch: "Almaty 1",
-        email: "berik@chessempire.kz",
-        phone: "+7 (777) 888-88-88"
-    },
-    {
-        id: 9,
-        firstName: "Vasiliev",
-        lastName: "Vasiliy",
-        branch: "Abaya Rozybakieva",
-        email: "vasiliy@chessempire.kz",
-        phone: "+7 (777) 999-99-99"
-    }
-];
+// Students array - populated from Supabase
+let students = [];
 
-// Branch data - All 7 branches
-// Will be overwritten by Supabase data when available
+// Coaches array - populated from Supabase
+// MUST remain empty - all coach data comes from Supabase
+let coaches = [];
+
+// Branches array - populated from Supabase (minimal fallback data for UI to function)
 let branches = [
     {
         id: 1,
