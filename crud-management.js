@@ -235,7 +235,8 @@ async function submitAddCoach(event) {
     const lastName = document.getElementById('coachLastName').value;
     const email = document.getElementById('coachEmail').value;
     const phone = document.getElementById('coachPhone').value;
-    const branchId = parseInt(document.getElementById('coachBranchSelect').value);
+    // Branch IDs from Supabase are strings (UUIDs), keep as string - don't use parseInt!
+    const branchId = document.getElementById('coachBranchSelect').value;
 
     if (!branchId) {
         alert('Please select a branch');
@@ -280,7 +281,8 @@ async function submitEditCoach(event) {
 
     // Coach IDs from Supabase are strings (UUIDs), don't parseInt
     const coachId = document.getElementById('editCoachId').value;
-    const branchId = parseInt(document.getElementById('editCoachBranchSelect').value);
+    // Branch IDs from Supabase are strings (UUIDs), keep as string - don't use parseInt!
+    const branchId = document.getElementById('editCoachBranchSelect').value;
 
     if (!branchId) {
         alert('Please select a branch');
