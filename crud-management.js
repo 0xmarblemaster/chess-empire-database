@@ -69,13 +69,13 @@ function loadCoaches() {
 
 // View coach details
 function viewCoach(coachName) {
-    const coach = coaches.find(c => `${c.firstName} ${c.lastName}` === coachName);
+    const coach = window.coaches.find(c => `${c.firstName} ${c.lastName}` === coachName);
     if (!coach) {
         alert('Coach not found');
         return;
     }
 
-    const coachStudents = students.filter(s => s.coach === coachName);
+    const coachStudents = window.students.filter(s => s.coach === coachName);
     const studentsList = coachStudents.length > 0
         ? coachStudents.map(s => `• ${s.firstName} ${s.lastName} (Level ${s.level})`).join('\n')
         : 'No students assigned';
@@ -85,7 +85,7 @@ function viewCoach(coachName) {
 
 // Open edit coach modal
 function editCoach(coachId) {
-    const coach = coaches.find(c => c.id === coachId);
+    const coach = window.coaches.find(c => c.id === coachId);
     if (!coach) {
         alert('Coach not found');
         return;
@@ -101,11 +101,12 @@ function editCoach(coachId) {
     // Populate branch dropdown
     const branchSelect = document.getElementById('editCoachBranchSelect');
     branchSelect.innerHTML = '<option value="">Select Branch</option>';
-    branches.forEach(branch => {
+    window.branches.forEach(branch => {
         const option = document.createElement('option');
-        option.value = branch.name;
+        option.value = branch.id;
         option.textContent = branch.name;
-        if (branch.name === coach.branch) {
+        option.setAttribute('data-branch-name', branch.name);
+        if (branch.id === coach.branchId) {
             option.selected = true;
         }
         branchSelect.appendChild(option);
@@ -118,14 +119,14 @@ function editCoach(coachId) {
 
 // Delete coach with confirmation
 function deleteCoachConfirm(coachId) {
-    const coach = coaches.find(c => c.id === coachId);
+    const coach = window.coaches.find(c => c.id === coachId);
     if (!coach) {
         alert('Coach not found');
         return;
     }
 
     const coachName = `${coach.firstName} ${coach.lastName}`;
-    const coachStudents = students.filter(s => s.coach === coachName);
+    const coachStudents = window.students.filter(s => s.coach === coachName);
 
     let confirmMsg = `Are you sure you want to delete coach "${coachName}"?`;
     if (coachStudents.length > 0) {
@@ -138,21 +139,31 @@ function deleteCoachConfirm(coachId) {
 }
 
 // Delete coach
-function deleteCoach(coachId) {
-    const index = coaches.findIndex(c => c.id === coachId);
+async function deleteCoach(coachId) {
+    const index = window.coaches.findIndex(c => c.id === coachId);
     if (index === -1) {
         alert('Coach not found');
         return;
     }
 
-    // Delete from Supabase if available
-    if (window.supabaseClient) {
-        deleteCoachFromSupabase(coachId);
+    // Delete from Supabase using supabaseData wrapper
+    if (window.supabaseData) {
+        try {
+            await window.supabaseData.deleteCoach(coachId);
+            // Reload coaches from Supabase
+            window.coaches = await window.supabaseData.getCoaches();
+            loadCoaches();
+            alert('Coach deleted successfully!');
+        } catch (error) {
+            console.error('Error deleting coach:', error);
+            alert('Failed to delete coach. Please try again.');
+        }
+    } else {
+        // Fallback: remove from local array
+        window.coaches.splice(index, 1);
+        loadCoaches();
+        alert('Coach deleted successfully!');
     }
-
-    coaches.splice(index, 1);
-    loadCoaches();
-    alert('Coach deleted successfully!');
 }
 
 // Open add coach modal
@@ -163,10 +174,11 @@ function addNewCoach() {
     // Populate branch dropdown
     const branchSelect = document.getElementById('coachBranchSelect');
     branchSelect.innerHTML = '<option value="">Select Branch</option>';
-    branches.forEach(branch => {
+    window.branches.forEach(branch => {
         const option = document.createElement('option');
-        option.value = branch.name;
+        option.value = branch.id;
         option.textContent = branch.name;
+        option.setAttribute('data-branch-name', branch.name);
         branchSelect.appendChild(option);
     });
 
@@ -175,62 +187,8 @@ function addNewCoach() {
     lucide.createIcons();
 }
 
-// Supabase helper functions for coaches
-async function updateCoachInSupabase(coach) {
-    try {
-        const { error } = await window.supabaseClient
-            .from('coaches')
-            .update({
-                first_name: coach.firstName,
-                last_name: coach.lastName,
-                email: coach.email,
-                phone: coach.phone,
-                branch: coach.branch
-            })
-            .eq('id', coach.id);
-
-        if (error) {
-            console.error('Error updating coach in Supabase:', error);
-        }
-    } catch (error) {
-        console.error('Error updating coach:', error);
-    }
-}
-
-async function deleteCoachFromSupabase(coachId) {
-    try {
-        const { error } = await window.supabaseClient
-            .from('coaches')
-            .delete()
-            .eq('id', coachId);
-
-        if (error) {
-            console.error('Error deleting coach from Supabase:', error);
-        }
-    } catch (error) {
-        console.error('Error deleting coach:', error);
-    }
-}
-
-async function addCoachToSupabase(coach) {
-    try {
-        const { error } = await window.supabaseClient
-            .from('coaches')
-            .insert({
-                first_name: coach.firstName,
-                last_name: coach.lastName,
-                email: coach.email,
-                phone: coach.phone,
-                branch: coach.branch
-            });
-
-        if (error) {
-            console.error('Error adding coach to Supabase:', error);
-        }
-    } catch (error) {
-        console.error('Error adding coach:', error);
-    }
-}
+// NOTE: Supabase operations now use window.supabaseData wrapper
+// No need for separate helper functions
 
 // Close add coach modal
 function closeAddCoachModal() {
@@ -243,61 +201,100 @@ function closeEditCoachModal() {
 }
 
 // Submit add coach form
-function submitAddCoach(event) {
+async function submitAddCoach(event) {
     event.preventDefault();
 
     const firstName = document.getElementById('coachFirstName').value;
     const lastName = document.getElementById('coachLastName').value;
     const email = document.getElementById('coachEmail').value;
     const phone = document.getElementById('coachPhone').value;
-    const branch = document.getElementById('coachBranchSelect').value;
+    const branchId = parseInt(document.getElementById('coachBranchSelect').value);
+
+    if (!branchId) {
+        alert('Please select a branch');
+        return;
+    }
 
     const newCoach = {
-        id: coaches.length > 0 ? Math.max(...coaches.map(c => c.id)) + 1 : 1,
         firstName,
         lastName,
         email,
         phone,
-        branch
+        branchId
     };
 
-    // Add to Supabase if available
-    if (window.supabaseClient) {
-        addCoachToSupabase(newCoach);
+    // Add to Supabase using supabaseData wrapper
+    if (window.supabaseData) {
+        try {
+            await window.supabaseData.addCoach(newCoach);
+            // Reload coaches from Supabase
+            window.coaches = await window.supabaseData.getCoaches();
+            loadCoaches();
+            closeAddCoachModal();
+            alert('Coach added successfully!');
+        } catch (error) {
+            console.error('Error adding coach:', error);
+            alert('Failed to add coach. Please try again.');
+        }
+    } else {
+        // Fallback: add to local array
+        newCoach.id = window.coaches.length > 0 ? Math.max(...window.coaches.map(c => c.id)) + 1 : 1;
+        window.coaches.push(newCoach);
+        loadCoaches();
+        closeAddCoachModal();
+        alert('Coach added successfully!');
     }
-
-    coaches.push(newCoach);
-    loadCoaches();
-    closeAddCoachModal();
-    alert('Coach added successfully!');
 }
 
 // Submit edit coach form
-function submitEditCoach(event) {
+async function submitEditCoach(event) {
     event.preventDefault();
 
     const coachId = parseInt(document.getElementById('editCoachId').value);
-    const coach = coaches.find(c => c.id === coachId);
+    const branchId = parseInt(document.getElementById('editCoachBranchSelect').value);
 
-    if (!coach) {
-        alert('Coach not found');
+    if (!branchId) {
+        alert('Please select a branch');
         return;
     }
 
-    coach.firstName = document.getElementById('editCoachFirstName').value;
-    coach.lastName = document.getElementById('editCoachLastName').value;
-    coach.email = document.getElementById('editCoachEmail').value;
-    coach.phone = document.getElementById('editCoachPhone').value;
-    coach.branch = document.getElementById('editCoachBranchSelect').value;
+    const updatedCoach = {
+        firstName: document.getElementById('editCoachFirstName').value,
+        lastName: document.getElementById('editCoachLastName').value,
+        email: document.getElementById('editCoachEmail').value,
+        phone: document.getElementById('editCoachPhone').value,
+        branchId: branchId
+    };
 
-    // Update in Supabase if available
-    if (window.supabaseClient) {
-        updateCoachInSupabase(coach);
+    // Update in Supabase using supabaseData wrapper
+    if (window.supabaseData) {
+        try {
+            await window.supabaseData.updateCoach(coachId, updatedCoach);
+            // Reload coaches from Supabase
+            window.coaches = await window.supabaseData.getCoaches();
+            loadCoaches();
+            closeEditCoachModal();
+            alert('Coach updated successfully!');
+        } catch (error) {
+            console.error('Error updating coach:', error);
+            alert('Failed to update coach. Please try again.');
+        }
+    } else {
+        // Fallback: update local array
+        const coach = window.coaches.find(c => c.id === coachId);
+        if (coach) {
+            coach.firstName = updatedCoach.firstName;
+            coach.lastName = updatedCoach.lastName;
+            coach.email = updatedCoach.email;
+            coach.phone = updatedCoach.phone;
+            coach.branchId = updatedCoach.branchId;
+            loadCoaches();
+            closeEditCoachModal();
+            alert('Coach updated successfully!');
+        } else {
+            alert('Coach not found');
+        }
     }
-
-    loadCoaches();
-    closeEditCoachModal();
-    alert('Coach updated successfully!');
 }
 
 // Show coaches management section
