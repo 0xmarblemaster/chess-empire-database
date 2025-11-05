@@ -448,10 +448,10 @@ function loadBranches() {
                         <button class="icon-button" onclick="viewBranch('${branch.name}')" title="View Branch">
                             <i data-lucide="eye"></i>
                         </button>
-                        <button class="icon-button" onclick="editBranch(${branch.id})" title="Edit Branch">
+                        <button class="icon-button" onclick="editBranch('${branch.id}')" title="Edit Branch">
                             <i data-lucide="edit"></i>
                         </button>
-                        <button class="icon-button" onclick="deleteBranchConfirm(${branch.id})" title="Delete Branch" style="color: #dc2626;">
+                        <button class="icon-button" onclick="deleteBranchConfirm('${branch.id}')" title="Delete Branch" style="color: #dc2626;">
                             <i data-lucide="trash-2"></i>
                         </button>
                     </div>
@@ -471,11 +471,18 @@ function viewBranch(branchName) {
 
 // Open edit branch modal
 function editBranch(branchId) {
-    const branch = branches.find(b => b.id === branchId);
+    console.log('🔧 editBranch called with ID:', branchId, 'Type:', typeof branchId);
+    console.log('📊 Available branches:', window.branches);
+
+    // Branch IDs from Supabase are strings (UUIDs), so compare as strings
+    const branch = branches.find(b => String(b.id) === String(branchId));
     if (!branch) {
+        console.error('❌ Branch not found with ID:', branchId);
+        console.error('Available IDs:', branches.map(b => b.id));
         alert('Branch not found');
         return;
     }
+    console.log('✅ Found branch:', branch);
 
     // Populate form fields
     document.getElementById('editBranchId').value = branch.id;
@@ -491,8 +498,12 @@ function editBranch(branchId) {
 
 // Delete branch with confirmation
 function deleteBranchConfirm(branchId) {
-    const branch = branches.find(b => b.id === branchId);
+    console.log('🗑️ deleteBranchConfirm called with ID:', branchId, 'Type:', typeof branchId);
+
+    // Branch IDs from Supabase are strings (UUIDs), so compare as strings
+    const branch = branches.find(b => String(b.id) === String(branchId));
     if (!branch) {
+        console.error('❌ Branch not found with ID:', branchId);
         alert('Branch not found');
         return;
     }
@@ -515,8 +526,12 @@ function deleteBranchConfirm(branchId) {
 
 // Delete branch
 function deleteBranch(branchId) {
-    const index = branches.findIndex(b => b.id === branchId);
+    console.log('🗑️ deleteBranch called with ID:', branchId);
+
+    // Branch IDs from Supabase are strings (UUIDs), so compare as strings
+    const index = branches.findIndex(b => String(b.id) === String(branchId));
     if (index === -1) {
+        console.error('❌ Branch not found with ID:', branchId);
         alert('Branch not found');
         return;
     }

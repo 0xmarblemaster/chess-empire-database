@@ -107,17 +107,22 @@ document.addEventListener('DOMContentLoaded', async () => {
     // Wait for data to load from Supabase
     if (typeof initializeData === 'function') {
         await initializeData();
+        // initializeData() already calls refreshAllUIComponents()
+        // which populates dropdowns and loads students
+    } else {
+        // Fallback if initializeData doesn't exist
+        loadStatistics();
+        populateFilterDropdowns();
+        populateBranchDropdown();
+        populateCoachDropdown();
+        loadStudents();
     }
 
     // Update menu visibility based on user permissions
     updateMenuVisibility();
-
-    loadStatistics();
-    populateFilterDropdowns();
-    populateBranchDropdown();
-    populateCoachDropdown();
+    
+    // Apply translations and setup
     applyAdminTranslations();
-    loadStudents();
     setupEventListeners();
     lucide.createIcons();
 });
@@ -269,13 +274,13 @@ function loadStudents() {
                 <td><span class="status-badge ${student.status}">${translateStatus(student.status)}</span></td>
                 <td>
                     <div class="action-buttons">
-                        <button class="icon-button" onclick="viewStudent(${student.id})" title="${t('admin.studentCard.view')}">
+                        <button class="icon-button" onclick="viewStudent('${student.id}')" title="${t('admin.studentCard.view')}">
                             <i data-lucide="eye"></i>
                         </button>
-                        <button class="icon-button" onclick="editStudent(${student.id})" title="${t('admin.studentCard.edit')}">
+                        <button class="icon-button" onclick="editStudent('${student.id}')" title="${t('admin.studentCard.edit')}">
                             <i data-lucide="edit"></i>
                         </button>
-                        <button class="icon-button" onclick="deleteStudentConfirm(${student.id})" title="Delete Student" style="color: #dc2626;">
+                        <button class="icon-button" onclick="deleteStudentConfirm('${student.id}')" title="Delete Student" style="color: #dc2626;">
                             <i data-lucide="trash-2"></i>
                         </button>
                     </div>
@@ -338,15 +343,15 @@ function renderMobileStudentCards(students) {
                 </div>
                 
                 <div class="mobile-card-actions">
-                    <button class="mobile-card-action-btn" onclick="viewStudent(${student.id})">
+                    <button class="mobile-card-action-btn" onclick="viewStudent('${student.id}')">
                         <i data-lucide="eye" style="width: 18px; height: 18px;"></i>
                         ${t('admin.studentCard.view')}
                     </button>
-                    <button class="mobile-card-action-btn primary" onclick="editStudent(${student.id})">
+                    <button class="mobile-card-action-btn primary" onclick="editStudent('${student.id}')">
                         <i data-lucide="edit" style="width: 18px; height: 18px;"></i>
                         ${t('admin.studentCard.edit')}
                     </button>
-                    <button class="mobile-card-action-btn danger" onclick="deleteStudentConfirm(${student.id})">
+                    <button class="mobile-card-action-btn danger" onclick="deleteStudentConfirm('${student.id}')">
                         <i data-lucide="trash-2" style="width: 18px; height: 18px;"></i>
                     </button>
                 </div>

@@ -19,17 +19,33 @@ async function initializeData() {
 // Load data from Supabase and update global variables
 async function loadDataFromSupabase() {
     try {
+        // Fetch data from Supabase
+        const supabaseStudents = await window.supabaseData.getStudents();
+        const supabaseCoaches = await window.supabaseData.getCoaches();
+        const supabaseBranches = await window.supabaseData.getBranches();
+        
         // Update global variables directly (defined in data.js)
-        window.students = await window.supabaseData.getStudents();
-        window.coaches = await window.supabaseData.getCoaches();
-        window.branches = await window.supabaseData.getBranches();
+        // IMPORTANT: Assign to global scope, not window
+        students.length = 0;
+        students.push(...supabaseStudents);
+        
+        coaches.length = 0;
+        coaches.push(...supabaseCoaches);
+        
+        branches.length = 0;
+        branches.push(...supabaseBranches);
+        
+        // Also set on window for compatibility
+        window.students = students;
+        window.coaches = coaches;
+        window.branches = branches;
 
         console.log('✅ Loaded from Supabase:', {
-            students: window.students.length,
-            coaches: window.coaches.length,
-            branches: window.branches.length
+            students: students.length,
+            coaches: coaches.length,
+            branches: branches.length
         });
-        console.log('👥 Coaches loaded:', window.coaches.map(c => `${c.firstName} ${c.lastName}`).join(', '));
+        console.log('👥 Coaches loaded:', coaches.map(c => `${c.firstName} ${c.lastName}`).join(', '));
 
         // Trigger UI refresh after data is loaded
         refreshAllUIComponents();
@@ -75,6 +91,30 @@ function refreshAllUIComponents() {
     const totalCoaches = document.querySelector('.stat-card:has([data-lucide="users"]) .stat-value');
     if (totalCoaches) {
         totalCoaches.textContent = window.coaches.length;
+    }
+
+    // Load students list (desktop table + mobile cards)
+    if (typeof loadStudents === 'function') {
+        loadStudents();
+    }
+    
+    // Load statistics
+    if (typeof loadStatistics === 'function') {
+        loadStatistics();
+    }
+    
+    // Populate sidebar dropdowns with Supabase data
+    if (typeof populateCoachDropdown === 'function') {
+        populateCoachDropdown();
+    }
+    
+    if (typeof populateBranchDropdown === 'function') {
+        populateBranchDropdown();
+    }
+    
+    // Update filter dropdowns
+    if (typeof populateFilterDropdowns === 'function') {
+        populateFilterDropdowns();
     }
 
     console.log('🔄 UI components refreshed with Supabase data');
@@ -162,7 +202,8 @@ async function createStudent(studentData) {
 
 // Read student by ID
 function getStudentById(id) {
-    return window.students.find(s => s.id === parseInt(id));
+    // Student IDs from Supabase are strings (UUIDs), so compare as strings
+    return window.students.find(s => String(s.id) === String(id));
 }
 
 // Update student
@@ -173,7 +214,8 @@ async function updateStudent(id, studentData) {
             const updatedStudent = await window.supabaseData.updateStudent(id, studentData);
 
             // Update local cache
-            const index = window.students.findIndex(s => s.id === parseInt(id));
+            // Student IDs from Supabase are strings (UUIDs), so compare as strings
+            const index = window.students.findIndex(s => String(s.id) === String(id));
             if (index !== -1) {
                 window.students[index] = updatedStudent;
             }
@@ -181,7 +223,8 @@ async function updateStudent(id, studentData) {
             return { success: true, student: updatedStudent };
         } else {
             // Fallback to localStorage
-            const index = window.students.findIndex(s => s.id === parseInt(id));
+            // Student IDs from Supabase are strings (UUIDs), so compare as strings
+            const index = window.students.findIndex(s => String(s.id) === String(id));
             if (index === -1) {
                 return { success: false, error: 'Student not found' };
             }
@@ -224,7 +267,8 @@ async function deleteStudent(id) {
             await window.supabaseData.deleteStudent(id);
 
             // Update local cache
-            const index = window.students.findIndex(s => s.id === parseInt(id));
+            // Student IDs from Supabase are strings (UUIDs), so compare as strings
+            const index = window.students.findIndex(s => String(s.id) === String(id));
             if (index !== -1) {
                 const deletedStudent = window.students[index];
                 window.students.splice(index, 1);
@@ -234,7 +278,8 @@ async function deleteStudent(id) {
             return { success: true };
         } else {
             // Fallback to localStorage
-            const index = window.students.findIndex(s => s.id === parseInt(id));
+            // Student IDs from Supabase are strings (UUIDs), so compare as strings
+            const index = window.students.findIndex(s => String(s.id) === String(id));
             if (index === -1) {
                 return { success: false, error: 'Student not found' };
             }
@@ -286,7 +331,8 @@ async function createCoach(coachData) {
 
 // Read coach by ID
 function getCoachById(id) {
-    return window.coaches.find(c => c.id === parseInt(id));
+    // Coach IDs from Supabase are strings (UUIDs), so compare as strings
+    return window.coaches.find(c => String(c.id) === String(id));
 }
 
 // Update coach
@@ -297,7 +343,8 @@ async function updateCoach(id, coachData) {
             const updatedCoach = await window.supabaseData.updateCoach(id, coachData);
 
             // Update local cache
-            const index = window.coaches.findIndex(c => c.id === parseInt(id));
+            // Coach IDs from Supabase are strings (UUIDs), so compare as strings
+            const index = window.coaches.findIndex(c => String(c.id) === String(id));
             if (index !== -1) {
                 window.coaches[index] = updatedCoach;
                 console.log('✅ Coach updated:', updatedCoach);
@@ -306,7 +353,8 @@ async function updateCoach(id, coachData) {
             return { success: true, coach: updatedCoach };
         } else {
             // Fallback to localStorage
-            const index = window.coaches.findIndex(c => c.id === parseInt(id));
+            // Coach IDs from Supabase are strings (UUIDs), so compare as strings
+            const index = window.coaches.findIndex(c => String(c.id) === String(id));
             if (index === -1) {
                 return { success: false, error: 'Coach not found' };
             }
@@ -338,7 +386,8 @@ async function deleteCoach(id) {
             await window.supabaseData.deleteCoach(id);
 
             // Update local cache
-            const index = window.coaches.findIndex(c => c.id === parseInt(id));
+            // Coach IDs from Supabase are strings (UUIDs), so compare as strings
+            const index = window.coaches.findIndex(c => String(c.id) === String(id));
             if (index !== -1) {
                 const deletedCoach = window.coaches[index];
                 window.coaches.splice(index, 1);
@@ -349,7 +398,8 @@ async function deleteCoach(id) {
             return { success: true };
         } else {
             // Fallback to localStorage
-            const index = window.coaches.findIndex(c => c.id === parseInt(id));
+            // Coach IDs from Supabase are strings (UUIDs), so compare as strings
+            const index = window.coaches.findIndex(c => String(c.id) === String(id));
             if (index === -1) {
                 return { success: false, error: 'Coach not found' };
             }
@@ -409,7 +459,8 @@ async function createBranch(branchData) {
 
 // Read branch by ID
 function getBranchById(id) {
-    return window.branches.find(b => b.id === parseInt(id));
+    // Branch IDs from Supabase are strings (UUIDs), so compare as strings
+    return window.branches.find(b => String(b.id) === String(id));
 }
 
 // Read branch by name
@@ -425,7 +476,8 @@ async function updateBranch(id, branchData) {
             const updatedBranch = await window.supabaseData.updateBranch(id, branchData);
 
             // Update local cache
-            const index = window.branches.findIndex(b => b.id === parseInt(id));
+            // Branch IDs from Supabase are strings (UUIDs), so compare as strings
+            const index = window.branches.findIndex(b => String(b.id) === String(id));
             if (index !== -1) {
                 window.branches[index] = updatedBranch;
             }
@@ -433,7 +485,8 @@ async function updateBranch(id, branchData) {
             return { success: true, branch: updatedBranch };
         } else {
             // Fallback to localStorage
-            const index = window.branches.findIndex(b => b.id === parseInt(id));
+            // Branch IDs from Supabase are strings (UUIDs), so compare as strings
+            const index = window.branches.findIndex(b => String(b.id) === String(id));
             if (index === -1) {
                 return { success: false, error: 'Branch not found' };
             }
@@ -481,7 +534,8 @@ async function deleteBranch(id) {
             await window.supabaseData.deleteBranch(id);
 
             // Update local cache
-            const index = window.branches.findIndex(b => b.id === parseInt(id));
+            // Branch IDs from Supabase are strings (UUIDs), so compare as strings
+            const index = window.branches.findIndex(b => String(b.id) === String(id));
             if (index !== -1) {
                 const deletedBranch = window.branches[index];
                 window.branches.splice(index, 1);
@@ -491,7 +545,8 @@ async function deleteBranch(id) {
             return { success: true };
         } else {
             // Fallback to localStorage
-            const index = window.branches.findIndex(b => b.id === parseInt(id));
+            // Branch IDs from Supabase are strings (UUIDs), so compare as strings
+            const index = window.branches.findIndex(b => String(b.id) === String(id));
             if (index === -1) {
                 return { success: false, error: 'Branch not found' };
             }
