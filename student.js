@@ -4,7 +4,8 @@ if (!studentId) {
     window.location.href = 'index.html';
 }
 
-const student = students.find(s => s.id === parseInt(studentId, 10));
+// Student IDs from Supabase are strings (UUIDs), keep as string - don't use parseInt!
+const student = students.find(s => String(s.id) === String(studentId));
 
 if (!student) {
     window.location.href = 'index.html';

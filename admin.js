@@ -1576,8 +1576,10 @@ document.addEventListener('keydown', function(event) {
 
 // Open Edit Student Modal
 function editStudent(studentId) {
-    const student = students.find(s => s.id === studentId);
+    // Student IDs from Supabase are strings (UUIDs), so compare as strings
+    const student = students.find(s => String(s.id) === String(studentId));
     if (!student) {
+        console.error('❌ Student not found with ID:', studentId);
         alert(t('admin.error.studentNotFound'));
         return;
     }
@@ -1665,11 +1667,13 @@ function submitEditStudent(event) {
     // Get form data
     const form = document.getElementById('editStudentForm');
     const formData = new FormData(form);
-    const studentId = parseInt(document.getElementById('editStudentId').value);
-    
+    // Student IDs from Supabase are strings (UUIDs), keep as string - don't use parseInt!
+    const studentId = document.getElementById('editStudentId').value;
+
     // Find student in array
-    const studentIndex = students.findIndex(s => s.id === studentId);
+    const studentIndex = students.findIndex(s => String(s.id) === String(studentId));
     if (studentIndex === -1) {
+        console.error('❌ Student not found with ID:', studentId);
         alert(t('admin.error.studentNotFound'));
         return;
     }

@@ -653,13 +653,17 @@ function submitAddBranch(event) {
 function submitEditBranch(event) {
     event.preventDefault();
 
-    const branchId = parseInt(document.getElementById('editBranchId').value);
-    const branch = branches.find(b => b.id === branchId);
+    // Branch IDs from Supabase are strings (UUIDs), keep as string - don't use parseInt!
+    const branchId = document.getElementById('editBranchId').value;
+    const branch = branches.find(b => String(b.id) === String(branchId));
 
     if (!branch) {
+        console.error('❌ Branch not found with ID:', branchId);
+        console.error('Available branches:', branches.map(b => ({ id: b.id, name: b.name })));
         alert('Branch not found');
         return;
     }
+    console.log('✅ Found branch to update:', branch);
 
     const oldName = branch.name;
     branch.name = document.getElementById('editBranchName').value;
