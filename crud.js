@@ -58,66 +58,82 @@ async function loadDataFromSupabase() {
 
 // Refresh all UI components after data loads
 function refreshAllUIComponents() {
-    // Refresh coaches management if it's visible
-    if (typeof loadCoaches === 'function') {
-        const coachesSection = document.getElementById('coachesSection');
-        if (coachesSection && coachesSection.classList.contains('active')) {
-            loadCoaches();
-            // Update stats
-            const totalCoachesManage = document.getElementById('totalCoachesManage');
-            if (totalCoachesManage) {
-                totalCoachesManage.textContent = window.coaches.length;
-            }
-        }
-    }
-
-    // Refresh coaches list view (Main menu) if it's visible
-    if (typeof refreshCoachesListView === 'function') {
-        const coachesListSection = document.getElementById('coachesListSection');
-        if (coachesListSection && coachesListSection.classList.contains('active')) {
-            refreshCoachesListView();
-        }
-    }
-
-    // Refresh branches management if it's visible
-    if (typeof loadBranches === 'function') {
-        const branchesSection = document.getElementById('branchesSection');
-        if (branchesSection && branchesSection.classList.contains('active')) {
-            loadBranches();
-        }
-    }
-
-    // Refresh dashboard stats
-    const totalCoaches = document.querySelector('.stat-card:has([data-lucide="users"]) .stat-value');
-    if (totalCoaches) {
-        totalCoaches.textContent = window.coaches.length;
-    }
-
-    // Load students list (desktop table + mobile cards)
+    // Priority 1: Critical UI updates (synchronous)
+    // Load students list first (most important)
     if (typeof loadStudents === 'function') {
         loadStudents();
     }
-    
-    // Load statistics
-    if (typeof loadStatistics === 'function') {
-        loadStatistics();
-    }
-    
-    // Populate sidebar dropdowns with Supabase data
-    if (typeof populateCoachDropdown === 'function') {
-        populateCoachDropdown();
-    }
-    
-    if (typeof populateBranchDropdown === 'function') {
-        populateBranchDropdown();
-    }
-    
-    // Update filter dropdowns
-    if (typeof populateFilterDropdowns === 'function') {
-        populateFilterDropdowns();
-    }
 
-    console.log('🔄 UI components refreshed with Supabase data');
+    // Priority 2: Defer non-critical updates to next frame
+    requestAnimationFrame(() => {
+        // Load statistics
+        if (typeof loadStatistics === 'function') {
+            loadStatistics();
+        }
+
+        // Refresh dashboard stats
+        const totalCoaches = document.querySelector('.stat-card:has([data-lucide="users"]) .stat-value');
+        if (totalCoaches) {
+            totalCoaches.textContent = window.coaches.length;
+        }
+    });
+
+    // Priority 3: Defer dropdowns to next frame after stats
+    requestAnimationFrame(() => {
+        requestAnimationFrame(() => {
+            // Populate sidebar dropdowns with Supabase data
+            if (typeof populateCoachDropdown === 'function') {
+                populateCoachDropdown();
+            }
+
+            if (typeof populateBranchDropdown === 'function') {
+                populateBranchDropdown();
+            }
+
+            // Update filter dropdowns
+            if (typeof populateFilterDropdowns === 'function') {
+                populateFilterDropdowns();
+            }
+        });
+    });
+
+    // Priority 4: Only refresh section-specific views if they're visible
+    requestAnimationFrame(() => {
+        requestAnimationFrame(() => {
+            requestAnimationFrame(() => {
+                // Refresh coaches management if it's visible
+                if (typeof loadCoaches === 'function') {
+                    const coachesSection = document.getElementById('coachesSection');
+                    if (coachesSection && coachesSection.classList.contains('active')) {
+                        loadCoaches();
+                        // Update stats
+                        const totalCoachesManage = document.getElementById('totalCoachesManage');
+                        if (totalCoachesManage) {
+                            totalCoachesManage.textContent = window.coaches.length;
+                        }
+                    }
+                }
+
+                // Refresh coaches list view (Main menu) if it's visible
+                if (typeof refreshCoachesListView === 'function') {
+                    const coachesListSection = document.getElementById('coachesListSection');
+                    if (coachesListSection && coachesListSection.classList.contains('active')) {
+                        refreshCoachesListView();
+                    }
+                }
+
+                // Refresh branches management if it's visible
+                if (typeof loadBranches === 'function') {
+                    const branchesSection = document.getElementById('branchesSection');
+                    if (branchesSection && branchesSection.classList.contains('active')) {
+                        loadBranches();
+                    }
+                }
+
+                console.log('🔄 UI components refreshed with Supabase data');
+            });
+        });
+    });
 }
 
 // Load data from localStorage (fallback)

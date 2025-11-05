@@ -292,10 +292,16 @@ function loadStudents() {
     // Update result count
     updateResultCount(filteredStudents.length);
 
-    // Also render mobile cards
-    renderMobileStudentCards(filteredStudents);
-
+    // Initialize icons for desktop table immediately
     lucide.createIcons();
+
+    // Defer mobile cards rendering to next animation frame for better performance
+    // Only render if mobile container exists and might be visible
+    requestAnimationFrame(() => {
+        renderMobileStudentCards(filteredStudents);
+        // Re-initialize icons after mobile cards are rendered
+        lucide.createIcons();
+    });
 }
 
 // Render mobile student cards
@@ -359,7 +365,8 @@ function renderMobileStudentCards(students) {
         `).join('');
     }
 
-    lucide.createIcons();
+    // Note: lucide.createIcons() is called by parent loadStudents() function
+    // to avoid duplicate icon initialization
 }
 
 // Setup event listeners
