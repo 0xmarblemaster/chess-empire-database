@@ -55,6 +55,14 @@ function refreshAllUIComponents() {
         }
     }
 
+    // Refresh coaches list view (Main menu) if it's visible
+    if (typeof refreshCoachesListView === 'function') {
+        const coachesListSection = document.getElementById('coachesListSection');
+        if (coachesListSection && coachesListSection.classList.contains('active')) {
+            refreshCoachesListView();
+        }
+    }
+
     // Refresh branches management if it's visible
     if (typeof loadBranches === 'function') {
         const branchesSection = document.getElementById('branchesSection');

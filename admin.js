@@ -287,6 +287,73 @@ function loadStudents() {
     // Update result count
     updateResultCount(filteredStudents.length);
 
+    // Also render mobile cards
+    renderMobileStudentCards(filteredStudents);
+
+    lucide.createIcons();
+}
+
+// Render mobile student cards
+function renderMobileStudentCards(students) {
+    const mobileCardsContainer = document.getElementById('mobileStudentCards');
+    if (!mobileCardsContainer) return;
+
+    if (students.length === 0) {
+        mobileCardsContainer.innerHTML = `
+            <div style="text-align: center; padding: 3rem 1rem; color: #94a3b8;">
+                <i data-lucide="users" style="width: 48px; height: 48px; margin-bottom: 1rem;"></i>
+                <div style="font-size: 1.125rem; font-weight: 600; margin-bottom: 0.5rem;">${t('admin.empty.table')}</div>
+                <div style="font-size: 0.875rem;">${t('admin.empty.hint')}</div>
+            </div>
+        `;
+    } else {
+        mobileCardsContainer.innerHTML = students.map(student => `
+            <div class="mobile-student-card">
+                <div class="mobile-card-header">
+                    <div class="mobile-card-avatar">${student.firstName[0]}${student.lastName[0]}</div>
+                    <div class="mobile-card-info">
+                        <div class="mobile-card-name">${student.firstName} ${student.lastName}</div>
+                        <div class="mobile-card-meta">${student.age} ${t('common.years')} • ${student.coach}</div>
+                    </div>
+                    <span class="mobile-card-status ${student.status}">${translateStatus(student.status)}</span>
+                </div>
+                
+                <div class="mobile-card-details">
+                    <div class="mobile-card-detail">
+                        <div class="mobile-card-detail-label">${t('admin.table.branch')}</div>
+                        <div class="mobile-card-detail-value">${i18n.translateBranchName(student.branch)}</div>
+                    </div>
+                    <div class="mobile-card-detail">
+                        <div class="mobile-card-detail-label">${t('admin.table.level')}</div>
+                        <div class="mobile-card-detail-value">${t('admin.studentCard.level', { level: student.currentLevel })}</div>
+                    </div>
+                    <div class="mobile-card-detail">
+                        <div class="mobile-card-detail-label">${t('admin.table.razryad')}</div>
+                        <div class="mobile-card-detail-value">${translateRazryad(student.razryad || 'None')}</div>
+                    </div>
+                    <div class="mobile-card-detail">
+                        <div class="mobile-card-detail-label">${t('admin.modals.edit.currentLesson')}</div>
+                        <div class="mobile-card-detail-value">${student.currentLesson || '-'}</div>
+                    </div>
+                </div>
+                
+                <div class="mobile-card-actions">
+                    <button class="mobile-card-action-btn" onclick="viewStudent(${student.id})">
+                        <i data-lucide="eye" style="width: 18px; height: 18px;"></i>
+                        ${t('admin.studentCard.view')}
+                    </button>
+                    <button class="mobile-card-action-btn primary" onclick="editStudent(${student.id})">
+                        <i data-lucide="edit" style="width: 18px; height: 18px;"></i>
+                        ${t('admin.studentCard.edit')}
+                    </button>
+                    <button class="mobile-card-action-btn danger" onclick="deleteStudentConfirm(${student.id})">
+                        <i data-lucide="trash-2" style="width: 18px; height: 18px;"></i>
+                    </button>
+                </div>
+            </div>
+        `).join('');
+    }
+
     lucide.createIcons();
 }
 
@@ -408,10 +475,223 @@ function showSection(section) {
         // Clear branch selection when returning to students
         currentlySelectedBranch = null;
         updateBranchDropdownSelection();
+    } else if (section === 'branches') {
+        // Show branches list view
+        showBranchesListView();
     } else if (section === 'coaches') {
-        // Future: Coaches section
-        alert(t('admin.alert.coaches'));
+        // Show coaches list view
+        showCoachesListView();
     }
+    
+    // Update mobile bottom nav active state
+    updateMobileBottomNav(section);
+    
+    // Close mobile menu if open
+    closeMobileMenu();
+}
+
+// Show branches list view
+function showBranchesListView() {
+    // Hide all sections
+    document.querySelectorAll('.content-section').forEach(section => {
+        section.classList.remove('active');
+    });
+    
+    // Show a temporary branches list view or create one
+    let branchesListSection = document.getElementById('branchesListSection');
+    
+    if (!branchesListSection) {
+        // Create branches list section dynamically
+        const mainContent = document.querySelector('.main-content');
+        const branchesHTML = `
+            <div id="branchesListSection" class="content-section">
+                <div class="header">
+                    <h1 class="header-title" data-i18n="admin.sidebar.branches">Branches</h1>
+                </div>
+                
+                <div class="stats-grid" style="margin-bottom: 2rem;">
+                    <div class="stat-card">
+                        <div class="stat-header">
+                            <div>
+                                <div class="stat-value">${branches.length}</div>
+                                <div class="stat-label">Total Branches</div>
+                            </div>
+                            <div class="stat-icon blue">
+                                <i data-lucide="building" style="width: 24px; height: 24px;"></i>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="mobile-student-cards" id="mobileBranchCards">
+                    ${branches.map(branch => `
+                        <div class="mobile-student-card" onclick="viewBranch('${branch.name}')">
+                            <div class="mobile-card-header">
+                                <div class="mobile-card-avatar" style="background: linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%);">
+                                    <i data-lucide="building" style="width: 28px; height: 28px;"></i>
+                                </div>
+                                <div class="mobile-card-info">
+                                    <div class="mobile-card-name">${i18n.translateBranchName(branch.name)}</div>
+                                    <div class="mobile-card-meta">${branch.location || 'Almaty'}</div>
+                                </div>
+                                <span class="mobile-card-status active">${students.filter(s => s.branch === branch.name).length} students</span>
+                            </div>
+                            
+                            <div class="mobile-card-details">
+                                <div class="mobile-card-detail">
+                                    <div class="mobile-card-detail-label">Phone</div>
+                                    <div class="mobile-card-detail-value">${branch.phone || '+7 (700) 123-45-67'}</div>
+                                </div>
+                                <div class="mobile-card-detail">
+                                    <div class="mobile-card-detail-label">Email</div>
+                                    <div class="mobile-card-detail-value">${branch.email || 'branch@chessempire.kz'}</div>
+                                </div>
+                            </div>
+                        </div>
+                    `).join('')}
+                </div>
+            </div>
+        `;
+        
+        mainContent.insertAdjacentHTML('beforeend', branchesHTML);
+        branchesListSection = document.getElementById('branchesListSection');
+        lucide.createIcons();
+    }
+    
+    branchesListSection.classList.add('active');
+}
+
+// Show coaches list view
+function showCoachesListView() {
+    // Hide all sections
+    document.querySelectorAll('.content-section').forEach(section => {
+        section.classList.remove('active');
+    });
+
+    // Show a temporary coaches list view or create one
+    let coachesListSection = document.getElementById('coachesListSection');
+
+    if (!coachesListSection) {
+        // Create coaches list section dynamically
+        const mainContent = document.querySelector('.main-content');
+        coachesListSection = createCoachesListSection(mainContent);
+    }
+
+    // Refresh coaches display with current data
+    refreshCoachesListView();
+    coachesListSection.classList.add('active');
+}
+
+// Create coaches list section HTML structure
+function createCoachesListSection(mainContent) {
+    const coachesHTML = `
+        <div id="coachesListSection" class="content-section">
+            <div class="header">
+                <h1 class="header-title" data-i18n="admin.sidebar.coaches">Coaches</h1>
+            </div>
+
+            <div class="stats-grid" style="margin-bottom: 2rem;">
+                <div class="stat-card">
+                    <div class="stat-header">
+                        <div>
+                            <div class="stat-value" id="coachesListCount">0</div>
+                            <div class="stat-label">Total Coaches</div>
+                        </div>
+                        <div class="stat-icon amber">
+                            <i data-lucide="award" style="width: 24px; height: 24px;"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="mobile-student-cards" id="mobileCoachCards">
+                <!-- Coaches will be loaded here -->
+            </div>
+        </div>
+    `;
+
+    mainContent.insertAdjacentHTML('beforeend', coachesHTML);
+    lucide.createIcons();
+    return document.getElementById('coachesListSection');
+}
+
+// Refresh coaches list view with current data
+function refreshCoachesListView() {
+    const coachesListCount = document.getElementById('coachesListCount');
+    const mobileCoachCards = document.getElementById('mobileCoachCards');
+
+    if (!mobileCoachCards) return;
+
+    // Safely access global arrays
+    const coachesArray = window.coaches || [];
+    const studentsArray = window.students || [];
+
+    // Update count
+    if (coachesListCount) {
+        coachesListCount.textContent = coachesArray.length;
+    }
+
+    // Render coaches cards
+    if (coachesArray.length === 0) {
+        mobileCoachCards.innerHTML = `
+            <div style="text-align: center; padding: 3rem; color: #94a3b8;">
+                <i data-lucide="users" style="width: 64px; height: 64px; margin-bottom: 1rem;"></i>
+                <p style="font-size: 1.25rem; font-weight: 500; margin: 0;">No coaches found</p>
+                <p style="font-size: 0.95rem; margin: 0.5rem 0 0;">Coaches data is loading...</p>
+            </div>
+        `;
+        lucide.createIcons();
+        return;
+    }
+
+    mobileCoachCards.innerHTML = coachesArray.map(coach => {
+        const coachFullName = `${coach.firstName} ${coach.lastName}`;
+        const studentCount = studentsArray.filter(s => s.coach === coachFullName).length;
+
+        return `
+            <div class="mobile-student-card">
+                <div class="mobile-card-header">
+                    <div class="mobile-card-avatar" style="background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%);">
+                        ${coach.firstName[0]}${coach.lastName[0]}
+                    </div>
+                    <div class="mobile-card-info">
+                        <div class="mobile-card-name">${coachFullName}</div>
+                        <div class="mobile-card-meta">${studentCount} students</div>
+                    </div>
+                </div>
+
+                <div class="mobile-card-details">
+                    <div class="mobile-card-detail">
+                        <div class="mobile-card-detail-label">Phone</div>
+                        <div class="mobile-card-detail-value">${coach.phone || '+7 (700) 123-45-67'}</div>
+                    </div>
+                    <div class="mobile-card-detail">
+                        <div class="mobile-card-detail-label">Email</div>
+                        <div class="mobile-card-detail-value">${coach.email || 'coach@chessempire.kz'}</div>
+                    </div>
+                    <div class="mobile-card-detail">
+                        <div class="mobile-card-detail-label">Branch</div>
+                        <div class="mobile-card-detail-value">${i18n.translateBranchName(coach.branch || 'Gagarin Park')}</div>
+                    </div>
+                </div>
+            </div>
+        `;
+    }).join('');
+
+    lucide.createIcons();
+}
+
+// Update mobile bottom navigation active state
+function updateMobileBottomNav(activeSection) {
+    const mobileNavItems = document.querySelectorAll('.mobile-nav-item');
+    mobileNavItems.forEach(item => {
+        const itemSection = item.getAttribute('data-section');
+        if (itemSection === activeSection) {
+            item.classList.add('active');
+        } else {
+            item.classList.remove('active');
+        }
+    });
 }
 
 // Track currently selected branch
