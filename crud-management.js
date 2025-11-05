@@ -66,6 +66,8 @@ function loadCoaches() {
 
     lucide.createIcons();
 }
+// Expose to global scope
+window.loadCoaches = loadCoaches;
 
 // View coach details
 function viewCoach(coachName) {
@@ -82,14 +84,22 @@ function viewCoach(coachName) {
 
     alert(`Coach Details\n\nName: ${coachName}\nBranch: ${coach.branch}\nEmail: ${coach.email}\nPhone: ${coach.phone}\nStudents (${coachStudents.length}):\n${studentsList}`);
 }
+// Expose to global scope for onclick handlers
+window.viewCoach = viewCoach;
 
 // Open edit coach modal
 function editCoach(coachId) {
+    console.log('🔧 editCoach called with ID:', coachId);
+    console.log('📊 Available coaches:', window.coaches);
+
     const coach = window.coaches.find(c => c.id === coachId);
     if (!coach) {
+        console.error('❌ Coach not found with ID:', coachId);
         alert('Coach not found');
         return;
     }
+
+    console.log('✅ Found coach:', coach);
 
     // Populate form fields
     document.getElementById('editCoachId').value = coach.id;
@@ -116,11 +126,17 @@ function editCoach(coachId) {
     document.getElementById('editCoachModal').classList.add('active');
     lucide.createIcons();
 }
+// Expose to global scope for onclick handlers
+window.editCoach = editCoach;
 
 // Delete coach with confirmation
 function deleteCoachConfirm(coachId) {
+    console.log('🗑️ deleteCoachConfirm called with ID:', coachId);
+    console.log('📊 Available coaches:', window.coaches);
+
     const coach = window.coaches.find(c => c.id === coachId);
     if (!coach) {
+        console.error('❌ Coach not found with ID:', coachId);
         alert('Coach not found');
         return;
     }
@@ -137,6 +153,8 @@ function deleteCoachConfirm(coachId) {
         deleteCoach(coachId);
     }
 }
+// Expose to global scope for onclick handlers
+window.deleteCoachConfirm = deleteCoachConfirm;
 
 // Delete coach
 async function deleteCoach(coachId) {
@@ -186,6 +204,8 @@ function addNewCoach() {
     document.getElementById('addCoachModal').classList.add('active');
     lucide.createIcons();
 }
+// Expose to global scope
+window.addNewCoach = addNewCoach;
 
 // NOTE: Supabase operations now use window.supabaseData wrapper
 // No need for separate helper functions
@@ -194,11 +214,13 @@ function addNewCoach() {
 function closeAddCoachModal() {
     document.getElementById('addCoachModal').classList.remove('active');
 }
+window.closeAddCoachModal = closeAddCoachModal;
 
 // Close edit coach modal
 function closeEditCoachModal() {
     document.getElementById('editCoachModal').classList.remove('active');
 }
+window.closeEditCoachModal = closeEditCoachModal;
 
 // Submit add coach form
 async function submitAddCoach(event) {
@@ -245,6 +267,7 @@ async function submitAddCoach(event) {
         alert('Coach added successfully!');
     }
 }
+window.submitAddCoach = submitAddCoach;
 
 // Submit edit coach form
 async function submitEditCoach(event) {
@@ -296,6 +319,7 @@ async function submitEditCoach(event) {
         }
     }
 }
+window.submitEditCoach = submitEditCoach;
 
 // Show coaches management section
 function showCoachesManagement() {
@@ -382,6 +406,7 @@ function showCoachesManagement() {
     loadCoaches();
     lucide.createIcons();
 }
+window.showCoachesManagement = showCoachesManagement;
 
 // ==================== BRANCHES MANAGEMENT ====================
 
