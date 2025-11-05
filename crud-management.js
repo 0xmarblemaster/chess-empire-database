@@ -52,10 +52,10 @@ function loadCoaches() {
                         <button class="icon-button" onclick="viewCoach('${coachFullName}')" title="View Coach">
                             <i data-lucide="eye"></i>
                         </button>
-                        <button class="icon-button" onclick="editCoach(${coach.id})" title="Edit Coach">
+                        <button class="icon-button" onclick="editCoach('${coach.id}')" title="Edit Coach">
                             <i data-lucide="edit"></i>
                         </button>
-                        <button class="icon-button" onclick="deleteCoachConfirm(${coach.id})" title="Delete Coach" style="color: #dc2626;">
+                        <button class="icon-button" onclick="deleteCoachConfirm('${coach.id}')" title="Delete Coach" style="color: #dc2626;">
                             <i data-lucide="trash-2"></i>
                         </button>
                     </div>
@@ -89,12 +89,14 @@ window.viewCoach = viewCoach;
 
 // Open edit coach modal
 function editCoach(coachId) {
-    console.log('🔧 editCoach called with ID:', coachId);
+    console.log('🔧 editCoach called with ID:', coachId, 'Type:', typeof coachId);
     console.log('📊 Available coaches:', window.coaches);
 
-    const coach = window.coaches.find(c => c.id === coachId);
+    // Coach IDs from Supabase are strings (UUIDs), so compare as strings
+    const coach = window.coaches.find(c => String(c.id) === String(coachId));
     if (!coach) {
         console.error('❌ Coach not found with ID:', coachId);
+        console.error('Available IDs:', window.coaches.map(c => c.id));
         alert('Coach not found');
         return;
     }
@@ -131,12 +133,14 @@ window.editCoach = editCoach;
 
 // Delete coach with confirmation
 function deleteCoachConfirm(coachId) {
-    console.log('🗑️ deleteCoachConfirm called with ID:', coachId);
+    console.log('🗑️ deleteCoachConfirm called with ID:', coachId, 'Type:', typeof coachId);
     console.log('📊 Available coaches:', window.coaches);
 
-    const coach = window.coaches.find(c => c.id === coachId);
+    // Coach IDs from Supabase are strings (UUIDs), so compare as strings
+    const coach = window.coaches.find(c => String(c.id) === String(coachId));
     if (!coach) {
         console.error('❌ Coach not found with ID:', coachId);
+        console.error('Available IDs:', window.coaches.map(c => c.id));
         alert('Coach not found');
         return;
     }
@@ -158,7 +162,8 @@ window.deleteCoachConfirm = deleteCoachConfirm;
 
 // Delete coach
 async function deleteCoach(coachId) {
-    const index = window.coaches.findIndex(c => c.id === coachId);
+    // Coach IDs from Supabase are strings (UUIDs)
+    const index = window.coaches.findIndex(c => String(c.id) === String(coachId));
     if (index === -1) {
         alert('Coach not found');
         return;
@@ -273,7 +278,8 @@ window.submitAddCoach = submitAddCoach;
 async function submitEditCoach(event) {
     event.preventDefault();
 
-    const coachId = parseInt(document.getElementById('editCoachId').value);
+    // Coach IDs from Supabase are strings (UUIDs), don't parseInt
+    const coachId = document.getElementById('editCoachId').value;
     const branchId = parseInt(document.getElementById('editCoachBranchSelect').value);
 
     if (!branchId) {
@@ -304,7 +310,7 @@ async function submitEditCoach(event) {
         }
     } else {
         // Fallback: update local array
-        const coach = window.coaches.find(c => c.id === coachId);
+        const coach = window.coaches.find(c => String(c.id) === String(coachId));
         if (coach) {
             coach.firstName = updatedCoach.firstName;
             coach.lastName = updatedCoach.lastName;
