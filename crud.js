@@ -4,6 +4,11 @@
 
 console.log('✅ crud.js loaded and executing - initializeData will be defined');
 
+// Helper function to check if Supabase is available
+function isSupabaseAvailable() {
+    return typeof window !== 'undefined' && window.supabaseClient && window.supabaseData;
+}
+
 // Initialize data - load from Supabase or fallback to localStorage
 async function initializeData() {
     // Check if Supabase is available at runtime (not at module load time)
@@ -11,7 +16,7 @@ async function initializeData() {
     console.log('  window.supabaseClient:', typeof window.supabaseClient);
     console.log('  window.supabaseData:', typeof window.supabaseData);
 
-    const useSupabase = typeof window !== 'undefined' && window.supabaseClient && window.supabaseData;
+    const useSupabase = isSupabaseAvailable();
 
     console.log('  useSupabase:', useSupabase);
 
@@ -211,7 +216,7 @@ function resetDataToDefaults() {
 // Create new student
 async function createStudent(studentData) {
     try {
-        if (useSupabase) {
+        if (isSupabaseAvailable()) {
             // Use Supabase
             const newStudent = await window.supabaseData.addStudent(studentData);
             window.students.push(newStudent);
@@ -259,7 +264,7 @@ function getStudentById(id) {
 // Update student
 async function updateStudent(id, studentData) {
     try {
-        if (useSupabase) {
+        if (isSupabaseAvailable()) {
             // Use Supabase
             const updatedStudent = await window.supabaseData.updateStudent(id, studentData);
 
@@ -312,7 +317,7 @@ async function updateStudent(id, studentData) {
 // Delete student
 async function deleteStudent(id) {
     try {
-        if (useSupabase) {
+        if (isSupabaseAvailable()) {
             // Use Supabase
             await window.supabaseData.deleteStudent(id);
 
@@ -350,7 +355,7 @@ async function deleteStudent(id) {
 // Create new coach
 async function createCoach(coachData) {
     try {
-        if (useSupabase) {
+        if (isSupabaseAvailable()) {
             // Use Supabase
             const newCoach = await window.supabaseData.addCoach(coachData);
             window.coaches.push(newCoach);
@@ -388,7 +393,7 @@ function getCoachById(id) {
 // Update coach
 async function updateCoach(id, coachData) {
     try {
-        if (useSupabase) {
+        if (isSupabaseAvailable()) {
             // Use Supabase
             const updatedCoach = await window.supabaseData.updateCoach(id, coachData);
 
@@ -431,7 +436,7 @@ async function updateCoach(id, coachData) {
 // Delete coach
 async function deleteCoach(id) {
     try {
-        if (useSupabase) {
+        if (isSupabaseAvailable()) {
             // Use Supabase
             await window.supabaseData.deleteCoach(id);
 
@@ -481,7 +486,7 @@ async function deleteCoach(id) {
 // Create new branch
 async function createBranch(branchData) {
     try {
-        if (useSupabase) {
+        if (isSupabaseAvailable()) {
             // Use Supabase
             const newBranch = await window.supabaseData.addBranch(branchData);
             window.branches.push(newBranch);
@@ -521,7 +526,7 @@ function getBranchByName(name) {
 // Update branch
 async function updateBranch(id, branchData) {
     try {
-        if (useSupabase) {
+        if (isSupabaseAvailable()) {
             // Use Supabase
             const updatedBranch = await window.supabaseData.updateBranch(id, branchData);
 
@@ -579,7 +584,7 @@ async function updateBranch(id, branchData) {
 // Delete branch
 async function deleteBranch(id) {
     try {
-        if (useSupabase) {
+        if (isSupabaseAvailable()) {
             // Use Supabase
             await window.supabaseData.deleteBranch(id);
 
@@ -688,7 +693,7 @@ async function importDataFromJSON(fileInput) {
         try {
             let data = JSON.parse(e.target.result);
 
-            if (useSupabase && window.supabaseData) {
+            if (isSupabaseAvailable()) {
                 // Detect and normalize JSON format
                 let studentsArray = [];
 
