@@ -23,10 +23,16 @@ async function searchStudents(query) {
         }
     }
 
-    // Fallback to local search
-    return students
-        .filter(student => `${student.firstName} ${student.lastName}`.toLowerCase().includes(searchTerm))
-        .slice(0, 10);
+    // Fallback to local search (only if students array is available and has data)
+    if (typeof students !== 'undefined' && Array.isArray(students) && students.length > 0) {
+        return students
+            .filter(student => `${student.firstName} ${student.lastName}`.toLowerCase().includes(searchTerm))
+            .slice(0, 10);
+    }
+
+    // If no data source is available, return empty array
+    console.warn('No student data available for search');
+    return [];
 }
 
 function renderDropdown(results) {
