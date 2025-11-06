@@ -100,10 +100,10 @@ function refreshAllUIComponents() {
             loadStatistics();
         }
 
-        // Refresh dashboard stats
-        const totalCoaches = document.querySelector('.stat-card:has([data-lucide="users"]) .stat-value');
-        if (totalCoaches) {
-            totalCoaches.textContent = window.coaches.length;
+        // Refresh dashboard stats - use ID for reliability instead of icon selector
+        const totalCoachesElement = document.getElementById('totalCoaches');
+        if (totalCoachesElement) {
+            totalCoachesElement.textContent = window.coaches.length;
         }
 
         // Populate sidebar dropdowns with Supabase data
