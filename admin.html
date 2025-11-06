@@ -23,6 +23,17 @@
     <!-- Mobile Overlay -->
     <div class="mobile-overlay" id="mobileOverlay" onclick="closeMobileMenu()"></div>
 
+    <!-- Loading Overlay -->
+    <div id="loadingOverlay" style="position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(255,255,255,0.95); z-index: 9999; display: flex; align-items: center; justify-content: center; flex-direction: column;">
+        <div style="width: 48px; height: 48px; border: 4px solid #f3f4f6; border-top-color: #5F192B; border-radius: 50%; animation: spin 1s linear infinite;"></div>
+        <p style="margin-top: 1rem; color: #5F192B; font-weight: 600;">Loading dashboard...</p>
+    </div>
+    <style>
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+    </style>
+
     <div class="dashboard-container">
         <!-- Sidebar -->
         <aside class="sidebar" id="sidebar">
@@ -1010,7 +1021,7 @@
     <script src="supabase-data.js?v=1762345505"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script src="data.js?v=1762345505"></script>
-    <script src="crud.js?v=1762345505"></script>
+    <script src="crud.js?v=1762345506"></script>
     <script src="crud-handlers.js?v=1762345505"></script>
     <script src="crud-management.js?v=1762345505"></script>
     <script src="admin.js?v=1762345806"></script>

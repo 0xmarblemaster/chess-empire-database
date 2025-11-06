@@ -30,19 +30,21 @@ async function initializeData() {
 // Load data from Supabase and update global variables
 async function loadDataFromSupabase() {
     try {
-        // Fetch data from Supabase
-        const supabaseStudents = await window.supabaseData.getStudents();
-        const supabaseCoaches = await window.supabaseData.getCoaches();
-        const supabaseBranches = await window.supabaseData.getBranches();
-        
+        // Fetch data from Supabase IN PARALLEL for faster loading
+        const [supabaseStudents, supabaseCoaches, supabaseBranches] = await Promise.all([
+            window.supabaseData.getStudents(),
+            window.supabaseData.getCoaches(),
+            window.supabaseData.getBranches()
+        ]);
+
         // Update global variables directly (defined in data.js)
         // IMPORTANT: Assign to global scope, not window
         students.length = 0;
         students.push(...supabaseStudents);
-        
+
         coaches.length = 0;
         coaches.push(...supabaseCoaches);
-        
+
         branches.length = 0;
         branches.push(...supabaseBranches);
         
@@ -60,10 +62,27 @@ async function loadDataFromSupabase() {
 
         // Trigger UI refresh after data is loaded
         refreshAllUIComponents();
+
+        // Hide loading overlay after data is loaded
+        hideLoadingOverlay();
     } catch (error) {
         console.error('❌ Error loading data from Supabase:', error);
         // Fallback to localStorage on error
         loadDataFromStorage();
+        // Still hide loading overlay even on error
+        hideLoadingOverlay();
+    }
+}
+
+// Hide loading overlay
+function hideLoadingOverlay() {
+    const overlay = document.getElementById('loadingOverlay');
+    if (overlay) {
+        overlay.style.opacity = '0';
+        overlay.style.transition = 'opacity 0.3s ease';
+        setTimeout(() => {
+            overlay.style.display = 'none';
+        }, 300);
     }
 }
 
