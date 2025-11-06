@@ -117,7 +117,7 @@ const supabaseData = {
                 status: studentData.status || 'active',
                 current_level: studentData.currentLevel || 1,
                 current_lesson: studentData.currentLesson || 1,
-                total_lessons: studentData.totalLessons || 40,
+                total_lessons: studentData.totalLessons || 105,
                 parent_name: studentData.parentName,
                 parent_phone: studentData.parentPhone,
                 parent_email: studentData.parentEmail
