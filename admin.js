@@ -158,15 +158,26 @@ function loadStatistics() {
     const totalBranches = uniqueBranches.length;
     const activeStudents = students.filter(s => s.status === 'active').length;
 
-    // DEBUG: Log student counts and data types
-    console.log('📊 loadStatistics()');
-    console.log('  Total students:', totalStudents);
+    // DEBUG: Comprehensive logging to trace the issue
+    console.log('📊 loadStatistics() - COMPREHENSIVE DEBUG');
+    console.log('  =====================================');
+    console.log('  students variable type:', typeof students);
+    console.log('  students.length:', students.length);
+    console.log('  Is students an array?:', Array.isArray(students));
+    console.log('  Total students (calculated):', totalStudents);
     console.log('  Active students:', activeStudents);
-    console.log('  Students array:', students);
-    console.log('  First student:', students[0]);
-    if (students.length > 0) {
-        console.log('  Student ID type:', typeof students[0].id, students[0].id);
-    }
+    console.log('  =====================================');
+    console.log('  coaches.length:', coaches.length);
+    console.log('  Total coaches (calculated):', totalCoaches);
+    console.log('  =====================================');
+    console.log('  branches.length:', branches.length);
+    console.log('  uniqueBranches.length:', uniqueBranches.length);
+    console.log('  Total branches (calculated):', totalBranches);
+    console.log('  Unique branch names:', uniqueBranches);
+    console.log('  =====================================');
+    console.log('  First 3 students:', students.slice(0, 3).map(s => ({id: s.id, name: `${s.firstName} ${s.lastName}`})));
+    console.log('  window.students === students?:', window.students === students);
+    console.log('  window.students?.length:', window.students?.length);
 
     // Update main stats
     const totalStudentsElement = document.getElementById('totalStudents');
@@ -174,16 +185,27 @@ function loadStatistics() {
     const totalBranchesElement = document.getElementById('totalBranches');
     const activeStudentsElement = document.getElementById('activeStudents');
 
-    console.log('📝 Updating DOM elements:');
-    console.log('  totalStudentsElement:', totalStudentsElement);
-    console.log('  Setting totalStudents to:', totalStudents);
+    console.log('  =====================================');
+    console.log('📝 DOM Elements Before Update:');
+    console.log('  totalStudentsElement exists?:', !!totalStudentsElement);
+    console.log('  totalStudentsElement.id:', totalStudentsElement?.id);
+    console.log('  totalStudentsElement.textContent (before):', totalStudentsElement?.textContent);
+    console.log('  totalCoachesElement.textContent (before):', totalCoachesElement?.textContent);
+    console.log('  totalBranchesElement.textContent (before):', totalBranchesElement?.textContent);
+    console.log('  activeStudentsElement.textContent (before):', activeStudentsElement?.textContent);
 
+    // Perform the updates
     totalStudentsElement.textContent = totalStudents;
     totalCoachesElement.textContent = totalCoaches;
     totalBranchesElement.textContent = totalBranches;
     activeStudentsElement.textContent = activeStudents;
 
-    console.log('  After update, totalStudentsElement.textContent:', totalStudentsElement.textContent);
+    console.log('  =====================================');
+    console.log('📝 DOM Elements After Update:');
+    console.log('  totalStudentsElement.textContent (after):', totalStudentsElement.textContent);
+    console.log('  Value set:', totalStudents, 'vs displayed:', totalStudentsElement.textContent);
+    console.log('  ARE THEY EQUAL?:', totalStudentsElement.textContent === String(totalStudents));
+    console.log('  =====================================');
 
     // Update nav badge
     const studentCountBadge = document.getElementById('studentCount');
