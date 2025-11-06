@@ -43,7 +43,7 @@ CREATE TABLE IF NOT EXISTS students (
     status TEXT CHECK (status IN ('active', 'frozen', 'left')) DEFAULT 'active',
     current_level INTEGER DEFAULT 1,
     current_lesson INTEGER DEFAULT 1,
-    total_lessons INTEGER DEFAULT 40,
+    total_lessons INTEGER DEFAULT 105,
     parent_name TEXT,
     parent_phone TEXT,
     parent_email TEXT,
