@@ -161,9 +161,25 @@ function loadDataFromStorage() {
         const storedCoaches = localStorage.getItem('coaches');
         const storedBranches = localStorage.getItem('branches');
 
-        if (storedStudents) window.students = JSON.parse(storedStudents);
-        if (storedCoaches) window.coaches = JSON.parse(storedCoaches);
-        if (storedBranches) window.branches = JSON.parse(storedBranches);
+        // Update arrays in place to maintain reference consistency
+        if (storedStudents) {
+            const parsedStudents = JSON.parse(storedStudents);
+            students.length = 0;
+            students.push(...parsedStudents);
+            window.students = students;
+        }
+        if (storedCoaches) {
+            const parsedCoaches = JSON.parse(storedCoaches);
+            coaches.length = 0;
+            coaches.push(...parsedCoaches);
+            window.coaches = coaches;
+        }
+        if (storedBranches) {
+            const parsedBranches = JSON.parse(storedBranches);
+            branches.length = 0;
+            branches.push(...parsedBranches);
+            window.branches = branches;
+        }
     } catch (error) {
         console.error('Error loading data from localStorage:', error);
     }

@@ -15,6 +15,7 @@ const supabaseData = {
 
     // Get all students
     async getStudents() {
+        console.log('🔍 supabaseData.getStudents() - Fetching students from database...');
         const { data, error } = await window.supabaseClient
             .from('students')
             .select(`
@@ -29,8 +30,11 @@ const supabaseData = {
             return [];
         }
 
+        console.log('✅ supabaseData.getStudents() - Received', data?.length || 0, 'students from database');
+        console.log('   First 3 students from DB:', data?.slice(0, 3).map(s => ({id: s.id, name: `${s.first_name} ${s.last_name}`})));
+
         // Transform to match data.js format
-        return data.map(student => ({
+        const transformedStudents = data.map(student => ({
             id: student.id,
             firstName: student.first_name,
             lastName: student.last_name,
@@ -51,6 +55,9 @@ const supabaseData = {
             parentPhone: student.parent_phone,
             parentEmail: student.parent_email
         }));
+
+        console.log('✅ supabaseData.getStudents() - Transformed', transformedStudents.length, 'students');
+        return transformedStudents;
     },
 
     // Get student by ID
