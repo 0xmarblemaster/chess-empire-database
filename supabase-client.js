@@ -166,7 +166,7 @@ window.supabaseAuth = {
         if (!isAuth) return false;
 
         if (!window.supabaseAuth.isAdmin()) {
-            alert('Access denied. Admin privileges required.');
+            showToast('Access denied. Admin privileges required.', 'error');
             window.location.href = 'index.html';
             return false;
         }

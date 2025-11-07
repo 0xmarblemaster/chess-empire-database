@@ -73,7 +73,7 @@ window.loadCoaches = loadCoaches;
 function viewCoach(coachName) {
     const coach = window.coaches.find(c => `${c.firstName} ${c.lastName}` === coachName);
     if (!coach) {
-        alert('Coach not found');
+        showToast('Coach not found', 'error');
         return;
     }
 
@@ -82,7 +82,7 @@ function viewCoach(coachName) {
         ? coachStudents.map(s => `• ${s.firstName} ${s.lastName} (Level ${s.level})`).join('\n')
         : 'No students assigned';
 
-    alert(`Coach Details\n\nName: ${coachName}\nBranch: ${coach.branch}\nEmail: ${coach.email}\nPhone: ${coach.phone}\nStudents (${coachStudents.length}):\n${studentsList}`);
+    showToast(`Coach Details\n\nName: ${coachName}\nBranch: ${coach.branch}\nEmail: ${coach.email}\nPhone: ${coach.phone}\nStudents (${coachStudents.length}):\n${studentsList}`, 'info', 5000);
 }
 // Expose to global scope for onclick handlers
 window.viewCoach = viewCoach;
@@ -97,7 +97,7 @@ function editCoach(coachId) {
     if (!coach) {
         console.error('❌ Coach not found with ID:', coachId);
         console.error('Available IDs:', window.coaches.map(c => c.id));
-        alert('Coach not found');
+        showToast('Coach not found', 'error');
         return;
     }
 
@@ -141,7 +141,7 @@ function deleteCoachConfirm(coachId) {
     if (!coach) {
         console.error('❌ Coach not found with ID:', coachId);
         console.error('Available IDs:', window.coaches.map(c => c.id));
-        alert('Coach not found');
+        showToast('Coach not found', 'error');
         return;
     }
 
@@ -165,7 +165,7 @@ async function deleteCoach(coachId) {
     // Coach IDs from Supabase are strings (UUIDs)
     const index = window.coaches.findIndex(c => String(c.id) === String(coachId));
     if (index === -1) {
-        alert('Coach not found');
+        showToast('Coach not found', 'error');
         return;
     }
 
@@ -176,16 +176,16 @@ async function deleteCoach(coachId) {
             // Reload coaches from Supabase
             window.coaches = await window.supabaseData.getCoaches();
             loadCoaches();
-            alert('Coach deleted successfully!');
+            showToast('Coach deleted successfully!', 'success');
         } catch (error) {
             console.error('Error deleting coach:', error);
-            alert('Failed to delete coach. Please try again.');
+            showToast('Failed to delete coach. Please try again.', 'error');
         }
     } else {
         // Fallback: remove from local array
         window.coaches.splice(index, 1);
         loadCoaches();
-        alert('Coach deleted successfully!');
+        showToast('Coach deleted successfully!', 'success');
     }
 }
 
@@ -239,7 +239,7 @@ async function submitAddCoach(event) {
     const branchId = document.getElementById('coachBranchSelect').value;
 
     if (!branchId) {
-        alert('Please select a branch');
+        showToast('Please select a branch', 'error');
         return;
     }
 
@@ -259,10 +259,10 @@ async function submitAddCoach(event) {
             window.coaches = await window.supabaseData.getCoaches();
             loadCoaches();
             closeAddCoachModal();
-            alert('Coach added successfully!');
+            showToast('Coach added successfully!', 'success');
         } catch (error) {
             console.error('Error adding coach:', error);
-            alert('Failed to add coach. Please try again.');
+            showToast('Failed to add coach. Please try again.', 'error');
         }
     } else {
         // Fallback: add to local array
@@ -270,7 +270,7 @@ async function submitAddCoach(event) {
         window.coaches.push(newCoach);
         loadCoaches();
         closeAddCoachModal();
-        alert('Coach added successfully!');
+        showToast('Coach added successfully!', 'success');
     }
 }
 window.submitAddCoach = submitAddCoach;
@@ -285,7 +285,7 @@ async function submitEditCoach(event) {
     const branchId = document.getElementById('editCoachBranchSelect').value;
 
     if (!branchId) {
-        alert('Please select a branch');
+        showToast('Please select a branch', 'error');
         return;
     }
 
@@ -305,10 +305,10 @@ async function submitEditCoach(event) {
             window.coaches = await window.supabaseData.getCoaches();
             loadCoaches();
             closeEditCoachModal();
-            alert('Coach updated successfully!');
+            showToast('Coach updated successfully!', 'success');
         } catch (error) {
             console.error('Error updating coach:', error);
-            alert('Failed to update coach. Please try again.');
+            showToast('Failed to update coach. Please try again.', 'error');
         }
     } else {
         // Fallback: update local array
@@ -321,9 +321,9 @@ async function submitEditCoach(event) {
             coach.branchId = updatedCoach.branchId;
             loadCoaches();
             closeEditCoachModal();
-            alert('Coach updated successfully!');
+            showToast('Coach updated successfully!', 'success');
         } else {
-            alert('Coach not found');
+            showToast('Coach not found', 'error');
         }
     }
 }
@@ -488,7 +488,7 @@ function editBranch(branchId) {
     if (!branch) {
         console.error('❌ Branch not found with ID:', branchId);
         console.error('Available IDs:', branches.map(b => b.id));
-        alert('Branch not found');
+        showToast('Branch not found', 'error');
         return;
     }
     console.log('✅ Found branch:', branch);
@@ -513,7 +513,7 @@ function deleteBranchConfirm(branchId) {
     const branch = branches.find(b => String(b.id) === String(branchId));
     if (!branch) {
         console.error('❌ Branch not found with ID:', branchId);
-        alert('Branch not found');
+        showToast('Branch not found', 'error');
         return;
     }
 
@@ -541,7 +541,7 @@ function deleteBranch(branchId) {
     const index = branches.findIndex(b => String(b.id) === String(branchId));
     if (index === -1) {
         console.error('❌ Branch not found with ID:', branchId);
-        alert('Branch not found');
+        showToast('Branch not found', 'error');
         return;
     }
 
@@ -552,7 +552,7 @@ function deleteBranch(branchId) {
 
     branches.splice(index, 1);
     loadBranches();
-    alert('Branch deleted successfully!');
+    showToast('Branch deleted successfully!', 'success');
 }
 
 // Open add branch modal
@@ -655,7 +655,7 @@ function submitAddBranch(event) {
     branches.push(newBranch);
     loadBranches();
     closeAddBranchModal();
-    alert('Branch added successfully!');
+    showToast('Branch added successfully!', 'success');
 }
 
 // Submit edit branch form
@@ -669,7 +669,7 @@ function submitEditBranch(event) {
     if (!branch) {
         console.error('❌ Branch not found with ID:', branchId);
         console.error('Available branches:', branches.map(b => ({ id: b.id, name: b.name })));
-        alert('Branch not found');
+        showToast('Branch not found', 'error');
         return;
     }
     console.log('✅ Found branch to update:', branch);
@@ -704,7 +704,7 @@ function submitEditBranch(event) {
     } else if (typeof showSuccess === 'function') {
         showSuccess(t ? t('admin.modals.branch.editSuccess') : 'Branch updated successfully!');
     } else {
-        alert(t ? t('admin.modals.branch.editSuccess') : 'Branch updated successfully!');
+        showToast(t ? t('admin.modals.branch.editSuccess') : 'Branch updated successfully!', 'success');
     }
 }
 
@@ -944,7 +944,7 @@ async function checkAppAccessPermission() {
 async function showAppAccessManagement() {
     // Check if user has permission to access this page
     if (!await checkAppAccessPermission()) {
-        alert('You do not have permission to access this page.');
+        showToast('You do not have permission to access this page.', 'error');
         showStudents(); // Redirect to Students page
         return;
     }

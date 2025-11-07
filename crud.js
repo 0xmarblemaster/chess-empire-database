@@ -723,12 +723,12 @@ async function importDataFromJSON(fileInput) {
                     studentsArray = data;
                 }
                 else {
-                    alert('❌ Invalid JSON format. Expected:\n- {"students": [...]}\n- [{Student Name, Branch, Coach}]\n- [{firstName, lastName, ...}]');
+                    showToast('❌ Invalid JSON format. Expected:\n- {"students": [...]}\n- [{Student Name, Branch, Coach}]\n- [{firstName, lastName, ...}]', 'error');
                     return;
                 }
 
                 if (studentsArray.length === 0) {
-                    alert('❌ No students found in JSON file');
+                    showToast('❌ No students found in JSON file', 'error');
                     return;
                 }
 
@@ -872,9 +872,9 @@ async function importDataFromJSON(fileInput) {
 
                 if (errorCount > 0) {
                     console.error('Import errors:', errors);
-                    alert(`⚠️ Import completed with errors:\n✅ ${successCount} students imported\n❌ ${errorCount} students failed\n\nCheck console for details.`);
+                    showToast(`⚠️ Import completed with errors:\n✅ ${successCount} students imported\n❌ ${errorCount} students failed\n\nCheck console for details.`, 'warning');
                 } else {
-                    alert(`✅ Successfully imported ${successCount} students!`);
+                    showToast(`✅ Successfully imported ${successCount} students!`, 'success');
                 }
 
                 // Reload data from Supabase to refresh UI
@@ -891,7 +891,7 @@ async function importDataFromJSON(fileInput) {
                 }
             }
         } catch (error) {
-            alert('❌ Error importing data: ' + error.message);
+            showToast('❌ Error importing data: ' + error.message, 'error');
             console.error('Import error:', error);
         }
     };

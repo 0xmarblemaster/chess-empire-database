@@ -62,7 +62,7 @@ async function initializeStudentProfile() {
         if (students && students.length > 0) {
             console.error('Available student IDs:', students.map(s => s.id).slice(0, 10));
         }
-        alert('Student not found. Redirecting to home page.');
+        showToast('Student not found. Redirecting to home page.', 'error');
         window.location.href = 'index.html';
         return;
     }

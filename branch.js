@@ -17,7 +17,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const branchName = getBranchFromURL();
 
     if (!branchName) {
-        alert(t('branch.alert.noBranch'));
+        showToast(t('branch.alert.noBranch'), 'error');
         window.location.href = 'admin.html';
         return;
     }
@@ -25,7 +25,7 @@ document.addEventListener('DOMContentLoaded', () => {
     currentBranch = branches.find(b => b.name === branchName);
 
     if (!currentBranch) {
-        alert(t('branch.alert.notFound', { branch: branchName }));
+        showToast(t('branch.alert.notFound', { branch: branchName }), 'error');
         window.location.href = 'admin.html';
         return;
     }
@@ -314,9 +314,9 @@ function viewStudent(studentId) {
 
 // View coach profile (placeholder)
 function viewCoach(coachId) {
-    alert(t('branch.alert.coachSoon', { id: coachId }));
+    showToast(t('branch.alert.coachSoon', { id: coachId }), 'info');
 }
 
 function handleEditBranch() {
-    alert(t('branch.alert.editPending'));
+    showToast(t('branch.alert.editPending'), 'info');
 }

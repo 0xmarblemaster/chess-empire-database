@@ -509,12 +509,12 @@ function viewStudent(studentId) {
 
 // Add new student (placeholder for legacy code)
 function addNewStudentLegacy() {
-    alert(t('admin.alert.addStudent'));
+    showToast(t('admin.alert.addStudent'), 'info');
 }
 
 // Export data (placeholder)
 function exportData() {
-    alert(t('admin.alert.export'));
+    showToast(t('admin.alert.export'), 'info');
 }
 
 // Reset all filters
@@ -1504,14 +1504,14 @@ function previewPhoto(event) {
     
     // Check file size (max 2MB)
     if (file.size > 2 * 1024 * 1024) {
-        alert(t('admin.form.fileTooLarge'));
+        showToast(t('admin.form.fileTooLarge'), 'error');
         event.target.value = '';
         return;
     }
-    
+
     // Check file type
     if (!file.type.match('image.*')) {
-        alert(t('admin.form.imageRequired'));
+        showToast(t('admin.form.imageRequired'), 'error');
         event.target.value = '';
         return;
     }
@@ -1551,7 +1551,7 @@ function submitAddStudent(event) {
     
     // Validate required fields
     if (!newStudent.firstName || !newStudent.lastName || !newStudent.branch || !newStudent.coach) {
-        alert(t('admin.form.requiredFields'));
+        showToast(t('admin.form.requiredFields'), 'error');
         return;
     }
     
@@ -1570,43 +1570,9 @@ function submitAddStudent(event) {
     updateStats();
 }
 
-// Show Success Message
+// Show Success Message (wrapper for showToast)
 function showSuccessMessage(message) {
-    // Create success notification
-    const notification = document.createElement('div');
-    notification.style.cssText = `
-        position: fixed;
-        top: 2rem;
-        right: 2rem;
-        background: linear-gradient(135deg, #10b981 0%, #059669 100%);
-        color: white;
-        padding: 1rem 1.5rem;
-        border-radius: 0.75rem;
-        box-shadow: 0 10px 25px -5px rgba(16, 185, 129, 0.3);
-        font-weight: 600;
-        font-size: 0.9375rem;
-        z-index: 2000;
-        animation: slideInRight 0.3s ease-out;
-        display: flex;
-        align-items: center;
-        gap: 0.75rem;
-    `;
-    
-    notification.innerHTML = `
-        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path>
-            <polyline points="22 4 12 14.01 9 11.01"></polyline>
-        </svg>
-        ${message}
-    `;
-    
-    document.body.appendChild(notification);
-    
-    // Remove after 3 seconds
-    setTimeout(() => {
-        notification.style.animation = 'slideOutRight 0.3s ease-out';
-        setTimeout(() => notification.remove(), 300);
-    }, 3000);
+    showToast(message, 'success');
 }
 
 // Close modal when clicking outside
@@ -1638,7 +1604,7 @@ function editStudent(studentId) {
     const student = students.find(s => String(s.id) === String(studentId));
     if (!student) {
         console.error('❌ Student not found with ID:', studentId);
-        alert(t('admin.error.studentNotFound'));
+        showToast(t('admin.error.studentNotFound'), 'error');
         return;
     }
 
@@ -1732,7 +1698,7 @@ async function submitEditStudent(event) {
     const student = window.students.find(s => String(s.id) === String(studentId));
     if (!student) {
         console.error('❌ Student not found with ID:', studentId);
-        alert(t('admin.error.studentNotFound'));
+        showToast(t('admin.error.studentNotFound'), 'error');
         return;
     }
 
@@ -1767,7 +1733,7 @@ async function submitEditStudent(event) {
 
     // Validate required fields
     if (!studentData.firstName || !studentData.lastName) {
-        alert(t('admin.form.requiredFields'));
+        showToast(t('admin.form.requiredFields'), 'error');
         return;
     }
 
@@ -1805,11 +1771,11 @@ async function submitEditStudent(event) {
             }
         } else {
             // Show error message
-            alert(result.error || t('admin.error.updateFailed'));
+            showToast(result.error || t('admin.error.updateFailed'), 'error');
         }
     } catch (error) {
         console.error('❌ Error updating student:', error);
-        alert(t('admin.error.updateFailed') + ': ' + error.message);
+        showToast(t('admin.error.updateFailed') + ': ' + error.message, 'error');
     }
 }
 
