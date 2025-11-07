@@ -9,11 +9,11 @@ const razryadDictionary = {
 };
 
 const statusDictionary = {
-    active: { en: 'Active', ru: 'Активен' },
-    frozen: { en: 'Frozen', ru: 'Заморожен' },
-    left: { en: 'Left', ru: 'Ушел' },
-    inactive: { en: 'Inactive', ru: 'Неактивен' },
-    pending: { en: 'Pending', ru: 'В ожидании' }
+    active: { en: 'Active', ru: 'Активен', kk: 'Белсенді' },
+    frozen: { en: 'Frozen', ru: 'Заморожен', kk: 'Мұздатылған' },
+    left: { en: 'Left', ru: 'Ушел', kk: 'Кетті' },
+    inactive: { en: 'Inactive', ru: 'Неактивен', kk: 'Белсенді емес' },
+    pending: { en: 'Pending', ru: 'В ожидании', kk: 'Күтуде' }
 };
 
 const translations = {
@@ -205,6 +205,7 @@ const translations = {
         "admin.modals.add.status": "Status *",
         "admin.modals.add.statusActive": "Active",
         "admin.modals.add.statusInactive": "Inactive",
+        "admin.modals.add.statusFrozen": "Frozen",
         "admin.modals.add.contact": "Contact Information (Optional)",
         "admin.modals.add.parentName": "Parent/Guardian Name",
         "admin.modals.add.parentPlaceholder": "Enter parent name",
@@ -498,6 +499,7 @@ const translations = {
         "admin.modals.add.status": "Мәртебе *",
         "admin.modals.add.statusActive": "Белсенді",
         "admin.modals.add.statusInactive": "Белсенді емес",
+        "admin.modals.add.statusFrozen": "Мұздатылған",
         "admin.modals.add.contact": "Байланыс ақпараты (міндетті емес)",
         "admin.modals.add.parentName": "Ата-ана/Қамқоршы аты",
         "admin.modals.add.parentPlaceholder": "Ата-ана атын енгізіңіз",
@@ -822,6 +824,7 @@ const translations = {
         "admin.modals.add.status": "Статус *",
         "admin.modals.add.statusActive": "Активен",
         "admin.modals.add.statusInactive": "Неактивен",
+        "admin.modals.add.statusFrozen": "Заморожен",
         "admin.modals.add.contact": "Контактная информация (необязательно)",
         "admin.modals.add.parentName": "Имя родителя/опекуна",
         "admin.modals.add.parentPlaceholder": "Введите имя родителя",
