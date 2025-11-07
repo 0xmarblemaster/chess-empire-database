@@ -25,9 +25,31 @@ supabase link --project-ref zvvunwglxuavjnzatpfj
 
 # Run the migration
 supabase db execute --file migrations/update_total_lessons_to_105.sql
+supabase db execute --file migrations/update_razryad_constraint.sql
 ```
 
 ## Migration History
+
+### 2025-01-07: update_razryad_constraint.sql
+**Purpose**: Update razryad constraint to add 4th and remove master
+
+**Changes**:
+- Updates any existing students with 'master' razryad to NULL
+- Drops the existing CHECK constraint `students_razryad_check`
+- Adds new CHECK constraint allowing: 'none', '4th', '3rd', '2nd', '1st', 'kms'
+- Removes 'master' from allowed values
+
+**Impact**:
+- Allows admins to assign '4th' razryad to students
+- Removes 'master' as a valid razryad option
+- Any students with 'master' will have their razryad set to NULL
+
+**Rollback** (if needed):
+```sql
+ALTER TABLE students DROP CONSTRAINT IF EXISTS students_razryad_check;
+ALTER TABLE students ADD CONSTRAINT students_razryad_check
+CHECK (razryad IN ('none', '3rd', '2nd', '1st', 'kms', 'master'));
+```
 
 ### 2025-01-06: update_total_lessons_to_105.sql
 **Purpose**: Update total lessons from 40 to 105
