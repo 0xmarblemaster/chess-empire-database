@@ -1,9 +1,9 @@
 const razryadDictionary = {
     'KMS': { en: 'KMS', ru: 'КМС' },
-    'Master': { en: 'Master', ru: 'Мастер' },
     '1st': { en: '1st', ru: '1' },
     '2nd': { en: '2nd', ru: '2' },
     '3rd': { en: '3rd', ru: '3' },
+    '4th': { en: '4th', ru: '4' },
     'None': { en: 'No Razryad', ru: 'Без разряда' }
 };
 
@@ -214,11 +214,11 @@ const translations = {
         "admin.modals.add.cancel": "Cancel",
         "admin.modals.add.submit": "Add Student",
         "admin.razryad.none": "No razryad yet",
+        "admin.razryad.4th": "4th Razryad",
         "admin.razryad.3rd": "3rd Razryad",
         "admin.razryad.2nd": "2nd Razryad",
         "admin.razryad.1st": "1st Razryad",
         "admin.razryad.kms": "KMS (Candidate Master)",
-        "admin.razryad.master": "Master",
         "admin.modals.edit.title": "Edit Student",
         "admin.modals.edit.save": "Save Changes",
         "admin.modals.edit.level": "Level & Progress",
@@ -831,11 +831,11 @@ const translations = {
         "admin.modals.add.cancel": "Отмена",
         "admin.modals.add.submit": "Добавить ученика",
         "admin.razryad.none": "Разряд пока не присвоен",
+        "admin.razryad.4th": "4 разряд",
         "admin.razryad.3rd": "3 разряд",
         "admin.razryad.2nd": "2 разряд",
         "admin.razryad.1st": "1 разряд",
         "admin.razryad.kms": "КМС (кандидат в мастера)",
-        "admin.razryad.master": "Мастер",
         "admin.modals.edit.title": "Редактировать ученика",
         "admin.modals.edit.save": "Сохранить изменения",
         "admin.modals.edit.level": "Ступень и прогресс",
