@@ -1679,7 +1679,8 @@ window.translateStatus = translateStatus;
         'Halyk Arena': { en: 'Halyk Arena', ru: 'Халык Арена', kk: 'Халық Арена' },
         'Zhandosova': { en: 'Zhandosova', ru: 'Жандосова', kk: 'Жандосов' },
         'Abaya Rozybakieva': { en: 'Abaya Rozybakieva', ru: 'Абая Розыбакиева', kk: 'Абай – Розыбакиев' },
-        'Almaty 1': { en: 'Almaty 1', ru: 'Алматы 1', kk: 'Алматы 1' }
+        'Almaty 1': { en: 'Almaty 1', ru: 'Алматы 1', kk: 'Алматы 1' },
+        'Almaty-1': { en: 'Almaty-1', ru: 'Алматы-1', kk: 'Алматы-1' }
     };
 
     const branchLocationTranslations = {
