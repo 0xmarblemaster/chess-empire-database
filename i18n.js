@@ -1,11 +1,11 @@
 const razryadDictionary = {
-    'KMS': { en: 'KMS', ru: 'КМС' },
-    '1st': { en: '1st', ru: '1' },
-    '2nd': { en: '2nd', ru: '2' },
-    '3rd': { en: '3rd', ru: '3' },
-    '4th': { en: '4th', ru: '4' },
-    'None': { en: 'No Razryad', ru: 'Без разряда' },
-    'none': { en: 'No Razryad', ru: 'Без разряда' }
+    'KMS': { en: 'KMS', ru: 'КМС', kk: 'ХШҚ' },
+    '1st': { en: '1st', ru: '1', kk: '1' },
+    '2nd': { en: '2nd', ru: '2', kk: '2' },
+    '3rd': { en: '3rd', ru: '3', kk: '3' },
+    '4th': { en: '4th', ru: '4', kk: '4' },
+    'None': { en: 'No', ru: 'нет', kk: 'жоқ' },
+    'none': { en: 'No', ru: 'нет', kk: 'жоқ' }
 };
 
 const statusDictionary = {
