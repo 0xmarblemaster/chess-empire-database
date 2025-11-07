@@ -4,7 +4,8 @@ const razryadDictionary = {
     '2nd': { en: '2nd', ru: '2' },
     '3rd': { en: '3rd', ru: '3' },
     '4th': { en: '4th', ru: '4' },
-    'None': { en: 'No Razryad', ru: 'Без разряда' }
+    'None': { en: 'No Razryad', ru: 'Без разряда' },
+    'none': { en: 'No Razryad', ru: 'Без разряда' }
 };
 
 const statusDictionary = {
