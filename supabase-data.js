@@ -451,14 +451,14 @@ const supabaseData = {
                 coach:coaches(first_name, last_name)
             `)
             .or(`first_name.ilike.%${query}%,last_name.ilike.%${query}%`)
-            .limit(20);
+            .limit(50);
 
         if (error) {
             console.error('Error searching students:', error);
             return [];
         }
 
-        return data.map(student => ({
+        const results = data.map(student => ({
             id: student.id,
             firstName: student.first_name,
             lastName: student.last_name,
@@ -467,6 +467,50 @@ const supabaseData = {
             razryad: student.razryad,
             status: student.status
         }));
+
+        // Prioritized search sorting:
+        // 1. Surname starts with query
+        // 2. First name starts with query
+        // 3. Contains query anywhere
+        const queryLower = query.toLowerCase();
+
+        return results.sort((a, b) => {
+            const aLastLower = a.lastName.toLowerCase();
+            const bLastLower = b.lastName.toLowerCase();
+            const aFirstLower = a.firstName.toLowerCase();
+            const bFirstLower = b.firstName.toLowerCase();
+
+            // Priority 1: Surname starts with query
+            const aLastStarts = aLastLower.startsWith(queryLower);
+            const bLastStarts = bLastLower.startsWith(queryLower);
+
+            if (aLastStarts && !bLastStarts) return -1;
+            if (!aLastStarts && bLastStarts) return 1;
+
+            // If both surnames start with query, sort alphabetically by surname
+            if (aLastStarts && bLastStarts) {
+                return aLastLower.localeCompare(bLastLower);
+            }
+
+            // Priority 2: First name starts with query
+            const aFirstStarts = aFirstLower.startsWith(queryLower);
+            const bFirstStarts = bFirstLower.startsWith(queryLower);
+
+            if (aFirstStarts && !bFirstStarts) return -1;
+            if (!aFirstStarts && bFirstStarts) return 1;
+
+            // If both first names start with query, sort alphabetically by first name
+            if (aFirstStarts && bFirstStarts) {
+                return aFirstLower.localeCompare(bFirstLower);
+            }
+
+            // Priority 3: Contains query anywhere (both are equal priority here)
+            // Sort alphabetically by last name, then first name
+            const lastNameCompare = aLastLower.localeCompare(bLastLower);
+            if (lastNameCompare !== 0) return lastNameCompare;
+
+            return aFirstLower.localeCompare(bFirstLower);
+        }).slice(0, 10);
     }
 };
 
