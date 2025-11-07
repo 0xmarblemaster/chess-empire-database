@@ -148,7 +148,7 @@ const translations = {
         "admin.empty.table": "No students found",
         "admin.empty.hint": "Try adjusting your filters or search query",
         "admin.coach.noStudents": "No students assigned to this coach",
-        "admin.coach.kms": "KMS Students",
+        "admin.coach.kms": "Titled Students",
         "admin.coach.placeholder": "Coach Name",
         "admin.form.fileTooLarge": "File size must be less than 2MB",
         "admin.form.imageRequired": "Please select an image file",
@@ -518,6 +518,11 @@ const translations = {
         "admin.alert.export": "Экспорт мүмкіндігі кейін қосылады.\n\nПішімдер:\n- Excel (.xlsx)\n- CSV\n- PDF есеп",
         "admin.alert.coaches": "Тренерлер бөлімі келесі кезеңде іске асады.\n\nЖоспарда:\n- Статистикасы бар тізім\n- Жеке тренер профилі\n- Оқушыларды бекіту\n- Нәтиже көрсеткіштері",
         "admin.alert.editStudent": "{{id}} ID оқушыны өңдеу кейінірек қолжетімді болады.\n\nҚазір бұл демо интерфейс.",
+        "admin.empty.table": "Оқушылар табылмады",
+        "admin.empty.hint": "Сүзгілерді немесе іздеу сұранысын өзгертіп көріңіз",
+        "admin.coach.noStudents": "Бұл тренерге әлі оқушылар бекітілмеген",
+        "admin.coach.kms": "Разрядтылар",
+        "admin.coach.placeholder": "Тренер аты",
         "admin.status.active": "Белсенді",
         "admin.status.frozen": "Тоқтатылған",
         "admin.status.left": "Кеткен",
@@ -767,7 +772,7 @@ const translations = {
         "admin.empty.table": "Ученики не найдены",
         "admin.empty.hint": "Попробуйте изменить фильтры или запрос",
         "admin.coach.noStudents": "К этому тренеру пока не прикреплены ученики",
-        "admin.coach.kms": "Ученики КМС",
+        "admin.coach.kms": "Разрядники",
         "admin.coach.placeholder": "Имя тренера",
         "admin.form.fileTooLarge": "Размер файла должен быть меньше 2 МБ",
         "admin.form.imageRequired": "Выберите файл изображения",
@@ -1275,7 +1280,7 @@ window.translateStatus = translateStatus;
                     coaches: 'Coaches',
                     branches: 'Branches',
                     averageLevel: 'Average Level',
-                    kmsStudents: 'KMS Students'
+                    kmsStudents: 'Titled Students'
                 },
                 filters: {
                     statusLabel: 'Status',
@@ -1501,7 +1506,7 @@ window.translateStatus = translateStatus;
                     coaches: 'Тренеры',
                     branches: 'Филиалы',
                     averageLevel: 'Средняя ступень',
-                    kmsStudents: 'Ученики КМС'
+                    kmsStudents: 'Разрядники'
                 },
                 filters: {
                     statusLabel: 'Статус',

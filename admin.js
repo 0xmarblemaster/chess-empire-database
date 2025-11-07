@@ -1239,7 +1239,8 @@ function loadCoachView(coach) {
     const avgLevel = coachStudents.length > 0
         ? (coachStudents.reduce((sum, s) => sum + s.currentLevel, 0) / coachStudents.length).toFixed(1)
         : 0;
-    const kmsStudents = coachStudents.filter(s => s.razryad === 'KMS').length;
+    // Count all students with any razryad (excluding 'none' and null)
+    const kmsStudents = coachStudents.filter(s => s.razryad && s.razryad !== 'none' && s.razryad !== 'None').length;
 
     // Update statistics
     document.getElementById('coachTotalStudents').textContent = coachStudents.length;
