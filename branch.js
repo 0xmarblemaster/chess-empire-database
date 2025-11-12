@@ -151,6 +151,17 @@ function loadRazryadChart() {
         }
     });
 
+    // Calculate total razryadniki (excluding 'None')
+    const totalRazryadniki = razryadCounts.KMS + razryadCounts['1st'] +
+                              razryadCounts['2nd'] + razryadCounts['3rd'] +
+                              razryadCounts['4th'];
+
+    // Update the count display
+    const razryadCountElement = document.getElementById('razryadCount');
+    if (razryadCountElement) {
+        razryadCountElement.textContent = `(${totalRazryadniki})`;
+    }
+
     const ctx = document.getElementById('razryadChart');
     const labels = t('branch.chart.razryadLabels');
 
