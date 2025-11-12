@@ -987,6 +987,7 @@ function loadBranchCharts(branchStudents) {
         '1st': 0,
         '2nd': 0,
         '3rd': 0,
+        '4th': 0,
         None: 0
     };
 
@@ -1004,6 +1005,7 @@ function loadBranchCharts(branchStudents) {
         razryadCounts['1st'],
         razryadCounts['2nd'],
         razryadCounts['3rd'],
+        razryadCounts['4th'],
         razryadCounts.None
     ];
 
@@ -1014,11 +1016,12 @@ function loadBranchCharts(branchStudents) {
             datasets: [{
                 data: razryadData,
                 backgroundColor: [
-                    '#d97706',
-                    '#3b82f6',
-                    '#10b981',
-                    '#8b5cf6',
-                    '#94a3b8'
+                    '#d97706',  // KMS - amber
+                    '#3b82f6',  // 1st - blue
+                    '#10b981',  // 2nd - green
+                    '#8b5cf6',  // 3rd - purple
+                    '#ec4899',  // 4th - pink
+                    '#94a3b8'   // None - gray
                 ],
                 borderWidth: 0
             }]
@@ -1297,7 +1300,7 @@ function loadCoachCharts(coachStudents) {
 
     // Razryad Chart
     const razryadCounts = {
-        KMS: 0, '1st': 0, '2nd': 0, '3rd': 0, None: 0
+        KMS: 0, '1st': 0, '2nd': 0, '3rd': 0, '4th': 0, None: 0
     };
 
     coachStudents.forEach(student => {
@@ -1314,6 +1317,7 @@ function loadCoachCharts(coachStudents) {
         razryadCounts['1st'],
         razryadCounts['2nd'],
         razryadCounts['3rd'],
+        razryadCounts['4th'],
         razryadCounts.None
     ];
 
@@ -1323,7 +1327,7 @@ function loadCoachCharts(coachStudents) {
             labels: razryadLabels,
             datasets: [{
                 data: razryadData,
-                backgroundColor: ['#d97706', '#3b82f6', '#10b981', '#8b5cf6', '#94a3b8'],
+                backgroundColor: ['#d97706', '#3b82f6', '#10b981', '#8b5cf6', '#ec4899', '#94a3b8'],
                 borderWidth: 0
             }]
         },
@@ -1527,48 +1531,80 @@ function previewPhoto(event) {
 }
 
 // Submit Add Student Form
-function submitAddStudent(event) {
+async function submitAddStudent(event) {
     event.preventDefault();
-    
+
     // Get form data
     const form = document.getElementById('addStudentForm');
     const formData = new FormData(form);
-    
-    // Create new student object
-    const newStudent = {
-        id: students.length > 0 ? Math.max(...students.map(s => s.id)) + 1 : 1,
+
+    // Get branch and coach names
+    const branchName = formData.get('branch');
+    const coachName = formData.get('coach');
+
+    // Find branch and coach IDs
+    const branch = window.branches?.find(b => b.name === branchName);
+    const coach = window.coaches?.find(c => `${c.firstName} ${c.lastName}` === coachName);
+
+    if (!branch) {
+        showToast('Branch not found', 'error');
+        return;
+    }
+
+    if (!coach) {
+        showToast('Coach not found', 'error');
+        return;
+    }
+
+    // Create student data object with IDs
+    const studentData = {
         firstName: formData.get('firstName'),
         lastName: formData.get('lastName'),
-        dateOfBirth: formData.get('dateOfBirth'),
-        gender: formData.get('gender'),
-        branch: formData.get('branch'),
-        coach: formData.get('coach'),
-        razryad: formData.get('razryad') || null,
-        status: formData.get('status'),
+        age: parseInt(formData.get('age')) || null,
+        dateOfBirth: formData.get('dateOfBirth') || null,
+        gender: (formData.get('gender') || '').toLowerCase() || null,
+        branch: branchName,
+        branchId: branch.id,
+        coach: coachName,
+        coachId: coach.id,
+        razryad: formData.get('razryad') || 'none',
+        status: (formData.get('status') || 'active').toLowerCase(),
+        currentLevel: parseInt(formData.get('currentLevel')) || 1,
+        currentLesson: parseInt(formData.get('currentLesson')) || 1,
+        totalLessons: parseInt(formData.get('totalLessons')) || 105,
         parentName: formData.get('parentName') || null,
-        phoneNumber: formData.get('phoneNumber') || null,
-        email: formData.get('email') || null
+        parentPhone: formData.get('parentPhone') || null,
+        parentEmail: formData.get('parentEmail') || null,
+        photoUrl: formData.get('photoUrl') || null
     };
-    
-    // Validate required fields
-    if (!newStudent.firstName || !newStudent.lastName || !newStudent.branch || !newStudent.coach) {
+
+    // Validate required fields: Name, Surname, Age, Coach, Branch
+    if (!studentData.firstName || !studentData.lastName || !studentData.age || !studentData.branchId || !studentData.coachId) {
         showToast(t('admin.form.requiredFields'), 'error');
         return;
     }
-    
-    // Add to students array
-    students.push(newStudent);
-    
-    // Close modal
-    closeAddStudentModal();
-    
-    // Show success message
-    showSuccessMessage(t('admin.form.addSuccess'));
-    
-    // Refresh the page or update UI
-    updateDashboard();
-    renderTable();
-    updateStats();
+
+    try {
+        // Call the proper createStudent function from crud.js
+        const result = await createStudent(studentData);
+
+        if (result.success) {
+            // Close modal
+            closeAddStudentModal();
+
+            // Show success message
+            showToast(t('admin.form.addSuccess'), 'success');
+
+            // Refresh the UI
+            loadStudents();
+            updateStats();
+        } else {
+            throw new Error(result.error || 'Failed to create student');
+        }
+    } catch (error) {
+        console.error('❌ Error adding student:', error);
+        showToast(error.message || 'Failed to add student', 'error');
+    }
 }
 
 // Show Success Message (wrapper for showToast)

@@ -140,6 +140,7 @@ function loadRazryadChart() {
         '1st': 0,
         '2nd': 0,
         '3rd': 0,
+        '4th': 0,
         None: 0
     };
 
@@ -158,6 +159,7 @@ function loadRazryadChart() {
         razryadCounts['1st'],
         razryadCounts['2nd'],
         razryadCounts['3rd'],
+        razryadCounts['4th'],
         razryadCounts.None
     ];
 
@@ -172,11 +174,12 @@ function loadRazryadChart() {
             datasets: [{
                 data: dataset,
                 backgroundColor: [
-                    '#d97706',
-                    '#3b82f6',
-                    '#10b981',
-                    '#8b5cf6',
-                    '#94a3b8'
+                    '#d97706',  // KMS - amber
+                    '#3b82f6',  // 1st - blue
+                    '#10b981',  // 2nd - green
+                    '#8b5cf6',  // 3rd - purple
+                    '#ec4899',  // 4th - pink
+                    '#94a3b8'   // None - gray
                 ],
                 borderWidth: 0
             }]
