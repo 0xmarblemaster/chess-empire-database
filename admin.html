@@ -352,6 +352,7 @@
                             <h2 class="card-title-inline">
                                 <i data-lucide="trophy" style="width: 20px; height: 20px;"></i>
                                 <span data-i18n="branch.razryadDistribution"></span>
+                                <span id="branchRazryadCount" style="margin-left: 8px; font-weight: 600; color: #3b82f6;"></span>
                             </h2>
                         </div>
                         <div class="branch-chart-container">
@@ -474,6 +475,7 @@
                             <h2 class="card-title-inline">
                                 <i data-lucide="trophy" style="width: 20px; height: 20px;"></i>
                                 <span data-i18n="branch.razryadDistribution"></span>
+                                <span id="coachRazryadCount" style="margin-left: 8px; font-weight: 600; color: #3b82f6;"></span>
                             </h2>
                         </div>
                         <div class="branch-chart-container">
@@ -543,13 +545,20 @@
 
                     <div class="form-row">
                         <div class="form-group">
-                            <label for="dateOfBirth" class="form-label" data-i18n="admin.modals.add.dateOfBirth"></label>
-                            <input type="date" id="dateOfBirth" name="dateOfBirth" class="form-input" required>
+                            <label for="age" class="form-label" data-i18n="admin.modals.add.age"></label>
+                            <input type="number" id="age" name="age" class="form-input" min="3" max="100" required data-i18n-placeholder="admin.modals.add.agePlaceholder">
                         </div>
                         <div class="form-group">
+                            <label for="dateOfBirth" class="form-label" data-i18n="admin.modals.add.dateOfBirth"></label>
+                            <input type="date" id="dateOfBirth" name="dateOfBirth" class="form-input">
+                        </div>
+                    </div>
+
+                    <div class="form-row">
+                        <div class="form-group">
                             <label for="gender" class="form-label" data-i18n="admin.modals.add.gender"></label>
-                            <select id="gender" name="gender" class="form-input" required>
-                                <option value="" data-i18n="admin.modals.add.genderSelect"></option>
+                            <select id="gender" name="gender" class="form-input">
+                                <option value="" disabled selected data-i18n="admin.modals.add.genderSelect"></option>
                                 <option value="male" data-i18n="admin.modals.add.genderMale"></option>
                                 <option value="female" data-i18n="admin.modals.add.genderFemale"></option>
                             </select>
@@ -613,10 +622,10 @@
                         </div>
                         <div class="form-group">
                             <label for="statusSelect" class="form-label" data-i18n="admin.modals.add.status"></label>
-                            <select id="statusSelect" name="status" class="form-input" required>
-                                <option value="Active" selected data-i18n="admin.modals.add.statusActive"></option>
-                                <option value="Frozen" data-i18n="admin.modals.add.statusFrozen"></option>
-                                <option value="Inactive" data-i18n="admin.modals.add.statusInactive"></option>
+                            <select id="statusSelect" name="status" class="form-input">
+                                <option value="active" selected data-i18n="admin.modals.add.statusActive"></option>
+                                <option value="frozen" data-i18n="admin.modals.add.statusFrozen"></option>
+                                <option value="left" data-i18n="admin.modals.add.statusInactive"></option>
                             </select>
                         </div>
                     </div>

@@ -998,6 +998,17 @@ function loadBranchCharts(branchStudents) {
         }
     });
 
+    // Calculate total students (including all categories)
+    const totalStudents = razryadCounts.KMS + razryadCounts['1st'] +
+                          razryadCounts['2nd'] + razryadCounts['3rd'] +
+                          razryadCounts['4th'] + razryadCounts.None;
+
+    // Update the count display
+    const branchRazryadCountElement = document.getElementById('branchRazryadCount');
+    if (branchRazryadCountElement) {
+        branchRazryadCountElement.textContent = `(${totalStudents})`;
+    }
+
     const razryadCtx = document.getElementById('branchRazryadChart');
     const razryadLabels = t('branch.chart.razryadLabels');
     const razryadData = [
@@ -1309,6 +1320,17 @@ function loadCoachCharts(coachStudents) {
             razryadCounts[razryad]++;
         }
     });
+
+    // Calculate total students (including all categories)
+    const totalCoachStudents = razryadCounts.KMS + razryadCounts['1st'] +
+                                razryadCounts['2nd'] + razryadCounts['3rd'] +
+                                razryadCounts['4th'] + razryadCounts.None;
+
+    // Update the count display
+    const coachRazryadCountElement = document.getElementById('coachRazryadCount');
+    if (coachRazryadCountElement) {
+        coachRazryadCountElement.textContent = `(${totalCoachStudents})`;
+    }
 
     const razryadCtx = document.getElementById('coachRazryadChart');
     const razryadLabels = t('branch.chart.razryadLabels');

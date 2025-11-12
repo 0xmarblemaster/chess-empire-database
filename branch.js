@@ -151,15 +151,15 @@ function loadRazryadChart() {
         }
     });
 
-    // Calculate total razryadniki (excluding 'None')
-    const totalRazryadniki = razryadCounts.KMS + razryadCounts['1st'] +
-                              razryadCounts['2nd'] + razryadCounts['3rd'] +
-                              razryadCounts['4th'];
+    // Calculate total students (including all categories)
+    const totalStudents = razryadCounts.KMS + razryadCounts['1st'] +
+                          razryadCounts['2nd'] + razryadCounts['3rd'] +
+                          razryadCounts['4th'] + razryadCounts.None;
 
     // Update the count display
     const razryadCountElement = document.getElementById('razryadCount');
     if (razryadCountElement) {
-        razryadCountElement.textContent = `(${totalRazryadniki})`;
+        razryadCountElement.textContent = `(${totalStudents})`;
     }
 
     const ctx = document.getElementById('razryadChart');
