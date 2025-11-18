@@ -239,7 +239,7 @@ async function createStudent(studentData) {
                 status: studentData.status || 'active',
                 currentLevel: parseInt(studentData.currentLevel) || 1,
                 currentLesson: parseInt(studentData.currentLesson) || 1,
-                totalLessons: parseInt(studentData.totalLessons) || 105,
+                totalLessons: parseInt(studentData.totalLessons) || 120,
                 parentName: studentData.parentName,
                 parentPhone: studentData.parentPhone,
                 parentEmail: studentData.parentEmail
@@ -848,7 +848,7 @@ async function importDataFromJSON(fileInput) {
                             status: studentData.status || 'active',
                             currentLevel: studentData.currentLevel || 1,
                             currentLesson: studentData.currentLesson || 1,
-                            totalLessons: studentData.totalLessons || 105,
+                            totalLessons: studentData.totalLessons || 120,
                             parentName: studentData.parentName,
                             parentPhone: studentData.parentPhone,
                             parentEmail: studentData.parentEmail

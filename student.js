@@ -97,7 +97,13 @@ function renderProfile() {
     }
 
     const levelProgress = Math.round((student.currentLevel / 8) * 100);
-    const lessonProgress = Math.round((student.currentLesson / student.totalLessons) * 100);
+
+    // Calculate lesson progress within the current level
+    // Formula: currentLesson - ((currentLevel - 1) × 15) = lesson within current level
+    const lessonsPerLevel = 15;
+    const lessonWithinLevel = student.currentLesson - ((student.currentLevel - 1) * lessonsPerLevel);
+    const lessonProgress = Math.round((lessonWithinLevel / lessonsPerLevel) * 100);
+
     const initials = `${student.firstName[0]}${student.lastName[0]}`;
 
     const statusLabel = translateStatus(student.status || 'active') || t('student.statusActive');
@@ -173,7 +179,7 @@ function renderProfile() {
                     <div class="progress-label">${t('student.currentLesson')}</div>
                     <div class="progress-percentage">${lessonProgress}%</div>
                 </div>
-                <div class="progress-detail">${t('student.lessonDetail', { current: student.currentLesson, total: student.totalLessons })}</div>
+                <div class="progress-detail">${t('student.lessonDetail', { current: lessonWithinLevel, total: lessonsPerLevel })}</div>
                 <div class="progress-bar-container">
                     <div class="progress-bar" style="width: 0%" data-target="${lessonProgress}"></div>
                 </div>

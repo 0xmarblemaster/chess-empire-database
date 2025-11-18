@@ -1593,7 +1593,7 @@ async function submitAddStudent(event) {
         status: (formData.get('status') || 'active').toLowerCase(),
         currentLevel: parseInt(formData.get('currentLevel')) || 1,
         currentLesson: parseInt(formData.get('currentLesson')) || 1,
-        totalLessons: parseInt(formData.get('totalLessons')) || 105,
+        totalLessons: parseInt(formData.get('totalLessons')) || 120,
         parentName: formData.get('parentName') || null,
         parentPhone: formData.get('parentPhone') || null,
         parentEmail: formData.get('parentEmail') || null,
