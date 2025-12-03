@@ -129,15 +129,14 @@ body {
 }
 
 .logo-image {
-    width: 42px !important;
-    height: 68px !important;
+    width: auto !important;
+    height: 102px !important;
     margin-bottom: 0.625rem !important;
-    filter: brightness(0) saturate(100%) invert(71%) sepia(18%) saturate(835%) hue-rotate(358deg) brightness(95%) contrast(86%);
-    transition: filter 0.3s ease;
+    transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 .logo-image:hover {
-    filter: brightness(0) saturate(100%) invert(71%) sepia(18%) saturate(900%) hue-rotate(358deg) brightness(98%) contrast(88%);
+    transform: scale(1.1);
 }
 
 .logo-text {
@@ -511,8 +510,8 @@ body {
     }
 
     .logo-image {
-        width: 48px !important;
-        height: 78px !important;
+        width: auto !important;
+        height: 117px !important;
         margin-bottom: 0.75rem !important;
     }
 
@@ -624,23 +623,25 @@ body {
         /* Desktop: Constrain to 640px centered */
         max-width: 640px;
         margin: 0 auto;
+        margin-top: -10px;
     }
 
     .logo-image {
-        width: 96px !important;
-        height: 156px !important;
-        margin-bottom: 1.5rem !important;
+        width: auto !important;
+        height: 281px !important;
+        margin-bottom: 0.5rem !important;
     }
 
     .logo-text {
         font-size: 3.5rem !important;
-        margin-bottom: 0.5rem;
+        margin-bottom: 0.25rem;
+        margin-top: -20px;
         line-height: 1.2;
     }
 
     .logo-subtitle {
         font-size: 0.95rem;
-        margin-bottom: 3rem;
+        margin-bottom: 1.5rem;
     }
 
     .language-dropdown {
