@@ -306,14 +306,25 @@ function loadStudents() {
             </tr>
         `;
     } else {
-        tbody.innerHTML = filteredStudents.map(student => `
+        tbody.innerHTML = filteredStudents.map(student => {
+            // Create avatar HTML - use photo if available, otherwise initials
+            const avatarHTML = student.photoUrl
+                ? `<div class="student-avatar" style="background: none; padding: 0; overflow: hidden;">
+                       <img src="${student.photoUrl}" alt="${student.firstName}" style="width: 100%; height: 100%; object-fit: cover; border-radius: 50%;">
+                   </div>`
+                : `<div class="student-avatar">${student.firstName[0]}${student.lastName[0]}</div>`;
+
+            return `
             <tr>
                 <td>
                     <div class="student-cell">
-                        <div class="student-avatar">${student.firstName[0]}${student.lastName[0]}</div>
+                        ${avatarHTML}
                         <div class="student-name clickable" onclick="viewStudent('${student.id}')" style="cursor: pointer; color: #d97706;" onmouseover="this.style.textDecoration='underline'" onmouseout="this.style.textDecoration='none'">${student.firstName} ${student.lastName}</div>
                     </div>
-                </td>
+                </td>`;
+        }).map((rowStart, index) => {
+            const student = filteredStudents[index];
+            return rowStart + `
                 <td>${student.age}</td>
                 <td>
                     <a href="branch.html?branch=${encodeURIComponent(student.branch)}"
@@ -340,8 +351,8 @@ function loadStudents() {
                         </button>
                     </div>
                 </td>
-            </tr>
-        `).join('');
+            </tr>`;
+        }).join('');
     }
 
     // Update result count
@@ -376,10 +387,18 @@ function renderMobileStudentCards(students) {
             </div>
         `;
     } else {
-        mobileCardsContainer.innerHTML = students.map(student => `
+        mobileCardsContainer.innerHTML = students.map(student => {
+            // Create avatar HTML - use photo if available, otherwise initials
+            const mobileAvatarHTML = student.photoUrl
+                ? `<div class="mobile-card-avatar" style="background: none; padding: 0; overflow: hidden;">
+                       <img src="${student.photoUrl}" alt="${student.firstName}" style="width: 100%; height: 100%; object-fit: cover; border-radius: 50%;">
+                   </div>`
+                : `<div class="mobile-card-avatar">${student.firstName[0]}${student.lastName[0]}</div>`;
+
+            return `
             <div class="mobile-student-card">
                 <div class="mobile-card-header">
-                    <div class="mobile-card-avatar">${student.firstName[0]}${student.lastName[0]}</div>
+                    ${mobileAvatarHTML}
                     <div class="mobile-card-info">
                         <div class="mobile-card-name clickable" onclick="viewStudent('${student.id}')" style="cursor: pointer; color: #d97706;" onmouseover="this.style.textDecoration='underline'" onmouseout="this.style.textDecoration='none'">${student.firstName} ${student.lastName}</div>
                         <div class="mobile-card-meta">${student.age} ${t('common.years')} • ${student.coach}</div>
@@ -419,8 +438,8 @@ function renderMobileStudentCards(students) {
                         <i data-lucide="trash-2" style="width: 18px; height: 18px;"></i>
                     </button>
                 </div>
-            </div>
-        `).join('');
+            </div>`;
+        }).join('');
     }
 
     // Note: lucide.createIcons() is called by parent loadStudents() function
@@ -1468,14 +1487,17 @@ function loadCoachCharts(coachStudents) {
 function addNewStudent() {
     const modal = document.getElementById('addStudentModal');
     modal.classList.add('active');
-    
+
     // Populate branches dropdown
     populateBranchesDropdown();
-    
+
     // Reset form
     document.getElementById('addStudentForm').reset();
     document.getElementById('photoPreview').innerHTML = '<i data-lucide="user" style="width: 64px; height: 64px; color: #94a3b8;"></i>';
-    
+
+    // Clear stored photo file
+    window.addPhotoFile = null;
+
     // Reinitialize icons
     setTimeout(() => lucide.createIcons(), 100);
 }
@@ -1524,13 +1546,74 @@ function updateCoachOptions() {
     });
 }
 
+// Compress and resize image before upload
+// Returns a Promise that resolves to a compressed File object
+async function compressImage(file, maxWidth = 400, maxHeight = 400, quality = 0.8) {
+    return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = function(e) {
+            const img = new Image();
+            img.onload = function() {
+                // Calculate new dimensions while maintaining aspect ratio
+                let width = img.width;
+                let height = img.height;
+
+                if (width > height) {
+                    if (width > maxWidth) {
+                        height = Math.round((height * maxWidth) / width);
+                        width = maxWidth;
+                    }
+                } else {
+                    if (height > maxHeight) {
+                        width = Math.round((width * maxHeight) / height);
+                        height = maxHeight;
+                    }
+                }
+
+                // Create canvas and draw resized image
+                const canvas = document.createElement('canvas');
+                canvas.width = width;
+                canvas.height = height;
+
+                const ctx = canvas.getContext('2d');
+                ctx.drawImage(img, 0, 0, width, height);
+
+                // Convert to blob
+                canvas.toBlob(
+                    (blob) => {
+                        if (!blob) {
+                            reject(new Error('Canvas to Blob conversion failed'));
+                            return;
+                        }
+
+                        // Create new File from blob
+                        const compressedFile = new File([blob], file.name.replace(/\.[^/.]+$/, '.jpg'), {
+                            type: 'image/jpeg',
+                            lastModified: Date.now()
+                        });
+
+                        console.log(`📸 Image compressed: ${(file.size / 1024).toFixed(1)}KB → ${(compressedFile.size / 1024).toFixed(1)}KB (${width}x${height})`);
+                        resolve(compressedFile);
+                    },
+                    'image/jpeg',
+                    quality
+                );
+            };
+            img.onerror = () => reject(new Error('Failed to load image'));
+            img.src = e.target.result;
+        };
+        reader.onerror = () => reject(new Error('Failed to read file'));
+        reader.readAsDataURL(file);
+    });
+}
+
 // Preview Photo Upload
-function previewPhoto(event) {
+async function previewPhoto(event) {
     const file = event.target.files[0];
     if (!file) return;
-    
-    // Check file size (max 2MB)
-    if (file.size > 2 * 1024 * 1024) {
+
+    // Check file size (max 10MB for original, will be compressed)
+    if (file.size > 10 * 1024 * 1024) {
         showToast(t('admin.form.fileTooLarge'), 'error');
         event.target.value = '';
         return;
@@ -1542,14 +1625,85 @@ function previewPhoto(event) {
         event.target.value = '';
         return;
     }
-    
-    // Preview image
-    const reader = new FileReader();
-    reader.onload = function(e) {
-        const photoPreview = document.getElementById('photoPreview');
-        photoPreview.innerHTML = `<img src="${e.target.result}" alt="Preview">`;
-    };
-    reader.readAsDataURL(file);
+
+    try {
+        // Compress the image
+        const compressedFile = await compressImage(file);
+
+        // Preview compressed image
+        const reader = new FileReader();
+        reader.onload = function(e) {
+            const photoPreview = document.getElementById('photoPreview');
+            photoPreview.innerHTML = `<img src="${e.target.result}" alt="Preview">`;
+        };
+        reader.readAsDataURL(compressedFile);
+
+        // Store compressed file for upload
+        window.addPhotoFile = compressedFile;
+    } catch (error) {
+        console.error('Error compressing image:', error);
+        showToast(t('admin.form.imageRequired'), 'error');
+        event.target.value = '';
+    }
+}
+
+// Preview photo for Edit Student Modal
+async function previewEditPhoto(event) {
+    const file = event.target.files[0];
+    if (!file) return;
+
+    // Check file size (max 10MB for original, will be compressed)
+    if (file.size > 10 * 1024 * 1024) {
+        showToast(t('admin.form.fileTooLarge'), 'error');
+        event.target.value = '';
+        return;
+    }
+
+    // Check file type
+    if (!file.type.match('image.*')) {
+        showToast(t('admin.form.imageRequired'), 'error');
+        event.target.value = '';
+        return;
+    }
+
+    try {
+        // Compress the image
+        const compressedFile = await compressImage(file);
+
+        // Preview compressed image
+        const reader = new FileReader();
+        reader.onload = function(e) {
+            const photoPreview = document.getElementById('editPhotoPreview');
+            photoPreview.innerHTML = `<img src="${e.target.result}" alt="Preview" style="width: 100%; height: 100%; object-fit: cover; border-radius: 12px;">`;
+        };
+        reader.readAsDataURL(compressedFile);
+
+        // Store compressed file for upload and show remove button
+        window.editPhotoFile = compressedFile;
+        window.editPhotoRemoved = false;
+        document.getElementById('editRemovePhotoBtn').style.display = 'inline-flex';
+        setTimeout(() => lucide.createIcons(), 50);
+    } catch (error) {
+        console.error('Error compressing image:', error);
+        showToast(t('admin.form.imageRequired'), 'error');
+        event.target.value = '';
+    }
+}
+
+// Remove photo in Edit Student Modal
+function removeEditPhoto() {
+    const photoPreview = document.getElementById('editPhotoPreview');
+    photoPreview.innerHTML = '<i data-lucide="user" style="width: 64px; height: 64px; color: #94a3b8;"></i>';
+
+    // Clear file input
+    document.getElementById('editPhotoUpload').value = '';
+    document.getElementById('editRemovePhotoBtn').style.display = 'none';
+
+    // Mark photo for removal
+    window.editPhotoRemoved = true;
+    window.editPhotoFile = null;
+
+    setTimeout(() => lucide.createIcons(), 50);
 }
 
 // Submit Add Student Form
@@ -1597,7 +1751,7 @@ async function submitAddStudent(event) {
         parentName: formData.get('parentName') || null,
         parentPhone: formData.get('parentPhone') || null,
         parentEmail: formData.get('parentEmail') || null,
-        photoUrl: formData.get('photoUrl') || null
+        photoUrl: null // Will be set after upload
     };
 
     // Validate required fields: Name, Surname, Age, Coach, Branch
@@ -1607,8 +1761,27 @@ async function submitAddStudent(event) {
     }
 
     try {
-        // Call the proper createStudent function from crud.js
+        // First create the student to get their ID
         const result = await createStudent(studentData);
+
+        if (result.success && result.data) {
+            // If a photo was selected, upload it now that we have the student ID
+            if (window.addPhotoFile) {
+                try {
+                    const photoUrl = await window.supabaseData.uploadStudentPhoto(window.addPhotoFile, result.data.id);
+                    // Update student with photo URL
+                    await window.supabaseData.updateStudent(result.data.id, { ...studentData, photoUrl: photoUrl });
+                } catch (photoError) {
+                    console.error('⚠️ Photo upload failed, student created without photo:', photoError);
+                    showToast(t('admin.form.photoUploadFailed'), 'warning');
+                }
+                // Clear the stored file
+                window.addPhotoFile = null;
+            }
+        }
+
+        // Continue with original success handling
+        const originalResult = result;
 
         if (result.success) {
             // Close modal
@@ -1688,12 +1861,34 @@ function editStudent(studentId) {
     setTimeout(() => {
         document.getElementById('editBranchSelect').value = student.branch;
         updateEditCoachOptions();
-        
+
         // Set coach after coaches are loaded
         setTimeout(() => {
             document.getElementById('editCoachSelect').value = student.coach;
         }, 100);
     }, 100);
+
+    // Set photo preview
+    const photoPreview = document.getElementById('editPhotoPreview');
+    const removePhotoBtn = document.getElementById('editRemovePhotoBtn');
+    const currentPhotoUrlInput = document.getElementById('editCurrentPhotoUrl');
+
+    if (student.photoUrl) {
+        photoPreview.innerHTML = `<img src="${student.photoUrl}" alt="${student.firstName}" style="width: 100%; height: 100%; object-fit: cover; border-radius: 12px;">`;
+        currentPhotoUrlInput.value = student.photoUrl;
+        removePhotoBtn.style.display = 'inline-flex';
+    } else {
+        photoPreview.innerHTML = '<i data-lucide="user" style="width: 64px; height: 64px; color: #94a3b8;"></i>';
+        currentPhotoUrlInput.value = '';
+        removePhotoBtn.style.display = 'none';
+    }
+
+    // Clear file input
+    document.getElementById('editPhotoUpload').value = '';
+
+    // Store flag for photo removal
+    window.editPhotoRemoved = false;
+    window.editPhotoFile = null;
 
     // Reinitialize icons
     setTimeout(() => lucide.createIcons(), 150);
@@ -1787,7 +1982,8 @@ async function submitEditStudent(event) {
         currentLesson: parseInt(formData.get('currentLesson')) || student.currentLesson,
         parentName: formData.get('parentName') || null,
         parentPhone: formData.get('parentPhone') || null,
-        parentEmail: formData.get('parentEmail') || null
+        parentEmail: formData.get('parentEmail') || null,
+        photoUrl: student.photoUrl // Keep existing photo by default
     };
 
     // Validate required fields
@@ -1797,6 +1993,28 @@ async function submitEditStudent(event) {
     }
 
     try {
+        // Handle photo upload/removal
+        const currentPhotoUrl = document.getElementById('editCurrentPhotoUrl').value;
+
+        // If photo was removed
+        if (window.editPhotoRemoved) {
+            // Delete old photo from storage
+            if (currentPhotoUrl) {
+                await window.supabaseData.deleteStudentPhoto(currentPhotoUrl);
+            }
+            studentData.photoUrl = null;
+        }
+        // If new photo was selected
+        else if (window.editPhotoFile) {
+            // Delete old photo first
+            if (currentPhotoUrl) {
+                await window.supabaseData.deleteStudentPhoto(currentPhotoUrl);
+            }
+            // Upload new photo
+            const newPhotoUrl = await window.supabaseData.uploadStudentPhoto(window.editPhotoFile, studentId);
+            studentData.photoUrl = newPhotoUrl;
+        }
+
         // Update student in Supabase
         const result = await updateStudent(studentId, studentData);
 

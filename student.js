@@ -98,11 +98,9 @@ function renderProfile() {
 
     const levelProgress = Math.round((student.currentLevel / 8) * 100);
 
-    // Calculate lesson progress within the current level
-    // Formula: currentLesson - ((currentLevel - 1) × 15) = lesson within current level
-    const lessonsPerLevel = 15;
-    const lessonWithinLevel = student.currentLesson - ((student.currentLevel - 1) * lessonsPerLevel);
-    const lessonProgress = Math.round((lessonWithinLevel / lessonsPerLevel) * 100);
+    // Calculate lesson progress based on total lessons (120 total: 15 per level × 8 levels)
+    const totalLessons = 120;
+    const lessonProgress = Math.round((student.currentLesson / totalLessons) * 100);
 
     const initials = `${student.firstName[0]}${student.lastName[0]}`;
 
@@ -111,9 +109,16 @@ function renderProfile() {
         ? translateRazryad(student.razryad)
         : t('student.razryadNotYet');
 
+    // Create avatar HTML - use photo if available, otherwise initials
+    const avatarHTML = student.photoUrl
+        ? `<div class="avatar" style="background: none; padding: 0; overflow: hidden;">
+               <img src="${student.photoUrl}" alt="${student.firstName}" style="width: 100%; height: 100%; object-fit: cover; border-radius: 50%;">
+           </div>`
+        : `<div class="avatar">${initials}</div>`;
+
     const profileHTML = `
         <div class="profile-header">
-            <div class="avatar">${initials}</div>
+            ${avatarHTML}
             <div class="profile-info">
                 <h1 class="student-name">${student.firstName} ${student.lastName}</h1>
                 <span class="student-status">
@@ -179,7 +184,7 @@ function renderProfile() {
                     <div class="progress-label">${t('student.currentLesson')}</div>
                     <div class="progress-percentage">${lessonProgress}%</div>
                 </div>
-                <div class="progress-detail">${t('student.lessonDetail', { current: lessonWithinLevel, total: lessonsPerLevel })}</div>
+                <div class="progress-detail">${t('student.lessonDetail', { current: student.currentLesson, total: totalLessons })}</div>
                 <div class="progress-bar-container">
                     <div class="progress-bar" style="width: 0%" data-target="${lessonProgress}"></div>
                 </div>

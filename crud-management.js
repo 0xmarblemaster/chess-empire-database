@@ -1162,10 +1162,15 @@ function displayAppAccessUsers(users) {
         return;
     }
 
+    // Check if current user is admin
+    const currentUserRole = window.supabaseAuth?.getCurrentUserRole();
+    const isCurrentUserAdmin = currentUserRole?.role === 'admin';
+
     container.innerHTML = users.map(user => {
         const roleLabel = getAppAccessRoleLabel(user.role);
         const emailText = user.email || (window.t ? window.t('access.users.noEmail') : 'Email not available');
         const adminHint = window.t ? window.t('access.users.adminHint') : 'Administrators have full access to all features';
+        const deleteLabel = window.t ? window.t('access.users.deleteUser') : 'Delete User';
 
         return `
             <div class="app-access-card">
@@ -1177,7 +1182,17 @@ function displayAppAccessUsers(users) {
                             <p>${emailText}</p>
                         </div>
                     </div>
-                    <span class="app-access-role-badge app-access-role-${user.role}">${roleLabel}</span>
+                    <div style="display: flex; align-items: center; gap: 0.75rem;">
+                        <span class="app-access-role-badge app-access-role-${user.role}">${roleLabel}</span>
+                        ${isCurrentUserAdmin ? `
+                            <button class="app-access-delete-btn"
+                                    onclick="deleteAppAccessUser('${user.user_id}', '${emailText}')"
+                                    title="${deleteLabel}"
+                                    style="background: #dc2626; color: white; border: none; border-radius: 6px; padding: 0.5rem 0.75rem; cursor: pointer; display: flex; align-items: center; gap: 0.5rem; font-size: 0.85rem; transition: all 0.2s;">
+                                <i data-lucide="trash-2" style="width: 16px; height: 16px;"></i>
+                            </button>
+                        ` : ''}
+                    </div>
                 </div>
                 ${user.role !== 'admin'
                     ? `<div class="app-access-permission-grid">
@@ -1316,6 +1331,74 @@ async function handleAppAccessPermissionChange(event) {
     }
 }
 
+async function deleteAppAccessUser(userId, userEmail) {
+    if (!window.supabaseClient) {
+        console.error('Supabase client not initialized');
+        return;
+    }
+
+    // Confirm deletion
+    const confirmMessage = window.t
+        ? window.t('access.users.confirmDelete', { email: userEmail })
+        : `Are you sure you want to delete user ${userEmail}?\n\nThis will:\n- Remove the user from the dashboard\n- Delete the user account from the database\n\nThis action cannot be undone.`;
+
+    if (!confirm(confirmMessage)) {
+        return;
+    }
+
+    try {
+        console.log(`🗑️ Deleting user ${userId} (${userEmail})...`);
+
+        // Step 1: Delete from user_roles table
+        const { error: roleError } = await window.supabaseClient
+            .from('user_roles')
+            .delete()
+            .eq('user_id', userId);
+
+        if (roleError) {
+            console.error('Error deleting user role:', roleError);
+            throw new Error('Failed to delete user role: ' + roleError.message);
+        }
+
+        console.log('✅ User role deleted');
+
+        // Step 2: Delete from auth.users using admin API via Edge Function
+        // We need to create an Edge Function for this since client can't delete auth users
+        const { data, error: deleteError } = await window.supabaseClient.functions.invoke('delete-user', {
+            body: { user_id: userId }
+        });
+
+        if (deleteError) {
+            console.error('Edge Function error:', deleteError);
+            throw new Error('Failed to delete user account: ' + deleteError.message);
+        }
+
+        if (data?.error) {
+            console.error('Delete user error:', data.error);
+            throw new Error(data.error);
+        }
+
+        console.log('✅ User account deleted');
+
+        // Show success message
+        const successMessage = window.t
+            ? window.t('access.users.deleteSuccess', { email: userEmail })
+            : `User ${userEmail} deleted successfully`;
+        showAppAccessMessage('success', successMessage);
+
+        // Reload the users list
+        await loadSupabaseAppAccessUsers();
+
+    } catch (error) {
+        console.error('❌ Error deleting user:', error);
+        const errorMessage = window.t
+            ? window.t('access.users.deleteError')
+            : 'Failed to delete user. Please try again.';
+        showAppAccessMessage('error', errorMessage + ' ' + error.message);
+    }
+}
+window.deleteAppAccessUser = deleteAppAccessUser;
+
 async function handleAppAccessInviteSubmit(event) {
     event.preventDefault();
 
@@ -1357,15 +1440,40 @@ async function handleAppAccessInviteSubmit(event) {
 
         console.log('✅ Invitation sent successfully:', data);
 
-        // Show success message
+        // Show success message with registration URL
         const messageDiv = document.getElementById('appAccessInviteMessage');
+        const registrationUrl = data.registration_url || '';
         messageDiv.innerHTML = `
             <div style="margin-bottom: 1rem;">
-                <strong style="color: #059669;">✅ Invitation sent successfully!</strong>
+                <strong style="color: #059669;">✅ Invitation created successfully!</strong>
             </div>
-            <div style="font-size: 0.9rem; color: #475569;">
-                An invitation email has been sent to <strong>${email}</strong>.<br/>
-                The user will receive a link to create their account.
+            <div style="font-size: 0.9rem; color: #475569; margin-bottom: 1rem;">
+                Invitation created for <strong>${email}</strong>.
+            </div>
+            ${registrationUrl ? `
+            <div style="background: #f8fafc; padding: 1rem; border-radius: 8px; border: 1px solid #e2e8f0; margin-bottom: 1rem;">
+                <div style="font-size: 0.85rem; color: #64748b; margin-bottom: 0.5rem;">
+                    <strong>Registration Link:</strong> (Share this link with the user)
+                </div>
+                <div style="display: flex; gap: 0.5rem; align-items: center;">
+                    <input
+                        type="text"
+                        value="${registrationUrl}"
+                        readonly
+                        id="registrationUrlInput"
+                        style="flex: 1; padding: 0.5rem; border: 1px solid #cbd5e1; border-radius: 6px; font-size: 0.85rem; font-family: monospace; background: white;"
+                    />
+                    <button
+                        onclick="navigator.clipboard.writeText('${registrationUrl}').then(() => { this.textContent = '✓ Copied!'; setTimeout(() => { this.textContent = 'Copy'; }, 2000); })"
+                        style="padding: 0.5rem 1rem; background: #667eea; color: white; border: none; border-radius: 6px; cursor: pointer; font-size: 0.85rem; white-space: nowrap;"
+                    >
+                        Copy
+                    </button>
+                </div>
+            </div>
+            ` : ''}
+            <div style="font-size: 0.8rem; color: #94a3b8;">
+                Note: Email sending requires SMTP configuration. For now, share the registration link above directly with the user.
             </div>
         `;
         messageDiv.hidden = false;

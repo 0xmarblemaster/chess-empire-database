@@ -79,6 +79,24 @@ async function loadDataFromSupabase() {
     }
 }
 
+// Show loading overlay with optional custom message
+function showLoadingOverlay(message = null) {
+    const overlay = document.getElementById('loadingOverlay');
+    if (overlay) {
+        overlay.style.display = 'flex';
+        overlay.style.opacity = '1';
+        overlay.style.transition = 'opacity 0.3s ease';
+
+        // Update message if provided
+        if (message) {
+            const messageEl = overlay.querySelector('.loading-message, p');
+            if (messageEl) {
+                messageEl.textContent = message;
+            }
+        }
+    }
+}
+
 // Hide loading overlay
 function hideLoadingOverlay() {
     const overlay = document.getElementById('loadingOverlay');
@@ -736,6 +754,9 @@ async function importDataFromJSON(fileInput) {
                     return;
                 }
 
+                // Show loading overlay during import
+                showLoadingOverlay(`Importing ${studentsArray.length} students...`);
+
                 console.log(`📥 Starting import of ${studentsArray.length} students...`);
                 let successCount = 0;
                 let errorCount = 0;
@@ -870,6 +891,9 @@ async function importDataFromJSON(fileInput) {
 
                 console.log(`📊 Import complete: ${successCount} success, ${errorCount} errors`);
 
+                // Hide loading overlay
+                hideLoadingOverlay();
+
                 if (errorCount > 0) {
                     console.error('Import errors:', errors);
                     showToast(`⚠️ Import completed with errors:\n✅ ${successCount} students imported\n❌ ${errorCount} students failed\n\nCheck console for details.`, 'warning');
@@ -891,6 +915,7 @@ async function importDataFromJSON(fileInput) {
                 }
             }
         } catch (error) {
+            hideLoadingOverlay();
             showToast('❌ Error importing data: ' + error.message, 'error');
             console.error('Import error:', error);
         }
@@ -908,6 +933,8 @@ if (typeof window !== 'undefined') {
     window.loadDataFromSupabase = loadDataFromSupabase;
     window.loadDataFromStorage = loadDataFromStorage;
     window.refreshAllUIComponents = refreshAllUIComponents;
+    window.showLoadingOverlay = showLoadingOverlay;
+    window.hideLoadingOverlay = hideLoadingOverlay;
     console.log('✅ CRUD functions exposed to global scope');
     console.log('  window.initializeData:', typeof window.initializeData);
     console.log('  window.loadDataFromSupabase:', typeof window.loadDataFromSupabase);

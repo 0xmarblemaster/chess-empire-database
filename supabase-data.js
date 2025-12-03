@@ -439,6 +439,82 @@ const supabaseData = {
     },
 
     /**
+     * PHOTO UPLOAD
+     */
+
+    // Upload student photo to Supabase Storage
+    async uploadStudentPhoto(file, studentId) {
+        if (!file) {
+            console.error('No file provided for upload');
+            return null;
+        }
+
+        // Generate unique filename with student ID and timestamp
+        const fileExt = file.name.split('.').pop();
+        const fileName = `${studentId}_${Date.now()}.${fileExt}`;
+        const filePath = `students/${fileName}`;
+
+        console.log('📤 Uploading photo to Supabase Storage:', filePath);
+
+        const { data, error } = await window.supabaseClient
+            .storage
+            .from('student-photos')
+            .upload(filePath, file, {
+                cacheControl: '3600',
+                upsert: false
+            });
+
+        if (error) {
+            console.error('Error uploading photo:', error);
+            throw error;
+        }
+
+        // Get public URL for the uploaded file
+        const { data: urlData } = window.supabaseClient
+            .storage
+            .from('student-photos')
+            .getPublicUrl(filePath);
+
+        console.log('✅ Photo uploaded successfully:', urlData.publicUrl);
+        return urlData.publicUrl;
+    },
+
+    // Delete student photo from Supabase Storage
+    async deleteStudentPhoto(photoUrl) {
+        if (!photoUrl) return true;
+
+        try {
+            // Extract file path from URL
+            // URL format: https://xxx.supabase.co/storage/v1/object/public/student-photos/students/filename.jpg
+            const urlParts = photoUrl.split('/student-photos/');
+            if (urlParts.length < 2) {
+                console.warn('Could not parse photo URL for deletion:', photoUrl);
+                return true;
+            }
+
+            const filePath = urlParts[1];
+            console.log('🗑️ Deleting photo from storage:', filePath);
+
+            const { error } = await window.supabaseClient
+                .storage
+                .from('student-photos')
+                .remove([filePath]);
+
+            if (error) {
+                console.error('Error deleting photo:', error);
+                // Don't throw - photo deletion failure shouldn't block other operations
+                return false;
+            }
+
+            console.log('✅ Photo deleted successfully');
+            return true;
+        } catch (err) {
+            console.error('Error in deleteStudentPhoto:', err);
+            return false;
+        }
+    },
+
+    /**
      * SEARCH
      */
 

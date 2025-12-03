@@ -708,6 +708,29 @@
                     </div>
                 </div>
 
+                <!-- Photo Upload -->
+                <div class="form-section">
+                    <h3 class="form-section-title" data-i18n="admin.modals.add.photo"></h3>
+                    <div class="photo-upload-container">
+                        <div class="photo-preview" id="editPhotoPreview">
+                            <i data-lucide="user" style="width: 64px; height: 64px; color: #94a3b8;"></i>
+                        </div>
+                        <div class="photo-upload-actions">
+                            <label for="editPhotoUpload" class="btn-upload">
+                                <i data-lucide="upload" style="width: 18px; height: 18px;"></i>
+                                <span data-i18n="admin.modals.add.uploadPhoto"></span>
+                            </label>
+                            <input type="file" id="editPhotoUpload" name="photo" accept="image/*" style="display: none;" onchange="previewEditPhoto(event)">
+                            <button type="button" id="editRemovePhotoBtn" class="btn-remove-photo" style="display: none;" onclick="removeEditPhoto()">
+                                <i data-lucide="trash-2" style="width: 16px; height: 16px;"></i>
+                                <span data-i18n="admin.modals.edit.removePhoto"></span>
+                            </button>
+                            <p class="upload-hint" data-i18n="admin.modals.add.uploadHint"></p>
+                        </div>
+                    </div>
+                    <input type="hidden" id="editCurrentPhotoUrl" name="currentPhotoUrl">
+                </div>
+
                 <!-- Branch and Coach Assignment -->
                 <div class="form-section">
                     <h3 class="form-section-title" data-i18n="admin.modals.add.branchCoach"></h3>

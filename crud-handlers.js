@@ -130,7 +130,7 @@ function closeStudentModal() {
 }
 
 // Delete student
-function deleteStudentConfirm(studentId) {
+async function deleteStudentConfirm(studentId) {
     const student = getStudentById(studentId);
     if (!student) {
         showError('Student not found');
@@ -139,15 +139,15 @@ function deleteStudentConfirm(studentId) {
 
     showDeleteConfirmation(
         `Are you sure you want to delete student "${student.firstName} ${student.lastName}"?`,
-        () => {
-            const result = deleteStudent(studentId);
-            if (result.success) {
+        async () => {
+            const result = await deleteStudent(studentId);
+            if (result && result.success) {
                 loadStudents();
                 loadStatistics();
                 populateFilterDropdowns();
                 showSuccess('admin.form.deleteSuccess');
             } else {
-                showError(result.error);
+                showError(result ? result.error : 'Failed to delete student');
             }
         }
     );

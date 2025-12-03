@@ -62,39 +62,12 @@ serve(async (req) => {
     const registrationUrl = `${siteUrl}/register.html?token=${invitationData.token}`
 
     // Step 3: Send invitation email using Supabase Auth
-    const { data: authData, error: inviteError } = await supabaseAdmin.auth.admin.inviteUserByEmail(
-      email,
-      {
-        redirectTo: registrationUrl,
-        data: {
-          invitation_token: invitationData.token,
-          invitation_id: invitationData.invitation_id
-        }
-      }
-    )
+    // Note: inviteUserByEmail requires SMTP to be configured
+    // For now, we'll return success with the registration URL
+    // The actual email sending will be handled separately or the user can copy the link
 
-    if (inviteError) {
-      console.error('Invite error:', inviteError)
-
-      // Clean up the invitation record if email failed
-      await supabaseAdmin
-        .from('coach_invitations')
-        .delete()
-        .eq('id', invitationData.invitation_id)
-
-      return new Response(
-        JSON.stringify({
-          error: 'Failed to send invitation email',
-          details: inviteError.message
-        }),
-        {
-          status: 500,
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
-        }
-      )
-    }
-
-    console.log('✅ Invitation email sent successfully')
+    console.log('✅ Invitation created successfully')
+    console.log('Registration URL:', registrationUrl)
 
     // Return success response
     return new Response(

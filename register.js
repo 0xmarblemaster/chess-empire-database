@@ -166,50 +166,34 @@
         hideMessages();
 
         try {
-            // User account was already created by inviteUserByEmail()
-            // We need to set their password using updateUser()
-            const { data: authData, error: updateError } = await window.supabaseClient.auth.updateUser({
-                password: password
+            // Call Edge Function to create user with auto-confirmed email
+            // This uses the admin API which bypasses email confirmation requirements
+            const supabaseUrl = 'https://papgcizhfkngubwofjuo.supabase.co';
+            const supabaseAnonKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InBhcGdjaXpoZmtuZ3Vid29manVvIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjE5MzAzNTEsImV4cCI6MjA3NzUwNjM1MX0.lN94-p4L3gUTU1vw_odZt6ruv_K40lOIKXXE80LIS_U';
+
+            const response = await fetch(`${supabaseUrl}/functions/v1/complete-registration`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${supabaseAnonKey}`
+                },
+                body: JSON.stringify({
+                    email: email,
+                    password: password,
+                    invitation_token: invitationToken
+                })
             });
 
-            if (updateError) throw updateError;
+            const result = await response.json();
 
-            console.log('✅ User password set:', authData.user.id);
-
-            // Mark invitation as used
-            const { error: invitationError } = await window.supabaseClient
-                .from('coach_invitations')
-                .update({ used: true })
-                .eq('token', invitationToken);
-
-            if (invitationError) {
-                console.error('Failed to mark invitation as used:', invitationError);
-                // Don't throw - account is created, this is just cleanup
+            if (!response.ok) {
+                throw new Error(result.error || 'Registration failed');
             }
 
-            // Create user role entry (default to coach so they can access dashboard)
-            const { error: roleError } = await window.supabaseClient
-                .from('user_roles')
-                .insert({
-                    user_id: authData.user.id,
-                    role: 'coach',
-                    can_view_all_students: false,
-                    can_edit_students: false,
-                    can_manage_branches: false,
-                    can_manage_coaches: false
-                });
-
-            if (roleError) {
-                console.error('Failed to create user role:', roleError);
-                // Don't throw - admin can create role manually
-            }
+            console.log('✅ User account created:', result.user_id);
+            console.log('✅ Registration completed successfully');
 
             showSuccess('Account created successfully! Redirecting to login page...');
-
-            // Sign out the user before redirecting to login
-            // This ensures the password update is committed and there are no session conflicts
-            await window.supabaseClient.auth.signOut();
-            console.log('✅ User signed out, redirecting to login page');
 
             // Redirect to login page
             setTimeout(() => {
