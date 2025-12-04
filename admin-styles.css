@@ -2113,16 +2113,15 @@ td {
         display: none;
     }
 
-    /* Mobile Stats Grid - Horizontal Scroll */
+    /* Mobile Stats Grid - 2x2 Grid Layout (Wise Style) */
     .stats-grid {
-        display: flex;
-        overflow-x: auto;
-        scroll-snap-type: x mandatory;
-        gap: 12px;
-        padding: 16px 20px;
-        margin: 0;
-        -webkit-overflow-scrolling: touch;
-        scrollbar-width: none;
+        display: grid !important;
+        grid-template-columns: repeat(2, 1fr) !important;
+        gap: 12px !important;
+        padding: 16px 20px !important;
+        margin: 0 !important;
+        overflow-x: visible !important;
+        scroll-snap-type: none !important;
     }
 
     .stats-grid::-webkit-scrollbar {
@@ -2130,10 +2129,9 @@ td {
     }
 
     .stat-card {
-        flex: 0 0 140px;
-        scroll-snap-align: start;
-        padding: 20px;
-        border-radius: 16px;
+        flex: none;
+        padding: 16px;
+        border-radius: 14px;
         border: 1px solid #e5e7eb;
         background: #ffffff;
         box-shadow: none;

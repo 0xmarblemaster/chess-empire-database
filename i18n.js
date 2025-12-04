@@ -57,6 +57,7 @@ const translations = {
         "common.languageRussian": "Русский",
         "common.languageToggle": "Switch language",
         "common.loading": "Searching...",
+        "common.years": "years",
 
         // Index
         "index.title": "Chess Empire - Student Database",
@@ -407,6 +408,7 @@ const translations = {
         "common.languageRussian": "Русский",
         "common.languageToggle": "Тілді ауыстыру",
         "common.loading": "Іздеу...",
+        "common.years": "жас",
         "index.title": "Chess Empire - Оқушылар базасы",
         "index.searchPlaceholder": "Оқушыны іздеу...",
         "index.noStudents": "Оқушылар табылмады",
@@ -714,6 +716,7 @@ const translations = {
         "common.languageRussian": "Русский",
         "common.languageToggle": "Сменить язык",
         "common.loading": "Поиск...",
+        "common.years": "лет",
 
         // Index
         "index.title": "Шахматная Империя — база учеников",
