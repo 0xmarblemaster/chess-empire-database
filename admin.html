@@ -34,13 +34,44 @@
         }
     </style>
 
+    <!-- Mobile Header (Wise Style) -->
+    <header class="mobile-header" id="mobileHeader">
+        <h1 class="mobile-header-title" id="mobileHeaderTitle" data-i18n="admin.header.students">Students</h1>
+        <div class="mobile-header-actions">
+            <button class="mobile-icon-btn" onclick="toggleMobileLanguageMenu(event)" id="mobileLanguageBtn">
+                <i data-lucide="globe"></i>
+            </button>
+            <button class="mobile-icon-btn" onclick="toggleMobileFilters()" id="mobileFilterBtn">
+                <i data-lucide="sliders-horizontal"></i>
+            </button>
+        </div>
+    </header>
+
+    <!-- Mobile Language Menu -->
+    <div class="mobile-language-menu" id="mobileLanguageMenu">
+        <button class="language-option" onclick="setLanguage('en'); closeMobileLanguageMenu();">
+            <span>🇬🇧</span> English
+        </button>
+        <button class="language-option" onclick="setLanguage('ru'); closeMobileLanguageMenu();">
+            <span>🇷🇺</span> Русский
+        </button>
+    </div>
+
+    <!-- Mobile Search -->
+    <div class="mobile-search-container" id="mobileSearchContainer">
+        <div class="mobile-search-box">
+            <i data-lucide="search"></i>
+            <input type="text" id="mobileSearchInput" data-i18n-placeholder="common.searchStudentsPlaceholder" placeholder="Search students...">
+        </div>
+    </div>
+
     <div class="dashboard-container">
         <!-- Sidebar -->
         <aside class="sidebar" id="sidebar">
             <div class="sidebar-logo">
-                <a href="index.html" style="display: flex; align-items: flex-end; gap: 0.75rem; text-decoration: none; cursor: pointer; transition: opacity 0.3s ease;" onmouseover="this.style.opacity='0.8'" onmouseout="this.style.opacity='1'">
-                    <img src="chess-empire-logo.png" alt="Chess Empire" class="logo-image" style="width: 22px; height: 36px; object-fit: contain;">
-                    <span class="logo-text-gradient" style="font-family: 'Clear Sans', sans-serif; font-size: 1.25rem; letter-spacing: 0.025em; font-weight: 600; padding-bottom: 1px;">Chess Empire</span>
+                <a href="index.html" style="display: flex; flex-direction: row; flex-wrap: nowrap; align-items: flex-end; justify-content: center; gap: 0; text-decoration: none; cursor: pointer; transition: opacity 0.3s ease; width: 100%; margin-left: -8px;" onmouseover="this.style.opacity='0.8'" onmouseout="this.style.opacity='1'">
+                    <img src="chess-empire-logo.png" alt="Chess Empire" class="logo-image" style="width: 63px; height: 63px; flex-shrink: 0; margin-right: -8px; margin-bottom: -12px;">
+                    <span class="logo-text-gradient" style="font-family: 'Clear Sans', sans-serif; font-size: 1.25rem; letter-spacing: 0.025em; font-weight: 600; line-height: 1; white-space: nowrap; margin-bottom: 5px;">Chess Empire</span>
                 </a>
             </div>
 
@@ -1048,6 +1079,31 @@
 
     <!-- Include CRUD Modals -->
     <div id="crud-modals-container"></div>
+
+    <!-- Mobile Bottom Navigation (Wise Style) -->
+    <nav class="mobile-bottom-nav" id="mobileBottomNav">
+        <div class="mobile-bottom-nav-items">
+            <button class="mobile-nav-item active" onclick="showMobileSection('students', event)" data-section="students">
+                <i data-lucide="users"></i>
+                <span data-i18n="admin.nav.students">Students</span>
+            </button>
+            <button class="mobile-nav-item" onclick="showMobileSection('coaches', event)" data-section="coaches">
+                <i data-lucide="user-check"></i>
+                <span data-i18n="admin.nav.coaches">Coaches</span>
+            </button>
+            <button class="mobile-nav-item add-btn" onclick="addNewStudent()">
+                <i data-lucide="plus"></i>
+            </button>
+            <button class="mobile-nav-item" onclick="showMobileSection('branches', event)" data-section="branches">
+                <i data-lucide="building"></i>
+                <span data-i18n="admin.nav.branches">Branches</span>
+            </button>
+            <button class="mobile-nav-item" onclick="showMobileSection('settings', event)" data-section="settings">
+                <i data-lucide="settings"></i>
+                <span data-i18n="admin.nav.settings">More</span>
+            </button>
+        </div>
+    </nav>
 
     <script src="toast-notifications.js?v=1762500000"></script>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>

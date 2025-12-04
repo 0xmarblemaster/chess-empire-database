@@ -70,11 +70,31 @@
             z-index: 10;
         }
 
-        .login-logo {
-            width: 56px;
-            height: 92px;
-            margin: 0 auto 1rem;
+        .login-logo-wrapper {
+            width: 160px;
+            height: 160px;
+            margin: 15px auto 6px;
             display: block;
+            position: relative;
+            /* Gradient background matching the text */
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            /* Use the logo as a mask - the logo shape will show the gradient */
+            -webkit-mask-image: url('chess-empire-logo.png');
+            -webkit-mask-size: contain;
+            -webkit-mask-repeat: no-repeat;
+            -webkit-mask-position: center;
+            mask-image: url('chess-empire-logo.png');
+            mask-size: contain;
+            mask-repeat: no-repeat;
+            mask-position: center;
+        }
+
+        .login-logo {
+            width: 160px;
+            height: 160px;
+            display: block;
+            /* Hide the original image, the mask will show the gradient */
+            opacity: 0;
         }
 
         .login-title {
@@ -357,7 +377,9 @@
         <div class="chess-pattern"></div>
 
         <div class="login-card">
-            <img src="chess-empire-logo.png" alt="Chess Empire" class="login-logo">
+            <div class="login-logo-wrapper">
+                <img src="chess-empire-logo.png" alt="Chess Empire" class="login-logo">
+            </div>
             <h1 class="login-title">Chess Empire</h1>
             <p class="login-subtitle" data-i18n="register.subtitle">Create your account</p>
 

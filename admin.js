@@ -738,7 +738,7 @@ function refreshCoachesListView() {
         const studentCount = studentsArray.filter(s => s.coach === coachFullName).length;
 
         return `
-            <div class="mobile-student-card">
+            <div class="mobile-student-card" onclick="viewCoach('${coachFullName}')">
                 <div class="mobile-card-header">
                     <div class="mobile-card-avatar" style="background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%);">
                         ${coach.firstName[0]}${coach.lastName[0]}
@@ -2071,6 +2071,208 @@ document.addEventListener('keydown', function(event) {
         if (editModal && editModal.classList.contains('active')) {
             closeEditStudentModal();
         }
+    }
+});
+
+// ========================================
+// MOBILE NAVIGATION & UI FUNCTIONS
+// ========================================
+
+// Mobile section titles for header
+const mobileSectionTitles = {
+    students: 'admin.header.students',
+    coaches: 'admin.header.coaches',
+    branches: 'admin.header.branches',
+    settings: 'admin.header.settings'
+};
+
+// Show mobile section (called from bottom nav)
+function showMobileSection(section, event) {
+    if (event) {
+        event.preventDefault();
+    }
+
+    // Update mobile header title
+    updateMobileHeaderTitle(section);
+
+    // Update mobile bottom nav active state
+    const mobileNavItems = document.querySelectorAll('.mobile-nav-item');
+    mobileNavItems.forEach(item => {
+        item.classList.remove('active');
+        if (item.getAttribute('data-section') === section) {
+            item.classList.add('active');
+        }
+    });
+
+    // Show/hide mobile search based on section
+    const mobileSearchContainer = document.getElementById('mobileSearchContainer');
+    if (mobileSearchContainer) {
+        if (section === 'students' || section === 'coaches') {
+            mobileSearchContainer.style.display = 'block';
+        } else {
+            mobileSearchContainer.style.display = 'none';
+        }
+    }
+
+    // Hide filters when switching sections
+    const filters = document.querySelector('.filters');
+    if (filters) {
+        filters.classList.remove('mobile-expanded');
+    }
+
+    // Call the existing showSection function
+    showSection(section);
+}
+
+// Update mobile header title
+function updateMobileHeaderTitle(section) {
+    const mobileHeaderTitle = document.getElementById('mobileHeaderTitle');
+    if (mobileHeaderTitle) {
+        const titleKey = mobileSectionTitles[section] || 'admin.header.students';
+        mobileHeaderTitle.textContent = t(titleKey);
+        mobileHeaderTitle.setAttribute('data-i18n', titleKey);
+    }
+}
+
+// Toggle mobile filters visibility
+function toggleMobileFilters() {
+    const filters = document.querySelector('.filters');
+    const filterBtn = document.getElementById('mobileFilterBtn');
+
+    if (filters) {
+        filters.classList.toggle('mobile-expanded');
+
+        // Update button state
+        if (filterBtn) {
+            if (filters.classList.contains('mobile-expanded')) {
+                filterBtn.classList.add('active');
+            } else {
+                filterBtn.classList.remove('active');
+            }
+        }
+    }
+}
+
+// Toggle mobile language menu
+function toggleMobileLanguageMenu(event) {
+    if (event) {
+        event.stopPropagation();
+    }
+    const menu = document.getElementById('mobileLanguageMenu');
+    if (menu) {
+        menu.classList.toggle('open');
+
+        // Update active state based on current language
+        const currentLang = localStorage.getItem('language') || 'en';
+        menu.querySelectorAll('.language-option').forEach(btn => {
+            btn.classList.remove('active');
+            if ((currentLang === 'en' && btn.textContent.includes('English')) ||
+                (currentLang === 'ru' && btn.textContent.includes('Русский'))) {
+                btn.classList.add('active');
+            }
+        });
+    }
+}
+
+// Close mobile language menu
+function closeMobileLanguageMenu() {
+    const menu = document.getElementById('mobileLanguageMenu');
+    if (menu) {
+        menu.classList.remove('open');
+    }
+}
+
+// Close mobile language menu when clicking outside
+document.addEventListener('click', function(event) {
+    const menu = document.getElementById('mobileLanguageMenu');
+    const btn = document.getElementById('mobileLanguageBtn');
+    if (menu && menu.classList.contains('open')) {
+        if (!menu.contains(event.target) && event.target !== btn && !btn.contains(event.target)) {
+            closeMobileLanguageMenu();
+        }
+    }
+});
+
+// Close mobile menu (legacy sidebar)
+function closeMobileMenu() {
+    const sidebar = document.querySelector('.sidebar');
+    const overlay = document.querySelector('.mobile-overlay');
+
+    if (sidebar) {
+        sidebar.classList.remove('mobile-open');
+    }
+    if (overlay) {
+        overlay.classList.remove('active');
+    }
+}
+
+// Sync mobile search with desktop search
+function initMobileSearch() {
+    const mobileSearchInput = document.getElementById('mobileSearchInput');
+    const desktopSearchInput = document.getElementById('searchInput');
+
+    if (mobileSearchInput && desktopSearchInput) {
+        // Sync mobile search to desktop
+        mobileSearchInput.addEventListener('input', (e) => {
+            const value = e.target.value;
+            desktopSearchInput.value = value;
+
+            // Trigger the search
+            clearTimeout(window.mobileSearchTimeout);
+            window.mobileSearchTimeout = setTimeout(() => {
+                currentFilters.search = value.toLowerCase();
+                loadStudents();
+            }, 300);
+        });
+
+        // Sync desktop search to mobile
+        desktopSearchInput.addEventListener('input', () => {
+            mobileSearchInput.value = desktopSearchInput.value;
+        });
+    }
+}
+
+// Initialize mobile UI on page load
+function initMobileUI() {
+    // Check if on mobile
+    const isMobile = window.innerWidth <= 768;
+
+    if (isMobile) {
+        // Set initial header title
+        updateMobileHeaderTitle('students');
+
+        // Hide mobile search initially (will show for students)
+        const mobileSearchContainer = document.getElementById('mobileSearchContainer');
+        if (mobileSearchContainer) {
+            mobileSearchContainer.style.display = 'block';
+        }
+    }
+
+    // Initialize mobile search sync
+    initMobileSearch();
+
+    // Refresh Lucide icons for mobile nav
+    if (typeof lucide !== 'undefined') {
+        setTimeout(() => lucide.createIcons(), 100);
+    }
+}
+
+// Call initMobileUI when DOM is ready
+document.addEventListener('DOMContentLoaded', function() {
+    initMobileUI();
+});
+
+// Also initialize on window resize (in case user rotates device)
+window.addEventListener('resize', function() {
+    const isMobile = window.innerWidth <= 768;
+    const mobileBottomNav = document.getElementById('mobileBottomNav');
+    const mobileHeader = document.getElementById('mobileHeader');
+
+    if (mobileBottomNav) {
+        mobileBottomNav.style.display = isMobile ? 'block' : 'none';
+    }
+    if (mobileHeader) {
+        mobileHeader.style.display = isMobile ? 'flex' : 'none';
     }
 });
 
