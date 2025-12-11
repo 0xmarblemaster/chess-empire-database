@@ -301,10 +301,12 @@ function getBestRankTier(rankings) {
 
 // Render level-based rank info boxes for the info grid
 // Shows position like "5 / 70" instead of percentiles
+// Returns object with separate branch and school rank HTML for mobile ordering
 function renderLevelRankInfoBoxes(rankings) {
-    if (!rankings) return '';
+    if (!rankings) return { branchRankHTML: '', schoolRankHTML: '' };
 
-    let infoBoxesHTML = '';
+    let branchRankHTML = '';
+    let schoolRankHTML = '';
 
     // Branch-level rank based on level/lesson progress
     const branchRank = rankings.branchLevel?.rankInBranch;
@@ -323,8 +325,8 @@ function renderLevelRankInfoBoxes(rankings) {
             ? `<span class="branch-rank-badge branch-rank-badge--${tierInfo.tier}">${tierInfo.label}</span>`
             : '';
 
-        infoBoxesHTML += `
-            <div class="info-item rank-info-item ${tierClass} ${animatedClass}">
+        branchRankHTML = `
+            <div class="info-item rank-info-item mobile-order-1 ${tierClass} ${animatedClass}">
                 ${topBadgeHTML}
                 <div class="info-label">
                     <i data-lucide="users" style="width: 14px; height: 14px;"></i>
@@ -352,8 +354,8 @@ function renderLevelRankInfoBoxes(rankings) {
             ? `<span class="school-rank-badge school-rank-badge--${tierInfo.tier}">${tierInfo.label}</span>`
             : '';
 
-        infoBoxesHTML += `
-            <div class="info-item rank-info-item ${tierClass} ${animatedClass}">
+        schoolRankHTML = `
+            <div class="info-item rank-info-item mobile-order-2 ${tierClass} ${animatedClass}">
                 ${topBadgeHTML}
                 <div class="info-label">
                     <i data-lucide="school" style="width: 14px; height: 14px;"></i>
@@ -364,7 +366,7 @@ function renderLevelRankInfoBoxes(rankings) {
         `;
     }
 
-    return infoBoxesHTML;
+    return { branchRankHTML, schoolRankHTML };
 }
 
 // Switch tab
@@ -703,8 +705,52 @@ async function renderProfile() {
 
         <!-- Tab Content -->
         <div class="tab-content active" id="tab-overview">
-            <div class="info-grid">
-                <div class="info-item">
+            <div class="overview-mobile-grid">
+                <!-- Mobile order: 1. Branch rank, 2. School rank -->
+                ${renderLevelRankInfoBoxes(rankings).branchRankHTML}
+                ${renderLevelRankInfoBoxes(rankings).schoolRankHTML}
+
+                <!-- Mobile order: 3. Razryad -->
+                <div class="info-item razryad-info-item tier-${razryadConfig.tier} mobile-order-3">
+                    <div class="info-label">
+                        <i data-lucide="award" style="width: 14px; height: 14px;"></i>
+                        ${t('student.razryad')}
+                    </div>
+                    <div class="info-value">${razryadLabel}</div>
+                </div>
+
+                <!-- Mobile order: 4. Learning Progress -->
+                <div class="progress-section mobile-order-4">
+                    <h2 class="section-title">
+                        <i data-lucide="trending-up" style="width: 28px; height: 28px; color: #d97706;"></i>
+                        ${t('student.learningProgress')}
+                    </h2>
+
+                    <div class="progress-item">
+                        <div class="progress-header">
+                            <div class="progress-label">${t('student.currentLevel')}</div>
+                            <div class="progress-percentage">${levelProgress}%</div>
+                        </div>
+                        <div class="progress-detail">${t('student.levelDetail', { current: student.currentLevel })}</div>
+                        <div class="progress-bar-container">
+                            <div class="progress-bar" style="width: 0%" data-target="${levelProgress}"></div>
+                        </div>
+                    </div>
+
+                    <div class="progress-item">
+                        <div class="progress-header">
+                            <div class="progress-label">${t('student.currentLesson')}</div>
+                            <div class="progress-percentage">${lessonProgress}%</div>
+                        </div>
+                        <div class="progress-detail">${t('student.lessonDetail', { current: student.currentLesson, total: totalLessons })}</div>
+                        <div class="progress-bar-container">
+                            <div class="progress-bar" style="width: 0%" data-target="${lessonProgress}"></div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Mobile order: 5. Age -->
+                <div class="info-item mobile-order-5">
                     <div class="info-label">
                         <i data-lucide="calendar" style="width: 14px; height: 14px;"></i>
                         ${t('student.age')}
@@ -712,7 +758,8 @@ async function renderProfile() {
                     <div class="info-value">${t('student.ageValue', { count: student.age })}</div>
                 </div>
 
-                <div class="info-item">
+                <!-- Mobile order: 6. Branch -->
+                <div class="info-item mobile-order-6">
                     <div class="info-label">
                         <i data-lucide="building" style="width: 14px; height: 14px;"></i>
                         ${t('student.branch')}
@@ -720,7 +767,8 @@ async function renderProfile() {
                     <div class="info-value">${i18n.translateBranchName(student.branch)}</div>
                 </div>
 
-                <div class="info-item">
+                <!-- Mobile order: 7. Coach -->
+                <div class="info-item mobile-order-7">
                     <div class="info-label">
                         <i data-lucide="user" style="width: 14px; height: 14px;"></i>
                         ${t('student.coach')}
@@ -728,59 +776,8 @@ async function renderProfile() {
                     <div class="info-value">${student.coach}</div>
                 </div>
 
-                <div class="info-item razryad-info-item tier-${razryadConfig.tier}">
-                    <div class="info-label">
-                        <i data-lucide="award" style="width: 14px; height: 14px;"></i>
-                        ${t('student.razryad')}
-                    </div>
-                    <div class="info-value">${razryadLabel}</div>
-                </div>
-                ${renderLevelRankInfoBoxes(rankings)}
-            </div>
-
-            <div class="progress-section">
-                <h2 class="section-title">
-                    <i data-lucide="trending-up" style="width: 28px; height: 28px; color: #d97706;"></i>
-                    ${t('student.learningProgress')}
-                </h2>
-
-                <div class="progress-item">
-                    <div class="progress-header">
-                        <div class="progress-label">${t('student.currentLevel')}</div>
-                        <div class="progress-percentage">${levelProgress}%</div>
-                    </div>
-                    <div class="progress-detail">${t('student.levelDetail', { current: student.currentLevel })}</div>
-                    <div class="progress-bar-container">
-                        <div class="progress-bar" style="width: 0%" data-target="${levelProgress}"></div>
-                    </div>
-                </div>
-
-                <div class="progress-item">
-                    <div class="progress-header">
-                        <div class="progress-label">${t('student.currentLesson')}</div>
-                        <div class="progress-percentage">${lessonProgress}%</div>
-                    </div>
-                    <div class="progress-detail">${t('student.lessonDetail', { current: student.currentLesson, total: totalLessons })}</div>
-                    <div class="progress-bar-container">
-                        <div class="progress-bar" style="width: 0%" data-target="${lessonProgress}"></div>
-                    </div>
-                </div>
-            </div>
-
-            <div class="quick-stats">
-                ${currentRating ? `
-                <div class="quick-stat-card">
-                    <div class="quick-stat-icon" style="background: ${leagueInfo.color}20; color: ${leagueInfo.color};">
-                        <i data-lucide="trophy" style="width: 20px; height: 20px;"></i>
-                    </div>
-                    <div class="quick-stat-info">
-                        <div class="quick-stat-value">${currentRating}</div>
-                        <div class="quick-stat-label">${t('stats.rating') || 'Rating'}</div>
-                    </div>
-                </div>
-                ` : ''}
-
-                <div class="quick-stat-card">
+                <!-- Mobile order: 8. Bots defeated -->
+                <div class="quick-stat-card mobile-order-8">
                     <div class="quick-stat-icon" style="background: #10b98120; color: #10b981;">
                         <i data-lucide="bot" style="width: 20px; height: 20px;"></i>
                     </div>
@@ -790,7 +787,8 @@ async function renderProfile() {
                     </div>
                 </div>
 
-                <div class="quick-stat-card">
+                <!-- Mobile order: 9. Best score -->
+                <div class="quick-stat-card mobile-order-9">
                     <div class="quick-stat-icon" style="background: #8b5cf620; color: #8b5cf6;">
                         <i data-lucide="zap" style="width: 20px; height: 20px;"></i>
                     </div>
@@ -799,6 +797,19 @@ async function renderProfile() {
                         <div class="quick-stat-label">${t('survival.bestScore') || 'Best Survival'}</div>
                     </div>
                 </div>
+
+                ${currentRating ? `
+                <!-- Rating card (hidden on mobile, shown on desktop) -->
+                <div class="quick-stat-card mobile-hidden">
+                    <div class="quick-stat-icon" style="background: ${leagueInfo.color}20; color: ${leagueInfo.color};">
+                        <i data-lucide="trophy" style="width: 20px; height: 20px;"></i>
+                    </div>
+                    <div class="quick-stat-info">
+                        <div class="quick-stat-value">${currentRating}</div>
+                        <div class="quick-stat-label">${t('stats.rating') || 'Rating'}</div>
+                    </div>
+                </div>
+                ` : ''}
             </div>
         </div>
 
