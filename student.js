@@ -223,9 +223,13 @@ function renderLevelRankInfoBoxes(rankings) {
 
     let infoBoxesHTML = '';
 
+    // Get both percentiles for comparison
+    const branchPercentile = rankings.branchLevel?.percentile;
+    const schoolPercentile = rankings.schoolLevel?.percentile;
+
     // Branch-level rank based on level/lesson progress
-    if (rankings.branchLevel?.percentile) {
-        const branchLevelRank = formatPercentile(rankings.branchLevel.percentile);
+    if (branchPercentile) {
+        const branchLevelRank = formatPercentile(branchPercentile);
         if (branchLevelRank) {
             infoBoxesHTML += `
                 <div class="info-item rank-info-item tier-${branchLevelRank.tier}">
@@ -239,9 +243,11 @@ function renderLevelRankInfoBoxes(rankings) {
         }
     }
 
-    // School-wide level rank based on level/lesson progress
-    if (rankings.schoolLevel?.percentile) {
-        const schoolLevelRank = formatPercentile(rankings.schoolLevel.percentile);
+    // School-wide level rank - only show if it's NOT better than branch rank
+    // (School rank should logically be equal or worse than branch rank)
+    // Higher percentile = better rank, so school percentile should be <= branch percentile
+    if (schoolPercentile && (!branchPercentile || schoolPercentile <= branchPercentile)) {
+        const schoolLevelRank = formatPercentile(schoolPercentile);
         if (schoolLevelRank) {
             infoBoxesHTML += `
                 <div class="info-item rank-info-item tier-${schoolLevelRank.tier}">
