@@ -206,59 +206,162 @@ function getSurvivalInfo(score) {
     return { label: 'Beginner', tier: 'beginner', color: '#94a3b8' };
 }
 
-// Format percentile for display
-function formatPercentile(percentile) {
-    if (!percentile) return null;
-    const rounded = Math.round(100 - percentile);
-    if (rounded <= 1) return { label: 'Top 1%', tier: 'diamond' };
-    if (rounded <= 5) return { label: 'Top 5%', tier: 'gold' };
-    if (rounded <= 10) return { label: 'Top 10%', tier: 'silver' };
-    if (rounded <= 25) return { label: 'Top 25%', tier: 'bronze' };
-    return { label: `Top ${rounded}%`, tier: 'none' };
+// Format rank position for display (e.g., "5 / 70")
+function formatRankPosition(rank, total) {
+    if (!rank || !total) return null;
+    return `${rank} / ${total}`;
+}
+
+// Get school rank tier based on position
+// Returns tier info for top 10, 30, 50, 100 students
+function getSchoolRankTier(rank) {
+    if (!rank || rank <= 0) return null;
+
+    if (rank <= 10) {
+        return {
+            tier: 'platinum',
+            label: 'TOP 10',
+            animated: true
+        };
+    }
+    if (rank <= 30) {
+        return {
+            tier: 'gold',
+            label: 'TOP 30',
+            animated: false
+        };
+    }
+    if (rank <= 50) {
+        return {
+            tier: 'silver',
+            label: 'TOP 50',
+            animated: false
+        };
+    }
+    if (rank <= 100) {
+        return {
+            tier: 'bronze',
+            label: 'TOP 100',
+            animated: false
+        };
+    }
+    return null;
+}
+
+// Get branch rank tier based on position
+// Returns tier info for top 3, 10, 20 students in branch
+function getBranchRankTier(rank) {
+    if (!rank || rank <= 0) return null;
+
+    if (rank <= 3) {
+        return {
+            tier: 'gold',
+            label: 'TOP 3',
+            animated: true
+        };
+    }
+    if (rank <= 10) {
+        return {
+            tier: 'silver',
+            label: 'TOP 10',
+            animated: true
+        };
+    }
+    if (rank <= 20) {
+        return {
+            tier: 'bronze',
+            label: 'TOP 20',
+            animated: false
+        };
+    }
+    return null;
+}
+
+// Get the best tier for avatar ring based on both branch and school rankings
+// Priority: platinum > gold > silver > bronze > none
+function getBestRankTier(rankings) {
+    const tierPriority = { 'platinum': 4, 'gold': 3, 'silver': 2, 'bronze': 1, 'none': 0 };
+
+    // Get school rank tier
+    const schoolRank = rankings?.schoolLevel?.rankInSchool;
+    const schoolTierInfo = getSchoolRankTier(schoolRank);
+    const schoolTier = schoolTierInfo?.tier || 'none';
+
+    // Get branch rank tier
+    const branchRank = rankings?.branchLevel?.rankInBranch;
+    const branchTierInfo = getBranchRankTier(branchRank);
+    const branchTier = branchTierInfo?.tier || 'none';
+
+    // Return the better tier
+    if (tierPriority[schoolTier] >= tierPriority[branchTier]) {
+        return schoolTier;
+    }
+    return branchTier;
 }
 
 // Render level-based rank info boxes for the info grid
+// Shows position like "5 / 70" instead of percentiles
 function renderLevelRankInfoBoxes(rankings) {
     if (!rankings) return '';
 
     let infoBoxesHTML = '';
 
-    // Get both percentiles for comparison
-    const branchPercentile = rankings.branchLevel?.percentile;
-    const schoolPercentile = rankings.schoolLevel?.percentile;
-
     // Branch-level rank based on level/lesson progress
-    if (branchPercentile) {
-        const branchLevelRank = formatPercentile(branchPercentile);
-        if (branchLevelRank) {
-            infoBoxesHTML += `
-                <div class="info-item rank-info-item tier-${branchLevelRank.tier}">
-                    <div class="info-label">
-                        <i data-lucide="users" style="width: 14px; height: 14px;"></i>
-                        ${t('rankings.branchRank') || 'Branch Rank'}
-                    </div>
-                    <div class="info-value rank-value">${branchLevelRank.label}</div>
+    const branchRank = rankings.branchLevel?.rankInBranch;
+    const branchTotal = rankings.branchLevel?.totalInBranch;
+
+    if (branchRank && branchTotal) {
+        const rankLabel = formatRankPosition(branchRank, branchTotal);
+        const tierInfo = getBranchRankTier(branchRank);
+
+        // Build CSS classes
+        const tierClass = tierInfo ? `branch-rank-${tierInfo.tier}` : '';
+        const animatedClass = tierInfo?.animated ? 'branch-rank-animated' : '';
+
+        // Top badge HTML
+        const topBadgeHTML = tierInfo
+            ? `<span class="branch-rank-badge branch-rank-badge--${tierInfo.tier}">${tierInfo.label}</span>`
+            : '';
+
+        infoBoxesHTML += `
+            <div class="info-item rank-info-item ${tierClass} ${animatedClass}">
+                ${topBadgeHTML}
+                <div class="info-label">
+                    <i data-lucide="users" style="width: 14px; height: 14px;"></i>
+                    ${t('rankings.branchRank') || 'Branch Rank'}
                 </div>
-            `;
-        }
+                <div class="info-value rank-value">${rankLabel}</div>
+            </div>
+        `;
     }
 
-    // School-wide level rank - only show if it's NOT better than branch rank
-    // (School rank should logically be equal or worse than branch rank)
-    // Higher percentile = better rank, so school percentile should be <= branch percentile
-    if (schoolPercentile && (!branchPercentile || schoolPercentile <= branchPercentile)) {
-        const schoolLevelRank = formatPercentile(schoolPercentile);
-        if (schoolLevelRank) {
-            infoBoxesHTML += `
-                <div class="info-item rank-info-item tier-${schoolLevelRank.tier}">
-                    <div class="info-label">
-                        <i data-lucide="school" style="width: 14px; height: 14px;"></i>
-                        ${t('rankings.schoolRank') || 'School Rank'}
-                    </div>
-                    <div class="info-value rank-value">${schoolLevelRank.label}</div>
+    // School-wide level rank with top tier distinction
+    const schoolRank = rankings.schoolLevel?.rankInSchool;
+    const schoolTotal = rankings.schoolLevel?.totalInSchool;
+
+    if (schoolRank && schoolTotal) {
+        const rankLabel = formatRankPosition(schoolRank, schoolTotal);
+        const tierInfo = getSchoolRankTier(schoolRank);
+
+        // Build CSS classes
+        const tierClass = tierInfo ? `school-rank-${tierInfo.tier}` : '';
+        const animatedClass = tierInfo?.animated ? 'school-rank-animated' : '';
+
+        // Top badge HTML
+        const topBadgeHTML = tierInfo
+            ? `<span class="school-rank-badge school-rank-badge--${tierInfo.tier}">${tierInfo.label}</span>`
+            : '';
+
+        infoBoxesHTML += `
+            <div class="info-item rank-info-item ${tierClass} ${animatedClass}">
+                ${topBadgeHTML}
+                <div class="info-label">
+                    <i data-lucide="school" style="width: 14px; height: 14px;"></i>
+                    ${t('rankings.schoolRank') || 'School Rank'}
                 </div>
-            `;
-        }
+                <div class="info-value rank-value">${rankLabel}</div>
+            </div>
+        `;
     }
 
     return infoBoxesHTML;
@@ -498,20 +601,21 @@ async function renderProfile() {
     const leagueInfo = getLeagueInfo(currentRating);
     const leagueTier = leagueInfo.tier || 'none';
 
-    // Get razryad tier for avatar ring
+    // Get razryad config for razryad info item styling
     const razryadConfig = typeof window.getRazryadConfig === 'function'
         ? window.getRazryadConfig(student.razryad)
         : { tier: 'none' };
-    const highestTier = typeof window.getHighestTier === 'function'
-        ? window.getHighestTier(student.razryad, leagueTier)
-        : leagueTier;
 
-    // Create avatar HTML with tier ring
+    // Get avatar ring tier based on rankings (best of branch or school rank)
+    const rankings = studentProfileData?.rankings || {};
+    const avatarRingTier = getBestRankTier(rankings);
+
+    // Create avatar HTML with ranking-based tier ring
     const avatarHTML = student.photoUrl
-        ? `<div class="avatar avatar-ring--${highestTier}" style="background: none; padding: 0; overflow: hidden;">
+        ? `<div class="avatar avatar-ring--${avatarRingTier}" style="background: none; padding: 0; overflow: hidden;">
                <img src="${student.photoUrl}" alt="${student.firstName}" style="width: 100%; height: 100%; object-fit: cover; border-radius: 50%;">
            </div>`
-        : `<div class="avatar avatar-ring--${highestTier}">${initials}</div>`;
+        : `<div class="avatar avatar-ring--${avatarRingTier}">${initials}</div>`;
 
     // Check if user can edit and add edit button
     const hasEditPermission = canEditStudent();
@@ -530,8 +634,7 @@ async function renderProfile() {
            </div>`
         : '';
 
-    // Rank badges
-    const rankings = studentProfileData?.rankings || {};
+    // Rank badges (using rankings already declared above)
     let rankBadgesHTML = '';
 
     if (rankings.branch?.percentile) {

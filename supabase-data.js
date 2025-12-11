@@ -976,40 +976,40 @@ const supabaseData = {
     },
 
     // Get student's LEVEL-based ranking within their branch
+    // Returns rank position (e.g., 5 out of 70) based on Level and Lesson
     async getStudentBranchLevelRank(studentId) {
         const { data, error } = await window.supabaseClient
             .rpc('get_student_branch_level_rank', { p_student_id: studentId });
 
         if (error) {
             console.error('Error fetching branch level rank:', error);
-            return { totalInBranch: 0, rankInBranch: 0, percentile: 0, currentLevel: 0, currentLesson: 0 };
+            return { totalInBranch: 0, rankInBranch: 0, currentLevel: 0, currentLesson: 0 };
         }
 
         const result = data?.[0] || {};
         return {
             totalInBranch: result.total_in_branch || 0,
             rankInBranch: result.rank_in_branch || 0,
-            percentile: result.percentile || 0,
             currentLevel: result.current_level || 0,
             currentLesson: result.current_lesson || 0
         };
     },
 
     // Get student's LEVEL-based school-wide ranking
+    // Returns rank position (e.g., 50 out of 618) based on Level and Lesson
     async getStudentSchoolLevelRank(studentId) {
         const { data, error } = await window.supabaseClient
             .rpc('get_student_school_level_rank', { p_student_id: studentId });
 
         if (error) {
             console.error('Error fetching school level rank:', error);
-            return { totalInSchool: 0, rankInSchool: 0, percentile: 0, currentLevel: 0, currentLesson: 0 };
+            return { totalInSchool: 0, rankInSchool: 0, currentLevel: 0, currentLesson: 0 };
         }
 
         const result = data?.[0] || {};
         return {
             totalInSchool: result.total_in_school || 0,
             rankInSchool: result.rank_in_school || 0,
-            percentile: result.percentile || 0,
             currentLevel: result.current_level || 0,
             currentLesson: result.current_lesson || 0
         };
