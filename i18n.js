@@ -816,8 +816,8 @@ const translations = {
         "rankings.levelInBranch": "деңгей бойынша бөлімшеде",
         "rankings.levelInSchool": "деңгей бойынша мектепте",
         "rankings.topPercent": "Үздік {{percent}}%",
-        "rankings.branchRank": "Бөлімше рейтингі",
-        "rankings.schoolRank": "Мектеп рейтингі",
+        "rankings.branchRank": "Бөлімше рангі",
+        "rankings.schoolRank": "Мектеп рангі",
 
         // Bots
         "bots.progress": "Бот прогресі",
@@ -1280,8 +1280,8 @@ const translations = {
         "rankings.levelInBranch": "по уровню в филиале",
         "rankings.levelInSchool": "по уровню в школе",
         "rankings.topPercent": "Топ {{percent}}%",
-        "rankings.branchRank": "Рейтинг в филиале",
-        "rankings.schoolRank": "Рейтинг в школе",
+        "rankings.branchRank": "Ранг в филиале",
+        "rankings.schoolRank": "Ранг в школе",
 
         // Bots
         "bots.progress": "Прогресс ботов",
