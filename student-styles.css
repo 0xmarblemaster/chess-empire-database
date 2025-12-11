@@ -82,6 +82,44 @@ body {
     transform: translateX(-4px);
 }
 
+.nav-buttons {
+    display: flex;
+    gap: 0.75rem;
+    margin-bottom: 2rem;
+    flex-wrap: wrap;
+}
+
+.nav-buttons .back-button {
+    margin-bottom: 0;
+}
+
+.dashboard-button {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.75rem 1.25rem;
+    background: #059669;
+    border: none;
+    border-radius: 9999px;
+    color: white;
+    font-weight: 600;
+    font-size: 0.9375rem;
+    cursor: pointer;
+    transition: all 0.2s;
+    text-decoration: none;
+    box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -1px rgb(0 0 0 / 0.06);
+}
+
+.dashboard-button:hover {
+    background: #047857;
+    transform: translateY(-2px);
+    box-shadow: 0 10px 15px -3px rgb(0 0 0 / 0.15), 0 4px 6px -2px rgb(0 0 0 / 0.08);
+}
+
+.dashboard-button:active {
+    transform: translateY(1px) scale(0.97);
+}
+
 .profile-container {
     max-width: 800px;
     margin: 0 auto;
@@ -114,6 +152,37 @@ body {
     margin-bottom: 3rem;
     padding-bottom: 2rem;
     border-bottom: 2px solid #f1f5f9;
+    position: relative;
+}
+
+.edit-button {
+    position: absolute;
+    top: 0;
+    right: 0;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.625rem 1rem;
+    background: white;
+    border: 1px solid #e2e8f0;
+    border-radius: 0.75rem;
+    color: #475569;
+    font-weight: 600;
+    font-size: 0.875rem;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+}
+
+.edit-button:hover {
+    background: #f8fafc;
+    border-color: #cbd5e1;
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+}
+
+.edit-button:active {
+    transform: translateY(0);
 }
 
 .avatar {
@@ -341,8 +410,17 @@ body {
         padding: 1rem;
     }
 
+    .nav-buttons {
+        margin-bottom: 1.5rem;
+    }
+
     .back-button {
         margin-bottom: 1.5rem;
+        font-size: 0.875rem;
+        padding: 0.625rem 1rem;
+    }
+
+    .dashboard-button {
         font-size: 0.875rem;
         padding: 0.625rem 1rem;
     }
@@ -358,6 +436,18 @@ body {
         gap: 1.5rem;
         margin-bottom: 2rem;
         padding-bottom: 1.5rem;
+        padding-top: 2.5rem;
+    }
+
+    .edit-button {
+        top: 0;
+        right: 0;
+        padding: 0.5rem 0.875rem;
+        font-size: 0.8125rem;
+    }
+
+    .edit-button-text {
+        display: none;
     }
 
     .avatar {
@@ -490,5 +580,918 @@ body {
         padding: 0.5rem 0.875rem;
         width: 100%;
         justify-content: center;
+    }
+}
+
+/* Edit Modal Styles */
+/* Modal styles are now handled by modal-styles.css */
+/* The edit modal uses the shared modal-styles.css for consistent styling with admin dashboard */
+
+/* ============================================
+   LEAGUE TIER CARD STYLES
+   ============================================ */
+
+.tier-card--none {
+    background: white;
+}
+
+.tier-card--bronze {
+    background: linear-gradient(135deg, #fef3c7 0%, #fed7aa 100%);
+    border: 2px solid #cd7f32;
+}
+
+.tier-card--silver {
+    background: linear-gradient(135deg, #f1f5f9 0%, #e2e8f0 100%);
+    border: 2px solid #c0c0c0;
+}
+
+.tier-card--gold {
+    background: linear-gradient(135deg, #fef9c3 0%, #fde68a 100%);
+    border: 2px solid #ffd700;
+    box-shadow: 0 0 20px rgba(255, 215, 0, 0.15);
+}
+
+.tier-card--diamond {
+    background: linear-gradient(135deg, #e0f2fe 0%, #bae6fd 100%);
+    border: 2px solid #0ea5e9;
+    box-shadow: 0 0 25px rgba(14, 165, 233, 0.2);
+}
+
+/* ============================================
+   AVATAR TIER RINGS
+   ============================================ */
+
+.avatar-ring--none {
+    box-shadow: 0 10px 25px -5px rgb(102 126 234 / 0.4);
+}
+
+.avatar-ring--bronze {
+    box-shadow: 0 0 0 4px #cd7f32, 0 10px 25px -5px rgba(205, 127, 50, 0.4);
+}
+
+.avatar-ring--silver {
+    box-shadow: 0 0 0 4px #c0c0c0, 0 10px 25px -5px rgba(192, 192, 192, 0.4);
+}
+
+.avatar-ring--gold {
+    box-shadow: 0 0 0 4px #ffd700, 0 10px 25px -5px rgba(255, 215, 0, 0.4);
+    animation: goldGlow 2s ease-in-out infinite;
+}
+
+.avatar-ring--platinum {
+    box-shadow: 0 0 0 4px #e5e4e2, 0 10px 25px -5px rgba(229, 228, 226, 0.5);
+}
+
+.avatar-ring--diamond {
+    box-shadow: 0 0 0 4px #0ea5e9, 0 0 20px rgba(14, 165, 233, 0.4);
+    animation: diamondGlow 2s ease-in-out infinite;
+}
+
+@keyframes goldGlow {
+    0%, 100% { box-shadow: 0 0 0 4px #ffd700, 0 0 15px rgba(255, 215, 0, 0.4); }
+    50% { box-shadow: 0 0 0 4px #ffd700, 0 0 25px rgba(255, 215, 0, 0.6); }
+}
+
+@keyframes diamondGlow {
+    0%, 100% { box-shadow: 0 0 0 4px #0ea5e9, 0 0 20px rgba(14, 165, 233, 0.4); }
+    50% { box-shadow: 0 0 0 4px #0ea5e9, 0 0 35px rgba(14, 165, 233, 0.6); }
+}
+
+/* ============================================
+   STUDENT META & BADGES
+   ============================================ */
+
+.student-meta {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.75rem;
+    margin-top: 0.5rem;
+}
+
+.student-details {
+    font-size: 0.9375rem;
+    color: #64748b;
+    font-weight: 500;
+}
+
+.badge-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    margin-top: 0.75rem;
+}
+
+.league-badge,
+.rank-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.375rem;
+    padding: 0.375rem 0.75rem;
+    border-radius: 9999px;
+    font-size: 0.8125rem;
+    font-weight: 600;
+    transition: all 0.2s;
+}
+
+.league-badge {
+    background: #f1f5f9;
+    color: #475569;
+    border: 1px solid #e2e8f0;
+}
+
+.rank-badge {
+    background: #f8fafc;
+    color: #64748b;
+    border: 1px solid #e2e8f0;
+}
+
+/* Tier-based badge colors */
+.league-badge.tier-bronze,
+.rank-badge.tier-bronze {
+    background: linear-gradient(135deg, #fef3c7 0%, #fed7aa 100%);
+    color: #92400e;
+    border-color: #cd7f32;
+}
+
+.league-badge.tier-silver,
+.rank-badge.tier-silver {
+    background: linear-gradient(135deg, #f1f5f9 0%, #e2e8f0 100%);
+    color: #475569;
+    border-color: #c0c0c0;
+}
+
+.league-badge.tier-gold,
+.rank-badge.tier-gold {
+    background: linear-gradient(135deg, #fef9c3 0%, #fde68a 100%);
+    color: #92400e;
+    border-color: #ffd700;
+}
+
+.league-badge.tier-platinum,
+.rank-badge.tier-platinum {
+    background: linear-gradient(135deg, #f0f4f8 0%, #e8eef3 100%);
+    color: #475569;
+    border-color: #e5e4e2;
+}
+
+.league-badge.tier-diamond,
+.rank-badge.tier-diamond {
+    background: linear-gradient(135deg, #e0f2fe 0%, #bae6fd 100%);
+    color: #0369a1;
+    border-color: #0ea5e9;
+}
+
+/* Level-based rank badges (shown under level progress) */
+.level-rank-badges {
+    display: flex;
+    gap: 0.5rem;
+    flex-wrap: wrap;
+    margin-top: 0.75rem;
+    padding-top: 0.75rem;
+    border-top: 1px solid #e2e8f0;
+}
+
+.level-rank-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.25rem;
+    padding: 0.25rem 0.5rem;
+    border-radius: 9999px;
+    font-size: 0.75rem;
+    font-weight: 500;
+    background: #f8fafc;
+    color: #64748b;
+    border: 1px solid #e2e8f0;
+    transition: all 0.2s;
+}
+
+.level-rank-badge.tier-bronze {
+    background: linear-gradient(135deg, #fef3c7 0%, #fed7aa 100%);
+    color: #92400e;
+    border-color: #cd7f32;
+}
+
+.level-rank-badge.tier-silver {
+    background: linear-gradient(135deg, #f1f5f9 0%, #e2e8f0 100%);
+    color: #475569;
+    border-color: #c0c0c0;
+}
+
+.level-rank-badge.tier-gold {
+    background: linear-gradient(135deg, #fef9c3 0%, #fde68a 100%);
+    color: #92400e;
+    border-color: #ffd700;
+}
+
+.level-rank-badge.tier-platinum {
+    background: linear-gradient(135deg, #f0f4f8 0%, #e8eef3 100%);
+    color: #475569;
+    border-color: #e5e4e2;
+}
+
+.level-rank-badge.tier-diamond {
+    background: linear-gradient(135deg, #e0f2fe 0%, #bae6fd 100%);
+    color: #0369a1;
+    border-color: #0ea5e9;
+}
+
+/* Rank Info Boxes (in info grid) */
+.rank-info-item {
+    position: relative;
+    overflow: hidden;
+}
+
+.rank-info-item .rank-value {
+    font-weight: 700;
+}
+
+.rank-info-item.tier-none {
+    background: linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%);
+}
+
+.rank-info-item.tier-bronze {
+    background: linear-gradient(135deg, #fef3c7 0%, #fed7aa 100%);
+    border-color: #cd7f32;
+}
+
+.rank-info-item.tier-bronze .info-label {
+    color: #92400e;
+}
+
+.rank-info-item.tier-bronze .rank-value {
+    color: #78350f;
+}
+
+.rank-info-item.tier-silver {
+    background: linear-gradient(135deg, #f1f5f9 0%, #e2e8f0 100%);
+    border-color: #94a3b8;
+}
+
+.rank-info-item.tier-silver .info-label {
+    color: #475569;
+}
+
+.rank-info-item.tier-silver .rank-value {
+    color: #334155;
+}
+
+.rank-info-item.tier-gold {
+    background: linear-gradient(135deg, #fef9c3 0%, #fde68a 100%);
+    border-color: #fbbf24;
+}
+
+.rank-info-item.tier-gold .info-label {
+    color: #92400e;
+}
+
+.rank-info-item.tier-gold .rank-value {
+    color: #78350f;
+}
+
+.rank-info-item.tier-platinum {
+    background: linear-gradient(135deg, #f0f4f8 0%, #e8eef3 100%);
+    border-color: #94a3b8;
+}
+
+.rank-info-item.tier-platinum .info-label {
+    color: #475569;
+}
+
+.rank-info-item.tier-platinum .rank-value {
+    color: #334155;
+}
+
+.rank-info-item.tier-diamond {
+    background: linear-gradient(135deg, #e0f2fe 0%, #bae6fd 100%);
+    border-color: #0ea5e9;
+}
+
+.rank-info-item.tier-diamond .info-label {
+    color: #0369a1;
+}
+
+.rank-info-item.tier-diamond .rank-value {
+    color: #0c4a6e;
+}
+
+/* Razryad Info Box Styling */
+.razryad-info-item {
+    position: relative;
+    overflow: hidden;
+}
+
+.razryad-info-item.tier-none {
+    /* Default styling - no changes */
+}
+
+.razryad-info-item.tier-silver {
+    background: linear-gradient(135deg, #f1f5f9 0%, #e2e8f0 100%);
+    border-color: #94a3b8;
+}
+
+.razryad-info-item.tier-silver .info-label {
+    color: #475569;
+}
+
+.razryad-info-item.tier-silver .info-value {
+    color: #334155;
+}
+
+.razryad-info-item.tier-gold {
+    background: linear-gradient(135deg, #fef9c3 0%, #fde68a 100%);
+    border-color: #fbbf24;
+}
+
+.razryad-info-item.tier-gold .info-label {
+    color: #92400e;
+}
+
+.razryad-info-item.tier-gold .info-value {
+    color: #78350f;
+}
+
+.razryad-info-item.tier-platinum {
+    background: linear-gradient(135deg, #f0f4f8 0%, #e8eef3 100%);
+    border-color: #94a3b8;
+}
+
+.razryad-info-item.tier-platinum .info-label {
+    color: #475569;
+}
+
+.razryad-info-item.tier-platinum .info-value {
+    color: #334155;
+}
+
+.razryad-info-item.tier-diamond {
+    background: linear-gradient(135deg, #e0f2fe 0%, #bae6fd 100%);
+    border-color: #0ea5e9;
+}
+
+.razryad-info-item.tier-diamond .info-label {
+    color: #0369a1;
+}
+
+.razryad-info-item.tier-diamond .info-value {
+    color: #0c4a6e;
+}
+
+/* Lightning/Gleam animation for Diamond tier razryad */
+.razryad-info-item.tier-diamond::after {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: -100%;
+    width: 50%;
+    height: 100%;
+    background: linear-gradient(
+        90deg,
+        rgba(255, 255, 255, 0) 0%,
+        rgba(255, 255, 255, 0.5) 50%,
+        rgba(255, 255, 255, 0) 100%
+    );
+    animation: razryad-gleam 3s ease-in-out infinite;
+}
+
+@keyframes razryad-gleam {
+    0% {
+        left: -100%;
+    }
+    40% {
+        left: 150%;
+    }
+    100% {
+        left: 150%;
+    }
+}
+
+/* ============================================
+   TAB NAVIGATION
+   ============================================ */
+
+.tab-navigation {
+    display: flex;
+    gap: 0.5rem;
+    padding: 0.5rem;
+    background: #f8fafc;
+    border-radius: 1rem;
+    margin: 2rem 0 1.5rem;
+    border: 1px solid #e2e8f0;
+}
+
+.tab-button {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+    padding: 0.875rem 1rem;
+    background: transparent;
+    border: none;
+    border-radius: 0.75rem;
+    font-size: 0.9375rem;
+    font-weight: 600;
+    color: #64748b;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.tab-button:hover {
+    background: #e2e8f0;
+    color: #1e293b;
+}
+
+.tab-button.active {
+    background: white;
+    color: #1e293b;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+}
+
+.tab-content {
+    display: none;
+    animation: fadeIn 0.3s ease;
+}
+
+.tab-content.active {
+    display: block;
+}
+
+@keyframes fadeIn {
+    from { opacity: 0; transform: translateY(8px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+
+/* ============================================
+   QUICK STATS ROW
+   ============================================ */
+
+.quick-stats {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+    gap: 1rem;
+    margin-top: 2rem;
+}
+
+.quick-stat-card {
+    display: flex;
+    align-items: center;
+    gap: 0.875rem;
+    padding: 1rem;
+    background: white;
+    border-radius: 1rem;
+    border: 1px solid #e2e8f0;
+    transition: all 0.2s;
+}
+
+.quick-stat-card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 8px 16px rgba(0, 0, 0, 0.08);
+}
+
+.quick-stat-icon {
+    width: 48px;
+    height: 48px;
+    border-radius: 0.75rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+}
+
+.quick-stat-info {
+    flex: 1;
+    min-width: 0;
+}
+
+.quick-stat-value {
+    font-size: 1.25rem;
+    font-weight: 800;
+    color: #1e293b;
+    font-family: 'Outfit', sans-serif;
+}
+
+.quick-stat-label {
+    font-size: 0.8125rem;
+    color: #64748b;
+    font-weight: 500;
+}
+
+/* ============================================
+   BOT GRID (Bots Tab)
+   ============================================ */
+
+.bot-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+    gap: 1rem;
+    margin-bottom: 2rem;
+}
+
+.bot-card {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    padding: 1rem;
+    background: #f8fafc;
+    border-radius: 1rem;
+    border: 2px solid #e2e8f0;
+    transition: all 0.2s;
+    position: relative;
+    overflow: hidden;
+}
+
+.bot-card::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 4px;
+    height: 100%;
+    background: var(--bot-color, #94a3b8);
+}
+
+.bot-card.defeated {
+    background: #ecfdf5;
+    border-color: #10b981;
+}
+
+.bot-card.defeated::before {
+    background: #10b981;
+}
+
+.bot-card.next-target {
+    background: #fffbeb;
+    border-color: #f59e0b;
+    animation: pulseTarget 2s ease-in-out infinite;
+}
+
+.bot-card.next-target::before {
+    background: #f59e0b;
+}
+
+@keyframes pulseTarget {
+    0%, 100% { box-shadow: 0 0 0 0 rgba(245, 158, 11, 0.4); }
+    50% { box-shadow: 0 0 0 8px rgba(245, 158, 11, 0); }
+}
+
+.bot-avatar {
+    width: 40px;
+    height: 40px;
+    border-radius: 50%;
+    background: var(--bot-color, #94a3b8);
+    color: white;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: 700;
+    font-size: 1.125rem;
+    flex-shrink: 0;
+}
+
+.bot-info {
+    flex: 1;
+    min-width: 0;
+}
+
+.bot-name {
+    font-weight: 600;
+    color: #1e293b;
+    font-size: 0.9375rem;
+}
+
+.bot-rating {
+    font-size: 0.8125rem;
+    color: #64748b;
+    font-weight: 500;
+}
+
+.bot-status {
+    flex-shrink: 0;
+}
+
+.bot-progress-summary {
+    padding: 1.5rem;
+    background: linear-gradient(135deg, #f0fdf4 0%, #dcfce7 100%);
+    border-radius: 1rem;
+    border: 2px solid #10b981;
+}
+
+.bot-progress-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 0.75rem;
+}
+
+.bot-progress-label {
+    font-weight: 600;
+    color: #166534;
+    font-size: 1rem;
+}
+
+.bot-progress-count {
+    font-weight: 800;
+    color: #15803d;
+    font-size: 1.25rem;
+    font-family: 'Outfit', sans-serif;
+}
+
+.bot-progress-bar {
+    background: linear-gradient(90deg, #10b981 0%, #059669 100%);
+}
+
+/* ============================================
+   SURVIVAL MODE (Puzzles Tab)
+   ============================================ */
+
+.survival-hero {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 1rem;
+    padding: 2.5rem;
+    background: linear-gradient(135deg, #faf5ff 0%, #f3e8ff 100%);
+    border-radius: 1.5rem;
+    border: 2px solid #c4b5fd;
+    margin-bottom: 1.5rem;
+}
+
+.survival-score-display {
+    text-align: center;
+}
+
+.survival-score-value {
+    font-size: 4rem;
+    font-weight: 800;
+    color: var(--tier-color, #8b5cf6);
+    font-family: 'Outfit', sans-serif;
+    line-height: 1;
+}
+
+.survival-score-label {
+    font-size: 0.9375rem;
+    color: #7c3aed;
+    font-weight: 600;
+    margin-top: 0.5rem;
+}
+
+.survival-tier-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.5rem 1rem;
+    border-radius: 9999px;
+    font-weight: 600;
+    font-size: 0.9375rem;
+}
+
+.survival-tier-badge.tier-beginner { background: #f1f5f9; color: #64748b; border: 1px solid #e2e8f0; }
+.survival-tier-badge.tier-intermediate { background: #ecfdf5; color: #059669; border: 1px solid #10b981; }
+.survival-tier-badge.tier-advanced { background: #eff6ff; color: #2563eb; border: 1px solid #3b82f6; }
+.survival-tier-badge.tier-expert { background: #faf5ff; color: #7c3aed; border: 1px solid #8b5cf6; }
+.survival-tier-badge.tier-master { background: #fffbeb; color: #d97706; border: 1px solid #f59e0b; }
+.survival-tier-badge.tier-grandmaster { background: #fef2f2; color: #dc2626; border: 1px solid #ef4444; }
+
+.survival-rank-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.375rem;
+    padding: 0.5rem 1rem;
+    border-radius: 9999px;
+    font-weight: 600;
+    font-size: 0.875rem;
+    margin-bottom: 1.5rem;
+    justify-content: center;
+    background: #f8fafc;
+    color: #64748b;
+    border: 1px solid #e2e8f0;
+}
+
+.survival-history {
+    margin-top: 1.5rem;
+}
+
+.subsection-title {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    font-size: 1.125rem;
+    font-weight: 700;
+    color: #1e293b;
+    margin-bottom: 1rem;
+}
+
+.score-list {
+    display: grid;
+    gap: 0.75rem;
+}
+
+.score-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 1rem;
+    background: #f8fafc;
+    border-radius: 0.75rem;
+    border: 1px solid #e2e8f0;
+}
+
+.score-value {
+    font-size: 1.25rem;
+    font-weight: 700;
+    font-family: 'Outfit', sans-serif;
+}
+
+.score-date {
+    font-size: 0.875rem;
+    color: #64748b;
+}
+
+/* ============================================
+   STATS TAB
+   ============================================ */
+
+.stats-section {
+    margin-bottom: 2rem;
+}
+
+.current-rating-card {
+    padding: 2rem;
+    background: #f8fafc;
+    border-radius: 1.25rem;
+    border: 2px solid #e2e8f0;
+    text-align: center;
+}
+
+.current-rating-card.tier-bronze { background: linear-gradient(135deg, #fef3c7, #fed7aa); border-color: #cd7f32; }
+.current-rating-card.tier-silver { background: linear-gradient(135deg, #f1f5f9, #e2e8f0); border-color: #c0c0c0; }
+.current-rating-card.tier-gold { background: linear-gradient(135deg, #fef9c3, #fde68a); border-color: #ffd700; }
+.current-rating-card.tier-diamond { background: linear-gradient(135deg, #e0f2fe, #bae6fd); border-color: #0ea5e9; }
+
+.rating-value {
+    font-size: 3rem;
+    font-weight: 800;
+    color: #1e293b;
+    font-family: 'Outfit', sans-serif;
+    line-height: 1.1;
+}
+
+.rating-league {
+    font-size: 1.125rem;
+    font-weight: 600;
+    color: #475569;
+    margin-top: 0.5rem;
+}
+
+.rating-date {
+    font-size: 0.875rem;
+    color: #64748b;
+    margin-top: 0.25rem;
+}
+
+.achievements-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+    gap: 1rem;
+}
+
+.achievement-card {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 1.25rem 1rem;
+    background: #f8fafc;
+    border-radius: 1rem;
+    border: 2px solid #e2e8f0;
+    text-align: center;
+    transition: all 0.2s;
+}
+
+.achievement-card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 8px 16px rgba(0, 0, 0, 0.08);
+}
+
+.achievement-card.tier-bronze { background: linear-gradient(135deg, #fef3c7, #fed7aa); border-color: #cd7f32; }
+.achievement-card.tier-silver { background: linear-gradient(135deg, #f1f5f9, #e2e8f0); border-color: #c0c0c0; }
+.achievement-card.tier-gold { background: linear-gradient(135deg, #fef9c3, #fde68a); border-color: #ffd700; }
+.achievement-card.tier-platinum { background: linear-gradient(135deg, #f0f4f8, #e8eef3); border-color: #e5e4e2; }
+.achievement-card.tier-diamond { background: linear-gradient(135deg, #e0f2fe, #bae6fd); border-color: #0ea5e9; }
+
+.achievement-icon {
+    width: 48px;
+    height: 48px;
+    border-radius: 50%;
+    background: white;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+}
+
+.achievement-name {
+    font-weight: 600;
+    font-size: 0.875rem;
+    color: #1e293b;
+}
+
+.achievement-date {
+    font-size: 0.75rem;
+    color: #64748b;
+}
+
+.empty-state {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 1rem;
+    padding: 3rem;
+    text-align: center;
+}
+
+.empty-state p {
+    font-size: 0.9375rem;
+    color: #94a3b8;
+    margin: 0;
+}
+
+/* ============================================
+   MOBILE RESPONSIVE ADJUSTMENTS
+   ============================================ */
+
+@media (max-width: 768px) {
+    .student-meta {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 0.5rem;
+    }
+
+    .badge-row {
+        justify-content: center;
+        width: 100%;
+    }
+
+    .tab-navigation {
+        padding: 0.375rem;
+        gap: 0.25rem;
+    }
+
+    .tab-button {
+        padding: 0.75rem 0.5rem;
+        font-size: 0.8125rem;
+    }
+
+    .tab-button span {
+        display: none;
+    }
+
+    .quick-stats {
+        grid-template-columns: 1fr;
+    }
+
+    .quick-stat-card {
+        padding: 0.875rem;
+    }
+
+    .bot-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .survival-score-value {
+        font-size: 3rem;
+    }
+
+    .achievements-grid {
+        grid-template-columns: repeat(2, 1fr);
+    }
+
+    .rating-value {
+        font-size: 2.5rem;
+    }
+}
+
+@media (max-width: 480px) {
+    .league-badge,
+    .rank-badge {
+        font-size: 0.75rem;
+        padding: 0.25rem 0.5rem;
+    }
+
+    .tab-button {
+        padding: 0.625rem 0.375rem;
+    }
+
+    .survival-hero {
+        padding: 1.5rem;
+    }
+
+    .survival-score-value {
+        font-size: 2.5rem;
+    }
+
+    .achievements-grid {
+        grid-template-columns: 1fr;
     }
 }

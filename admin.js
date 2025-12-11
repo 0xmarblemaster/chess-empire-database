@@ -46,6 +46,7 @@ function updateMenuVisibility() {
     console.log('User role:', userRole);
 
     // Show/hide menu items based on permissions
+    const menuRatings = document.getElementById('menuRatings');
     const menuAppAccess = document.getElementById('menuAppAccess');
     const menuManageCoaches = document.getElementById('menuManageCoaches');
     const menuManageBranches = document.getElementById('menuManageBranches');
@@ -54,6 +55,7 @@ function updateMenuVisibility() {
 
     // Admins see everything
     if (userRole.role === 'admin') {
+        if (menuRatings) menuRatings.style.display = 'flex';
         if (menuAppAccess) menuAppAccess.style.display = 'flex';
         if (menuManageCoaches) menuManageCoaches.style.display = 'flex';
         if (menuManageBranches) menuManageBranches.style.display = 'flex';
@@ -2275,4 +2277,601 @@ window.addEventListener('resize', function() {
         mobileHeader.style.display = isMobile ? 'flex' : 'none';
     }
 });
+
+// ========================================
+// RATINGS MANAGEMENT FUNCTIONALITY
+// ========================================
+
+// CSV data storage for import
+let csvParsedData = null;
+
+// Show Ratings Management section
+function showRatingsManagement() {
+    // Switch to ratings section
+    switchToSection('ratings');
+
+    // Update nav items
+    document.querySelectorAll('.nav-item').forEach(item => {
+        item.classList.remove('active');
+    });
+    const ratingsMenuItem = document.getElementById('menuRatings');
+    if (ratingsMenuItem) {
+        ratingsMenuItem.classList.add('active');
+    }
+
+    // Load ratings data
+    loadRatingsData();
+
+    // Populate student dropdown
+    populateRatingStudentDropdown();
+
+    // Set default date to today
+    const dateInput = document.getElementById('ratingDate');
+    if (dateInput) {
+        dateInput.value = new Date().toISOString().split('T')[0];
+    }
+
+    lucide.createIcons();
+}
+
+// Load ratings data and populate table
+async function loadRatingsData() {
+    try {
+        // Get all students with their current ratings
+        const studentsWithRatings = [];
+        let ratedCount = 0;
+        let totalRating = 0;
+        let leagueACount = 0;
+        let recentUpdates = 0;
+        const oneWeekAgo = new Date();
+        oneWeekAgo.setDate(oneWeekAgo.getDate() - 7);
+
+        for (const student of window.students) {
+            let currentRating = null;
+            let lastUpdated = null;
+            let leagueName = t('rankings.beginner');
+            let leagueTier = 'none';
+
+            // Try to get rating from supabase if available
+            if (window.supabaseData && typeof window.supabaseData.getCurrentRating === 'function') {
+                try {
+                    const ratingData = await window.supabaseData.getCurrentRating(student.id);
+                    if (ratingData) {
+                        currentRating = ratingData.rating;
+                        lastUpdated = ratingData.rating_date;
+
+                        // Get league info
+                        const leagueInfo = getLeagueFromRating(currentRating);
+                        leagueName = leagueInfo.name;
+                        leagueTier = leagueInfo.tier;
+                    }
+                } catch (e) {
+                    console.warn('Could not fetch rating for student:', student.id);
+                }
+            }
+
+            studentsWithRatings.push({
+                ...student,
+                currentRating,
+                lastUpdated,
+                leagueName,
+                leagueTier
+            });
+
+            if (currentRating !== null) {
+                ratedCount++;
+                totalRating += currentRating;
+
+                // Check if League A or A+
+                if (currentRating >= 1200) {
+                    leagueACount++;
+                }
+
+                // Check recent updates
+                if (lastUpdated && new Date(lastUpdated) >= oneWeekAgo) {
+                    recentUpdates++;
+                }
+            }
+        }
+
+        // Update stats
+        document.getElementById('ratedStudentsCount').textContent = ratedCount;
+        document.getElementById('avgRating').textContent = ratedCount > 0 ? Math.round(totalRating / ratedCount) : 0;
+        document.getElementById('leagueACount').textContent = leagueACount;
+        document.getElementById('recentUpdates').textContent = recentUpdates;
+
+        // Populate table
+        renderRatingsTable(studentsWithRatings);
+
+        // Setup search
+        setupRatingsSearch(studentsWithRatings);
+
+    } catch (error) {
+        console.error('Error loading ratings data:', error);
+    }
+}
+
+// Get league info from rating
+function getLeagueFromRating(rating) {
+    if (!rating || rating < 400) {
+        return { name: t('rankings.beginner'), tier: 'none', color: '#94a3b8' };
+    } else if (rating < 900) {
+        return { name: t('leagues.leagueC'), tier: 'bronze', color: '#cd7f32' };
+    } else if (rating < 1200) {
+        return { name: t('leagues.leagueB'), tier: 'silver', color: '#c0c0c0' };
+    } else if (rating < 1500) {
+        return { name: t('leagues.leagueA'), tier: 'gold', color: '#ffd700' };
+    } else {
+        return { name: t('leagues.leagueAPlus'), tier: 'diamond', color: '#0ea5e9' };
+    }
+}
+
+// Render ratings table
+function renderRatingsTable(studentsWithRatings) {
+    const tbody = document.getElementById('ratingsTableBody');
+    if (!tbody) return;
+
+    // Sort by rating (highest first), then by name
+    const sorted = [...studentsWithRatings].sort((a, b) => {
+        if (b.currentRating === null && a.currentRating === null) {
+            return `${a.firstName} ${a.lastName}`.localeCompare(`${b.firstName} ${b.lastName}`);
+        }
+        if (b.currentRating === null) return -1;
+        if (a.currentRating === null) return 1;
+        return b.currentRating - a.currentRating;
+    });
+
+    tbody.innerHTML = sorted.map(student => {
+        const leagueInfo = getLeagueFromRating(student.currentRating);
+        const branchName = i18n.translateBranchName(student.branch || '');
+
+        return `
+            <tr>
+                <td>
+                    <div style="display: flex; align-items: center; gap: 0.75rem;">
+                        <div class="student-avatar" style="width: 36px; height: 36px; border-radius: 50%; background: #f1f5f9; display: flex; align-items: center; justify-content: center; overflow: hidden;">
+                            ${student.photoUrl
+                                ? `<img src="${student.photoUrl}" alt="" style="width: 100%; height: 100%; object-fit: cover;">`
+                                : `<i data-lucide="user" style="width: 18px; height: 18px; color: #94a3b8;"></i>`
+                            }
+                        </div>
+                        <div>
+                            <div style="font-weight: 500; color: #1e293b;">${student.firstName} ${student.lastName}</div>
+                        </div>
+                    </div>
+                </td>
+                <td>
+                    <span style="font-weight: 600; color: ${student.currentRating ? '#1e293b' : '#94a3b8'};">
+                        ${student.currentRating || '-'}
+                    </span>
+                </td>
+                <td>
+                    <span class="league-badge league-badge--${leagueInfo.tier}" style="display: inline-flex; align-items: center; gap: 0.25rem; padding: 0.25rem 0.5rem; border-radius: 0.5rem; font-size: 0.75rem; font-weight: 500; background: ${leagueInfo.tier !== 'none' ? leagueInfo.color + '20' : '#f1f5f9'}; color: ${leagueInfo.tier !== 'none' ? leagueInfo.color : '#64748b'}; border: 1px solid ${leagueInfo.tier !== 'none' ? leagueInfo.color + '40' : '#e2e8f0'};">
+                        ${leagueInfo.name}
+                    </span>
+                </td>
+                <td style="color: #64748b; font-size: 0.875rem;">
+                    ${student.lastUpdated ? formatDate(student.lastUpdated) : '-'}
+                </td>
+                <td style="color: #64748b;">
+                    ${branchName}
+                </td>
+                <td>
+                    <div style="display: flex; gap: 0.5rem;">
+                        <button class="btn-icon" onclick="viewRatingHistory('${student.id}')" title="${t('admin.ratings.viewHistory')}">
+                            <i data-lucide="history" style="width: 16px; height: 16px;"></i>
+                        </button>
+                        <button class="btn-icon" onclick="quickEditRating('${student.id}', '${student.firstName} ${student.lastName}', ${student.currentRating || 0})" title="${t('admin.ratings.edit')}">
+                            <i data-lucide="edit-2" style="width: 16px; height: 16px;"></i>
+                        </button>
+                    </div>
+                </td>
+            </tr>
+        `;
+    }).join('');
+
+    lucide.createIcons();
+}
+
+// Format date for display
+function formatDate(dateStr) {
+    if (!dateStr) return '-';
+    const date = new Date(dateStr);
+    return date.toLocaleDateString(getCurrentLanguage() === 'ru' ? 'ru-RU' : 'en-US', {
+        year: 'numeric',
+        month: 'short',
+        day: 'numeric'
+    });
+}
+
+// Setup ratings search
+function setupRatingsSearch(studentsWithRatings) {
+    const searchInput = document.getElementById('ratingsSearchInput');
+    if (!searchInput) return;
+
+    searchInput.addEventListener('input', (e) => {
+        const query = e.target.value.toLowerCase();
+        const filtered = studentsWithRatings.filter(s =>
+            `${s.firstName} ${s.lastName}`.toLowerCase().includes(query) ||
+            (s.branch && s.branch.toLowerCase().includes(query))
+        );
+        renderRatingsTable(filtered);
+    });
+}
+
+// Populate student dropdown for rating entry
+function populateRatingStudentDropdown() {
+    const select = document.getElementById('ratingStudentSelect');
+    if (!select) return;
+
+    // Sort students by name
+    const sortedStudents = [...window.students].sort((a, b) =>
+        `${a.firstName} ${a.lastName}`.localeCompare(`${b.firstName} ${b.lastName}`)
+    );
+
+    select.innerHTML = `
+        <option value="">${t('admin.ratings.selectStudentPlaceholder')}</option>
+        ${sortedStudents.map(s => `
+            <option value="${s.id}">${s.firstName} ${s.lastName}</option>
+        `).join('')}
+    `;
+}
+
+// Handle student selection change
+async function onRatingStudentChange() {
+    const studentId = document.getElementById('ratingStudentSelect').value;
+    const display = document.getElementById('currentRatingDisplay');
+
+    if (!studentId) {
+        display.style.display = 'none';
+        return;
+    }
+
+    // Try to get current rating
+    if (window.supabaseData && typeof window.supabaseData.getCurrentRating === 'function') {
+        try {
+            const ratingData = await window.supabaseData.getCurrentRating(studentId);
+            if (ratingData && ratingData.rating) {
+                const leagueInfo = getLeagueFromRating(ratingData.rating);
+
+                document.getElementById('currentRatingValue').textContent = `${t('admin.ratings.currentRating')}: ${ratingData.rating}`;
+                document.getElementById('currentRatingDate').textContent = `${t('admin.ratings.lastUpdated')}: ${formatDate(ratingData.rating_date)}`;
+                document.getElementById('currentRatingBadge').textContent = leagueInfo.name;
+                document.getElementById('currentRatingBadge').style.cssText = `
+                    display: inline-flex;
+                    padding: 0.25rem 0.75rem;
+                    border-radius: 0.5rem;
+                    font-size: 0.875rem;
+                    font-weight: 500;
+                    background: ${leagueInfo.color}20;
+                    color: ${leagueInfo.color};
+                    border: 1px solid ${leagueInfo.color}40;
+                `;
+
+                display.style.display = 'block';
+            } else {
+                document.getElementById('currentRatingValue').textContent = t('admin.ratings.noRatingYet');
+                document.getElementById('currentRatingDate').textContent = '';
+                document.getElementById('currentRatingBadge').textContent = t('rankings.beginner');
+                document.getElementById('currentRatingBadge').style.cssText = `
+                    display: inline-flex;
+                    padding: 0.25rem 0.75rem;
+                    border-radius: 0.5rem;
+                    font-size: 0.875rem;
+                    font-weight: 500;
+                    background: #f1f5f9;
+                    color: #64748b;
+                    border: 1px solid #e2e8f0;
+                `;
+                display.style.display = 'block';
+            }
+        } catch (e) {
+            console.warn('Error fetching current rating:', e);
+            display.style.display = 'none';
+        }
+    }
+}
+
+// Submit new rating
+async function submitRating() {
+    const studentId = document.getElementById('ratingStudentSelect').value;
+    const rating = parseInt(document.getElementById('ratingValue').value);
+    const date = document.getElementById('ratingDate').value;
+
+    if (!studentId) {
+        showToast(t('admin.ratings.selectStudentError'), 'error');
+        return;
+    }
+
+    if (!rating || rating < 100 || rating > 3000) {
+        showToast(t('admin.ratings.invalidRating'), 'error');
+        return;
+    }
+
+    if (!date) {
+        showToast(t('admin.ratings.selectDateError'), 'error');
+        return;
+    }
+
+    try {
+        if (window.supabaseData && typeof window.supabaseData.addStudentRating === 'function') {
+            await window.supabaseData.addStudentRating(studentId, rating, date);
+            showToast(t('admin.ratings.ratingAdded'), 'success');
+
+            // Reset form
+            document.getElementById('ratingStudentSelect').value = '';
+            document.getElementById('ratingValue').value = '';
+            document.getElementById('currentRatingDisplay').style.display = 'none';
+
+            // Reload ratings data
+            loadRatingsData();
+        } else {
+            showToast(t('admin.ratings.functionNotAvailable'), 'error');
+        }
+    } catch (error) {
+        console.error('Error adding rating:', error);
+        showToast(t('admin.ratings.addError') + ': ' + error.message, 'error');
+    }
+}
+
+// Quick edit rating (from table action)
+function quickEditRating(studentId, studentName, currentRating) {
+    document.getElementById('ratingStudentSelect').value = studentId;
+    document.getElementById('ratingValue').value = currentRating || '';
+
+    // Scroll to the form
+    document.querySelector('.branch-card')?.scrollIntoView({ behavior: 'smooth' });
+
+    // Trigger change to show current rating
+    onRatingStudentChange();
+}
+
+// View rating history
+async function viewRatingHistory(studentId) {
+    const student = window.students.find(s => String(s.id) === String(studentId));
+    if (!student) return;
+
+    const modal = document.getElementById('ratingHistoryModal');
+    const title = document.getElementById('ratingHistoryTitle');
+    const content = document.getElementById('ratingHistoryContent');
+
+    title.textContent = `${student.firstName} ${student.lastName} - ${t('admin.ratings.ratingHistory')}`;
+    content.innerHTML = '<div style="text-align: center; padding: 2rem;"><i data-lucide="loader" class="spin" style="width: 24px; height: 24px;"></i></div>';
+
+    modal.classList.add('active');
+    lucide.createIcons();
+
+    try {
+        if (window.supabaseData && typeof window.supabaseData.getStudentRatings === 'function') {
+            const ratings = await window.supabaseData.getStudentRatings(studentId);
+
+            if (ratings && ratings.length > 0) {
+                content.innerHTML = `
+                    <div style="max-height: 400px; overflow-y: auto;">
+                        <table style="width: 100%; border-collapse: collapse;">
+                            <thead>
+                                <tr style="background: #f8fafc;">
+                                    <th style="padding: 0.75rem; text-align: left; border-bottom: 1px solid #e2e8f0;">${t('admin.ratings.rating')}</th>
+                                    <th style="padding: 0.75rem; text-align: left; border-bottom: 1px solid #e2e8f0;">${t('admin.ratings.league')}</th>
+                                    <th style="padding: 0.75rem; text-align: left; border-bottom: 1px solid #e2e8f0;">${t('admin.ratings.date')}</th>
+                                    <th style="padding: 0.75rem; text-align: left; border-bottom: 1px solid #e2e8f0;">${t('admin.ratings.source')}</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                ${ratings.map(r => {
+                                    const leagueInfo = getLeagueFromRating(r.rating);
+                                    return `
+                                        <tr>
+                                            <td style="padding: 0.75rem; border-bottom: 1px solid #f1f5f9; font-weight: 600;">${r.rating}</td>
+                                            <td style="padding: 0.75rem; border-bottom: 1px solid #f1f5f9;">
+                                                <span style="padding: 0.125rem 0.5rem; border-radius: 0.25rem; font-size: 0.75rem; background: ${leagueInfo.color}20; color: ${leagueInfo.color};">${leagueInfo.name}</span>
+                                            </td>
+                                            <td style="padding: 0.75rem; border-bottom: 1px solid #f1f5f9; color: #64748b;">${formatDate(r.rating_date)}</td>
+                                            <td style="padding: 0.75rem; border-bottom: 1px solid #f1f5f9; color: #94a3b8; font-size: 0.875rem;">${r.source || 'manual'}</td>
+                                        </tr>
+                                    `;
+                                }).join('')}
+                            </tbody>
+                        </table>
+                    </div>
+                `;
+            } else {
+                content.innerHTML = `<p style="text-align: center; color: #94a3b8; padding: 2rem;">${t('admin.ratings.noHistory')}</p>`;
+            }
+        } else {
+            content.innerHTML = `<p style="text-align: center; color: #94a3b8; padding: 2rem;">${t('admin.ratings.functionNotAvailable')}</p>`;
+        }
+    } catch (error) {
+        console.error('Error loading rating history:', error);
+        content.innerHTML = `<p style="text-align: center; color: #ef4444; padding: 2rem;">${t('admin.ratings.loadError')}</p>`;
+    }
+}
+
+// Close rating history modal
+function closeRatingHistoryModal() {
+    const modal = document.getElementById('ratingHistoryModal');
+    if (modal) {
+        modal.classList.remove('active');
+    }
+}
+
+// ========================================
+// CSV IMPORT FUNCTIONALITY
+// ========================================
+
+// Open CSV import modal
+function openCSVImportModal() {
+    const modal = document.getElementById('csvImportModal');
+    if (modal) {
+        modal.classList.add('active');
+        // Reset state
+        csvParsedData = null;
+        document.getElementById('csvFileInput').value = '';
+        document.getElementById('csvFileName').textContent = 'No file selected';
+        document.getElementById('csvPreviewSection').style.display = 'none';
+        document.getElementById('importCSVBtn').disabled = true;
+    }
+    lucide.createIcons();
+}
+
+// Close CSV import modal
+function closeCSVImportModal() {
+    const modal = document.getElementById('csvImportModal');
+    if (modal) {
+        modal.classList.remove('active');
+    }
+}
+
+// Preview CSV file
+async function previewCSVFile(event) {
+    const file = event.target.files[0];
+    if (!file) return;
+
+    document.getElementById('csvFileName').textContent = file.name;
+
+    try {
+        const text = await file.text();
+        const lines = text.split('\n').filter(line => line.trim());
+
+        if (lines.length < 2) {
+            showToast(t('admin.ratings.csvEmpty'), 'error');
+            return;
+        }
+
+        // Parse header
+        const headers = lines[0].split(',').map(h => h.trim().toLowerCase());
+
+        // Find column indices
+        const nameIndex = headers.findIndex(h => h === 'student_name' || h === 'name');
+        const firstNameIndex = headers.findIndex(h => h === 'first_name' || h === 'firstname');
+        const lastNameIndex = headers.findIndex(h => h === 'last_name' || h === 'lastname');
+        const ratingIndex = headers.findIndex(h => h === 'rating');
+        const dateIndex = headers.findIndex(h => h === 'date');
+
+        if (ratingIndex === -1) {
+            showToast(t('admin.ratings.csvMissingRating'), 'error');
+            return;
+        }
+
+        if (nameIndex === -1 && (firstNameIndex === -1 || lastNameIndex === -1)) {
+            showToast(t('admin.ratings.csvMissingName'), 'error');
+            return;
+        }
+
+        // Parse data rows
+        csvParsedData = [];
+        let validCount = 0;
+        let warningCount = 0;
+        let errorCount = 0;
+
+        const previewRows = [];
+
+        for (let i = 1; i < lines.length; i++) {
+            const values = lines[i].split(',').map(v => v.trim());
+
+            let studentName;
+            if (nameIndex !== -1) {
+                studentName = values[nameIndex];
+            } else {
+                studentName = `${values[firstNameIndex]} ${values[lastNameIndex]}`;
+            }
+
+            const rating = parseInt(values[ratingIndex]);
+            const date = dateIndex !== -1 ? values[dateIndex] : new Date().toISOString().split('T')[0];
+
+            // Find matching student
+            const student = window.students.find(s =>
+                `${s.firstName} ${s.lastName}`.toLowerCase() === studentName.toLowerCase()
+            );
+
+            let status = 'valid';
+            let statusText = 'OK';
+            let statusColor = '#10b981';
+
+            if (!student) {
+                status = 'error';
+                statusText = t('admin.ratings.studentNotFound');
+                statusColor = '#ef4444';
+                errorCount++;
+            } else if (isNaN(rating) || rating < 100 || rating > 3000) {
+                status = 'error';
+                statusText = t('admin.ratings.invalidRating');
+                statusColor = '#ef4444';
+                errorCount++;
+            } else {
+                validCount++;
+                csvParsedData.push({
+                    studentId: student.id,
+                    studentName,
+                    rating,
+                    date
+                });
+            }
+
+            previewRows.push(`
+                <tr>
+                    <td style="padding: 0.5rem; border-bottom: 1px solid #f1f5f9;">${studentName}</td>
+                    <td style="padding: 0.5rem; border-bottom: 1px solid #f1f5f9;">${rating || '-'}</td>
+                    <td style="padding: 0.5rem; border-bottom: 1px solid #f1f5f9;">${date}</td>
+                    <td style="padding: 0.5rem; border-bottom: 1px solid #f1f5f9; color: ${statusColor};">${statusText}</td>
+                </tr>
+            `);
+        }
+
+        // Update preview
+        document.getElementById('csvPreviewBody').innerHTML = previewRows.join('');
+        document.getElementById('csvValidCount').textContent = validCount;
+        document.getElementById('csvWarningCount').textContent = warningCount;
+        document.getElementById('csvErrorCount').textContent = errorCount;
+        document.getElementById('csvPreviewSection').style.display = 'block';
+
+        // Enable import button if we have valid data
+        document.getElementById('importCSVBtn').disabled = validCount === 0;
+
+    } catch (error) {
+        console.error('Error parsing CSV:', error);
+        showToast(t('admin.ratings.csvParseError'), 'error');
+    }
+}
+
+// Import CSV ratings
+async function importCSVRatings() {
+    if (!csvParsedData || csvParsedData.length === 0) {
+        showToast(t('admin.ratings.noValidData'), 'error');
+        return;
+    }
+
+    const importBtn = document.getElementById('importCSVBtn');
+    importBtn.disabled = true;
+    importBtn.innerHTML = '<i data-lucide="loader" class="spin" style="width: 18px; height: 18px;"></i> Importing...';
+
+    try {
+        let successCount = 0;
+        let errorCount = 0;
+
+        for (const item of csvParsedData) {
+            try {
+                if (window.supabaseData && typeof window.supabaseData.addStudentRating === 'function') {
+                    await window.supabaseData.addStudentRating(item.studentId, item.rating, item.date, 'csv_import');
+                    successCount++;
+                }
+            } catch (e) {
+                console.error('Error importing rating for', item.studentName, e);
+                errorCount++;
+            }
+        }
+
+        showToast(t('admin.ratings.importComplete', { success: successCount, errors: errorCount }), 'success');
+        closeCSVImportModal();
+        loadRatingsData();
+
+    } catch (error) {
+        console.error('Error importing CSV:', error);
+        showToast(t('admin.ratings.importError'), 'error');
+    } finally {
+        importBtn.disabled = false;
+        importBtn.innerHTML = `<i data-lucide="upload" style="width: 18px; height: 18px;"></i> ${t('admin.ratings.import')}`;
+        lucide.createIcons();
+    }
+}
 

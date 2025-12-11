@@ -6,6 +6,11 @@
     z-index: 120;
 }
 
+/* Mobile language menu - hidden by default on desktop */
+.mobile-language-menu {
+    display: none !important;
+}
+
 /* Mobile responsive positioning - hide fixed dropdown on mobile, use header button instead */
 @media (max-width: 768px) {
     .language-dropdown {

@@ -58,6 +58,9 @@ try {
                             sessionStorage.setItem('userRole', JSON.stringify({ role: 'viewer' }));
                             sessionStorage.setItem('userEmail', session.user.email);
                         }
+
+                        // Dispatch event to notify that session and permissions are ready
+                        document.dispatchEvent(new Event('sessionestablished'));
                     });
             } else {
                 console.log('ℹ️ No active session found');

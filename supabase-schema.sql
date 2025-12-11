@@ -388,7 +388,485 @@ END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
 
 -- ============================================
--- 6. CREATE INITIAL ADMIN USER (Run this after authentication is set up)
+-- 6. STORAGE BUCKET POLICIES (for student photos)
+-- ============================================
+
+-- NOTE: The storage bucket 'student-photos' must be created in Supabase Dashboard first:
+-- 1. Go to Storage > Create Bucket
+-- 2. Name: student-photos
+-- 3. Public bucket: Yes (to allow public URL access)
+-- 4. File size limit: 5MB recommended
+-- 5. Allowed MIME types: image/jpeg, image/png, image/webp
+
+-- Storage policies for student-photos bucket
+-- Allow authenticated users to upload photos
+CREATE POLICY "Authenticated users can upload student photos"
+    ON storage.objects FOR INSERT
+    WITH CHECK (
+        bucket_id = 'student-photos'
+        AND auth.role() = 'authenticated'
+        AND (storage.foldername(name))[1] = 'students'
+    );
+
+-- Allow authenticated users to update their uploaded photos
+CREATE POLICY "Authenticated users can update student photos"
+    ON storage.objects FOR UPDATE
+    USING (
+        bucket_id = 'student-photos'
+        AND auth.role() = 'authenticated'
+    );
+
+-- Allow authenticated users to delete photos (for replacements)
+CREATE POLICY "Authenticated users can delete student photos"
+    ON storage.objects FOR DELETE
+    USING (
+        bucket_id = 'student-photos'
+        AND auth.role() = 'authenticated'
+    );
+
+-- Allow anyone to read photos (public bucket)
+CREATE POLICY "Anyone can view student photos"
+    ON storage.objects FOR SELECT
+    USING (bucket_id = 'student-photos');
+
+-- ============================================
+-- 7. RANKING & ACHIEVEMENT SYSTEM TABLES
+-- ============================================
+
+-- Student ratings history (internal school rating system)
+CREATE TABLE IF NOT EXISTS student_ratings (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    student_id UUID NOT NULL REFERENCES students(id) ON DELETE CASCADE,
+    rating INTEGER NOT NULL DEFAULT 400,
+    rating_date DATE NOT NULL DEFAULT CURRENT_DATE,
+    source TEXT CHECK (source IN ('manual', 'csv_import', 'tournament')) DEFAULT 'manual',
+    notes TEXT,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    created_by UUID REFERENCES auth.users(id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_student_ratings_student_date ON student_ratings(student_id, rating_date DESC);
+CREATE INDEX IF NOT EXISTS idx_student_ratings_rating ON student_ratings(rating);
+
+-- Bot battles (Chess.com bot defeat tracking)
+CREATE TABLE IF NOT EXISTS bot_battles (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    student_id UUID NOT NULL REFERENCES students(id) ON DELETE CASCADE,
+    bot_name TEXT NOT NULL,
+    bot_rating INTEGER NOT NULL,
+    defeated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    time_control TEXT,
+    notes TEXT,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    created_by UUID REFERENCES auth.users(id),
+    UNIQUE(student_id, bot_name)
+);
+
+CREATE INDEX IF NOT EXISTS idx_bot_battles_student ON bot_battles(student_id);
+CREATE INDEX IF NOT EXISTS idx_bot_battles_bot_rating ON bot_battles(bot_rating);
+
+-- Survival scores (Puzzle Rush/Survival mode)
+CREATE TABLE IF NOT EXISTS survival_scores (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    student_id UUID NOT NULL REFERENCES students(id) ON DELETE CASCADE,
+    score INTEGER NOT NULL,
+    mode TEXT DEFAULT 'survival_3' CHECK (mode IN ('survival_3', 'survival_5', 'timed_3min', 'timed_5min')),
+    achieved_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    notes TEXT,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    created_by UUID REFERENCES auth.users(id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_survival_scores_student ON survival_scores(student_id);
+CREATE INDEX IF NOT EXISTS idx_survival_scores_score ON survival_scores(score DESC);
+CREATE INDEX IF NOT EXISTS idx_survival_scores_mode ON survival_scores(mode);
+
+-- Achievement definitions
+CREATE TABLE IF NOT EXISTS achievements (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    code TEXT NOT NULL UNIQUE,
+    name_en TEXT NOT NULL,
+    name_ru TEXT NOT NULL,
+    name_kk TEXT,
+    description_en TEXT,
+    description_ru TEXT,
+    description_kk TEXT,
+    category TEXT CHECK (category IN ('bot', 'survival', 'rating', 'lesson', 'streak', 'special')),
+    icon TEXT,
+    color TEXT,
+    tier TEXT CHECK (tier IN ('bronze', 'silver', 'gold', 'platinum', 'diamond')) DEFAULT 'bronze',
+    threshold_value INTEGER,
+    sort_order INTEGER DEFAULT 0,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+-- Student achievements (earned achievements)
+CREATE TABLE IF NOT EXISTS student_achievements (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    student_id UUID NOT NULL REFERENCES students(id) ON DELETE CASCADE,
+    achievement_id UUID NOT NULL REFERENCES achievements(id) ON DELETE CASCADE,
+    earned_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    notes TEXT,
+    UNIQUE(student_id, achievement_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_student_achievements_student ON student_achievements(student_id);
+CREATE INDEX IF NOT EXISTS idx_student_achievements_earned ON student_achievements(earned_at DESC);
+
+-- ============================================
+-- 8. RANKING VIEWS AND FUNCTIONS
+-- ============================================
+
+-- View: Current rating per student (latest rating)
+CREATE OR REPLACE VIEW student_current_ratings AS
+SELECT DISTINCT ON (student_id)
+    student_id,
+    rating,
+    rating_date,
+    CASE
+        WHEN rating >= 1500 THEN 'League A+'
+        WHEN rating >= 1200 THEN 'League A'
+        WHEN rating >= 900 THEN 'League B'
+        WHEN rating >= 400 THEN 'League C'
+        ELSE 'Beginner'
+    END AS league,
+    CASE
+        WHEN rating >= 1500 THEN 'diamond'
+        WHEN rating >= 1200 THEN 'gold'
+        WHEN rating >= 900 THEN 'silver'
+        WHEN rating >= 400 THEN 'bronze'
+        ELSE 'none'
+    END AS league_tier
+FROM student_ratings
+ORDER BY student_id, rating_date DESC;
+
+-- View: Best survival score per student per mode
+CREATE OR REPLACE VIEW student_best_survival AS
+SELECT
+    student_id,
+    mode,
+    MAX(score) as best_score,
+    MAX(achieved_at) as achieved_at
+FROM survival_scores
+GROUP BY student_id, mode;
+
+-- View: Bot battle progress per student
+CREATE OR REPLACE VIEW student_bot_progress AS
+SELECT
+    student_id,
+    COUNT(*) as bots_defeated,
+    MAX(bot_rating) as highest_bot_rating,
+    array_agg(bot_name ORDER BY bot_rating) as defeated_bots
+FROM bot_battles
+GROUP BY student_id;
+
+-- Function: Get student's percentile rank within their branch
+CREATE OR REPLACE FUNCTION get_student_branch_rank(p_student_id UUID)
+RETURNS TABLE (
+    total_in_branch INTEGER,
+    rank_in_branch INTEGER,
+    percentile NUMERIC
+) AS $$
+BEGIN
+    RETURN QUERY
+    WITH student_info AS (
+        SELECT branch_id FROM students WHERE id = p_student_id
+    ),
+    branch_rankings AS (
+        SELECT
+            s.id,
+            COALESCE(r.rating, 0) as rating,
+            ROW_NUMBER() OVER (ORDER BY COALESCE(r.rating, 0) DESC) as rank
+        FROM students s
+        LEFT JOIN student_current_ratings r ON s.id = r.student_id
+        WHERE s.branch_id = (SELECT branch_id FROM student_info)
+        AND s.status = 'active'
+    )
+    SELECT
+        (SELECT COUNT(*)::INTEGER FROM branch_rankings),
+        (SELECT rank::INTEGER FROM branch_rankings WHERE id = p_student_id),
+        ROUND(100.0 - ((SELECT rank FROM branch_rankings WHERE id = p_student_id) - 1) * 100.0 /
+            NULLIF((SELECT COUNT(*) FROM branch_rankings), 0), 1);
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+-- Function: Get student's percentile rank school-wide
+CREATE OR REPLACE FUNCTION get_student_school_rank(p_student_id UUID)
+RETURNS TABLE (
+    total_in_school INTEGER,
+    rank_in_school INTEGER,
+    percentile NUMERIC
+) AS $$
+BEGIN
+    RETURN QUERY
+    WITH school_rankings AS (
+        SELECT
+            s.id,
+            COALESCE(r.rating, 0) as rating,
+            ROW_NUMBER() OVER (ORDER BY COALESCE(r.rating, 0) DESC) as rank
+        FROM students s
+        LEFT JOIN student_current_ratings r ON s.id = r.student_id
+        WHERE s.status = 'active'
+    )
+    SELECT
+        (SELECT COUNT(*)::INTEGER FROM school_rankings),
+        (SELECT rank::INTEGER FROM school_rankings WHERE id = p_student_id),
+        ROUND(100.0 - ((SELECT rank FROM school_rankings WHERE id = p_student_id) - 1) * 100.0 /
+            NULLIF((SELECT COUNT(*) FROM school_rankings), 0), 1);
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+-- Function: Get survival mode percentile rank
+CREATE OR REPLACE FUNCTION get_student_survival_rank(p_student_id UUID, p_mode TEXT DEFAULT 'survival_3')
+RETURNS TABLE (
+    total_players INTEGER,
+    rank INTEGER,
+    percentile NUMERIC,
+    best_score INTEGER
+) AS $$
+BEGIN
+    RETURN QUERY
+    WITH survival_rankings AS (
+        SELECT
+            student_id,
+            best_score as score,
+            ROW_NUMBER() OVER (ORDER BY best_score DESC) as rank
+        FROM student_best_survival
+        WHERE mode = p_mode
+    )
+    SELECT
+        (SELECT COUNT(*)::INTEGER FROM survival_rankings),
+        (SELECT sr.rank::INTEGER FROM survival_rankings sr WHERE sr.student_id = p_student_id),
+        ROUND(100.0 - ((SELECT sr.rank FROM survival_rankings sr WHERE sr.student_id = p_student_id) - 1) * 100.0 /
+            NULLIF((SELECT COUNT(*) FROM survival_rankings), 0), 1),
+        (SELECT sr.score::INTEGER FROM survival_rankings sr WHERE sr.student_id = p_student_id);
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+-- Function: Get student's LEVEL-based percentile rank within their branch
+-- This ranks students by their current_level and current_lesson progress
+CREATE OR REPLACE FUNCTION get_student_branch_level_rank(p_student_id UUID)
+RETURNS TABLE (
+    total_in_branch INTEGER,
+    rank_in_branch INTEGER,
+    percentile NUMERIC,
+    current_level INTEGER,
+    current_lesson INTEGER
+) AS $$
+BEGIN
+    RETURN QUERY
+    WITH student_info AS (
+        SELECT branch_id, s.current_level, s.current_lesson
+        FROM students s WHERE id = p_student_id
+    ),
+    branch_rankings AS (
+        SELECT
+            s.id,
+            s.current_level as level,
+            s.current_lesson as lesson,
+            -- Rank by level first, then by lesson within level
+            ROW_NUMBER() OVER (ORDER BY s.current_level DESC, s.current_lesson DESC) as rank
+        FROM students s
+        WHERE s.branch_id = (SELECT branch_id FROM student_info)
+        AND s.status = 'active'
+    )
+    SELECT
+        (SELECT COUNT(*)::INTEGER FROM branch_rankings),
+        (SELECT br.rank::INTEGER FROM branch_rankings br WHERE br.id = p_student_id),
+        ROUND(100.0 - ((SELECT br.rank FROM branch_rankings br WHERE br.id = p_student_id) - 1) * 100.0 /
+            NULLIF((SELECT COUNT(*) FROM branch_rankings), 0), 1),
+        (SELECT si.current_level FROM student_info si),
+        (SELECT si.current_lesson FROM student_info si);
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+-- Function: Get student's LEVEL-based percentile rank school-wide
+CREATE OR REPLACE FUNCTION get_student_school_level_rank(p_student_id UUID)
+RETURNS TABLE (
+    total_in_school INTEGER,
+    rank_in_school INTEGER,
+    percentile NUMERIC,
+    current_level INTEGER,
+    current_lesson INTEGER
+) AS $$
+BEGIN
+    RETURN QUERY
+    WITH student_info AS (
+        SELECT s.current_level, s.current_lesson
+        FROM students s WHERE id = p_student_id
+    ),
+    school_rankings AS (
+        SELECT
+            s.id,
+            s.current_level as level,
+            s.current_lesson as lesson,
+            -- Rank by level first, then by lesson within level
+            ROW_NUMBER() OVER (ORDER BY s.current_level DESC, s.current_lesson DESC) as rank
+        FROM students s
+        WHERE s.status = 'active'
+    )
+    SELECT
+        (SELECT COUNT(*)::INTEGER FROM school_rankings),
+        (SELECT sr.rank::INTEGER FROM school_rankings sr WHERE sr.id = p_student_id),
+        ROUND(100.0 - ((SELECT sr.rank FROM school_rankings sr WHERE sr.id = p_student_id) - 1) * 100.0 /
+            NULLIF((SELECT COUNT(*) FROM school_rankings), 0), 1),
+        (SELECT si.current_level FROM student_info si),
+        (SELECT si.current_lesson FROM student_info si);
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+-- ============================================
+-- 9. RLS POLICIES FOR RANKING TABLES
+-- ============================================
+
+-- Enable RLS on new tables
+ALTER TABLE student_ratings ENABLE ROW LEVEL SECURITY;
+ALTER TABLE bot_battles ENABLE ROW LEVEL SECURITY;
+ALTER TABLE survival_scores ENABLE ROW LEVEL SECURITY;
+ALTER TABLE achievements ENABLE ROW LEVEL SECURITY;
+ALTER TABLE student_achievements ENABLE ROW LEVEL SECURITY;
+
+-- Student Ratings Policies
+CREATE POLICY "Anyone can read student ratings"
+    ON student_ratings FOR SELECT
+    USING (true);
+
+CREATE POLICY "Authorized users can insert student ratings"
+    ON student_ratings FOR INSERT
+    WITH CHECK (
+        EXISTS (
+            SELECT 1 FROM user_roles
+            WHERE user_roles.user_id = auth.uid()
+            AND (user_roles.role = 'admin' OR user_roles.can_edit_students = true)
+        )
+    );
+
+CREATE POLICY "Authorized users can update student ratings"
+    ON student_ratings FOR UPDATE
+    USING (
+        EXISTS (
+            SELECT 1 FROM user_roles
+            WHERE user_roles.user_id = auth.uid()
+            AND (user_roles.role = 'admin' OR user_roles.can_edit_students = true)
+        )
+    );
+
+CREATE POLICY "Admins can delete student ratings"
+    ON student_ratings FOR DELETE
+    USING (
+        EXISTS (
+            SELECT 1 FROM user_roles
+            WHERE user_roles.user_id = auth.uid()
+            AND user_roles.role = 'admin'
+        )
+    );
+
+-- Bot Battles Policies
+CREATE POLICY "Anyone can read bot battles"
+    ON bot_battles FOR SELECT
+    USING (true);
+
+CREATE POLICY "Authorized users can manage bot battles"
+    ON bot_battles FOR ALL
+    USING (
+        EXISTS (
+            SELECT 1 FROM user_roles
+            WHERE user_roles.user_id = auth.uid()
+            AND (user_roles.role = 'admin' OR user_roles.can_edit_students = true)
+        )
+    );
+
+-- Survival Scores Policies
+CREATE POLICY "Anyone can read survival scores"
+    ON survival_scores FOR SELECT
+    USING (true);
+
+CREATE POLICY "Authorized users can manage survival scores"
+    ON survival_scores FOR ALL
+    USING (
+        EXISTS (
+            SELECT 1 FROM user_roles
+            WHERE user_roles.user_id = auth.uid()
+            AND (user_roles.role = 'admin' OR user_roles.can_edit_students = true)
+        )
+    );
+
+-- Achievements Policies (definitions - read-only for most)
+CREATE POLICY "Anyone can read achievements"
+    ON achievements FOR SELECT
+    USING (true);
+
+CREATE POLICY "Admins can manage achievements"
+    ON achievements FOR ALL
+    USING (
+        EXISTS (
+            SELECT 1 FROM user_roles
+            WHERE user_roles.user_id = auth.uid()
+            AND user_roles.role = 'admin'
+        )
+    );
+
+-- Student Achievements Policies
+CREATE POLICY "Anyone can read student achievements"
+    ON student_achievements FOR SELECT
+    USING (true);
+
+CREATE POLICY "Authorized users can manage student achievements"
+    ON student_achievements FOR ALL
+    USING (
+        EXISTS (
+            SELECT 1 FROM user_roles
+            WHERE user_roles.user_id = auth.uid()
+            AND (user_roles.role = 'admin' OR user_roles.can_edit_students = true)
+        )
+    );
+
+-- ============================================
+-- 10. SEED ACHIEVEMENT DEFINITIONS
+-- ============================================
+
+INSERT INTO achievements (code, name_en, name_ru, name_kk, category, icon, tier, threshold_value, sort_order) VALUES
+-- Bot Battle Achievements
+('first_bot', 'First Victory', 'Первая победа', 'Алғашқы жеңіс', 'bot', 'sword', 'bronze', 1, 1),
+('bot_3', 'Bot Hunter', 'Охотник на ботов', 'Бот аулаушы', 'bot', 'target', 'bronze', 3, 2),
+('bot_5', 'Bot Slayer', 'Победитель ботов', 'Ботты жеңуші', 'bot', 'swords', 'silver', 5, 3),
+('bot_10', 'Bot Master', 'Мастер ботов', 'Бот шебері', 'bot', 'crown', 'gold', 10, 4),
+('bot_15', 'Bot Legend', 'Легенда ботов', 'Бот аңызы', 'bot', 'trophy', 'platinum', 15, 5),
+('bot_500', 'Beat 500 Rating Bot', 'Победа над ботом 500', '500 рейтингті ботты жеңу', 'bot', 'zap', 'bronze', 500, 10),
+('bot_1000', 'Beat 1000 Rating Bot', 'Победа над ботом 1000', '1000 рейтингті ботты жеңу', 'bot', 'flame', 'silver', 1000, 11),
+('bot_1500', 'Beat 1500 Rating Bot', 'Победа над ботом 1500', '1500 рейтингті ботты жеңу', 'bot', 'star', 'gold', 1500, 12),
+
+-- Survival Mode Achievements
+('survival_5', 'Survivor', 'Выживший', 'Тірі қалған', 'survival', 'shield', 'bronze', 5, 20),
+('survival_10', 'Puzzle Pro', 'Мастер головоломок', 'Жұмбақ шебері', 'survival', 'puzzle', 'silver', 10, 21),
+('survival_15', 'Puzzle Expert', 'Эксперт головоломок', 'Жұмбақ сарапшысы', 'survival', 'brain', 'gold', 15, 22),
+('survival_20', 'Puzzle Legend', 'Легенда головоломок', 'Жұмбақ аңызы', 'survival', 'sparkles', 'platinum', 20, 23),
+('survival_30', 'Puzzle God', 'Бог головоломок', 'Жұмбақ құдайы', 'survival', 'gem', 'diamond', 30, 24),
+
+-- Rating Achievements
+('rating_500', 'Rising Star', 'Восходящая звезда', 'Көтеріліп келе жатқан жұлдыз', 'rating', 'trending-up', 'bronze', 500, 30),
+('rating_800', 'Solid Player', 'Уверенный игрок', 'Сенімді ойыншы', 'rating', 'anchor', 'bronze', 800, 31),
+('rating_1000', 'Breakthrough', 'Прорыв', 'Жарылыс', 'rating', 'zap', 'silver', 1000, 32),
+('rating_1200', 'Advanced Player', 'Продвинутый игрок', 'Озық ойыншы', 'rating', 'award', 'gold', 1200, 33),
+('rating_1500', 'Elite Player', 'Элитный игрок', 'Элиталық ойыншы', 'rating', 'crown', 'platinum', 1500, 34),
+('rating_1800', 'Master Class', 'Мастер класс', 'Шебер класы', 'rating', 'trophy', 'diamond', 1800, 35),
+
+-- Lesson Achievements
+('lessons_10', 'Getting Started', 'Начало пути', 'Жолдың басы', 'lesson', 'book-open', 'bronze', 10, 40),
+('lessons_30', 'Dedicated Learner', 'Усердный ученик', 'Ынталы оқушы', 'lesson', 'book', 'bronze', 30, 41),
+('lessons_60', 'Knowledge Seeker', 'Искатель знаний', 'Білім іздеуші', 'lesson', 'graduation-cap', 'silver', 60, 42),
+('lessons_90', 'Almost There', 'Почти у цели', 'Мақсатқа жақын', 'lesson', 'target', 'gold', 90, 43),
+('lessons_120', 'Course Master', 'Мастер курса', 'Курс шебері', 'lesson', 'medal', 'platinum', 120, 44),
+
+-- Special Achievements
+('first_razryad', 'First Razryad', 'Первый разряд', 'Алғашқы разряд', 'special', 'award', 'gold', NULL, 50),
+('kms', 'Candidate Master', 'Кандидат в мастера', 'Шебер үміткері', 'special', 'crown', 'platinum', NULL, 51),
+('top_10_branch', 'Branch Top 10', 'Топ 10 филиала', 'Филиал топ 10', 'special', 'medal', 'silver', 10, 52),
+('top_10_school', 'School Top 10', 'Топ 10 школы', 'Мектеп топ 10', 'special', 'trophy', 'gold', 10, 53)
+ON CONFLICT (code) DO NOTHING;
+
+-- ============================================
+-- 11. CREATE INITIAL ADMIN USER (Run this after authentication is set up)
 -- ============================================
 
 -- This needs to be run AFTER the admin user is created via Supabase Auth
