@@ -378,31 +378,31 @@ body {
     }
 }
 
-/* Rating Progress Item (second progress box) */
+/* Rating Progress Item (second progress box) - matches Level progress box colors */
 .rating-progress-item {
-    background: linear-gradient(135deg, #e0f2fe 0%, #bae6fd 100%);
-    border: 2px solid #0ea5e9;
+    background: linear-gradient(135deg, #fef3c7 0%, #fde68a 100%);
+    border: 2px solid #fbbf24;
 }
 
 .rating-progress-item .progress-label {
     display: flex;
     align-items: center;
     gap: 0.5rem;
-    color: #0c4a6e;
+    color: #78350f;
 }
 
 .rating-progress-item .progress-label svg {
-    color: #0ea5e9;
+    color: #d97706;
 }
 
 .rating-progress-item .rating-value-large {
     font-size: 2rem;
     font-weight: 800;
-    color: #0369a1;
+    color: #92400e;
 }
 
 .rating-progress-item .rating-rank-detail {
-    color: #0369a1;
+    color: #92400e;
     margin-bottom: 0;
     font-size: 1rem;
 }

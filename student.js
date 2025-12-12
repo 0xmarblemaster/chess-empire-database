@@ -1159,9 +1159,20 @@ async function openEditModal() {
     // Populate bot progress checkboxes
     populateEditBotGrid();
 
-    // Populate puzzle rush score
+    // Populate puzzle rush score - select matching level from dropdown
     const bestPuzzleScore = studentProfileData?.survival?.best?.score || 0;
-    document.getElementById('editPuzzleRushScore').value = bestPuzzleScore || '';
+    const puzzleRushSelect = document.getElementById('editPuzzleRushScore');
+    if (puzzleRushSelect) {
+        // Find the highest level target that the student has achieved
+        const levelTargets = [0, 6, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55, 60];
+        let selectedValue = 0;
+        for (const target of levelTargets) {
+            if (bestPuzzleScore >= target) {
+                selectedValue = target;
+            }
+        }
+        puzzleRushSelect.value = selectedValue.toString();
+    }
 
     // Reset photo upload state
     window.editPhotoFile = null;
