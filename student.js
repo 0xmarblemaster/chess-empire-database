@@ -148,10 +148,20 @@ async function loadStudentProfileData(studentId) {
                 studentProfileData.ratings.current = await window.supabaseData.getCurrentRating(studentId);
             }
             if (typeof window.supabaseData.getStudentBotProgress === 'function') {
-                studentProfileData.botProgress = await window.supabaseData.getStudentBotProgress(studentId);
+                const botProgressData = await window.supabaseData.getStudentBotProgress(studentId);
+                studentProfileData.botProgress = {
+                    count: botProgressData.botsDefeated || 0,
+                    total: window.TOTAL_BOTS || 17,
+                    defeated: (botProgressData.defeatedBots || []).map(name => ({ bot_name: name })),
+                    highestRating: botProgressData.highestBotRating || 0
+                };
             }
             if (typeof window.supabaseData.getBestSurvivalScore === 'function') {
-                studentProfileData.survival.best = await window.supabaseData.getBestSurvivalScore(studentId);
+                const survivalData = await window.supabaseData.getBestSurvivalScore(studentId, 'puzzle_rush');
+                studentProfileData.survival.best = {
+                    score: survivalData.bestScore || 0,
+                    achievedAt: survivalData.achievedAt
+                };
             }
             if (typeof window.supabaseData.getStudentRankings === 'function') {
                 studentProfileData.rankings = await window.supabaseData.getStudentRankings(studentId);
