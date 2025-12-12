@@ -1302,9 +1302,9 @@ const supabaseData = {
             currentRating,
             ratingHistory,
             botBattles,
-            botProgress,
+            botProgressRaw,
             survivalScores,
-            bestSurvival,
+            bestSurvivalRaw,
             rankings,
             achievements
         ] = await Promise.all([
@@ -1314,10 +1314,27 @@ const supabaseData = {
             this.getStudentBotBattles(studentId),
             this.getStudentBotProgress(studentId),
             this.getStudentSurvivalScores(studentId),
-            this.getBestSurvivalScore(studentId),
+            this.getBestSurvivalScore(studentId, 'puzzle_rush'),
             this.getStudentRankings(studentId),
             this.getStudentAchievements(studentId)
         ]);
+
+        // Transform botProgress to expected format
+        const botProgress = {
+            count: botProgressRaw.botsDefeated || 0,
+            total: window.TOTAL_BOTS || 17,
+            defeated: (botProgressRaw.defeatedBots || []).map(name => ({ bot_name: name })),
+            highestRating: botProgressRaw.highestBotRating || 0
+        };
+
+        // Transform bestSurvival to expected format
+        const survival = {
+            best: {
+                score: bestSurvivalRaw.bestScore || 0,
+                achievedAt: bestSurvivalRaw.achievedAt
+            },
+            scores: survivalScores.slice(0, 10) // Last 10 scores
+        };
 
         return {
             ...basicInfo,
@@ -1325,8 +1342,8 @@ const supabaseData = {
             ratingHistory: ratingHistory.slice(0, 10), // Last 10 ratings
             botBattles,
             botProgress,
-            survivalScores: survivalScores.slice(0, 10), // Last 10 scores
-            bestSurvival,
+            survivalScores: survivalScores.slice(0, 10), // Last 10 scores (kept for compatibility)
+            survival,
             rankings,
             achievements
         };
