@@ -79,6 +79,7 @@ const translations = {
         "student.razryadNotYet": "Not yet",
         "student.learningProgress": "Learning Progress",
         "student.currentLevel": "Current Level",
+        "student.levelLabel": "Level",
         "student.levelDetail": "Level {{current}} of 8",
         "student.currentLesson": "Current Lesson",
         "student.lessonDetail": "Lesson {{current}} of {{total}}",
@@ -257,6 +258,11 @@ const translations = {
         "admin.modals.edit.genderUnknown": "Not specified",
         "admin.modals.edit.levelPlaceholder": "1-10",
         "admin.modals.edit.lessonPlaceholder": "1-40",
+        "admin.modals.edit.botProgress": "Bot Progress",
+        "admin.modals.edit.botProgressHint": "Check bots the student has defeated",
+        "admin.modals.edit.puzzleRush": "Puzzle Rush",
+        "admin.modals.edit.puzzleRushHint": "Record the student's best Puzzle Rush score",
+        "admin.modals.edit.puzzleRushScore": "Best Score",
         "admin.alert.addStudent": "Add Student functionality will be implemented in the next phase.\n\nThis will include:\n- Student information form\n- Photo upload\n- Branch and coach assignment\n- Initial level placement",
         "admin.alert.export": "Export functionality will be implemented soon.\n\nSupported formats:\n- Excel (.xlsx)\n- CSV\n- PDF Report",
         "admin.alert.coaches": "Coaches section will be implemented in the next phase.\n\nThis will include:\n- Coach list with statistics\n- Individual coach profiles\n- Student assignments\n- Performance metrics",
@@ -398,17 +404,42 @@ const translations = {
         "rankings.topPercent": "Top {{percent}}%",
         "rankings.branchRank": "Branch Rank",
         "rankings.schoolRank": "School Rank",
+        "rankings.ofTotal": "of {{total}}",
+        "rankings.noRank": "No rank yet",
 
         // Bots
         "bots.progress": "Bot Progress",
         "bots.defeated": "Bots Defeated",
         "bots.nextTarget": "Next Target",
+        "bots.tierBeginner": "Beginner",
+        "bots.tierIntermediate": "Intermediate",
+        "bots.tierAdvanced": "Advanced",
+        "bots.tierExpert": "Expert",
+        "bots.tierMaster": "Master",
+        "bots.tierGrandmaster": "Grandmaster",
 
         // Survival Mode
         "survival.bestScore": "Best Score",
         "survival.recentScores": "Recent Scores",
         "survival.mode3": "3 Lives",
         "survival.mode5": "5 Lives",
+
+        // Puzzle Rush
+        "puzzleRush.title": "Puzzle Rush",
+        "puzzleRush.bestScore": "Best Score",
+        "puzzleRush.level": "Level",
+        "puzzleRush.target": "puzzles",
+        "puzzleRush.completed": "Completed",
+        "puzzleRush.nextTarget": "Next Target",
+        "puzzleRush.locked": "Locked",
+        "puzzleRush.levelsCompleted": "Levels Completed",
+        "puzzleRush.tierBeginner": "Beginner",
+        "puzzleRush.tierIntermediate": "Intermediate",
+        "puzzleRush.tierAdvanced": "Advanced",
+        "puzzleRush.tierExpert": "Expert",
+        "puzzleRush.tierMaster": "Master",
+        "puzzleRush.tierGrandmaster": "Grandmaster",
+        "puzzleRush.progress": "Puzzle Rush Progress",
 
         // Stats
         "stats.rating": "Rating",
@@ -480,7 +511,20 @@ const translations = {
         // Admin Survival
         "admin.survival.title": "Survival Scores",
         "admin.survival.addScore": "Add Score",
-        "admin.survival.bestScore": "Best Score"
+        "admin.survival.bestScore": "Best Score",
+
+        // Coach Edit Controls
+        "coach.clickToToggle": "Click on a bot to toggle defeated status",
+        "coach.addScore": "Add New Score",
+        "coach.scorePlaceholder": "Enter score...",
+        "coach.add": "Add",
+        "coach.noPermission": "You do not have permission to edit",
+        "coach.noStudent": "No student selected",
+        "coach.botAdded": "Added {{name}} to defeated bots",
+        "coach.botRemoved": "Removed {{name}} from defeated bots",
+        "coach.scoreAdded": "Score of {{score}} added successfully",
+        "coach.updateFailed": "Failed to update",
+        "coach.invalidScore": "Please enter a valid score (0-100)"
     },
     kk: {
         "common.brand": "Chess Empire",
@@ -539,6 +583,7 @@ const translations = {
         "student.razryadNotYet": "Әзірге жоқ",
         "student.learningProgress": "Оқу барысы",
         "student.currentLevel": "Ағымдағы деңгей",
+        "student.levelLabel": "Деңгей",
         "student.levelDetail": "{{current}} / 8 деңгей",
         "student.currentLesson": "Ағымдағы сабақ",
         "student.lessonDetail": "Сабақ {{current}} / {{total}}",
@@ -671,6 +716,11 @@ const translations = {
         "admin.modals.edit.level": "Деңгей және прогресс",
         "admin.modals.edit.currentLevel": "Ағымдағы деңгей",
         "admin.modals.edit.currentLesson": "Ағымдағы сабақ",
+        "admin.modals.edit.botProgress": "Боттар прогресі",
+        "admin.modals.edit.botProgressHint": "Оқушы жеңген боттарды белгілеңіз",
+        "admin.modals.edit.puzzleRush": "Puzzle Rush",
+        "admin.modals.edit.puzzleRushHint": "Оқушының ең жақсы Puzzle Rush нәтижесін жазыңыз",
+        "admin.modals.edit.puzzleRushScore": "Ең жақсы нәтиже",
         "admin.alert.addStudent": "Оқушы қосу мүмкіндігі келесі кезеңде іске асады.\n\nЖоспарда:\n- Оқушы деректер формасы\n- Фото жүктеу\n- Бөлімше мен тренер тағайындау\n- Бастапқы деңгейді анықтау",
         "admin.alert.export": "Экспорт мүмкіндігі кейін қосылады.\n\nПішімдер:\n- Excel (.xlsx)\n- CSV\n- PDF есеп",
         "admin.alert.coaches": "Тренерлер бөлімі келесі кезеңде іске асады.\n\nЖоспарда:\n- Статистикасы бар тізім\n- Жеке тренер профилі\n- Оқушыларды бекіту\n- Нәтиже көрсеткіштері",
@@ -818,17 +868,42 @@ const translations = {
         "rankings.topPercent": "Үздік {{percent}}%",
         "rankings.branchRank": "Бөлімше рангі",
         "rankings.schoolRank": "Мектеп рангі",
+        "rankings.ofTotal": "{{total}} ішінде",
+        "rankings.noRank": "Рейтинг жоқ",
 
         // Bots
         "bots.progress": "Бот прогресі",
         "bots.defeated": "Жеңілген боттар",
         "bots.nextTarget": "Келесі мақсат",
+        "bots.tierBeginner": "Бастаушы",
+        "bots.tierIntermediate": "Орташа",
+        "bots.tierAdvanced": "Озық",
+        "bots.tierExpert": "Сарапшы",
+        "bots.tierMaster": "Шебер",
+        "bots.tierGrandmaster": "Гроссмейстер",
 
         // Survival Mode
         "survival.bestScore": "Ең жақсы ұпай",
         "survival.recentScores": "Соңғы ұпайлар",
         "survival.mode3": "3 өмір",
         "survival.mode5": "5 өмір",
+
+        // Puzzle Rush
+        "puzzleRush.title": "Жылдам шешім",
+        "puzzleRush.bestScore": "Ең жақсы ұпай",
+        "puzzleRush.level": "Деңгей",
+        "puzzleRush.target": "жұмбақ",
+        "puzzleRush.completed": "Орындалды",
+        "puzzleRush.nextTarget": "Келесі мақсат",
+        "puzzleRush.locked": "Құлыпталған",
+        "puzzleRush.levelsCompleted": "Аяқталған деңгейлер",
+        "puzzleRush.tierBeginner": "Бастаушы",
+        "puzzleRush.tierIntermediate": "Орташа",
+        "puzzleRush.tierAdvanced": "Озық",
+        "puzzleRush.tierExpert": "Сарапшы",
+        "puzzleRush.tierMaster": "Шебер",
+        "puzzleRush.tierGrandmaster": "Гроссмейстер",
+        "puzzleRush.progress": "Жылдам шешім прогресі",
 
         // Stats
         "stats.rating": "Рейтинг",
@@ -900,7 +975,20 @@ const translations = {
         // Admin Survival
         "admin.survival.title": "Survival ұпайлары",
         "admin.survival.addScore": "Ұпай қосу",
-        "admin.survival.bestScore": "Ең жақсы ұпай"
+        "admin.survival.bestScore": "Ең жақсы ұпай",
+
+        // Coach Edit Controls
+        "coach.clickToToggle": "Жеңілген күйін ауыстыру үшін ботқа басыңыз",
+        "coach.addScore": "Жаңа ұпай қосу",
+        "coach.scorePlaceholder": "Ұпайды енгізіңіз...",
+        "coach.add": "Қосу",
+        "coach.noPermission": "Өңдеуге рұқсатыңыз жоқ",
+        "coach.noStudent": "Оқушы таңдалмаған",
+        "coach.botAdded": "{{name}} жеңілген боттарға қосылды",
+        "coach.botRemoved": "{{name}} жеңілген боттардан алынды",
+        "coach.scoreAdded": "{{score}} ұпай сәтті қосылды",
+        "coach.updateFailed": "Жаңарту сәтсіз аяқталды",
+        "coach.invalidScore": "Жарамды ұпай енгізіңіз (0-100)"
     },
     ru: {
         // Common
@@ -964,6 +1052,7 @@ const translations = {
         "student.razryadNotYet": "Пока нет",
         "student.learningProgress": "Прогресс обучения",
         "student.currentLevel": "Текущая ступень",
+        "student.levelLabel": "Ступень",
         "student.levelDetail": "Ступень {{current}} из 8",
         "student.currentLesson": "Текущее занятие",
         "student.lessonDetail": "Урок {{current}} из {{total}}",
@@ -1141,6 +1230,11 @@ const translations = {
         "admin.modals.edit.genderUnknown": "Не указано",
         "admin.modals.edit.levelPlaceholder": "1-10",
         "admin.modals.edit.lessonPlaceholder": "1-40",
+        "admin.modals.edit.botProgress": "Прогресс по ботам",
+        "admin.modals.edit.botProgressHint": "Отметьте ботов, которых победил ученик",
+        "admin.modals.edit.puzzleRush": "Puzzle Rush",
+        "admin.modals.edit.puzzleRushHint": "Запишите лучший результат Puzzle Rush ученика",
+        "admin.modals.edit.puzzleRushScore": "Лучший результат",
         "admin.alert.addStudent": "Функция добавления ученика появится в следующей версии.\n\nПланируется:\n- Форма с данными ученика\n- Загрузка фото\n- Назначение филиала и тренера\n- Определение стартовой ступени",
         "admin.alert.export": "Экспорт данных появится позже.\n\nБудут поддерживаться форматы:\n- Excel (.xlsx)\n- CSV\n- PDF-отчет",
         "admin.alert.coaches": "Раздел тренеров будет реализован в следующей версии.\n\nПланируется:\n- Список тренеров со статистикой\n- Отдельные профили\n- Закрепленные ученики\n- Показатели эффективности",
@@ -1282,17 +1376,42 @@ const translations = {
         "rankings.topPercent": "Топ {{percent}}%",
         "rankings.branchRank": "Ранг в филиале",
         "rankings.schoolRank": "Ранг в школе",
+        "rankings.ofTotal": "из {{total}}",
+        "rankings.noRank": "Нет рейтинга",
 
         // Bots
         "bots.progress": "Прогресс ботов",
         "bots.defeated": "Побеждено ботов",
         "bots.nextTarget": "Следующая цель",
+        "bots.tierBeginner": "Начинающий",
+        "bots.tierIntermediate": "Средний",
+        "bots.tierAdvanced": "Продвинутый",
+        "bots.tierExpert": "Эксперт",
+        "bots.tierMaster": "Мастер",
+        "bots.tierGrandmaster": "Гроссмейстер",
 
         // Survival Mode
         "survival.bestScore": "Лучший результат",
         "survival.recentScores": "Последние результаты",
         "survival.mode3": "3 жизни",
         "survival.mode5": "5 жизней",
+
+        // Puzzle Rush
+        "puzzleRush.title": "Выживание",
+        "puzzleRush.bestScore": "Выживание",
+        "puzzleRush.level": "Уровень",
+        "puzzleRush.target": "задач",
+        "puzzleRush.completed": "Выполнено",
+        "puzzleRush.nextTarget": "Следующая цель",
+        "puzzleRush.locked": "Закрыто",
+        "puzzleRush.levelsCompleted": "Уровней пройдено",
+        "puzzleRush.tierBeginner": "Начинающий",
+        "puzzleRush.tierIntermediate": "Средний",
+        "puzzleRush.tierAdvanced": "Продвинутый",
+        "puzzleRush.tierExpert": "Эксперт",
+        "puzzleRush.tierMaster": "Мастер",
+        "puzzleRush.tierGrandmaster": "Гроссмейстер",
+        "puzzleRush.progress": "Прогресс выживания",
 
         // Stats
         "stats.rating": "Рейтинг",
@@ -1364,7 +1483,20 @@ const translations = {
         // Admin Survival
         "admin.survival.title": "Survival результаты",
         "admin.survival.addScore": "Добавить результат",
-        "admin.survival.bestScore": "Лучший результат"
+        "admin.survival.bestScore": "Лучший результат",
+
+        // Coach Edit Controls
+        "coach.clickToToggle": "Нажмите на бота, чтобы изменить статус победы",
+        "coach.addScore": "Добавить новый результат",
+        "coach.scorePlaceholder": "Введите результат...",
+        "coach.add": "Добавить",
+        "coach.noPermission": "У вас нет разрешения на редактирование",
+        "coach.noStudent": "Ученик не выбран",
+        "coach.botAdded": "{{name}} добавлен в побеждённые боты",
+        "coach.botRemoved": "{{name}} удалён из побеждённых ботов",
+        "coach.scoreAdded": "Результат {{score}} успешно добавлен",
+        "coach.updateFailed": "Не удалось обновить",
+        "coach.invalidScore": "Введите корректный результат (0-100)"
     }
 };
 

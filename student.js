@@ -190,7 +190,7 @@ function getLeagueInfo(rating) {
 
 // Get survival tier info
 function getSurvivalInfo(score) {
-    if (!score) return { label: t('rankings.noScore') || 'No Score', tier: 'none', color: '#94a3b8' };
+    if (!score) return { label: t('puzzleRush.tierBeginner') || 'Beginner', tier: 'beginner', color: '#94a3b8' };
 
     if (typeof window.getSurvivalTier === 'function') {
         const tier = window.getSurvivalTier(score);
@@ -395,29 +395,68 @@ function renderBotGrid() {
     const defeatedBots = studentProfileData?.botProgress?.defeated || [];
     const defeatedSet = new Set(defeatedBots.map(b => b.bot_name?.toLowerCase() || b.botName?.toLowerCase()));
 
-    let html = '<div class="bot-grid">';
+    // Tier configuration with labels and colors
+    const tierConfig = {
+        beginner: { label: t('bots.tierBeginner') || 'Beginner', color: '#94a3b8', icon: 'baby' },
+        intermediate: { label: t('bots.tierIntermediate') || 'Intermediate', color: '#10b981', icon: 'user' },
+        advanced: { label: t('bots.tierAdvanced') || 'Advanced', color: '#3b82f6', icon: 'user-check' },
+        expert: { label: t('bots.tierExpert') || 'Expert', color: '#8b5cf6', icon: 'brain' },
+        master: { label: t('bots.tierMaster') || 'Master', color: '#d97706', icon: 'crown' },
+        grandmaster: { label: t('bots.tierGrandmaster') || 'Grandmaster', color: '#ef4444', icon: 'flame' }
+    };
 
+    // Group bots by tier
+    const botsByTier = {};
     bots.forEach((bot, index) => {
-        const isDefeated = defeatedSet.has(bot.name.toLowerCase());
-        const isNextTarget = !isDefeated && index === defeatedBots.length;
+        if (!botsByTier[bot.tier]) {
+            botsByTier[bot.tier] = [];
+        }
+        botsByTier[bot.tier].push({ ...bot, originalIndex: index });
+    });
+
+    let html = '<div class="bot-sections">';
+
+    // Render each tier section
+    const tierOrder = ['beginner', 'intermediate', 'advanced', 'expert', 'master', 'grandmaster'];
+    tierOrder.forEach(tier => {
+        const tierBots = botsByTier[tier];
+        if (!tierBots || tierBots.length === 0) return;
+
+        const config = tierConfig[tier];
 
         html += `
-            <div class="bot-card ${isDefeated ? 'defeated' : ''} ${isNextTarget ? 'next-target' : ''}"
-                 style="--bot-color: ${bot.color}">
-                <div class="bot-avatar">${bot.avatar}</div>
-                <div class="bot-info">
-                    <div class="bot-name">${bot.name}</div>
-                    <div class="bot-rating">${bot.rating}</div>
+            <div class="bot-tier-section">
+                <div class="bot-tier-header" style="--tier-color: ${config.color}">
+                    <i data-lucide="${config.icon}" style="width: 18px; height: 18px;"></i>
+                    <span>${config.label}</span>
                 </div>
-                <div class="bot-status">
-                    ${isDefeated
-                        ? '<i data-lucide="check-circle" style="width: 20px; height: 20px; color: #10b981;"></i>'
-                        : isNextTarget
-                            ? '<i data-lucide="target" style="width: 20px; height: 20px; color: #f59e0b;"></i>'
-                            : '<i data-lucide="lock" style="width: 20px; height: 20px; color: #94a3b8;"></i>'}
-                </div>
-            </div>
+                <div class="bot-grid">
         `;
+
+        tierBots.forEach(bot => {
+            const isDefeated = defeatedSet.has(bot.name.toLowerCase());
+            const isNextTarget = !isDefeated && bot.originalIndex === defeatedBots.length;
+
+            html += `
+                <div class="bot-card ${isDefeated ? 'defeated' : ''} ${isNextTarget ? 'next-target' : ''}"
+                     style="--bot-color: ${bot.color}">
+                    <div class="bot-avatar">${bot.avatar}</div>
+                    <div class="bot-info">
+                        <div class="bot-name">${bot.name}</div>
+                        <div class="bot-rating">${bot.rating}</div>
+                    </div>
+                    <div class="bot-status">
+                        ${isDefeated
+                            ? '<i data-lucide="check-circle" style="width: 20px; height: 20px; color: #10b981;"></i>'
+                            : isNextTarget
+                                ? '<i data-lucide="target" style="width: 20px; height: 20px; color: #f59e0b;"></i>'
+                                : '<i data-lucide="lock" style="width: 20px; height: 20px; color: #94a3b8;"></i>'}
+                    </div>
+                </div>
+            `;
+        });
+
+        html += '</div></div>';
     });
 
     html += '</div>';
@@ -442,21 +481,34 @@ function renderBotGrid() {
     return html;
 }
 
-// Render survival scores for Puzzles tab
+// Render survival/puzzle rush content for Puzzles tab
 function renderSurvivalContent() {
     const best = studentProfileData?.survival?.best;
     const scores = studentProfileData?.survival?.scores || [];
     const survivalRank = studentProfileData?.rankings?.survival;
+    const bestScore = best?.score || 0;
 
-    const survivalInfo = getSurvivalInfo(best?.score);
+    const survivalInfo = getSurvivalInfo(bestScore);
+    const levels = window.PUZZLE_RUSH_LEVELS || [];
 
+    // Tier configuration for headings
+    const tierConfig = {
+        beginner: { label: t('puzzleRush.tierBeginner') || 'Beginner', color: '#94a3b8', icon: 'baby' },
+        intermediate: { label: t('puzzleRush.tierIntermediate') || 'Intermediate', color: '#10b981', icon: 'user' },
+        advanced: { label: t('puzzleRush.tierAdvanced') || 'Advanced', color: '#3b82f6', icon: 'user-check' },
+        expert: { label: t('puzzleRush.tierExpert') || 'Expert', color: '#8b5cf6', icon: 'brain' },
+        master: { label: t('puzzleRush.tierMaster') || 'Master', color: '#d97706', icon: 'crown' },
+        grandmaster: { label: t('puzzleRush.tierGrandmaster') || 'Grandmaster', color: '#ef4444', icon: 'flame' }
+    };
+
+    // Hero section with best score
     let html = `
         <div class="survival-hero">
             <div class="survival-score-display" style="--tier-color: ${survivalInfo.color}">
-                <div class="survival-score-value">${best?.score || '—'}</div>
-                <div class="survival-score-label">${t('survival.bestScore') || 'Best Score'}</div>
+                <div class="survival-score-value">${bestScore}</div>
+                <div class="survival-score-label">${t('puzzleRush.bestScore') || 'Best Score'}</div>
             </div>
-            <div class="survival-tier-badge tier-${survivalInfo.tier || 'none'}">
+            <div class="survival-tier-badge tier-${survivalInfo.tier || 'beginner'}">
                 <i data-lucide="zap" style="width: 18px; height: 18px;"></i>
                 <span>${survivalInfo.label}</span>
             </div>
@@ -476,11 +528,77 @@ function renderSurvivalContent() {
         }
     }
 
+    // Group levels by tier
+    const levelsByTier = {};
+    levels.forEach(level => {
+        if (!levelsByTier[level.tier]) {
+            levelsByTier[level.tier] = [];
+        }
+        levelsByTier[level.tier].push(level);
+    });
+
+    // Render level sections
+    html += '<div class="puzzle-rush-sections">';
+
+    const tierOrder = ['beginner', 'intermediate', 'advanced', 'expert', 'master', 'grandmaster'];
+    tierOrder.forEach(tier => {
+        const tierLevels = levelsByTier[tier];
+        if (!tierLevels || tierLevels.length === 0) return;
+
+        const config = tierConfig[tier];
+
+        html += `
+            <div class="puzzle-rush-tier-section">
+                <div class="puzzle-rush-tier-header" style="--tier-color: ${config.color}">
+                    <i data-lucide="${config.icon}" style="width: 18px; height: 18px;"></i>
+                    <span>${config.label}</span>
+                </div>
+                <div class="puzzle-rush-grid">
+        `;
+
+        tierLevels.forEach(level => {
+            const isCompleted = bestScore >= level.target;
+            const isNext = !isCompleted && (bestScore < level.target) &&
+                           (level.level === 1 || bestScore >= levels[level.level - 2]?.target);
+
+            const isLocked = !isCompleted && !isNext;
+            html += `
+                <div class="puzzle-rush-card ${isCompleted ? 'completed' : ''} ${isNext ? 'next-target' : ''} ${isLocked ? 'locked' : ''}">
+                    <div class="puzzle-rush-checkbox">
+                        ${isCompleted ? '<i data-lucide="check"></i>' : ''}
+                    </div>
+                    <div class="puzzle-rush-number">${level.target}</div>
+                </div>
+            `;
+        });
+
+        html += '</div></div>';
+    });
+
+    html += '</div>';
+
+    // Progress summary
+    const completedLevels = levels.filter(l => bestScore >= l.target).length;
+    const totalLevels = levels.length;
+    const progressPercent = Math.round((completedLevels / totalLevels) * 100);
+
+    html += `
+        <div class="puzzle-rush-progress-summary">
+            <div class="puzzle-rush-progress-header">
+                <span class="puzzle-rush-progress-label">${t('puzzleRush.progress') || 'Puzzle Rush Progress'}</span>
+                <span class="puzzle-rush-progress-count">${completedLevels}/${totalLevels}</span>
+            </div>
+            <div class="progress-bar-container">
+                <div class="progress-bar puzzle-rush-progress-bar" style="width: ${progressPercent}%" data-target="${progressPercent}"></div>
+            </div>
+        </div>
+    `;
+
     // Recent scores
     if (scores.length > 0) {
         html += `
             <div class="survival-history">
-                <h3 class="subsection-title">${t('survival.recentScores') || 'Recent Scores'}</h3>
+                <h3 class="subsection-title">${t('puzzleRush.recentScores') || 'Recent Scores'}</h3>
                 <div class="score-list">
         `;
 
@@ -728,23 +846,27 @@ async function renderProfile() {
 
                     <div class="progress-item">
                         <div class="progress-header">
-                            <div class="progress-label">${t('student.currentLevel')}</div>
-                            <div class="progress-percentage">${levelProgress}%</div>
-                        </div>
-                        <div class="progress-detail">${t('student.levelDetail', { current: student.currentLevel })}</div>
-                        <div class="progress-bar-container">
-                            <div class="progress-bar" style="width: 0%" data-target="${levelProgress}"></div>
-                        </div>
-                    </div>
-
-                    <div class="progress-item">
-                        <div class="progress-header">
-                            <div class="progress-label">${t('student.currentLesson')}</div>
+                            <div class="progress-label">${t('student.levelLabel') || 'Level'} ${student.currentLevel}</div>
                             <div class="progress-percentage">${lessonProgress}%</div>
                         </div>
                         <div class="progress-detail">${t('student.lessonDetail', { current: student.currentLesson, total: totalLessons })}</div>
                         <div class="progress-bar-container">
                             <div class="progress-bar" style="width: 0%" data-target="${lessonProgress}"></div>
+                        </div>
+                    </div>
+
+                    <div class="progress-item rating-progress-item">
+                        <div class="progress-header">
+                            <div class="progress-label">
+                                <i data-lucide="trending-up" style="width: 16px; height: 16px;"></i>
+                                ${t('stats.rating') || 'Rating'}
+                            </div>
+                            <div class="progress-percentage rating-value-large">${currentRating || '—'}</div>
+                        </div>
+                        <div class="progress-detail rating-rank-detail">
+                            ${rankings.schoolLevel?.rankInSchool
+                                ? `#${rankings.schoolLevel.rankInSchool} ${t('rankings.ofTotal', { total: rankings.schoolLevel.totalInSchool }) || `of ${rankings.schoolLevel.totalInSchool}`}`
+                                : t('rankings.noRank') || 'No rank yet'}
                         </div>
                     </div>
                 </div>
@@ -1024,6 +1146,13 @@ async function openEditModal() {
     document.getElementById('editCurrentLevel').value = student.currentLevel || 1;
     document.getElementById('editCurrentLesson').value = student.currentLesson || 1;
 
+    // Populate bot progress checkboxes
+    populateEditBotGrid();
+
+    // Populate puzzle rush score
+    const bestPuzzleScore = studentProfileData?.survival?.best?.score || 0;
+    document.getElementById('editPuzzleRushScore').value = bestPuzzleScore || '';
+
     // Reset photo upload state
     window.editPhotoFile = null;
     window.editPhotoRemoved = false;
@@ -1042,6 +1171,119 @@ async function openEditModal() {
 // Close edit modal
 function closeEditModal() {
     document.getElementById('editModal').classList.remove('active');
+}
+
+// Populate bot grid in edit modal with checkboxes
+function populateEditBotGrid() {
+    const bots = window.CHESS_BOTS || [];
+    const defeatedBots = studentProfileData?.botProgress?.defeated || [];
+    const defeatedSet = new Set(defeatedBots.map(b => (b.bot_name || b.botName || '').toLowerCase()));
+
+    const container = document.getElementById('editBotGrid');
+    if (!container) return;
+
+    // Group bots by tier
+    const tiers = {
+        beginner: { label: t('bots.tiers.beginner') || 'Beginner', bots: [] },
+        intermediate: { label: t('bots.tiers.intermediate') || 'Intermediate', bots: [] },
+        advanced: { label: t('bots.tiers.advanced') || 'Advanced', bots: [] },
+        master: { label: t('bots.tiers.master') || 'Master', bots: [] }
+    };
+
+    bots.forEach(bot => {
+        if (tiers[bot.tier]) {
+            tiers[bot.tier].bots.push(bot);
+        }
+    });
+
+    let html = '';
+
+    Object.entries(tiers).forEach(([tierKey, tierData]) => {
+        if (tierData.bots.length === 0) return;
+
+        html += `<div class="edit-bot-tier">
+            <div class="edit-bot-tier-label" style="color: ${tierData.bots[0]?.color || '#64748b'}">${tierData.label}</div>
+            <div class="edit-bot-tier-bots">`;
+
+        tierData.bots.forEach(bot => {
+            const isDefeated = defeatedSet.has(bot.name.toLowerCase());
+            html += `
+                <label class="edit-bot-checkbox ${isDefeated ? 'checked' : ''}">
+                    <input type="checkbox"
+                           name="bot_${bot.name}"
+                           value="${bot.name}"
+                           data-rating="${bot.rating}"
+                           ${isDefeated ? 'checked' : ''}>
+                    <span class="edit-bot-avatar" style="background: ${bot.color}">${bot.avatar}</span>
+                    <span class="edit-bot-name">${bot.name}</span>
+                    <span class="edit-bot-rating">${bot.rating}</span>
+                </label>`;
+        });
+
+        html += `</div></div>`;
+    });
+
+    container.innerHTML = html;
+
+    // Add change listeners to update visual state
+    container.querySelectorAll('input[type="checkbox"]').forEach(checkbox => {
+        checkbox.addEventListener('change', function() {
+            this.closest('.edit-bot-checkbox').classList.toggle('checked', this.checked);
+        });
+    });
+}
+
+// Save bot progress changes from edit modal
+async function saveBotProgressFromModal(studentId) {
+    const container = document.getElementById('editBotGrid');
+    if (!container || !window.supabaseData) return;
+
+    const defeatedBots = studentProfileData?.botProgress?.defeated || [];
+    const previouslyDefeatedSet = new Set(defeatedBots.map(b => (b.bot_name || b.botName || '').toLowerCase()));
+
+    const checkboxes = container.querySelectorAll('input[type="checkbox"]');
+
+    for (const checkbox of checkboxes) {
+        const botName = checkbox.value;
+        const botRating = parseInt(checkbox.dataset.rating) || 0;
+        const isChecked = checkbox.checked;
+        const wasDefeated = previouslyDefeatedSet.has(botName.toLowerCase());
+
+        // If state changed, update in database
+        if (isChecked && !wasDefeated) {
+            // Add bot win
+            try {
+                await window.supabaseData.addBotBattleWin(studentId, botName, botRating);
+            } catch (error) {
+                console.error(`Error adding bot win for ${botName}:`, error);
+            }
+        } else if (!isChecked && wasDefeated) {
+            // Remove bot win
+            try {
+                await window.supabaseData.removeBotBattleWin(studentId, botName);
+            } catch (error) {
+                console.error(`Error removing bot win for ${botName}:`, error);
+            }
+        }
+    }
+}
+
+// Save puzzle rush score from edit modal
+async function savePuzzleRushFromModal(studentId) {
+    const scoreInput = document.getElementById('editPuzzleRushScore');
+    if (!scoreInput || !window.supabaseData) return;
+
+    const newScore = parseInt(scoreInput.value) || 0;
+    const currentBestScore = studentProfileData?.survival?.best?.score || 0;
+
+    // Only save if score is greater than current best (or if there's no current score)
+    if (newScore > 0 && newScore !== currentBestScore) {
+        try {
+            await window.supabaseData.addSurvivalScore(studentId, newScore, 'puzzle_rush', 'Updated via edit form');
+        } catch (error) {
+            console.error('Error saving puzzle rush score:', error);
+        }
+    }
 }
 
 // Save student edits
@@ -1127,6 +1369,15 @@ async function saveStudentEdits(event) {
             // Update local student object with the transformed data
             Object.assign(window.currentStudent, updatedStudent);
             window.currentStudentName = `${firstName} ${lastName}`;
+
+            // Save bot progress changes
+            await saveBotProgressFromModal(student.id);
+
+            // Save puzzle rush score if changed
+            await savePuzzleRushFromModal(student.id);
+
+            // Reload profile data to reflect bot/puzzle changes
+            await loadStudentProfileData(student.id);
 
             // Re-render profile
             renderProfile();

@@ -7,32 +7,32 @@
 // CHESS.COM BOTS CONFIGURATION
 // ============================================
 const CHESS_BOTS = [
-    // Beginner Tier (0-500)
+    // Beginner Tier (250-850)
     { name: 'Martin', rating: 250, tier: 'beginner', avatar: 'M', color: '#94a3b8' },
-    { name: 'Sven', rating: 300, tier: 'beginner', avatar: 'S', color: '#94a3b8' },
     { name: 'Juan', rating: 400, tier: 'beginner', avatar: 'J', color: '#94a3b8' },
-    { name: 'Ramon', rating: 500, tier: 'beginner', avatar: 'R', color: '#94a3b8' },
+    { name: 'Oliver', rating: 550, tier: 'beginner', avatar: 'O', color: '#94a3b8' },
+    { name: 'Mina', rating: 700, tier: 'beginner', avatar: 'M', color: '#94a3b8' },
+    { name: 'Zara', rating: 850, tier: 'beginner', avatar: 'Z', color: '#94a3b8' },
 
-    // Intermediate Tier (600-900)
-    { name: 'Wally', rating: 600, tier: 'intermediate', avatar: 'W', color: '#10b981' },
-    { name: 'Grant', rating: 700, tier: 'intermediate', avatar: 'G', color: '#10b981' },
-    { name: 'Elena', rating: 800, tier: 'intermediate', avatar: 'E', color: '#10b981' },
-    { name: 'Mahir', rating: 900, tier: 'intermediate', avatar: 'M', color: '#10b981' },
+    // Intermediate Tier (1000-1400)
+    { name: 'Maria', rating: 1000, tier: 'intermediate', avatar: 'M', color: '#10b981' },
+    { name: 'Sven', rating: 1100, tier: 'intermediate', avatar: 'S', color: '#10b981' },
+    { name: 'Emir', rating: 1200, tier: 'intermediate', avatar: 'E', color: '#10b981' },
+    { name: 'Nelson', rating: 1300, tier: 'intermediate', avatar: 'N', color: '#10b981' },
+    { name: 'Mateo', rating: 1400, tier: 'intermediate', avatar: 'M', color: '#10b981' },
 
-    // Advanced Tier (1000-1300)
-    { name: 'Chen', rating: 1000, tier: 'advanced', avatar: 'C', color: '#3b82f6' },
-    { name: 'Tony', rating: 1100, tier: 'advanced', avatar: 'T', color: '#3b82f6' },
-    { name: 'Fatima', rating: 1200, tier: 'advanced', avatar: 'F', color: '#3b82f6' },
-    { name: 'Wei', rating: 1300, tier: 'advanced', avatar: 'W', color: '#3b82f6' },
+    // Advanced Tier (1500-2000)
+    { name: 'Wendy', rating: 1500, tier: 'advanced', avatar: 'W', color: '#3b82f6' },
+    { name: 'Joel', rating: 1600, tier: 'advanced', avatar: 'J', color: '#3b82f6' },
+    { name: 'Isla', rating: 1700, tier: 'advanced', avatar: 'I', color: '#3b82f6' },
+    { name: 'Wally', rating: 1800, tier: 'advanced', avatar: 'W', color: '#3b82f6' },
+    { name: 'Miguel', rating: 1900, tier: 'advanced', avatar: 'M', color: '#3b82f6' },
+    { name: 'Charles', rating: 2000, tier: 'advanced', avatar: 'C', color: '#3b82f6' },
 
-    // Expert Tier (1400-1700)
-    { name: 'Sebastian', rating: 1400, tier: 'expert', avatar: 'S', color: '#8b5cf6' },
-    { name: 'Nelson', rating: 1500, tier: 'expert', avatar: 'N', color: '#8b5cf6' },
-    { name: 'Noam', rating: 1600, tier: 'expert', avatar: 'N', color: '#8b5cf6' },
-    { name: 'Francis', rating: 1700, tier: 'expert', avatar: 'F', color: '#8b5cf6' },
-
-    // Master Tier (1800+)
-    { name: 'Hikaru', rating: 2000, tier: 'master', avatar: 'H', color: '#d97706' }
+    // Master Tier (2200-2400)
+    { name: 'Nora', rating: 2200, tier: 'master', avatar: 'N', color: '#d97706' },
+    { name: 'Arjun', rating: 2300, tier: 'master', avatar: 'A', color: '#d97706' },
+    { name: 'Wei', rating: 2400, tier: 'master', avatar: 'W', color: '#d97706' }
 ];
 
 // Total number of bots for progress tracking
@@ -130,12 +130,61 @@ function getPointsToNextLeague(rating) {
 }
 
 // ============================================
-// SURVIVAL MODE TIERS
+// PUZZLE RUSH LEVELS CONFIGURATION
+// ============================================
+const PUZZLE_RUSH_LEVELS = [
+    // Beginner Tier (6-10)
+    { level: 1, target: 6, tier: 'beginner', color: '#94a3b8' },
+    { level: 2, target: 10, tier: 'beginner', color: '#94a3b8' },
+
+    // Intermediate Tier (15-20)
+    { level: 3, target: 15, tier: 'intermediate', color: '#10b981' },
+    { level: 4, target: 20, tier: 'intermediate', color: '#10b981' },
+
+    // Advanced Tier (25-30)
+    { level: 5, target: 25, tier: 'advanced', color: '#3b82f6' },
+    { level: 6, target: 30, tier: 'advanced', color: '#3b82f6' },
+
+    // Expert Tier (35-40)
+    { level: 7, target: 35, tier: 'expert', color: '#8b5cf6' },
+    { level: 8, target: 40, tier: 'expert', color: '#8b5cf6' },
+
+    // Master Tier (45-60)
+    { level: 9, target: 45, tier: 'master', color: '#d97706' },
+    { level: 10, target: 50, tier: 'master', color: '#d97706' },
+    { level: 11, target: 55, tier: 'master', color: '#d97706' },
+    { level: 12, target: 60, tier: 'master', color: '#d97706' }
+];
+
+// Get puzzle rush level from score
+function getPuzzleRushLevel(score) {
+    if (!score || score < 6) return null;
+    for (let i = PUZZLE_RUSH_LEVELS.length - 1; i >= 0; i--) {
+        if (score >= PUZZLE_RUSH_LEVELS[i].target) {
+            return PUZZLE_RUSH_LEVELS[i];
+        }
+    }
+    return null;
+}
+
+// Get next puzzle rush target
+function getNextPuzzleRushTarget(score) {
+    if (!score) return PUZZLE_RUSH_LEVELS[0];
+    for (const level of PUZZLE_RUSH_LEVELS) {
+        if (score < level.target) {
+            return level;
+        }
+    }
+    return null; // All levels completed
+}
+
+// ============================================
+// SURVIVAL MODE TIERS (Legacy - kept for compatibility)
 // ============================================
 const SURVIVAL_TIERS = {
     beginner: {
         min: 0,
-        max: 4,
+        max: 9,
         label: 'Beginner',
         labelRu: 'Начинающий',
         labelKk: 'Бастаушы',
@@ -143,8 +192,8 @@ const SURVIVAL_TIERS = {
         icon: 'circle'
     },
     intermediate: {
-        min: 5,
-        max: 9,
+        min: 10,
+        max: 19,
         label: 'Intermediate',
         labelRu: 'Средний',
         labelKk: 'Орташа',
@@ -152,8 +201,8 @@ const SURVIVAL_TIERS = {
         icon: 'triangle'
     },
     advanced: {
-        min: 10,
-        max: 14,
+        min: 20,
+        max: 29,
         label: 'Advanced',
         labelRu: 'Продвинутый',
         labelKk: 'Озық',
@@ -161,8 +210,8 @@ const SURVIVAL_TIERS = {
         icon: 'square'
     },
     expert: {
-        min: 15,
-        max: 19,
+        min: 30,
+        max: 39,
         label: 'Expert',
         labelRu: 'Эксперт',
         labelKk: 'Сарапшы',
@@ -170,8 +219,8 @@ const SURVIVAL_TIERS = {
         icon: 'pentagon'
     },
     master: {
-        min: 20,
-        max: 29,
+        min: 40,
+        max: 54,
         label: 'Master',
         labelRu: 'Мастер',
         labelKk: 'Шебер',
@@ -179,23 +228,23 @@ const SURVIVAL_TIERS = {
         icon: 'hexagon'
     },
     grandmaster: {
-        min: 30,
+        min: 55,
         max: 99,
         label: 'Grandmaster',
         labelRu: 'Гроссмейстер',
         labelKk: 'Гроссмейстер',
-        color: '#dc2626',
+        color: '#ef4444',
         icon: 'star'
     }
 };
 
 // Get survival tier from score
 function getSurvivalTier(score) {
-    if (score >= 30) return SURVIVAL_TIERS.grandmaster;
-    if (score >= 20) return SURVIVAL_TIERS.master;
-    if (score >= 15) return SURVIVAL_TIERS.expert;
-    if (score >= 10) return SURVIVAL_TIERS.advanced;
-    if (score >= 5) return SURVIVAL_TIERS.intermediate;
+    if (score >= 55) return SURVIVAL_TIERS.grandmaster;
+    if (score >= 40) return SURVIVAL_TIERS.master;
+    if (score >= 30) return SURVIVAL_TIERS.expert;
+    if (score >= 20) return SURVIVAL_TIERS.advanced;
+    if (score >= 10) return SURVIVAL_TIERS.intermediate;
     return SURVIVAL_TIERS.beginner;
 }
 
@@ -348,6 +397,7 @@ window.CHESS_BOTS = CHESS_BOTS;
 window.TOTAL_BOTS = TOTAL_BOTS;
 window.LEAGUES = LEAGUES;
 window.SURVIVAL_TIERS = SURVIVAL_TIERS;
+window.PUZZLE_RUSH_LEVELS = PUZZLE_RUSH_LEVELS;
 window.TIER_COLORS = TIER_COLORS;
 window.RAZRYAD_CONFIG = RAZRYAD_CONFIG;
 
@@ -360,6 +410,8 @@ window.getLeagueName = getLeagueName;
 window.getPointsToNextLeague = getPointsToNextLeague;
 window.getSurvivalTier = getSurvivalTier;
 window.getSurvivalTierName = getSurvivalTierName;
+window.getPuzzleRushLevel = getPuzzleRushLevel;
+window.getNextPuzzleRushTarget = getNextPuzzleRushTarget;
 window.getTierColors = getTierColors;
 window.getRazryadConfig = getRazryadConfig;
 window.getHighestTier = getHighestTier;

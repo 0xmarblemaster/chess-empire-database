@@ -157,6 +157,27 @@
                         </div>
                     </div>
                 </div>
+
+                <!-- Bot Progress -->
+                <div class="form-section">
+                    <h3 class="form-section-title" data-i18n="admin.modals.edit.botProgress">Bot Progress</h3>
+                    <p class="form-hint" data-i18n="admin.modals.edit.botProgressHint">Check bots the student has defeated</p>
+                    <div id="editBotGrid" class="edit-bot-grid">
+                        <!-- Bot checkboxes will be populated by JavaScript -->
+                    </div>
+                </div>
+
+                <!-- Puzzle Rush Progress -->
+                <div class="form-section">
+                    <h3 class="form-section-title" data-i18n="admin.modals.edit.puzzleRush">Puzzle Rush</h3>
+                    <p class="form-hint" data-i18n="admin.modals.edit.puzzleRushHint">Record the student's best Puzzle Rush score</p>
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="editPuzzleRushScore" class="form-label" data-i18n="admin.modals.edit.puzzleRushScore">Best Score</label>
+                            <input type="number" id="editPuzzleRushScore" name="puzzleRushScore" class="form-input" min="0" max="100" placeholder="0">
+                        </div>
+                    </div>
+                </div>
             </form>
 
             <div class="modal-footer">

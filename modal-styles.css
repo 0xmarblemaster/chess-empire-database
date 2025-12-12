@@ -398,3 +398,126 @@
         transform: translateX(100%);
     }
 }
+
+/* Form Hint Text */
+.form-hint {
+    font-size: 0.8125rem;
+    color: #64748b;
+    margin-bottom: 1rem;
+    line-height: 1.5;
+}
+
+/* Edit Bot Grid Styles */
+.edit-bot-grid {
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+}
+
+.edit-bot-tier {
+    background: #f8fafc;
+    border-radius: 0.75rem;
+    padding: 1rem;
+}
+
+.edit-bot-tier-label {
+    font-size: 0.75rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    margin-bottom: 0.75rem;
+}
+
+.edit-bot-tier-bots {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+}
+
+.edit-bot-checkbox {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.5rem 0.75rem;
+    background: white;
+    border: 1.5px solid #e2e8f0;
+    border-radius: 0.5rem;
+    cursor: pointer;
+    transition: all 0.2s;
+    user-select: none;
+}
+
+.edit-bot-checkbox:hover {
+    border-color: #cbd5e1;
+    background: #f1f5f9;
+}
+
+.edit-bot-checkbox.checked {
+    border-color: #10b981;
+    background: #ecfdf5;
+}
+
+.edit-bot-checkbox input[type="checkbox"] {
+    display: none;
+}
+
+.edit-bot-avatar {
+    width: 24px;
+    height: 24px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.75rem;
+    font-weight: 700;
+    color: white;
+}
+
+.edit-bot-name {
+    font-size: 0.8125rem;
+    font-weight: 600;
+    color: #1e293b;
+}
+
+.edit-bot-rating {
+    font-size: 0.6875rem;
+    font-weight: 500;
+    color: #64748b;
+    background: #f1f5f9;
+    padding: 0.125rem 0.375rem;
+    border-radius: 0.25rem;
+}
+
+.edit-bot-checkbox.checked .edit-bot-name {
+    color: #059669;
+}
+
+.edit-bot-checkbox.checked .edit-bot-avatar::after {
+    content: '✓';
+    position: absolute;
+    right: -4px;
+    bottom: -4px;
+    width: 14px;
+    height: 14px;
+    background: #10b981;
+    border-radius: 50%;
+    font-size: 0.625rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.edit-bot-checkbox .edit-bot-avatar {
+    position: relative;
+}
+
+/* Responsive for bot grid */
+@media (max-width: 640px) {
+    .edit-bot-tier-bots {
+        flex-direction: column;
+    }
+
+    .edit-bot-checkbox {
+        width: 100%;
+    }
+}
