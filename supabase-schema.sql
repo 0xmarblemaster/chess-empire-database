@@ -643,75 +643,122 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
 
--- Function: Get student's LEVEL-based percentile rank within their branch
--- This ranks students by their current_level and current_lesson progress
+-- Function: Get student's LEVEL-based rank within their branch
+-- Returns position (e.g., 5 out of 70) based purely on Level and Lesson progress
+-- Ranking Logic:
+-- 1. Calculate rank by counting students ahead (higher Level, or same Level with higher Lesson)
+-- 2. Tie-breaker: enrollment date (created_at) for students at same Level AND Lesson
 CREATE OR REPLACE FUNCTION get_student_branch_level_rank(p_student_id UUID)
 RETURNS TABLE (
     total_in_branch INTEGER,
     rank_in_branch INTEGER,
-    percentile NUMERIC,
     current_level INTEGER,
     current_lesson INTEGER
 ) AS $$
+DECLARE
+    v_total INTEGER;
+    v_students_ahead INTEGER;
+    v_rank INTEGER;
+    v_level INTEGER;
+    v_lesson INTEGER;
 BEGIN
+    -- Get student's current level and lesson
+    SELECT s.current_level, s.current_lesson
+    INTO v_level, v_lesson
+    FROM students s
+    WHERE s.id = p_student_id;
+
+    -- Count total active students in branch
+    SELECT COUNT(*)
+    INTO v_total
+    FROM students s
+    WHERE s.branch_id = (SELECT branch_id FROM students WHERE id = p_student_id)
+    AND s.status = 'active';
+
+    -- Count students ahead (higher level OR same level with higher lesson OR same level+lesson but earlier enrollment)
+    SELECT COUNT(*)
+    INTO v_students_ahead
+    FROM students s
+    WHERE s.branch_id = (SELECT branch_id FROM students WHERE id = p_student_id)
+    AND s.status = 'active'
+    AND s.id != p_student_id
+    AND (
+        -- Higher level
+        s.current_level > v_level
+        OR
+        -- Same level, higher lesson
+        (s.current_level = v_level AND s.current_lesson > v_lesson)
+        OR
+        -- Same level AND same lesson, but earlier enrollment (tie-breaker)
+        (s.current_level = v_level AND s.current_lesson = v_lesson AND s.created_at < (SELECT created_at FROM students WHERE id = p_student_id))
+    );
+
+    -- Calculate rank (1-based: rank 1 = best)
+    v_rank := v_students_ahead + 1;
+
     RETURN QUERY
-    WITH student_info AS (
-        SELECT branch_id, s.current_level, s.current_lesson
-        FROM students s WHERE id = p_student_id
-    ),
-    branch_rankings AS (
-        SELECT
-            s.id,
-            s.current_level as level,
-            s.current_lesson as lesson,
-            -- Rank by level first, then by lesson within level
-            ROW_NUMBER() OVER (ORDER BY s.current_level DESC, s.current_lesson DESC) as rank
-        FROM students s
-        WHERE s.branch_id = (SELECT branch_id FROM student_info)
-        AND s.status = 'active'
-    )
     SELECT
-        (SELECT COUNT(*)::INTEGER FROM branch_rankings),
-        (SELECT br.rank::INTEGER FROM branch_rankings br WHERE br.id = p_student_id),
-        ROUND(100.0 - ((SELECT br.rank FROM branch_rankings br WHERE br.id = p_student_id) - 1) * 100.0 /
-            NULLIF((SELECT COUNT(*) FROM branch_rankings), 0), 1),
-        (SELECT si.current_level FROM student_info si),
-        (SELECT si.current_lesson FROM student_info si);
+        v_total,
+        v_rank,
+        v_level,
+        v_lesson;
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
 
--- Function: Get student's LEVEL-based percentile rank school-wide
+-- Function: Get student's LEVEL-based rank school-wide
+-- Returns position (e.g., 50 out of 618) based purely on Level and Lesson progress
 CREATE OR REPLACE FUNCTION get_student_school_level_rank(p_student_id UUID)
 RETURNS TABLE (
     total_in_school INTEGER,
     rank_in_school INTEGER,
-    percentile NUMERIC,
     current_level INTEGER,
     current_lesson INTEGER
 ) AS $$
+DECLARE
+    v_total INTEGER;
+    v_students_ahead INTEGER;
+    v_rank INTEGER;
+    v_level INTEGER;
+    v_lesson INTEGER;
 BEGIN
+    -- Get student's current level and lesson
+    SELECT s.current_level, s.current_lesson
+    INTO v_level, v_lesson
+    FROM students s
+    WHERE s.id = p_student_id;
+
+    -- Count total active students school-wide
+    SELECT COUNT(*)
+    INTO v_total
+    FROM students s
+    WHERE s.status = 'active';
+
+    -- Count students ahead (higher level OR same level with higher lesson OR same level+lesson but earlier enrollment)
+    SELECT COUNT(*)
+    INTO v_students_ahead
+    FROM students s
+    WHERE s.status = 'active'
+    AND s.id != p_student_id
+    AND (
+        -- Higher level
+        s.current_level > v_level
+        OR
+        -- Same level, higher lesson
+        (s.current_level = v_level AND s.current_lesson > v_lesson)
+        OR
+        -- Same level AND same lesson, but earlier enrollment (tie-breaker)
+        (s.current_level = v_level AND s.current_lesson = v_lesson AND s.created_at < (SELECT created_at FROM students WHERE id = p_student_id))
+    );
+
+    -- Calculate rank (1-based: rank 1 = best)
+    v_rank := v_students_ahead + 1;
+
     RETURN QUERY
-    WITH student_info AS (
-        SELECT s.current_level, s.current_lesson
-        FROM students s WHERE id = p_student_id
-    ),
-    school_rankings AS (
-        SELECT
-            s.id,
-            s.current_level as level,
-            s.current_lesson as lesson,
-            -- Rank by level first, then by lesson within level
-            ROW_NUMBER() OVER (ORDER BY s.current_level DESC, s.current_lesson DESC) as rank
-        FROM students s
-        WHERE s.status = 'active'
-    )
     SELECT
-        (SELECT COUNT(*)::INTEGER FROM school_rankings),
-        (SELECT sr.rank::INTEGER FROM school_rankings sr WHERE sr.id = p_student_id),
-        ROUND(100.0 - ((SELECT sr.rank FROM school_rankings sr WHERE sr.id = p_student_id) - 1) * 100.0 /
-            NULLIF((SELECT COUNT(*) FROM school_rankings), 0), 1),
-        (SELECT si.current_level FROM student_info si),
-        (SELECT si.current_lesson FROM student_info si);
+        v_total,
+        v_rank,
+        v_level,
+        v_lesson;
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
 

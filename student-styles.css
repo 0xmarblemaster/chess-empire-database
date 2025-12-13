@@ -1654,6 +1654,55 @@ body {
     margin-top: 1.5rem;
 }
 
+/* Bot Hero Section */
+.bot-hero {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 1rem;
+    padding: 2.5rem;
+    background: linear-gradient(135deg, #f0fdf4 0%, #dcfce7 100%);
+    border-radius: 1.5rem;
+    border: 2px solid #86efac;
+    margin-bottom: 1.5rem;
+}
+
+.bot-score-display {
+    text-align: center;
+}
+
+.bot-score-value {
+    font-size: 4rem;
+    font-weight: 800;
+    color: var(--tier-color, #10b981);
+    font-family: 'Outfit', sans-serif;
+    line-height: 1;
+}
+
+.bot-score-label {
+    font-size: 0.9375rem;
+    color: #059669;
+    font-weight: 600;
+    margin-top: 0.5rem;
+}
+
+.bot-tier-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.5rem 1rem;
+    border-radius: 9999px;
+    font-weight: 600;
+    font-size: 0.9375rem;
+}
+
+.bot-tier-badge.tier-beginner { background: #f1f5f9; color: #64748b; border: 1px solid #e2e8f0; }
+.bot-tier-badge.tier-intermediate { background: #ecfdf5; color: #059669; border: 1px solid #10b981; }
+.bot-tier-badge.tier-advanced { background: #eff6ff; color: #2563eb; border: 1px solid #3b82f6; }
+.bot-tier-badge.tier-expert { background: #faf5ff; color: #7c3aed; border: 1px solid #8b5cf6; }
+.bot-tier-badge.tier-master { background: #fffbeb; color: #d97706; border: 1px solid #f59e0b; }
+.bot-tier-badge.tier-grandmaster { background: #fef2f2; color: #dc2626; border: 1px solid #ef4444; }
+
 /* ============================================
    PUZZLE RUSH LEVELS (Puzzles Tab)
    ============================================ */
@@ -2170,6 +2219,14 @@ body {
     }
 
     .survival-score-value {
+        font-size: 2.5rem;
+    }
+
+    .bot-hero {
+        padding: 1.5rem;
+    }
+
+    .bot-score-value {
         font-size: 2.5rem;
     }
 

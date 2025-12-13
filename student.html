@@ -141,7 +141,7 @@
                             <select id="editStatusSelect" name="status" class="form-input" required>
                                 <option value="active" data-i18n="admin.modals.add.statusActive">Active</option>
                                 <option value="frozen" data-i18n="admin.modals.add.statusFrozen">Frozen</option>
-                                <option value="inactive" data-i18n="admin.modals.add.statusInactive">Inactive</option>
+                                <option value="left" data-i18n="admin.modals.add.statusLeft">Left</option>
                             </select>
                         </div>
                     </div>
@@ -170,25 +170,11 @@
                 <!-- Puzzle Rush Progress -->
                 <div class="form-section">
                     <h3 class="form-section-title" data-i18n="admin.modals.edit.puzzleRush">Puzzle Rush</h3>
-                    <p class="form-hint" data-i18n="admin.modals.edit.puzzleRushHint">Select the highest level achieved</p>
+                    <p class="form-hint" data-i18n="admin.modals.edit.puzzleRushHint">Enter the student's best Puzzle Rush score</p>
                     <div class="form-row">
                         <div class="form-group">
                             <label for="editPuzzleRushScore" class="form-label" data-i18n="admin.modals.edit.puzzleRushScore">Best Score</label>
-                            <select id="editPuzzleRushScore" name="puzzleRushScore" class="form-input">
-                                <option value="0" data-i18n="admin.modals.edit.puzzleRushNone">Not achieved</option>
-                                <option value="6">Level 1 - 6 puzzles (Beginner)</option>
-                                <option value="10">Level 2 - 10 puzzles (Beginner)</option>
-                                <option value="15">Level 3 - 15 puzzles (Intermediate)</option>
-                                <option value="20">Level 4 - 20 puzzles (Intermediate)</option>
-                                <option value="25">Level 5 - 25 puzzles (Advanced)</option>
-                                <option value="30">Level 6 - 30 puzzles (Advanced)</option>
-                                <option value="35">Level 7 - 35 puzzles (Expert)</option>
-                                <option value="40">Level 8 - 40 puzzles (Expert)</option>
-                                <option value="45">Level 9 - 45 puzzles (Master)</option>
-                                <option value="50">Level 10 - 50 puzzles (Master)</option>
-                                <option value="55">Level 11 - 55 puzzles (Master)</option>
-                                <option value="60">Level 12 - 60 puzzles (Master)</option>
-                            </select>
+                            <input type="number" id="editPuzzleRushScore" name="puzzleRushScore" class="form-input" min="0" max="100" placeholder="0">
                         </div>
                     </div>
                 </div>

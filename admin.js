@@ -1892,6 +1892,9 @@ function editStudent(studentId) {
     window.editPhotoRemoved = false;
     window.editPhotoFile = null;
 
+    // Load and populate bot progress and puzzle rush data
+    loadEditStudentProgressData(studentId);
+
     // Reinitialize icons
     setTimeout(() => lucide.createIcons(), 150);
 }
@@ -1900,6 +1903,164 @@ function editStudent(studentId) {
 function closeEditStudentModal() {
     const modal = document.getElementById('editStudentModal');
     modal.classList.remove('active');
+    // Clear cached progress data
+    window.editStudentProgressData = null;
+}
+
+// Load student bot progress and puzzle rush data for edit modal
+async function loadEditStudentProgressData(studentId) {
+    try {
+        // Fetch bot progress
+        let botProgress = { defeated: [], highestRating: 0 };
+        if (window.supabaseData && typeof window.supabaseData.getBotBattles === 'function') {
+            const botBattles = await window.supabaseData.getBotBattles(studentId);
+            const defeated = botBattles.filter(b => b.result === 'win');
+            botProgress = {
+                defeated: defeated,
+                highestRating: defeated.length > 0 ? Math.max(...defeated.map(b => b.bot_rating || 0)) : 0
+            };
+        }
+
+        // Fetch survival/puzzle rush data
+        let survivalBest = null;
+        if (window.supabaseData && typeof window.supabaseData.getSurvivalScores === 'function') {
+            const scores = await window.supabaseData.getSurvivalScores(studentId);
+            if (scores && scores.length > 0) {
+                survivalBest = scores.reduce((best, s) => (!best || s.score > best.score) ? s : best, null);
+            }
+        }
+
+        // Cache the data for saving later
+        window.editStudentProgressData = {
+            botProgress: botProgress,
+            survival: { best: survivalBest }
+        };
+
+        // Populate the bot grid
+        populateEditBotGrid(botProgress.defeated);
+
+        // Set puzzle rush score
+        const scoreInput = document.getElementById('editPuzzleRushScore');
+        if (scoreInput) {
+            scoreInput.value = survivalBest?.score || '';
+        }
+    } catch (error) {
+        console.error('Error loading student progress data:', error);
+        // Still populate empty grid
+        populateEditBotGrid([]);
+    }
+}
+
+// Populate bot grid in edit modal with checkboxes
+function populateEditBotGrid(defeatedBots) {
+    const bots = window.CHESS_BOTS || [];
+    const defeatedSet = new Set((defeatedBots || []).map(b => (b.bot_name || b.botName || '').toLowerCase()));
+
+    const container = document.getElementById('editBotGrid');
+    if (!container) return;
+
+    // Group bots by tier
+    const tiers = {
+        beginner: { label: t('bots.tiers.beginner') || 'Beginner', bots: [] },
+        intermediate: { label: t('bots.tiers.intermediate') || 'Intermediate', bots: [] },
+        advanced: { label: t('bots.tiers.advanced') || 'Advanced', bots: [] },
+        master: { label: t('bots.tiers.master') || 'Master', bots: [] }
+    };
+
+    bots.forEach(bot => {
+        if (tiers[bot.tier]) {
+            tiers[bot.tier].bots.push(bot);
+        }
+    });
+
+    let html = '';
+
+    Object.entries(tiers).forEach(([tierKey, tierData]) => {
+        if (tierData.bots.length === 0) return;
+
+        html += `<div class="edit-bot-tier">
+            <div class="edit-bot-tier-label" style="color: ${tierData.bots[0]?.color || '#64748b'}">${tierData.label}</div>
+            <div class="edit-bot-tier-bots">`;
+
+        tierData.bots.forEach(bot => {
+            const isDefeated = defeatedSet.has(bot.name.toLowerCase());
+            html += `
+                <label class="edit-bot-checkbox ${isDefeated ? 'checked' : ''}">
+                    <input type="checkbox"
+                           name="bot_${bot.name}"
+                           value="${bot.name}"
+                           data-rating="${bot.rating}"
+                           ${isDefeated ? 'checked' : ''}>
+                    <span class="edit-bot-avatar" style="background: ${bot.color}">${bot.avatar}</span>
+                    <span class="edit-bot-name">${bot.name}</span>
+                    <span class="edit-bot-rating">${bot.rating}</span>
+                </label>`;
+        });
+
+        html += `</div></div>`;
+    });
+
+    container.innerHTML = html;
+
+    // Add change listeners to update visual state
+    container.querySelectorAll('input[type="checkbox"]').forEach(checkbox => {
+        checkbox.addEventListener('change', function() {
+            this.closest('.edit-bot-checkbox').classList.toggle('checked', this.checked);
+        });
+    });
+}
+
+// Save bot progress changes from edit modal
+async function saveBotProgressFromModal(studentId) {
+    const container = document.getElementById('editBotGrid');
+    if (!container || !window.supabaseData) return;
+
+    const defeatedBots = window.editStudentProgressData?.botProgress?.defeated || [];
+    const previouslyDefeatedSet = new Set(defeatedBots.map(b => (b.bot_name || b.botName || '').toLowerCase()));
+
+    const checkboxes = container.querySelectorAll('input[type="checkbox"]');
+
+    for (const checkbox of checkboxes) {
+        const botName = checkbox.value;
+        const botRating = parseInt(checkbox.dataset.rating) || 0;
+        const isChecked = checkbox.checked;
+        const wasDefeated = previouslyDefeatedSet.has(botName.toLowerCase());
+
+        // If state changed, update in database
+        if (isChecked && !wasDefeated) {
+            // Add bot win
+            try {
+                await window.supabaseData.addBotBattleWin(studentId, botName, botRating);
+            } catch (error) {
+                console.error(`Error adding bot win for ${botName}:`, error);
+            }
+        } else if (!isChecked && wasDefeated) {
+            // Remove bot win
+            try {
+                await window.supabaseData.removeBotBattleWin(studentId, botName);
+            } catch (error) {
+                console.error(`Error removing bot win for ${botName}:`, error);
+            }
+        }
+    }
+}
+
+// Save puzzle rush score from edit modal
+async function savePuzzleRushFromModal(studentId) {
+    const scoreInput = document.getElementById('editPuzzleRushScore');
+    if (!scoreInput || !window.supabaseData) return;
+
+    const newScore = parseInt(scoreInput.value) || 0;
+    const currentBestScore = window.editStudentProgressData?.survival?.best?.score || 0;
+
+    // Only save if score is greater than current best (or if there's no current score)
+    if (newScore > 0 && newScore !== currentBestScore) {
+        try {
+            await window.supabaseData.addSurvivalScore(studentId, newScore, 'puzzle_rush', 'Updated via admin edit form');
+        } catch (error) {
+            console.error('Error saving puzzle rush score:', error);
+        }
+    }
 }
 
 // Populate Branches Dropdown for Edit Modal
@@ -2021,6 +2182,12 @@ async function submitEditStudent(event) {
         const result = await updateStudent(studentId, studentData);
 
         if (result.success) {
+            // Save bot progress changes
+            await saveBotProgressFromModal(studentId);
+
+            // Save puzzle rush score if changed
+            await savePuzzleRushFromModal(studentId);
+
             // Close modal
             closeEditStudentModal();
 

@@ -198,22 +198,28 @@ function getLeagueInfo(rating) {
     return { name: t('rankings.beginner') || 'Beginner', tier: 'none', color: '#94a3b8' };
 }
 
-// Get survival tier info
+// Get survival tier info with translated label
 function getSurvivalInfo(score) {
+    const lang = window.currentLanguage || 'en';
+
     if (!score) return { label: t('puzzleRush.tierBeginner') || 'Beginner', tier: 'beginner', color: '#94a3b8' };
 
     if (typeof window.getSurvivalTier === 'function') {
         const tier = window.getSurvivalTier(score);
-        return tier;
+        // Get the translated label based on current language
+        let label = tier.label;
+        if (lang === 'ru' && tier.labelRu) label = tier.labelRu;
+        else if (lang === 'kk' && tier.labelKk) label = tier.labelKk;
+        return { ...tier, label };
     }
 
-    // Fallback
-    if (score >= 30) return { label: 'Grandmaster', tier: 'grandmaster', color: '#dc2626' };
-    if (score >= 20) return { label: 'Master', tier: 'master', color: '#d97706' };
-    if (score >= 15) return { label: 'Expert', tier: 'expert', color: '#8b5cf6' };
-    if (score >= 10) return { label: 'Advanced', tier: 'advanced', color: '#3b82f6' };
-    if (score >= 5) return { label: 'Intermediate', tier: 'intermediate', color: '#10b981' };
-    return { label: 'Beginner', tier: 'beginner', color: '#94a3b8' };
+    // Fallback with translations
+    if (score >= 55) return { label: t('puzzleRush.tierGrandmaster') || 'Grandmaster', tier: 'grandmaster', color: '#dc2626' };
+    if (score >= 40) return { label: t('puzzleRush.tierMaster') || 'Master', tier: 'master', color: '#d97706' };
+    if (score >= 30) return { label: t('puzzleRush.tierExpert') || 'Expert', tier: 'expert', color: '#8b5cf6' };
+    if (score >= 20) return { label: t('puzzleRush.tierAdvanced') || 'Advanced', tier: 'advanced', color: '#3b82f6' };
+    if (score >= 10) return { label: t('puzzleRush.tierIntermediate') || 'Intermediate', tier: 'intermediate', color: '#10b981' };
+    return { label: t('puzzleRush.tierBeginner') || 'Beginner', tier: 'beginner', color: '#94a3b8' };
 }
 
 // Format rank position for display (e.g., "5 / 70")
@@ -404,6 +410,7 @@ function renderBotGrid() {
     const bots = window.CHESS_BOTS || [];
     const defeatedBots = studentProfileData?.botProgress?.defeated || [];
     const defeatedSet = new Set(defeatedBots.map(b => b.bot_name?.toLowerCase() || b.botName?.toLowerCase()));
+    const highestRating = studentProfileData?.botProgress?.highestRating || 0;
 
     // Tier configuration with labels and colors
     const tierConfig = {
@@ -415,6 +422,30 @@ function renderBotGrid() {
         grandmaster: { label: t('bots.tierGrandmaster') || 'Grandmaster', color: '#ef4444', icon: 'flame' }
     };
 
+    // Find the strongest defeated bot to get its tier
+    let strongestBotTier = 'beginner';
+    if (highestRating > 0) {
+        const strongestBot = bots.find(b => b.rating === highestRating);
+        if (strongestBot) {
+            strongestBotTier = strongestBot.tier;
+        }
+    }
+    const strongestTierConfig = tierConfig[strongestBotTier];
+
+    // Hero section - strongest bot defeated
+    let html = `
+        <div class="bot-hero">
+            <div class="bot-score-display" style="--tier-color: ${strongestTierConfig.color}">
+                <div class="bot-score-value">${highestRating || '—'}</div>
+                <div class="bot-score-label">${t('bots.strongestBot') || 'Strongest Bot'}</div>
+            </div>
+            <div class="bot-tier-badge tier-${strongestBotTier}">
+                <i data-lucide="bot" style="width: 18px; height: 18px;"></i>
+                <span>${strongestTierConfig.label}</span>
+            </div>
+        </div>
+    `;
+
     // Group bots by tier
     const botsByTier = {};
     bots.forEach((bot, index) => {
@@ -424,7 +455,7 @@ function renderBotGrid() {
         botsByTier[bot.tier].push({ ...bot, originalIndex: index });
     });
 
-    let html = '<div class="bot-sections">';
+    html += '<div class="bot-sections">';
 
     // Render each tier section
     const tierOrder = ['beginner', 'intermediate', 'advanced', 'expert', 'master', 'grandmaster'];
@@ -603,30 +634,6 @@ function renderSurvivalContent() {
             </div>
         </div>
     `;
-
-    // Recent scores
-    if (scores.length > 0) {
-        html += `
-            <div class="survival-history">
-                <h3 class="subsection-title">${t('puzzleRush.recentScores') || 'Recent Scores'}</h3>
-                <div class="score-list">
-        `;
-
-        scores.slice(0, 5).forEach(score => {
-            const scoreInfo = getSurvivalInfo(score.score);
-            const date = new Date(score.achieved_at || score.achievedAt);
-            const dateStr = date.toLocaleDateString();
-
-            html += `
-                <div class="score-item">
-                    <div class="score-value" style="color: ${scoreInfo.color}">${score.score}</div>
-                    <div class="score-date">${dateStr}</div>
-                </div>
-            `;
-        });
-
-        html += '</div></div>';
-    }
 
     return html;
 }
@@ -908,14 +915,14 @@ async function renderProfile() {
                     <div class="info-value">${student.coach}</div>
                 </div>
 
-                <!-- Mobile order: 8. Bots defeated -->
+                <!-- Mobile order: 8. Strongest bot defeated -->
                 <div class="quick-stat-card mobile-order-8">
                     <div class="quick-stat-icon" style="background: #10b98120; color: #10b981;">
                         <i data-lucide="bot" style="width: 20px; height: 20px;"></i>
                     </div>
                     <div class="quick-stat-info">
-                        <div class="quick-stat-value">${studentProfileData?.botProgress?.count || 0}/${studentProfileData?.botProgress?.total || 17}</div>
-                        <div class="quick-stat-label">${t('bots.defeated') || 'Bots Defeated'}</div>
+                        <div class="quick-stat-value">${studentProfileData?.botProgress?.highestRating || '—'}</div>
+                        <div class="quick-stat-label">${t('bots.strongestBot') || 'Strongest Bot'}</div>
                     </div>
                 </div>
 
@@ -1159,20 +1166,9 @@ async function openEditModal() {
     // Populate bot progress checkboxes
     populateEditBotGrid();
 
-    // Populate puzzle rush score - select matching level from dropdown
+    // Populate puzzle rush score
     const bestPuzzleScore = studentProfileData?.survival?.best?.score || 0;
-    const puzzleRushSelect = document.getElementById('editPuzzleRushScore');
-    if (puzzleRushSelect) {
-        // Find the highest level target that the student has achieved
-        const levelTargets = [0, 6, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55, 60];
-        let selectedValue = 0;
-        for (const target of levelTargets) {
-            if (bestPuzzleScore >= target) {
-                selectedValue = target;
-            }
-        }
-        puzzleRushSelect.value = selectedValue.toString();
-    }
+    document.getElementById('editPuzzleRushScore').value = bestPuzzleScore || '';
 
     // Reset photo upload state
     window.editPhotoFile = null;
