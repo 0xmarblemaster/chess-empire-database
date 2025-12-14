@@ -53,6 +53,9 @@ function updateMenuVisibility() {
     const menuDataManagement = document.getElementById('menuDataManagement');
     const managementSectionTitle = document.getElementById('managementSectionTitle');
 
+    // Get attendance menu item
+    const menuAttendance = document.getElementById('menuAttendance');
+
     // Admins see everything
     if (userRole.role === 'admin') {
         if (menuRatings) menuRatings.style.display = 'flex';
@@ -60,6 +63,7 @@ function updateMenuVisibility() {
         if (menuManageCoaches) menuManageCoaches.style.display = 'flex';
         if (menuManageBranches) menuManageBranches.style.display = 'flex';
         if (menuDataManagement) menuDataManagement.style.display = 'flex';
+        if (menuAttendance) menuAttendance.style.display = 'flex';
         if (managementSectionTitle) managementSectionTitle.style.display = 'block';
         return;
     }
@@ -3041,4 +3045,3074 @@ async function importCSVRatings() {
         lucide.createIcons();
     }
 }
+
+// ========================================
+// ATTENDANCE MANAGEMENT
+// ========================================
+
+// Attendance state variables
+let attendanceCurrentBranch = null;
+let attendanceCurrentSchedule = 'mon_wed';
+let attendanceCurrentYear = new Date().getFullYear();
+let attendanceCurrentMonth = new Date().getMonth(); // 0-indexed
+let attendanceCurrentTimeSlot = 'all';
+let attendanceCalendarData = [];
+let attendanceStudentAliases = [];
+let attendanceExcelParsedData = null;
+let attendanceImportCurrentStep = 1;
+let attendanceMatchedNames = [];
+let attendanceSearchQuery = ''; // Search filter for student names
+let attendanceStudentScheduleAssignments = {}; // { studentId: 'mon_wed' | 'tue_thu' | 'sat_sun' | null }
+let attendanceHideEmptyRows = true; // Hide empty placeholder rows by default
+
+// Time slot configuration: 8 slots, 10 students per slot
+// Default slots for all branches (9:00 - 18:00)
+const ATTENDANCE_TIME_SLOTS_DEFAULT = [
+    '9:00-10:00',
+    '10:00-11:00',
+    '11:00-12:00',
+    '12:00-13:00',
+    '14:00-15:00',
+    '15:00-16:00',
+    '16:00-17:00',
+    '17:00-18:00'
+];
+
+// Halyk Arena has different slots (10:00 - 19:00, no 9am, has 18-19pm)
+const ATTENDANCE_TIME_SLOTS_HALYK = [
+    '10:00-11:00',
+    '11:00-12:00',
+    '12:00-13:00',
+    '14:00-15:00',
+    '15:00-16:00',
+    '16:00-17:00',
+    '17:00-18:00',
+    '18:00-19:00'
+];
+
+// Saturday-Sunday slots (9:00 - 14:00, shorter day - last slot ends at 14:00)
+const ATTENDANCE_TIME_SLOTS_SAT_SUN = [
+    '9:00-10:00',
+    '10:00-11:00',
+    '11:00-12:00',
+    '12:00-13:00',
+    '13:00-14:00'
+];
+
+const STUDENTS_PER_TIME_SLOT = 10;
+
+// Initialize time slot indices for all students
+// Students without a time_slot_index get assigned based on their array position
+// skipStudentIds: Set of student IDs that already have saved assignments (don't override them)
+function initializeStudentTimeSlots(skipStudentIds = new Set()) {
+    const timeSlots = getTimeSlotsForBranch(attendanceCurrentBranch, attendanceCurrentSchedule);
+    const numSlots = timeSlots.length;
+
+    // For students without a slot, assign them sequentially
+    let unassignedCount = 0;
+    attendanceCalendarData.forEach((student, index) => {
+        // Skip students who already have a saved assignment from the database
+        if (skipStudentIds.has(student.id)) {
+            return;
+        }
+
+        if (student.time_slot_index === null || student.time_slot_index === undefined) {
+            // Assign based on position: first 10 to slot 0, next 10 to slot 1, etc.
+            student.time_slot_index = Math.floor(index / STUDENTS_PER_TIME_SLOT);
+            // Clamp to available slots (last slot gets overflow)
+            if (student.time_slot_index >= numSlots) {
+                student.time_slot_index = numSlots - 1;
+            }
+            unassignedCount++;
+        }
+    });
+
+    if (unassignedCount > 0) {
+        console.log(`Initialized time_slot_index for ${unassignedCount} students`);
+    }
+}
+
+// Get students assigned to a specific time slot index
+function getStudentsForTimeSlot(slotIndex, filteredData) {
+    return filteredData.filter(student => student.time_slot_index === slotIndex);
+}
+
+// Get time slots for a specific branch and schedule type
+// Saturday-Sunday has shorter hours (last slot 13:00-14:00) for ALL branches
+function getTimeSlotsForBranch(branchName, scheduleType = null) {
+    // Saturday-Sunday schedule: use shorter time slots (9:00-14:00) for all branches
+    if (scheduleType === 'sat_sun') {
+        return ATTENDANCE_TIME_SLOTS_SAT_SUN;
+    }
+
+    if (!branchName) return ATTENDANCE_TIME_SLOTS_DEFAULT;
+    const normalizedName = branchName.toLowerCase().trim();
+    if (normalizedName.includes('halyk') || normalizedName.includes('khalyk')) {
+        return ATTENDANCE_TIME_SLOTS_HALYK;
+    }
+    return ATTENDANCE_TIME_SLOTS_DEFAULT;
+}
+
+// Russian-to-English transliteration map
+const CYRILLIC_TO_LATIN = {
+    'а': 'a', 'б': 'b', 'в': 'v', 'г': 'g', 'д': 'd', 'е': 'e', 'ё': 'yo',
+    'ж': 'zh', 'з': 'z', 'и': 'i', 'й': 'y', 'к': 'k', 'л': 'l', 'м': 'm',
+    'н': 'n', 'о': 'o', 'п': 'p', 'р': 'r', 'с': 's', 'т': 't', 'у': 'u',
+    'ф': 'f', 'х': 'kh', 'ц': 'ts', 'ч': 'ch', 'ш': 'sh', 'щ': 'shch',
+    'ъ': '', 'ы': 'y', 'ь': '', 'э': 'e', 'ю': 'yu', 'я': 'ya',
+    'А': 'A', 'Б': 'B', 'В': 'V', 'Г': 'G', 'Д': 'D', 'Е': 'E', 'Ё': 'Yo',
+    'Ж': 'Zh', 'З': 'Z', 'И': 'I', 'Й': 'Y', 'К': 'K', 'Л': 'L', 'М': 'M',
+    'Н': 'N', 'О': 'O', 'П': 'P', 'Р': 'R', 'С': 'S', 'Т': 'T', 'У': 'U',
+    'Ф': 'F', 'Х': 'Kh', 'Ц': 'Ts', 'Ч': 'Ch', 'Ш': 'Sh', 'Щ': 'Shch',
+    'Ъ': '', 'Ы': 'Y', 'Ь': '', 'Э': 'E', 'Ю': 'Yu', 'Я': 'Ya'
+};
+
+// Show Attendance Management section
+function showAttendanceManagement() {
+    // Switch to attendance section
+    switchToSection('attendance');
+
+    // Update nav items
+    document.querySelectorAll('.nav-item').forEach(item => {
+        item.classList.remove('active');
+    });
+    const attendanceMenuItem = document.getElementById('menuAttendance');
+    if (attendanceMenuItem) {
+        attendanceMenuItem.classList.add('active');
+    }
+
+    // Populate branch dropdown
+    populateAttendanceBranchDropdown();
+
+    // Initialize schedule filter from dropdown
+    const scheduleSelect = document.getElementById('attendanceScheduleFilter');
+    if (scheduleSelect) {
+        attendanceCurrentSchedule = scheduleSelect.value || '';
+    }
+
+    // Initialize time slot filter
+    const timeSlotSelect = document.getElementById('attendanceTimeSlotFilter');
+    if (timeSlotSelect) {
+        attendanceCurrentTimeSlot = timeSlotSelect.value || '';
+    }
+
+    // Load student aliases for name matching
+    loadStudentAliases();
+
+    // Update month display
+    updateAttendanceMonthDisplay();
+
+    // Populate time slot dropdown
+    populateAttendanceTimeSlots();
+
+    // Load attendance data if branch is selected
+    if (attendanceCurrentBranch) {
+        loadAttendanceData();
+    }
+
+    lucide.createIcons();
+}
+
+// Populate branch dropdown for attendance
+function populateAttendanceBranchDropdown() {
+    const select = document.getElementById('attendanceBranchFilter');
+    if (!select) return;
+
+    // Get unique branches from students
+    const uniqueBranches = [...new Set(window.students.map(s => s.branch))].filter(Boolean);
+
+    select.innerHTML = `
+        <option value="">${t('admin.attendance.selectBranch')}</option>
+        ${uniqueBranches.map(branch => `
+            <option value="${branch}" ${attendanceCurrentBranch === branch ? 'selected' : ''}>
+                ${i18n.translateBranchName(branch)}
+            </option>
+        `).join('')}
+    `;
+
+    // If no branch selected and we have branches, select the first one
+    if (!attendanceCurrentBranch && uniqueBranches.length > 0) {
+        attendanceCurrentBranch = uniqueBranches[0];
+        select.value = attendanceCurrentBranch;
+    }
+}
+
+// Load student name aliases
+async function loadStudentAliases() {
+    if (window.supabaseData && typeof window.supabaseData.getStudentNameAliases === 'function') {
+        try {
+            attendanceStudentAliases = await window.supabaseData.getStudentNameAliases();
+        } catch (e) {
+            console.warn('Could not load student aliases:', e);
+            attendanceStudentAliases = [];
+        }
+    }
+}
+
+// Handle branch filter change
+function onAttendanceBranchChange() {
+    const select = document.getElementById('attendanceBranchFilter');
+    attendanceCurrentBranch = select.value;
+    populateAttendanceTimeSlots();
+    loadAttendanceData();
+}
+
+// Handle schedule filter change
+function onAttendanceScheduleChange() {
+    const select = document.getElementById('attendanceScheduleFilter');
+    attendanceCurrentSchedule = select.value;
+    populateAttendanceTimeSlots();
+    loadAttendanceData();
+}
+
+// Handle time slot filter change
+function onAttendanceTimeSlotChange() {
+    const select = document.getElementById('attendanceTimeSlotFilter');
+    attendanceCurrentTimeSlot = select.value;
+    loadAttendanceData();
+}
+
+// Populate time slots dropdown based on current branch and schedule
+async function populateAttendanceTimeSlots() {
+    const select = document.getElementById('attendanceTimeSlotFilter');
+    if (!select || !attendanceCurrentBranch) return;
+
+    select.innerHTML = `<option value="all">${t('admin.attendance.allTimeSlots')}</option>`;
+
+    if (window.supabaseData && typeof window.supabaseData.getAttendanceTimeSlots === 'function') {
+        try {
+            const branchObj = window.branches.find(b => b.name === attendanceCurrentBranch);
+            if (branchObj) {
+                const timeSlots = await window.supabaseData.getAttendanceTimeSlots(branchObj.id, attendanceCurrentSchedule);
+                timeSlots.forEach(slot => {
+                    if (slot) {
+                        select.innerHTML += `<option value="${slot}">${slot}</option>`;
+                    }
+                });
+            }
+        } catch (e) {
+            console.warn('Could not load time slots:', e);
+        }
+    }
+}
+
+// Navigate month backward
+function attendancePrevMonth() {
+    attendanceCurrentMonth--;
+    if (attendanceCurrentMonth < 0) {
+        attendanceCurrentMonth = 11;
+        attendanceCurrentYear--;
+    }
+    updateAttendanceMonthDisplay();
+    loadAttendanceData();
+}
+
+// Navigate month forward
+function attendanceNextMonth() {
+    attendanceCurrentMonth++;
+    if (attendanceCurrentMonth > 11) {
+        attendanceCurrentMonth = 0;
+        attendanceCurrentYear++;
+    }
+    updateAttendanceMonthDisplay();
+    loadAttendanceData();
+}
+
+// Navigate attendance month (called from HTML onclick)
+function navigateAttendanceMonth(direction) {
+    if (direction < 0) {
+        attendancePrevMonth();
+    } else {
+        attendanceNextMonth();
+    }
+}
+
+// Update month display
+function updateAttendanceMonthDisplay() {
+    // Try both possible element IDs
+    const display = document.getElementById('attendanceMonthTitle') || document.getElementById('attendanceMonthDisplay');
+    if (!display) return;
+
+    const lang = getLanguage();
+    const monthNames = lang === 'ru'
+        ? ['Январь', 'Февраль', 'Март', 'Апрель', 'Май', 'Июнь', 'Июль', 'Август', 'Сентябрь', 'Октябрь', 'Ноябрь', 'Декабрь']
+        : lang === 'kk'
+        ? ['Қаңтар', 'Ақпан', 'Наурыз', 'Сәуір', 'Мамыр', 'Маусым', 'Шілде', 'Тамыз', 'Қыркүйек', 'Қазан', 'Қараша', 'Желтоқсан']
+        : ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+
+    display.textContent = `${monthNames[attendanceCurrentMonth]} ${attendanceCurrentYear}`;
+}
+
+// Load attendance data
+async function loadAttendanceData() {
+    if (!attendanceCurrentBranch) {
+        renderEmptyAttendanceCalendar();
+        return;
+    }
+
+    // Find branch ID
+    const branchObj = window.branches.find(b => b.name === attendanceCurrentBranch);
+    if (!branchObj) {
+        console.error('Branch not found:', attendanceCurrentBranch);
+        return;
+    }
+
+    try {
+        // Pass null for schedule if "all" or empty string
+        const scheduleFilter = attendanceCurrentSchedule && attendanceCurrentSchedule !== 'all' && attendanceCurrentSchedule !== ''
+            ? attendanceCurrentSchedule
+            : null;
+
+        // Run all independent API calls in parallel for faster loading
+        const [scheduleAssignmentsResult, calendarDataResult, timeSlotAssignmentsResult, statsResult, alertsResult] = await Promise.allSettled([
+            loadStudentScheduleAssignments(branchObj.id),
+            window.supabaseData?.getAttendanceCalendarData?.(
+                branchObj.id,
+                scheduleFilter,
+                attendanceCurrentYear,
+                attendanceCurrentMonth + 1
+            ),
+            // Load saved time slot assignments from database
+            scheduleFilter ? window.supabaseData?.getTimeSlotAssignments?.(branchObj.id, scheduleFilter) : Promise.resolve([]),
+            loadAttendanceStats(branchObj.id),
+            loadLowAttendanceAlerts(branchObj.id)
+        ]);
+
+        // Process calendar data result
+        if (calendarDataResult.status === 'fulfilled' && calendarDataResult.value) {
+            const rawData = calendarDataResult.value;
+            // Transform data: merge students with their attendance records
+            // rawData = { students: [...], attendance: { studentId: { date: {...} } } }
+            if (rawData && rawData.students) {
+                attendanceCalendarData = rawData.students.map(student => {
+                    const studentAttendance = rawData.attendance[student.id] || {};
+                    // Convert attendance map to array for the student
+                    const attendanceArray = Object.entries(studentAttendance).map(([dateKey, record]) => ({
+                        attendance_date: dateKey.split('_')[0], // Handle date_timeSlot keys
+                        status: record.status,
+                        time_slot: record.timeSlot,
+                        notes: record.notes,
+                        id: record.id
+                    }));
+
+                    return {
+                        id: student.id,
+                        first_name: student.firstName,
+                        last_name: student.lastName,
+                        attendance: attendanceArray,
+                        time_slot_index: null // Will be assigned from database or initialized
+                    };
+                });
+            } else {
+                attendanceCalendarData = [];
+            }
+        } else {
+            attendanceCalendarData = [];
+        }
+
+        // Apply saved time slot assignments from database
+        // Track which students have been explicitly assigned (from database)
+        const assignedStudentIds = new Set();
+        // Track students that have been explicitly deleted (time_slot_index = -1)
+        const deletedStudentIds = new Set();
+
+        if (timeSlotAssignmentsResult.status === 'fulfilled' && timeSlotAssignmentsResult.value) {
+            const savedAssignments = timeSlotAssignmentsResult.value;
+
+            // Create a map for quick lookup
+            const assignmentMap = new Map(savedAssignments.map(a => [a.studentId, a.timeSlotIndex]));
+
+            // Apply saved assignments to students
+            attendanceCalendarData.forEach(student => {
+                if (assignmentMap.has(student.id)) {
+                    const savedSlot = assignmentMap.get(student.id);
+                    if (savedSlot === -1) {
+                        // Student was explicitly deleted from this schedule
+                        deletedStudentIds.add(student.id);
+                    } else {
+                        student.time_slot_index = savedSlot;
+                    }
+                    assignedStudentIds.add(student.id);
+                }
+            });
+
+            // Filter out deleted students
+            if (deletedStudentIds.size > 0) {
+                attendanceCalendarData = attendanceCalendarData.filter(s => !deletedStudentIds.has(s.id));
+                console.log(`Filtered out ${deletedStudentIds.size} deleted students`);
+            }
+
+            console.log(`Applied ${savedAssignments.length - deletedStudentIds.size} saved time slot assignments`);
+        }
+
+        // Initialize time slot indices for students that don't have a saved assignment
+        // This ensures new students and students without explicit assignments get auto-assigned
+        initializeStudentTimeSlots(assignedStudentIds);
+
+        // Render calendar (only after calendar data is processed)
+        renderAttendanceCalendar();
+
+    } catch (error) {
+        console.error('Error loading attendance data:', error);
+        showToast(t('admin.attendance.loadError'), 'error');
+    }
+}
+
+// Load student schedule assignments (determine which schedule each student belongs to)
+async function loadStudentScheduleAssignments(branchId) {
+    try {
+        // Query all attendance records for this branch to determine schedule assignments
+        const { data, error } = await window.supabaseClient
+            .from('attendance')
+            .select('student_id, schedule_type')
+            .eq('branch_id', branchId)
+            .eq('status', 'present');
+
+        if (error) {
+            console.error('Error loading schedule assignments:', error);
+            return;
+        }
+
+        // Build assignment map: first attendance record determines the schedule
+        attendanceStudentScheduleAssignments = {};
+        const studentScheduleCounts = {}; // Track how many records per schedule per student
+
+        data.forEach(record => {
+            const studentId = record.student_id;
+            const scheduleType = record.schedule_type;
+
+            if (!studentScheduleCounts[studentId]) {
+                studentScheduleCounts[studentId] = {};
+            }
+            studentScheduleCounts[studentId][scheduleType] = (studentScheduleCounts[studentId][scheduleType] || 0) + 1;
+        });
+
+        // Assign each student to their most used schedule (or first one if tied)
+        Object.entries(studentScheduleCounts).forEach(([studentId, schedules]) => {
+            let maxCount = 0;
+            let assignedSchedule = null;
+
+            Object.entries(schedules).forEach(([schedule, count]) => {
+                if (count > maxCount) {
+                    maxCount = count;
+                    assignedSchedule = schedule;
+                }
+            });
+
+            if (assignedSchedule) {
+                attendanceStudentScheduleAssignments[studentId] = assignedSchedule;
+            }
+        });
+
+        console.log('Loaded schedule assignments for', Object.keys(attendanceStudentScheduleAssignments).length, 'students');
+    } catch (error) {
+        console.error('Error in loadStudentScheduleAssignments:', error);
+    }
+}
+
+// Load attendance statistics
+async function loadAttendanceStats(branchId) {
+    try {
+        // Get DOM elements with null checks
+        const totalSessionsEl = document.getElementById('attendanceTotalSessions');
+        const avgRateEl = document.getElementById('attendanceAvgRate');
+        const lowCountEl = document.getElementById('attendanceLowCount');
+        const studentsCountEl = document.getElementById('attendanceStudentsCount');
+
+        // Try to get summary from database function (may not exist yet)
+        if (window.supabaseData && typeof window.supabaseData.getBranchAttendanceSummary === 'function') {
+            try {
+                const summary = await window.supabaseData.getBranchAttendanceSummary(
+                    branchId,
+                    attendanceCurrentYear,
+                    attendanceCurrentMonth + 1
+                );
+
+                if (summary) {
+                    if (totalSessionsEl) totalSessionsEl.textContent = summary.totalSessions || 0;
+                    if (avgRateEl) avgRateEl.textContent = summary.avgAttendanceRate ? `${Math.round(summary.avgAttendanceRate)}%` : '0%';
+                    if (lowCountEl) lowCountEl.textContent = summary.studentsBelow70 || 0;
+                    if (studentsCountEl) studentsCountEl.textContent = summary.totalStudents || 0;
+                }
+            } catch (dbError) {
+                // Database function may not exist yet - use fallback
+                console.warn('getBranchAttendanceSummary not available, using fallback');
+                if (totalSessionsEl) totalSessionsEl.textContent = '0';
+                if (avgRateEl) avgRateEl.textContent = '0%';
+                if (lowCountEl) lowCountEl.textContent = '0';
+                if (studentsCountEl) studentsCountEl.textContent = '0';
+            }
+        }
+    } catch (e) {
+        console.warn('Could not load attendance stats:', e);
+    }
+}
+
+// Load low attendance alerts
+async function loadLowAttendanceAlerts(branchId) {
+    const container = document.getElementById('lowAttendanceAlerts');
+    if (!container) return;
+
+    try {
+        if (window.supabaseData && typeof window.supabaseData.getLowAttendanceAlerts === 'function') {
+            const alerts = await window.supabaseData.getLowAttendanceAlerts(branchId, 70);
+
+            if (alerts.length === 0) {
+                container.innerHTML = `
+                    <div style="color: #64748b; font-size: 0.875rem;">
+                        ${t('admin.attendance.noLowAttendance')}
+                    </div>
+                `;
+            } else {
+                container.innerHTML = alerts.map(alert => `
+                    <div class="low-attendance-alert">
+                        <i data-lucide="alert-triangle" style="width: 16px; height: 16px; color: #f59e0b;"></i>
+                        <span>${alert.first_name} ${alert.last_name}</span>
+                        <span class="attendance-rate-badge low">${Math.round(alert.attendance_rate)}%</span>
+                    </div>
+                `).join('');
+                lucide.createIcons();
+            }
+        }
+    } catch (e) {
+        console.warn('Could not load low attendance alerts:', e);
+    }
+}
+
+// Helper function to get dates for a specific schedule type in a given month
+function getScheduleDates(year, month, scheduleType) {
+    const dates = [];
+    const daysInMonth = new Date(year, month + 1, 0).getDate();
+
+    // Define which days of week correspond to each schedule
+    // 0 = Sunday, 1 = Monday, 2 = Tuesday, 3 = Wednesday, 4 = Thursday, 5 = Friday, 6 = Saturday
+    let targetDays = [];
+
+    switch (scheduleType) {
+        case 'mon_wed':
+            targetDays = [1, 3]; // Monday, Wednesday
+            break;
+        case 'tue_thu':
+            targetDays = [2, 4]; // Tuesday, Thursday
+            break;
+        case 'sat_sun':
+            targetDays = [0, 6]; // Saturday, Sunday
+            break;
+        default:
+            // If no schedule selected, return all days
+            for (let day = 1; day <= daysInMonth; day++) {
+                dates.push(day);
+            }
+            return dates;
+    }
+
+    // Find all dates that match the target days of week
+    for (let day = 1; day <= daysInMonth; day++) {
+        const date = new Date(year, month, day);
+        const dayOfWeek = date.getDay();
+        if (targetDays.includes(dayOfWeek)) {
+            dates.push(day);
+        }
+    }
+
+    return dates;
+}
+
+// Render empty attendance calendar
+function renderEmptyAttendanceCalendar() {
+    const placeholder = document.getElementById('attendanceCalendarPlaceholder');
+    const table = document.getElementById('attendanceCalendarTable');
+
+    if (placeholder) {
+        placeholder.style.display = 'block';
+    }
+    if (table) {
+        table.style.display = 'none';
+    }
+}
+
+// Render attendance calendar
+function renderAttendanceCalendar(preFilteredData = null) {
+    const placeholder = document.getElementById('attendanceCalendarPlaceholder');
+    const table = document.getElementById('attendanceCalendarTable');
+    const thead = document.getElementById('attendanceCalendarHead');
+    const tbody = document.getElementById('attendanceCalendarBody');
+
+    if (!table || !thead || !tbody) {
+        console.error('Attendance calendar elements not found');
+        return;
+    }
+
+    // Get dates filtered by schedule type
+    const scheduleDates = getScheduleDates(attendanceCurrentYear, attendanceCurrentMonth, attendanceCurrentSchedule);
+
+    // If pre-filtered data is provided (e.g., after drag-and-drop), use it directly
+    // and skip re-filtering to preserve the drag-and-drop order
+    let filteredData;
+    const skipFiltering = preFilteredData !== null;
+
+    if (skipFiltering) {
+        // Use the pre-filtered data directly (order already modified by drag-and-drop)
+        filteredData = preFilteredData;
+    } else {
+        // Apply standard filtering from source data
+        filteredData = attendanceCalendarData;
+
+        if (attendanceCurrentTimeSlot && attendanceCurrentTimeSlot !== 'all' && attendanceCurrentTimeSlot !== '') {
+            filteredData = filteredData.filter(s =>
+                s.attendance.some(a => a.time_slot === attendanceCurrentTimeSlot) ||
+                s.attendance.length === 0
+            );
+        }
+
+        // Filter by schedule assignment: only show students who are assigned to current schedule OR unassigned
+        // This ensures students only appear in their assigned schedule slot
+        if (attendanceCurrentSchedule && attendanceCurrentSchedule !== 'all' && attendanceCurrentSchedule !== '') {
+            filteredData = filteredData.filter(student => {
+                const assignedSchedule = attendanceStudentScheduleAssignments[student.id];
+                // Show student if: not assigned to any schedule yet, OR assigned to current schedule
+                return !assignedSchedule || assignedSchedule === attendanceCurrentSchedule;
+            });
+        }
+
+        // Search query no longer filters table - dropdown navigation is used instead
+        // See handleAttendanceSearchDropdown() for search functionality
+    }
+
+    // Store filtered data globally for drag-and-drop access
+    window.attendanceFilteredData = filteredData;
+
+    if (filteredData.length === 0) {
+        // Show placeholder with "no students" message
+        if (placeholder) {
+            placeholder.innerHTML = `
+                <i data-lucide="users" style="width: 48px; height: 48px; margin-bottom: 1rem; opacity: 0.5;"></i>
+                <p>${t('admin.attendance.noStudents')}</p>
+            `;
+            placeholder.style.display = 'block';
+        }
+        table.style.display = 'none';
+        lucide.createIcons();
+        return;
+    }
+
+    // Hide placeholder, show table
+    if (placeholder) {
+        placeholder.style.display = 'none';
+    }
+    table.style.display = 'table';
+
+    // Get day names for header
+    const dayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+    const dayNamesRu = ['Вс', 'Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб'];
+    const dayNamesKk = ['Жс', 'Дс', 'Сс', 'Ср', 'Бс', 'Жм', 'Сб'];
+
+    // Build header row with only filtered dates - include Add Student button in student column
+    let headerHtml = `
+        <tr>
+            <th class="attendance-student-header">
+                <button class="attendance-add-student-btn" onclick="openAddStudentToCalendarModal()">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"></path>
+                        <circle cx="9" cy="7" r="4"></circle>
+                        <line x1="19" y1="8" x2="19" y2="14"></line>
+                        <line x1="22" y1="11" x2="16" y2="11"></line>
+                    </svg>
+                    ${t('admin.attendance.addStudent') || 'Add Student'}
+                </button>
+            </th>
+    `;
+
+    // Add day headers only for filtered dates
+    scheduleDates.forEach(day => {
+        const date = new Date(attendanceCurrentYear, attendanceCurrentMonth, day);
+        const dayOfWeek = date.getDay();
+        const isWeekend = dayOfWeek === 0 || dayOfWeek === 6;
+
+        // Get localized day name
+        let dayName = dayNames[dayOfWeek];
+        const currentLang = window.currentLanguage || 'en';
+        if (currentLang === 'ru') {
+            dayName = dayNamesRu[dayOfWeek];
+        } else if (currentLang === 'kk') {
+            dayName = dayNamesKk[dayOfWeek];
+        }
+
+        headerHtml += `
+            <th class="attendance-day-header ${isWeekend ? 'weekend' : ''}">
+                <div style="display: flex; flex-direction: column; align-items: center; gap: 2px;">
+                    <span style="font-size: 0.65rem; color: #94a3b8; font-weight: 500;">${dayName}</span>
+                    <span>${day}</span>
+                </div>
+            </th>
+        `;
+    });
+
+    headerHtml += `
+            <th class="attendance-rate-header">%</th>
+        </tr>
+    `;
+    thead.innerHTML = headerHtml;
+
+    // Build body rows grouped by time slots
+    let bodyHtml = '';
+
+    // Get time slots for current branch and schedule type (Sat-Sun has different slots)
+    const timeSlots = getTimeSlotsForBranch(attendanceCurrentBranch, attendanceCurrentSchedule);
+    const totalColumns = scheduleDates.length + 2; // Student column + date columns + % column
+
+    // Group students into time slot sections by their time_slot_index property
+    // Always show ALL time slots, even if empty
+    timeSlots.forEach((timeSlot, slotIndex) => {
+        // Get students assigned to this time slot by their time_slot_index
+        const slotStudents = getStudentsForTimeSlot(slotIndex, filteredData);
+
+        // Create a unique slot ID for collapse functionality
+        const slotId = `time-slot-${slotIndex}`;
+        const isExpanded = attendanceExpandedSlots[slotId] !== false; // Default to expanded
+
+        // Always add time slot header row (even for empty slots)
+        const studentCount = slotStudents.length;
+        bodyHtml += `
+            <tr class="attendance-time-slot-header"
+                data-slot-id="${slotId}"
+                data-slot-index="${slotIndex}"
+                onclick="toggleTimeSlotExpanded('${slotId}')"
+                ondragover="handleSlotDragOver(event, '${slotId}')"
+                ondragleave="handleSlotDragLeave(event)"
+                ondrop="handleSlotDrop(event, '${slotId}', ${slotIndex})"
+                style="cursor: pointer;">
+                <td colspan="${totalColumns}" class="attendance-time-slot-cell">
+                    <div class="time-slot-label">
+                        <svg class="time-slot-chevron ${isExpanded ? 'expanded' : ''}" xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <polyline points="9 18 15 12 9 6"></polyline>
+                        </svg>
+                        <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <circle cx="12" cy="12" r="10"></circle>
+                            <polyline points="12 6 12 12 16 14"></polyline>
+                        </svg>
+                        <span>${timeSlot}</span>
+                        <span class="time-slot-count">(${studentCount}/${STUDENTS_PER_TIME_SLOT})</span>
+                    </div>
+                </td>
+            </tr>
+        `;
+
+        // Render all 10 student slots (filled with actual students or empty placeholders)
+        for (let rowIndex = 0; rowIndex < STUDENTS_PER_TIME_SLOT; rowIndex++) {
+            const student = slotStudents[rowIndex];
+
+            if (student) {
+                // Render actual student row
+                const firstName = student.first_name || '';
+                const lastName = student.last_name || '';
+                const initials = (firstName[0] || '?') + (lastName[0] || '?');
+
+                bodyHtml += `
+                    <tr class="time-slot-student-row"
+                        data-slot-id="${slotId}"
+                        data-slot-index="${slotIndex}"
+                        data-student-id="${student.id}"
+                        draggable="true"
+                        ondragstart="handleStudentDragStart(event, '${student.id}', '${slotId}')"
+                        ondragend="handleStudentDragEnd(event)"
+                        ondragover="handleStudentRowDragOver(event, '${slotId}')"
+                        ondragleave="handleStudentRowDragLeave(event)"
+                        ondrop="handleSlotDrop(event, '${slotId}', ${slotIndex})"
+                        style="${isExpanded ? '' : 'display: none;'}">
+                        <td class="attendance-student-cell">
+                            <div style="display: flex; align-items: center; gap: 0.5rem; width: 100%;">
+                                <div class="drag-handle" style="cursor: grab; color: #94a3b8; display: flex; align-items: center;">
+                                    <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                        <circle cx="9" cy="5" r="1"></circle>
+                                        <circle cx="9" cy="12" r="1"></circle>
+                                        <circle cx="9" cy="19" r="1"></circle>
+                                        <circle cx="15" cy="5" r="1"></circle>
+                                        <circle cx="15" cy="12" r="1"></circle>
+                                        <circle cx="15" cy="19" r="1"></circle>
+                                    </svg>
+                                </div>
+                                <div class="student-avatar" style="width: 28px; height: 28px; font-size: 0.75rem;">
+                                    ${initials}
+                                </div>
+                                <span style="flex: 1;">${firstName} ${lastName}</span>
+                                <button class="attendance-delete-student-btn"
+                                        onclick="event.stopPropagation(); deleteStudentFromCalendar('${student.id}', '${firstName} ${lastName}')"
+                                        title="${t('admin.attendance.deleteFromCalendar') || 'Remove from calendar'}">
+                                    <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                        <path d="M3 6h18"></path>
+                                        <path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"></path>
+                                        <path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"></path>
+                                        <line x1="10" y1="11" x2="10" y2="17"></line>
+                                        <line x1="14" y1="11" x2="14" y2="17"></line>
+                                    </svg>
+                                </button>
+                            </div>
+                        </td>
+                `;
+
+                let presentCount = 0;
+                const LESSONS_PER_MONTH = 8; // Fixed: every student is eligible for 8 lessons per month
+
+                // Add day cells only for filtered dates
+                scheduleDates.forEach(day => {
+                    const dateStr = `${attendanceCurrentYear}-${String(attendanceCurrentMonth + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+                    const attendance = student.attendance.find(a => a.attendance_date === dateStr);
+
+                    const isPresent = attendance && attendance.status === 'present';
+                    if (isPresent) {
+                        presentCount++;
+                    }
+
+                    // White checkbox with green checkmark when present
+                    bodyHtml += `
+                        <td class="attendance-checkbox-cell"
+                            data-student-id="${student.id}"
+                            data-date="${dateStr}"
+                            data-time-slot="${timeSlot}"
+                            onclick="toggleAttendanceCheckbox('${student.id}', '${dateStr}', this)">
+                            <div class="attendance-checkbox ${isPresent ? 'checked' : ''}">
+                                ${isPresent ? '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>' : ''}
+                            </div>
+                        </td>
+                    `;
+                });
+
+                // Calculate attendance rate based on 8 lessons per month
+                const rate = Math.round((presentCount / LESSONS_PER_MONTH) * 100);
+                const rateClass = rate >= 70 ? 'good' : rate >= 50 ? 'warning' : 'low';
+
+                bodyHtml += `
+                        <td class="attendance-rate-cell">
+                            <span class="attendance-rate-badge ${rateClass}">${rate}%</span>
+                        </td>
+                    </tr>
+                `;
+            } else {
+                // Skip rendering empty placeholder rows if hideEmptyRows is enabled
+                if (attendanceHideEmptyRows) {
+                    continue;
+                }
+
+                // Render empty placeholder row - also a drop target
+                bodyHtml += `
+                    <tr class="time-slot-student-row time-slot-empty-row"
+                        data-slot-id="${slotId}"
+                        data-slot-index="${slotIndex}"
+                        ondragover="handleEmptyRowDragOver(event, '${slotId}')"
+                        ondragleave="handleEmptyRowDragLeave(event)"
+                        ondrop="handleSlotDrop(event, '${slotId}', ${slotIndex})"
+                        style="${isExpanded ? '' : 'display: none;'}">
+                        <td class="attendance-student-cell">
+                            <div style="display: flex; align-items: center; gap: 0.5rem; opacity: 0.4;">
+                                <div class="student-avatar" style="width: 28px; height: 28px; font-size: 0.75rem; background: #e2e8f0; color: #94a3b8;">
+                                    --
+                                </div>
+                                <span style="color: #94a3b8; font-style: italic;">Empty slot ${rowIndex + 1}</span>
+                            </div>
+                        </td>
+                `;
+
+                // Add empty day cells for placeholder
+                scheduleDates.forEach(day => {
+                    bodyHtml += `
+                        <td class="attendance-checkbox-cell" style="opacity: 0.3;">
+                            <div class="attendance-checkbox" style="background: #f1f5f9; border-color: #e2e8f0;"></div>
+                        </td>
+                    `;
+                });
+
+                bodyHtml += `
+                        <td class="attendance-rate-cell">
+                            <span class="attendance-rate-badge" style="background: #f1f5f9; color: #94a3b8;">--%</span>
+                        </td>
+                    </tr>
+                `;
+            }
+        }
+    });
+
+    tbody.innerHTML = bodyHtml;
+}
+
+// Track which time slots are expanded/collapsed
+let attendanceExpandedSlots = {};
+
+// ============================================
+// DRAG AND DROP FOR STUDENT TIME SLOT ASSIGNMENT
+// ============================================
+
+// Drag state
+let draggedStudentRow = null;
+let draggedStudentId = null;
+let draggedFromSlotId = null;
+
+// Handle drag start on student row
+function handleStudentDragStart(event, studentId, slotId) {
+    draggedStudentRow = event.target.closest('tr');
+    draggedStudentId = studentId;
+    draggedFromSlotId = slotId;
+
+    // Set drag data
+    event.dataTransfer.effectAllowed = 'move';
+    event.dataTransfer.setData('text/plain', studentId);
+
+    // Add dragging class for visual feedback
+    setTimeout(() => {
+        draggedStudentRow.classList.add('dragging');
+    }, 0);
+
+    // Highlight all drop targets (time slot headers, empty rows, and student rows in other slots)
+    document.querySelectorAll('.attendance-time-slot-header').forEach(header => {
+        header.classList.add('drop-target-available');
+    });
+    document.querySelectorAll('.time-slot-empty-row').forEach(row => {
+        row.classList.add('drop-target-available');
+    });
+    // Highlight student rows in OTHER time slots (not the source slot)
+    document.querySelectorAll('.time-slot-student-row').forEach(row => {
+        if (row.dataset.slotId !== slotId && row.dataset.studentId !== studentId) {
+            row.classList.add('drop-target-available');
+        }
+    });
+}
+
+// Handle drag end
+function handleStudentDragEnd(event) {
+    if (draggedStudentRow) {
+        draggedStudentRow.classList.remove('dragging');
+    }
+
+    // Remove all drop target highlights from headers
+    document.querySelectorAll('.attendance-time-slot-header').forEach(header => {
+        header.classList.remove('drop-target-available', 'drop-target-hover');
+    });
+
+    // Remove all drop target highlights from empty rows
+    document.querySelectorAll('.time-slot-empty-row').forEach(row => {
+        row.classList.remove('drop-target-available', 'drop-target-hover');
+    });
+
+    // Remove all drop target highlights from student rows
+    document.querySelectorAll('.time-slot-student-row').forEach(row => {
+        row.classList.remove('drop-target-available', 'drop-target-hover');
+    });
+
+    // Reset drag state
+    draggedStudentRow = null;
+    draggedStudentId = null;
+    draggedFromSlotId = null;
+}
+
+// Handle drag over on time slot header (allow drop)
+function handleSlotDragOver(event, slotId) {
+    event.preventDefault();
+    event.dataTransfer.dropEffect = 'move';
+
+    // Don't highlight if dropping on same slot
+    if (slotId !== draggedFromSlotId) {
+        event.target.closest('.attendance-time-slot-header')?.classList.add('drop-target-hover');
+    }
+}
+
+// Handle drag leave on time slot header
+function handleSlotDragLeave(event) {
+    event.target.closest('.attendance-time-slot-header')?.classList.remove('drop-target-hover');
+}
+
+// Handle drag over on empty row (allow drop)
+function handleEmptyRowDragOver(event, slotId) {
+    event.preventDefault();
+    event.dataTransfer.dropEffect = 'move';
+
+    // Don't highlight if dropping on same slot
+    if (slotId !== draggedFromSlotId) {
+        const emptyRow = event.target.closest('.time-slot-empty-row');
+        if (emptyRow) {
+            emptyRow.classList.add('drop-target-hover');
+        }
+    }
+}
+
+// Handle drag leave on empty row
+function handleEmptyRowDragLeave(event) {
+    event.target.closest('.time-slot-empty-row')?.classList.remove('drop-target-hover');
+}
+
+// Handle drag over on student row (allow drop to transfer to same time slot)
+function handleStudentRowDragOver(event, slotId) {
+    event.preventDefault();
+    event.dataTransfer.dropEffect = 'move';
+
+    // Don't highlight if dropping on same slot or on the dragged row itself
+    if (slotId !== draggedFromSlotId) {
+        const studentRow = event.target.closest('.time-slot-student-row');
+        if (studentRow && studentRow.dataset.studentId !== draggedStudentId) {
+            studentRow.classList.add('drop-target-hover');
+        }
+    }
+}
+
+// Handle drag leave on student row
+function handleStudentRowDragLeave(event) {
+    event.target.closest('.time-slot-student-row')?.classList.remove('drop-target-hover');
+}
+
+// Handle drop on time slot header, empty row, or student row
+function handleSlotDrop(event, targetSlotId, targetSlotIndex) {
+    event.preventDefault();
+    event.stopPropagation();
+
+    // Remove hover class from header
+    const header = event.target.closest('.attendance-time-slot-header');
+    if (header) {
+        header.classList.remove('drop-target-hover');
+    }
+
+    // Remove hover class from empty row
+    const emptyRow = event.target.closest('.time-slot-empty-row');
+    if (emptyRow) {
+        emptyRow.classList.remove('drop-target-hover');
+    }
+
+    // Remove hover class from student row (when dropped on another student's row)
+    const studentRow = event.target.closest('.time-slot-student-row');
+    if (studentRow) {
+        studentRow.classList.remove('drop-target-hover');
+    }
+
+    // Don't do anything if dropping on same slot
+    if (targetSlotId === draggedFromSlotId) {
+        return;
+    }
+
+    if (!draggedStudentId) {
+        return;
+    }
+
+    // Move student to new time slot
+    moveStudentToTimeSlot(draggedStudentId, draggedFromSlotId, targetSlotId, targetSlotIndex);
+}
+
+// Move student from one time slot to another
+async function moveStudentToTimeSlot(studentId, fromSlotId, toSlotId, toSlotIndex) {
+    // Find the student in the source data (attendanceCalendarData)
+    const student = attendanceCalendarData.find(s => s.id === studentId);
+    if (!student) {
+        console.error('Student not found in calendar data:', studentId);
+        return;
+    }
+
+    // Get the student's current slot index
+    const currentSlotIndex = student.time_slot_index;
+    const studentName = `${student.first_name} ${student.last_name}`;
+
+    // If dropping on the same slot, no action needed
+    if (currentSlotIndex === toSlotIndex) {
+        console.log('Student already in target slot, no move needed');
+        return;
+    }
+
+    // Check if target slot has room (max 10 students per slot)
+    const timeSlots = getTimeSlotsForBranch(attendanceCurrentBranch, attendanceCurrentSchedule);
+    const filteredData = window.attendanceFilteredData || [];
+    const targetSlotStudents = getStudentsForTimeSlot(toSlotIndex, filteredData);
+
+    if (targetSlotStudents.length >= STUDENTS_PER_TIME_SLOT) {
+        showToast(
+            (t('admin.attendance.slotFull') || 'Time slot {slot} is full (10 students max)')
+                .replace('{slot}', timeSlots[toSlotIndex] || `Slot ${toSlotIndex + 1}`),
+            'error'
+        );
+        return;
+    }
+
+    // Update the student's time_slot_index locally
+    student.time_slot_index = toSlotIndex;
+
+    // Also update in filtered data if the student exists there
+    const filteredStudent = filteredData.find(s => s.id === studentId);
+    if (filteredStudent) {
+        filteredStudent.time_slot_index = toSlotIndex;
+    }
+
+    console.log(`Moving ${studentName}: slot ${currentSlotIndex} → slot ${toSlotIndex}`);
+
+    // Re-render the calendar to reflect changes immediately
+    renderAttendanceCalendar(filteredData);
+
+    // Save to database in the background
+    const branchObj = window.branches?.find(b => b.name === attendanceCurrentBranch);
+    const branchId = branchObj?.id;
+    const scheduleType = attendanceCurrentSchedule;
+
+    if (branchId && scheduleType) {
+        try {
+            await supabaseData.upsertTimeSlotAssignment(studentId, branchId, scheduleType, toSlotIndex);
+            console.log(`Saved time slot assignment to database: ${studentName} → slot ${toSlotIndex}`);
+        } catch (error) {
+            console.error('Failed to save time slot assignment to database:', error);
+            // Still show success since the UI has already updated
+            // The assignment will work for this session but may not persist
+            showToast(
+                (t('admin.attendance.saveFailed') || 'Warning: Could not save to database. Changes may not persist.'),
+                'warning'
+            );
+        }
+    }
+
+    // Show success notification
+    const targetTimeSlot = timeSlots[toSlotIndex] || `Slot ${toSlotIndex + 1}`;
+    showToast(
+        (t('admin.attendance.studentMoved') || 'Moved {name} to {slot}')
+            .replace('{name}', studentName)
+            .replace('{slot}', targetTimeSlot),
+        'success'
+    );
+
+    console.log(`Moved ${studentName} from slot ${currentSlotIndex} to slot ${toSlotIndex}`);
+}
+
+// Toggle hide/show empty rows in time slots
+function toggleHideEmptyRows() {
+    const toggle = document.getElementById('hideEmptyRowsToggle');
+    attendanceHideEmptyRows = toggle ? toggle.checked : !attendanceHideEmptyRows;
+
+    // Re-render the calendar with the new setting
+    const filteredData = window.attendanceFilteredData || [];
+    renderAttendanceCalendar(filteredData);
+}
+
+// Toggle time slot expand/collapse
+function toggleTimeSlotExpanded(slotId) {
+    // Toggle the state (default is expanded = true)
+    attendanceExpandedSlots[slotId] = attendanceExpandedSlots[slotId] === false ? true : false;
+    const isExpanded = attendanceExpandedSlots[slotId];
+
+    // Find all student rows for this slot and show/hide them
+    const rows = document.querySelectorAll(`tr.time-slot-student-row[data-slot-id="${slotId}"]`);
+    rows.forEach(row => {
+        row.style.display = isExpanded ? '' : 'none';
+    });
+
+    // Update the chevron icon
+    const headers = document.querySelectorAll('.attendance-time-slot-header');
+    headers.forEach(header => {
+        const chevron = header.querySelector('.time-slot-chevron');
+        if (chevron && header.getAttribute('onclick')?.includes(slotId)) {
+            if (isExpanded) {
+                chevron.classList.add('expanded');
+            } else {
+                chevron.classList.remove('expanded');
+            }
+        }
+    });
+}
+
+// Toggle attendance status on cell click
+async function toggleAttendanceStatus(studentId, dateStr, cell) {
+    if (!attendanceCurrentBranch) return;
+
+    // Find branch ID
+    const branchObj = window.branches.find(b => b.name === attendanceCurrentBranch);
+    if (!branchObj) return;
+
+    // Status cycle: empty -> present -> absent -> late -> excused -> empty
+    const statusCycle = ['', 'present', 'absent', 'late', 'excused'];
+    const charMap = { '': '', 'present': 'V', 'absent': 'X', 'late': 'L', 'excused': 'E' };
+
+    // Get current status from cell
+    const currentChar = cell.textContent.trim();
+    let currentIndex = statusCycle.findIndex(s => charMap[s] === currentChar);
+    if (currentIndex === -1) currentIndex = 0;
+
+    // Move to next status
+    const nextIndex = (currentIndex + 1) % statusCycle.length;
+    const newStatus = statusCycle[nextIndex];
+
+    // Update cell immediately for responsiveness
+    cell.textContent = charMap[newStatus];
+    cell.className = `attendance-cell ${newStatus}`;
+
+    // Save to database
+    try {
+        if (newStatus === '') {
+            // Delete attendance record
+            if (window.supabaseData && typeof window.supabaseData.deleteAttendance === 'function') {
+                await window.supabaseData.deleteAttendance(studentId, dateStr, attendanceCurrentSchedule);
+            }
+        } else {
+            // Upsert attendance record
+            if (window.supabaseData && typeof window.supabaseData.upsertAttendance === 'function') {
+                await window.supabaseData.upsertAttendance({
+                    student_id: studentId,
+                    branch_id: branchObj.id,
+                    attendance_date: dateStr,
+                    schedule_type: attendanceCurrentSchedule,
+                    time_slot: attendanceCurrentTimeSlot !== 'all' ? attendanceCurrentTimeSlot : null,
+                    status: newStatus
+                });
+            }
+        }
+
+        // Update local data
+        const studentData = attendanceCalendarData.find(s => s.id === studentId);
+        if (studentData) {
+            const existingIndex = studentData.attendance.findIndex(a => a.attendance_date === dateStr);
+            if (newStatus === '') {
+                if (existingIndex !== -1) {
+                    studentData.attendance.splice(existingIndex, 1);
+                }
+            } else {
+                if (existingIndex !== -1) {
+                    studentData.attendance[existingIndex].status = newStatus;
+                } else {
+                    studentData.attendance.push({
+                        attendance_date: dateStr,
+                        status: newStatus,
+                        time_slot: attendanceCurrentTimeSlot !== 'all' ? attendanceCurrentTimeSlot : null
+                    });
+                }
+            }
+        }
+
+    } catch (error) {
+        console.error('Error saving attendance:', error);
+        showToast(t('admin.attendance.saveError'), 'error');
+        // Revert cell on error
+        cell.textContent = currentChar;
+        cell.className = `attendance-cell ${statusCycle[currentIndex]}`;
+    }
+}
+
+// Toggle attendance checkbox (simplified present/absent toggle)
+async function toggleAttendanceCheckbox(studentId, dateStr, cell) {
+    if (!attendanceCurrentBranch) return;
+
+    // Find branch ID
+    const branchObj = window.branches.find(b => b.name === attendanceCurrentBranch);
+    if (!branchObj) return;
+
+    // Get the checkbox div inside the cell
+    const checkbox = cell.querySelector('.attendance-checkbox');
+    if (!checkbox) return;
+
+    // Check current state
+    const isCurrentlyChecked = checkbox.classList.contains('checked');
+    const newStatus = isCurrentlyChecked ? '' : 'present';
+
+    // Update UI immediately for responsiveness
+    if (newStatus === 'present') {
+        checkbox.classList.add('checked');
+        checkbox.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>';
+    } else {
+        checkbox.classList.remove('checked');
+        checkbox.innerHTML = '';
+    }
+
+    // Save to database
+    try {
+        if (newStatus === '') {
+            // Delete attendance record - need to find and delete the record
+            const studentData = attendanceCalendarData.find(s => s.id === studentId);
+            const attendanceRecord = studentData?.attendance.find(a => a.attendance_date === dateStr);
+
+            if (attendanceRecord && attendanceRecord.id && window.supabaseData && typeof window.supabaseData.deleteAttendance === 'function') {
+                await window.supabaseData.deleteAttendance(attendanceRecord.id);
+            }
+        } else {
+            // Upsert attendance record
+            if (window.supabaseData && typeof window.supabaseData.upsertAttendance === 'function') {
+                await window.supabaseData.upsertAttendance({
+                    studentId: studentId,
+                    branchId: branchObj.id,
+                    attendanceDate: dateStr,
+                    scheduleType: attendanceCurrentSchedule || 'mon_wed',
+                    timeSlot: attendanceCurrentTimeSlot !== 'all' ? attendanceCurrentTimeSlot : null,
+                    status: newStatus
+                });
+            }
+        }
+
+        // Update local data
+        const studentData = attendanceCalendarData.find(s => s.id === studentId);
+        if (studentData) {
+            const existingIndex = studentData.attendance.findIndex(a => a.attendance_date === dateStr);
+            if (newStatus === '') {
+                if (existingIndex !== -1) {
+                    studentData.attendance.splice(existingIndex, 1);
+                }
+            } else {
+                if (existingIndex !== -1) {
+                    studentData.attendance[existingIndex].status = newStatus;
+                } else {
+                    studentData.attendance.push({
+                        attendance_date: dateStr,
+                        status: newStatus,
+                        time_slot: attendanceCurrentTimeSlot !== 'all' ? attendanceCurrentTimeSlot : null
+                    });
+                }
+            }
+        }
+
+        // Update schedule assignment: when marking present, assign student to current schedule
+        if (newStatus === 'present' && attendanceCurrentSchedule && attendanceCurrentSchedule !== 'all') {
+            // Only assign if student doesn't already have an assignment
+            if (!attendanceStudentScheduleAssignments[studentId]) {
+                attendanceStudentScheduleAssignments[studentId] = attendanceCurrentSchedule;
+                console.log(`Assigned student ${studentId} to schedule ${attendanceCurrentSchedule}`);
+            }
+        }
+
+        // Recalculate and update the rate for this row
+        updateRowAttendanceRate(studentId);
+
+    } catch (error) {
+        console.error('Error saving attendance:', error);
+        showToast(t('admin.attendance.saveError'), 'error');
+        // Revert checkbox on error
+        if (isCurrentlyChecked) {
+            checkbox.classList.add('checked');
+            checkbox.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>';
+        } else {
+            checkbox.classList.remove('checked');
+            checkbox.innerHTML = '';
+        }
+    }
+}
+
+// Global variable for dropdown state
+let attendanceSearchDropdownVisible = false;
+
+// Handle attendance search dropdown - shows matching students in dropdown
+function handleAttendanceSearchDropdown(query) {
+    const dropdown = document.getElementById('attendanceSearchDropdown');
+    if (!dropdown) return;
+
+    // If empty query, hide dropdown
+    if (!query || query.trim() === '') {
+        dropdown.style.display = 'none';
+        attendanceSearchDropdownVisible = false;
+        return;
+    }
+
+    const searchLower = query.toLowerCase().trim();
+
+    // Get all students from current calendar data
+    const allStudents = attendanceCalendarData || [];
+
+    // Filter by schedule assignment (same as calendar logic)
+    let searchableStudents = allStudents;
+    if (attendanceCurrentSchedule && attendanceCurrentSchedule !== 'all' && attendanceCurrentSchedule !== '') {
+        searchableStudents = allStudents.filter(student => {
+            const assignedSchedule = attendanceStudentScheduleAssignments[student.id];
+            return !assignedSchedule || assignedSchedule === attendanceCurrentSchedule;
+        });
+    }
+
+    // Find matching students
+    const matches = searchableStudents.filter(student => {
+        const fullName = `${student.first_name || ''} ${student.last_name || ''}`.toLowerCase();
+        return fullName.includes(searchLower);
+    });
+
+    // Render dropdown
+    if (matches.length === 0) {
+        dropdown.innerHTML = `<div class="attendance-search-no-results">${t('admin.attendance.noStudentsFound') || 'No students found'}</div>`;
+    } else {
+        // Limit to first 10 matches for performance
+        const displayMatches = matches.slice(0, 10);
+        dropdown.innerHTML = displayMatches.map(student => {
+            const timeSlotIndex = student.time_slot_index ?? 0;
+            const timeSlots = getTimeSlotsForBranch(attendanceCurrentBranch, attendanceCurrentSchedule);
+            const timeSlotLabel = timeSlots[timeSlotIndex] || `Slot ${timeSlotIndex + 1}`;
+
+            return `
+                <div class="attendance-search-result"
+                     onclick="navigateToAttendanceStudent('${student.id}', ${timeSlotIndex})">
+                    <span class="attendance-search-result-name">${student.first_name} ${student.last_name}</span>
+                    <span class="attendance-search-result-slot">${timeSlotLabel}</span>
+                </div>
+            `;
+        }).join('');
+
+        if (matches.length > 10) {
+            dropdown.innerHTML += `<div class="attendance-search-more">+${matches.length - 10} more...</div>`;
+        }
+    }
+
+    // Position the dropdown using fixed positioning relative to the search input
+    const searchInput = document.getElementById('attendanceStudentSearch');
+    if (searchInput) {
+        const rect = searchInput.getBoundingClientRect();
+        dropdown.style.top = `${rect.bottom + 4}px`;
+        dropdown.style.left = `${rect.left}px`;
+        dropdown.style.width = `${Math.max(rect.width, 250)}px`;
+    }
+
+    dropdown.style.display = 'block';
+    attendanceSearchDropdownVisible = true;
+}
+
+// Old search handler - kept for backwards compatibility
+function handleAttendanceSearch(query) {
+    // Now just delegates to dropdown handler
+    handleAttendanceSearchDropdown(query);
+}
+
+// Navigate to a specific student in the attendance calendar
+function navigateToAttendanceStudent(studentId, timeSlotIndex) {
+    // 1. Close dropdown
+    const dropdown = document.getElementById('attendanceSearchDropdown');
+    if (dropdown) {
+        dropdown.style.display = 'none';
+    }
+    attendanceSearchDropdownVisible = false;
+
+    // 2. Clear search input
+    const searchInput = document.getElementById('attendanceStudentSearch');
+    if (searchInput) {
+        searchInput.value = '';
+    }
+
+    // 3. Expand the time slot group if collapsed
+    const slotId = `slot-${timeSlotIndex}`;
+    if (!attendanceExpandedSlots[slotId]) {
+        attendanceExpandedSlots[slotId] = true;
+        renderAttendanceCalendar();
+    }
+
+    // 4. Scroll to the student row and highlight
+    setTimeout(() => {
+        const studentRow = document.querySelector(`tr[data-student-id="${studentId}"]`);
+        if (studentRow) {
+            studentRow.scrollIntoView({ behavior: 'smooth', block: 'center' });
+
+            // Add highlight animation
+            studentRow.classList.add('attendance-row-highlight');
+            setTimeout(() => {
+                studentRow.classList.remove('attendance-row-highlight');
+            }, 2000);
+        }
+    }, 100);
+}
+
+// ========================================
+// ADD STUDENT TO CALENDAR MODAL
+// ========================================
+
+let addStudentSearchDropdownVisible = false;
+let addStudentBranchStudents = []; // Students for the selected branch
+
+// Open the Add Student to Calendar modal
+function openAddStudentToCalendarModal() {
+    const modal = document.getElementById('addStudentToCalendarModal');
+    if (!modal) return;
+
+    // Populate branch dropdown
+    populateAddStudentBranchDropdown();
+
+    // Set current branch if one is selected in attendance view
+    const branchSelect = document.getElementById('addStudentBranchSelect');
+    if (attendanceCurrentBranch && branchSelect) {
+        branchSelect.value = attendanceCurrentBranch;
+        onAddStudentBranchChange();
+    }
+
+    // Set current schedule if one is selected in attendance view
+    const scheduleSelect = document.getElementById('addStudentScheduleSelect');
+    if (attendanceCurrentSchedule && scheduleSelect) {
+        scheduleSelect.value = attendanceCurrentSchedule;
+        onAddStudentScheduleChange();
+    }
+
+    // Clear any previous selection
+    clearSelectedStudent();
+
+    // Show modal
+    modal.classList.add('active');
+
+    // Re-initialize Lucide icons
+    if (typeof lucide !== 'undefined') {
+        lucide.createIcons();
+    }
+}
+
+// Close the Add Student to Calendar modal
+function closeAddStudentToCalendarModal() {
+    const modal = document.getElementById('addStudentToCalendarModal');
+    if (modal) {
+        modal.classList.remove('active');
+    }
+    // Close dropdown if open
+    const dropdown = document.getElementById('addStudentSearchDropdown');
+    if (dropdown) {
+        dropdown.style.display = 'none';
+    }
+    addStudentSearchDropdownVisible = false;
+}
+
+// Populate branch dropdown in modal
+function populateAddStudentBranchDropdown() {
+    const select = document.getElementById('addStudentBranchSelect');
+    if (!select || !window.branches) return;
+
+    // Get unique branch names
+    const branchNames = [...new Set(window.branches.map(b => b.name))].sort();
+
+    select.innerHTML = `
+        <option value="">${t('admin.attendance.selectBranch') || 'Select Branch'}</option>
+        ${branchNames.map(name => `
+            <option value="${name}">${i18n.translateBranchName(name)}</option>
+        `).join('')}
+    `;
+}
+
+// Handle branch change in Add Student modal
+function onAddStudentBranchChange() {
+    const branchSelect = document.getElementById('addStudentBranchSelect');
+    const selectedBranch = branchSelect?.value;
+
+    // Clear student selection when branch changes
+    clearSelectedStudent();
+    document.getElementById('addStudentSearchInput').value = '';
+
+    // Filter students by selected branch
+    if (selectedBranch && window.students) {
+        addStudentBranchStudents = window.students
+            .filter(s => s.branch === selectedBranch)
+            .sort((a, b) => `${a.firstName} ${a.lastName}`.localeCompare(`${b.firstName} ${b.lastName}`));
+    } else {
+        addStudentBranchStudents = [];
+    }
+
+    // Update time slots based on branch and schedule
+    onAddStudentScheduleChange();
+}
+
+// Handle schedule change in Add Student modal
+function onAddStudentScheduleChange() {
+    const branchSelect = document.getElementById('addStudentBranchSelect');
+    const scheduleSelect = document.getElementById('addStudentScheduleSelect');
+    const timeSlotSelect = document.getElementById('addStudentTimeSlotSelect');
+
+    const selectedBranch = branchSelect?.value;
+    const selectedSchedule = scheduleSelect?.value;
+
+    if (!timeSlotSelect) return;
+
+    // Get time slots for the selected branch and schedule
+    const timeSlots = getTimeSlotsForBranch(selectedBranch, selectedSchedule);
+
+    timeSlotSelect.innerHTML = `
+        <option value="">${t('admin.attendance.selectTimeSlot') || 'Select Time Slot'}</option>
+        ${timeSlots.map((slot, index) => `
+            <option value="${index}">${slot}</option>
+        `).join('')}
+    `;
+}
+
+// Handle student search in Add Student modal
+function handleAddStudentSearch(query) {
+    const dropdown = document.getElementById('addStudentSearchDropdown');
+    if (!dropdown) return;
+
+    // If empty query, hide dropdown
+    if (!query || query.trim() === '') {
+        dropdown.style.display = 'none';
+        addStudentSearchDropdownVisible = false;
+        return;
+    }
+
+    const searchLower = query.toLowerCase().trim();
+
+    // Check if branch is selected
+    const branchSelect = document.getElementById('addStudentBranchSelect');
+    if (!branchSelect?.value) {
+        dropdown.innerHTML = `<div class="add-student-search-no-results">${t('admin.attendance.selectBranchFirst') || 'Please select a branch first'}</div>`;
+        dropdown.style.display = 'block';
+        addStudentSearchDropdownVisible = true;
+        return;
+    }
+
+    // Filter students by search query
+    const matches = addStudentBranchStudents.filter(student => {
+        const fullName = `${student.firstName || ''} ${student.lastName || ''}`.toLowerCase();
+        return fullName.includes(searchLower);
+    });
+
+    // Render dropdown
+    if (matches.length === 0) {
+        dropdown.innerHTML = `<div class="add-student-search-no-results">${t('admin.attendance.noStudentsFound') || 'No students found'}</div>`;
+    } else {
+        // Limit to first 10 matches for performance
+        const displayMatches = matches.slice(0, 10);
+        dropdown.innerHTML = displayMatches.map(student => `
+            <div class="add-student-search-result" onclick="selectStudentForCalendar('${student.id}', '${student.firstName}', '${student.lastName}')">
+                <span class="add-student-search-result-name">${student.firstName} ${student.lastName}</span>
+            </div>
+        `).join('');
+
+        if (matches.length > 10) {
+            dropdown.innerHTML += `<div class="add-student-search-more">+${matches.length - 10} ${t('admin.attendance.more') || 'more'}...</div>`;
+        }
+    }
+
+    // Position dropdown
+    const searchInput = document.getElementById('addStudentSearchInput');
+    if (searchInput) {
+        const rect = searchInput.getBoundingClientRect();
+        dropdown.style.top = `${rect.bottom + 4}px`;
+        dropdown.style.left = `${rect.left}px`;
+        dropdown.style.width = `${rect.width}px`;
+    }
+
+    dropdown.style.display = 'block';
+    addStudentSearchDropdownVisible = true;
+}
+
+// Select a student from the dropdown
+function selectStudentForCalendar(studentId, firstName, lastName) {
+    // Set hidden input
+    document.getElementById('addStudentSelectedId').value = studentId;
+
+    // Show selected display
+    const selectedDisplay = document.getElementById('addStudentSelectedDisplay');
+    const selectedName = document.getElementById('addStudentSelectedName');
+    const searchInput = document.getElementById('addStudentSearchInput');
+
+    if (selectedDisplay && selectedName) {
+        selectedName.textContent = `${firstName} ${lastName}`;
+        selectedDisplay.style.display = 'flex';
+    }
+
+    // Hide search input
+    if (searchInput) {
+        searchInput.style.display = 'none';
+        searchInput.value = '';
+    }
+
+    // Close dropdown
+    const dropdown = document.getElementById('addStudentSearchDropdown');
+    if (dropdown) {
+        dropdown.style.display = 'none';
+    }
+    addStudentSearchDropdownVisible = false;
+
+    // Re-initialize Lucide icons for the clear button
+    if (typeof lucide !== 'undefined') {
+        lucide.createIcons();
+    }
+}
+
+// Clear the selected student
+function clearSelectedStudent() {
+    document.getElementById('addStudentSelectedId').value = '';
+
+    const selectedDisplay = document.getElementById('addStudentSelectedDisplay');
+    const searchInput = document.getElementById('addStudentSearchInput');
+
+    if (selectedDisplay) {
+        selectedDisplay.style.display = 'none';
+    }
+    if (searchInput) {
+        searchInput.style.display = 'block';
+        searchInput.value = '';
+    }
+}
+
+// Submit the Add Student form
+async function submitAddStudentToCalendar() {
+    const branchSelect = document.getElementById('addStudentBranchSelect');
+    const studentId = document.getElementById('addStudentSelectedId').value;
+    const scheduleSelect = document.getElementById('addStudentScheduleSelect');
+    const timeSlotSelect = document.getElementById('addStudentTimeSlotSelect');
+
+    const selectedBranch = branchSelect?.value;
+    const selectedSchedule = scheduleSelect?.value;
+    const selectedTimeSlotIndex = timeSlotSelect?.value;
+
+    // Validation
+    if (!selectedBranch) {
+        showToast(t('admin.attendance.selectBranchError') || 'Please select a branch', 'error');
+        return;
+    }
+    if (!studentId) {
+        showToast(t('admin.attendance.selectStudentError') || 'Please select a student', 'error');
+        return;
+    }
+    if (!selectedSchedule) {
+        showToast(t('admin.attendance.selectScheduleError') || 'Please select a schedule', 'error');
+        return;
+    }
+    if (selectedTimeSlotIndex === '' || selectedTimeSlotIndex === null) {
+        showToast(t('admin.attendance.selectTimeSlotError') || 'Please select a time slot', 'error');
+        return;
+    }
+
+    try {
+        // Find branch ID
+        const branchObj = window.branches.find(b => b.name === selectedBranch);
+        if (!branchObj) {
+            showToast(t('admin.attendance.branchNotFound') || 'Branch not found', 'error');
+            return;
+        }
+
+        // Save time slot assignment to database
+        if (window.supabaseData?.upsertTimeSlotAssignment) {
+            await window.supabaseData.upsertTimeSlotAssignment(
+                studentId,
+                branchObj.id,
+                selectedSchedule,
+                parseInt(selectedTimeSlotIndex)
+            );
+        }
+
+        // Close modal
+        closeAddStudentToCalendarModal();
+
+        // Update the current attendance view if the branch/schedule matches
+        if (selectedBranch === attendanceCurrentBranch &&
+            (selectedSchedule === attendanceCurrentSchedule || attendanceCurrentSchedule === 'all')) {
+            // Reload attendance data to reflect the new assignment
+            await loadAttendanceData();
+        } else {
+            // Switch to the branch and schedule where the student was added
+            attendanceCurrentBranch = selectedBranch;
+            attendanceCurrentSchedule = selectedSchedule;
+
+            // Update the filter dropdowns
+            const branchFilter = document.getElementById('attendanceBranchFilter');
+            const scheduleFilter = document.getElementById('attendanceScheduleFilter');
+            if (branchFilter) branchFilter.value = selectedBranch;
+            if (scheduleFilter) scheduleFilter.value = selectedSchedule;
+
+            // Reload attendance data
+            await loadAttendanceData();
+        }
+
+        // Show success message
+        const student = window.students.find(s => s.id === studentId);
+        const studentName = student ? `${student.firstName} ${student.lastName}` : 'Student';
+        showToast(t('admin.attendance.studentAddedSuccess', { name: studentName }) || `${studentName} added to calendar`, 'success');
+
+    } catch (error) {
+        console.error('Error adding student to calendar:', error);
+        showToast(t('admin.attendance.addStudentError') || 'Error adding student', 'error');
+    }
+}
+
+// Close dropdown when clicking outside (for Add Student modal)
+document.addEventListener('click', function(event) {
+    if (!addStudentSearchDropdownVisible) return;
+
+    const dropdown = document.getElementById('addStudentSearchDropdown');
+    const searchInput = document.getElementById('addStudentSearchInput');
+
+    if (dropdown && searchInput &&
+        !dropdown.contains(event.target) &&
+        !searchInput.contains(event.target)) {
+        dropdown.style.display = 'none';
+        addStudentSearchDropdownVisible = false;
+    }
+});
+
+// Delete student from attendance calendar (removes from current view and deletes all attendance records)
+async function deleteStudentFromCalendar(studentId, studentName) {
+    // Show confirmation dialog
+    const message = t('admin.attendance.confirmDeleteStudent', { name: studentName }) ||
+                    `Are you sure you want to remove "${studentName}" from this attendance calendar? This will delete all their attendance records for this branch.`;
+
+    showDeleteConfirmation(message, async () => {
+        try {
+            // Find student in calendar data
+            const studentIndex = attendanceCalendarData.findIndex(s => s.id === studentId);
+            if (studentIndex === -1) {
+                console.error('Student not found in calendar data:', studentId);
+                showError(t('admin.attendance.studentNotFound') || 'Student not found');
+                return;
+            }
+
+            const student = attendanceCalendarData[studentIndex];
+
+            // Delete all attendance records for this student in the current branch
+            if (student.attendance && student.attendance.length > 0 && window.supabaseData) {
+                // Get all attendance record IDs
+                const attendanceIds = student.attendance
+                    .filter(a => a.id)
+                    .map(a => a.id);
+
+                if (attendanceIds.length > 0) {
+                    // Delete from database in batch
+                    const { error } = await window.supabaseClient
+                        .from('attendance')
+                        .delete()
+                        .in('id', attendanceIds);
+
+                    if (error) {
+                        console.error('Error deleting attendance records:', error);
+                        showError(t('admin.attendance.deleteError') || 'Failed to delete attendance records');
+                        return;
+                    }
+                }
+            }
+
+            // Remove from local calendar data
+            attendanceCalendarData.splice(studentIndex, 1);
+
+            // Also remove from schedule assignments if present
+            if (attendanceStudentScheduleAssignments[studentId]) {
+                delete attendanceStudentScheduleAssignments[studentId];
+            }
+
+            // Mark student as deleted by saving time_slot_index = -1
+            // This ensures they stay deleted even after page refresh
+            if (window.supabaseData && attendanceCurrentBranch && attendanceCurrentSchedule) {
+                try {
+                    // Look up the branch ID from the branch name
+                    const branchObj = window.branches?.find(b => b.name === attendanceCurrentBranch);
+                    if (branchObj && branchObj.id) {
+                        // Use -1 as a special value to indicate "deleted from this schedule"
+                        await window.supabaseData.upsertTimeSlotAssignment(
+                            studentId,
+                            branchObj.id,
+                            attendanceCurrentSchedule,
+                            -1 // Special value: deleted/removed from calendar
+                        );
+                        console.log(`Marked ${studentName} as deleted (time_slot_index = -1)`);
+                    }
+                } catch (err) {
+                    console.error('Error saving deletion marker:', err);
+                    // Continue anyway - the student is already removed from local state
+                }
+            }
+
+            // Re-render calendar
+            renderAttendanceCalendar();
+
+            // Show success notification
+            showSuccess(t('admin.attendance.studentDeleted', { name: studentName }) ||
+                       `"${studentName}" has been removed from the attendance calendar`);
+
+        } catch (error) {
+            console.error('Error deleting student from calendar:', error);
+            showError(t('admin.attendance.deleteError') || 'Failed to remove student from calendar');
+        }
+    });
+}
+
+// Update attendance rate for a specific student row
+function updateRowAttendanceRate(studentId) {
+    const studentData = attendanceCalendarData.find(s => s.id === studentId);
+    if (!studentData) return;
+
+    const scheduleDates = getScheduleDates(attendanceCurrentYear, attendanceCurrentMonth, attendanceCurrentSchedule);
+    const LESSONS_PER_MONTH = 8; // Fixed: every student is eligible for 8 lessons per month
+
+    let presentCount = 0;
+    scheduleDates.forEach(day => {
+        const dateStr = `${attendanceCurrentYear}-${String(attendanceCurrentMonth + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+        const attendance = studentData.attendance.find(a => a.attendance_date === dateStr);
+        if (attendance && attendance.status === 'present') {
+            presentCount++;
+        }
+    });
+
+    const rate = Math.round((presentCount / LESSONS_PER_MONTH) * 100);
+    const rateClass = rate >= 70 ? 'good' : rate >= 50 ? 'warning' : 'low';
+
+    // Find the rate badge in this student's row and update it
+    const rows = document.querySelectorAll('#attendanceCalendarBody tr');
+    rows.forEach(row => {
+        const firstCell = row.querySelector('.attendance-checkbox-cell');
+        if (firstCell && firstCell.dataset.studentId === studentId) {
+            const rateBadge = row.querySelector('.attendance-rate-badge');
+            if (rateBadge) {
+                rateBadge.textContent = `${rate}%`;
+                rateBadge.className = `attendance-rate-badge ${rateClass}`;
+            }
+        }
+    });
+}
+
+// Open attendance import modal
+function openAttendanceImportModal() {
+    const modal = document.getElementById('attendanceImportModal');
+    if (modal) {
+        modal.classList.add('active');
+
+        // Reset to step 1
+        attendanceImportCurrentStep = 1;
+        updateImportWizardStep();
+
+        // Populate branch dropdown
+        populateImportBranchDropdown();
+
+        // Reset file input
+        const fileInput = document.getElementById('attendanceFileInput');
+        if (fileInput) fileInput.value = '';
+
+        // Clear preview
+        const previewContainer = document.getElementById('sheetPreviewContainer');
+        if (previewContainer) previewContainer.innerHTML = '<p style="padding: 2rem; text-align: center; color: #64748b;">Select a sheet to preview</p>';
+        const nameMatchingBody = document.getElementById('nameMatchingBody');
+        if (nameMatchingBody) nameMatchingBody.innerHTML = '';
+    }
+}
+
+// Close attendance import modal
+function closeAttendanceImportModal() {
+    const modal = document.getElementById('attendanceImportModal');
+    if (modal) {
+        modal.classList.remove('active');
+        attendanceExcelParsedData = null;
+        attendanceMatchedNames = [];
+    }
+}
+
+// Populate import branch dropdown
+function populateImportBranchDropdown() {
+    const select = document.getElementById('importBranchSelect');
+    if (!select) return;
+
+    const uniqueBranches = [...new Set(window.students.map(s => s.branch))].filter(Boolean);
+
+    select.innerHTML = `
+        <option value="">${t('admin.attendance.selectBranch')}</option>
+        ${uniqueBranches.map(branch => `
+            <option value="${branch}">${i18n.translateBranchName(branch)}</option>
+        `).join('')}
+    `;
+}
+
+// Update import wizard step
+function updateImportWizardStep() {
+    // Update step indicators
+    document.querySelectorAll('.wizard-step').forEach((step, index) => {
+        const stepNum = index + 1;
+        step.classList.toggle('active', stepNum === attendanceImportCurrentStep);
+        step.classList.toggle('completed', stepNum < attendanceImportCurrentStep);
+    });
+
+    // Show/hide step content
+    document.querySelectorAll('.import-step').forEach((content, index) => {
+        content.style.display = (index + 1) === attendanceImportCurrentStep ? 'block' : 'none';
+    });
+
+    // Update buttons
+    const backBtn = document.getElementById('importBackBtn');
+    const nextBtn = document.getElementById('importNextBtn');
+    const submitBtn = document.getElementById('importSubmitBtn');
+
+    if (backBtn) backBtn.style.display = attendanceImportCurrentStep > 1 ? 'inline-flex' : 'none';
+
+    // Show Next button for steps 1-2, Submit button for step 3
+    if (nextBtn) nextBtn.style.display = attendanceImportCurrentStep < 3 ? 'inline-flex' : 'none';
+    if (submitBtn) submitBtn.style.display = attendanceImportCurrentStep === 3 ? 'inline-flex' : 'none';
+}
+
+// Navigate wizard back
+function importWizardBack() {
+    if (attendanceImportCurrentStep > 1) {
+        attendanceImportCurrentStep--;
+        updateImportWizardStep();
+    }
+}
+
+// Navigate wizard next
+async function importWizardNext() {
+    if (attendanceImportCurrentStep === 1) {
+        // Validate branch and file
+        const branchSelect = document.getElementById('importBranchSelect');
+        const fileInput = document.getElementById('attendanceFileInput');
+
+        if (!branchSelect.value) {
+            showToast(t('admin.attendance.selectBranchError'), 'error');
+            return;
+        }
+
+        if (!fileInput.files || fileInput.files.length === 0) {
+            showToast(t('admin.attendance.selectFileError'), 'error');
+            return;
+        }
+
+        // Parse Excel file
+        const success = await parseExcelFile(fileInput.files[0]);
+        if (!success) return;
+
+        attendanceImportCurrentStep = 2;
+        updateImportWizardStep();
+
+    } else if (attendanceImportCurrentStep === 2) {
+        // Process selected sheet
+        await processSelectedSheet();
+        attendanceImportCurrentStep = 3;
+        updateImportWizardStep();
+
+    } else if (attendanceImportCurrentStep === 3) {
+        // Submit import
+        await submitAttendanceImport();
+    }
+}
+
+// Parse Excel file using SheetJS
+async function parseExcelFile(file) {
+    try {
+        const data = await file.arrayBuffer();
+        const workbook = XLSX.read(data, { type: 'array' });
+
+        attendanceExcelParsedData = {
+            workbook,
+            sheetNames: workbook.SheetNames,
+            currentSheet: 0
+        };
+
+        // Render sheet tabs
+        renderSheetTabs();
+
+        // Preview first sheet
+        previewSheet(0);
+
+        return true;
+
+    } catch (error) {
+        console.error('Error parsing Excel file:', error);
+        showToast(t('admin.attendance.parseError'), 'error');
+        return false;
+    }
+}
+
+// Render sheet tabs
+function renderSheetTabs() {
+    const container = document.getElementById('sheetTabsContainer');
+    if (!container || !attendanceExcelParsedData) return;
+
+    container.innerHTML = attendanceExcelParsedData.sheetNames.map((name, index) => `
+        <button class="sheet-tab ${index === 0 ? 'active' : ''}" onclick="selectSheet(${index})">
+            ${name}
+        </button>
+    `).join('');
+}
+
+// Select a sheet
+function selectSheet(index) {
+    if (!attendanceExcelParsedData) return;
+
+    attendanceExcelParsedData.currentSheet = index;
+
+    // Update tab styling
+    document.querySelectorAll('.sheet-tab').forEach((tab, i) => {
+        tab.classList.toggle('active', i === index);
+    });
+
+    // Preview selected sheet
+    previewSheet(index);
+}
+
+// Preview sheet data
+function previewSheet(index) {
+    const container = document.getElementById('sheetPreviewContainer');
+    if (!container || !attendanceExcelParsedData) return;
+
+    const sheetName = attendanceExcelParsedData.sheetNames[index];
+    const sheet = attendanceExcelParsedData.workbook.Sheets[sheetName];
+    const jsonData = XLSX.utils.sheet_to_json(sheet, { header: 1 });
+
+    if (jsonData.length === 0) {
+        container.innerHTML = `<div style="color: #94a3b8; padding: 1rem;">${t('admin.attendance.emptySheet')}</div>`;
+        return;
+    }
+
+    // Show first 10 rows as preview
+    const previewRows = jsonData.slice(0, 10);
+
+    let html = '<table style="width: 100%; font-size: 0.75rem; border-collapse: collapse;">';
+    previewRows.forEach((row, rowIndex) => {
+        html += '<tr>';
+        row.forEach((cell, colIndex) => {
+            const tag = rowIndex < 2 ? 'th' : 'td';
+            html += `<${tag} style="padding: 0.25rem 0.5rem; border: 1px solid #e2e8f0; max-width: 100px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${cell || ''}</${tag}>`;
+        });
+        html += '</tr>';
+    });
+    html += '</table>';
+
+    if (jsonData.length > 10) {
+        html += `<div style="color: #64748b; font-size: 0.75rem; margin-top: 0.5rem;">... ${jsonData.length - 10} ${t('admin.attendance.moreRows')}</div>`;
+    }
+
+    container.innerHTML = html;
+}
+
+// Process selected sheet for name matching
+async function processSelectedSheet() {
+    if (!attendanceExcelParsedData) return;
+
+    const sheetName = attendanceExcelParsedData.sheetNames[attendanceExcelParsedData.currentSheet];
+    const sheet = attendanceExcelParsedData.workbook.Sheets[sheetName];
+    const jsonData = XLSX.utils.sheet_to_json(sheet, { header: 1 });
+
+    // Determine schedule type from sheet name
+    let scheduleType = 'mon_wed';
+    const sheetLower = sheetName.toLowerCase();
+    if (sheetLower.includes('вт') && sheetLower.includes('чт') || sheetLower.includes('tue') && sheetLower.includes('thu')) {
+        scheduleType = 'tue_thu';
+    } else if (sheetLower.includes('сб') || sheetLower.includes('вс') || sheetLower.includes('sat') || sheetLower.includes('sun')) {
+        scheduleType = 'sat_sun';
+    }
+
+    // Extract student names and attendance data
+    const parsedAttendance = parseAttendanceSheet(jsonData);
+
+    // Get selected branch
+    const branchName = document.getElementById('importBranchSelect').value;
+    const branchStudents = window.students.filter(s => s.branch === branchName);
+
+    // Match names
+    attendanceMatchedNames = await matchStudentNames(parsedAttendance.students, branchStudents);
+
+    // Store schedule type
+    attendanceExcelParsedData.scheduleType = scheduleType;
+    attendanceExcelParsedData.parsedData = parsedAttendance;
+
+    // Render name matching table
+    renderNameMatchingTable();
+}
+
+// ============================================
+// EXCEL PARSING HELPER FUNCTIONS
+// ============================================
+
+// Extract branch name from filename using common patterns
+// Returns the branch name if found, or null if not detectable
+function extractBranchFromFilename(filename) {
+    if (!filename) return null;
+
+    const normalizedFilename = filename.toLowerCase();
+
+    // Common branch patterns found in filenames
+    // Format: { pattern: regex/string, branches: array of possible branch names to try }
+    const branchPatterns = [
+        // Хан-Армия / Khan-Army variations
+        { pattern: /ха|хан|khan|han[-_\s]?arm/i, keywords: ['хан-армия', 'khan-army', 'han-army', 'хан армия', 'khan army'] },
+        // Halyk Arena variations
+        { pattern: /halyk|khalyk|халык/i, keywords: ['halyk arena', 'khalyk arena', 'халык арена', 'halyk'] },
+        // Dostyk variations
+        { pattern: /достык|dostyk|dost/i, keywords: ['достык', 'dostyk'] },
+        // Add more branch patterns as needed
+    ];
+
+    for (const { pattern, keywords } of branchPatterns) {
+        if (pattern.test(normalizedFilename)) {
+            // Try to find a matching branch from the available branches
+            const availableBranches = [...new Set(window.students?.map(s => s.branch) || [])].filter(Boolean);
+
+            for (const keyword of keywords) {
+                const matchedBranch = availableBranches.find(branch =>
+                    branch.toLowerCase().includes(keyword.toLowerCase()) ||
+                    keyword.toLowerCase().includes(branch.toLowerCase())
+                );
+                if (matchedBranch) {
+                    console.log(`Auto-detected branch "${matchedBranch}" from filename "${filename}"`);
+                    return matchedBranch;
+                }
+            }
+        }
+    }
+
+    return null;
+}
+
+// Check if a row is a time slot header row
+// Time slot headers contain: schedule type (Пн-Ср) or time pattern (10:00-11:00)
+// and typically have Excel serial dates in subsequent columns
+function isTimeSlotHeaderRow(row) {
+    if (!row || row.length === 0) return false;
+
+    const firstCell = String(row[0] || '').trim();
+
+    // Check for time pattern like "10:00-11:00" or "10:00 - 11:00"
+    if (/\d{1,2}:\d{2}\s*-\s*\d{1,2}:\d{2}/.test(firstCell)) {
+        return true;
+    }
+
+    // Check for schedule type keywords (Russian/English) in first cell
+    const hasScheduleKeyword = /пн|ср|вт|чт|сб|вс|mon|wed|tue|thu|sat|sun/i.test(firstCell);
+
+    // Check if row has Excel serial dates (numbers between 40000-50000)
+    const hasDateInRow = row.some((cell, idx) =>
+        idx > 0 && typeof cell === 'number' && cell > 40000 && cell < 50000
+    );
+
+    return hasScheduleKeyword && hasDateInRow;
+}
+
+// Extract time slot string from a row (e.g., "10:00-11:00")
+function extractTimeSlotFromRow(row) {
+    if (!row) return null;
+
+    // Check first few cells for time pattern
+    for (let i = 0; i < Math.min(3, row.length); i++) {
+        const cell = String(row[i] || '');
+        const timeMatch = cell.match(/(\d{1,2}:\d{2})\s*-\s*(\d{1,2}:\d{2})/);
+        if (timeMatch) {
+            return `${timeMatch[1]}-${timeMatch[2]}`;
+        }
+    }
+    return null;
+}
+
+// Normalize time slot for comparison (remove spaces, lowercase)
+function normalizeTimeSlot(slot) {
+    if (!slot) return '';
+    return slot.replace(/\s/g, '').toLowerCase();
+}
+
+// Find the index of a time slot in the branch's time slot list
+function findTimeSlotIndexForBranch(extractedSlot, branchName, scheduleType = null) {
+    if (!extractedSlot) return -1;
+
+    const timeSlots = getTimeSlotsForBranch(branchName, scheduleType);
+    const normalizedExtracted = normalizeTimeSlot(extractedSlot);
+
+    return timeSlots.findIndex(slot =>
+        normalizeTimeSlot(slot) === normalizedExtracted
+    );
+}
+
+// Check if a row is a student row (has a name in column B, typically numbered)
+function isStudentRow(row, nameColumnIndex = 1) {
+    if (!row || row.length <= nameColumnIndex) return false;
+
+    const name = row[nameColumnIndex];
+    if (!name || typeof name !== 'string') return false;
+
+    const trimmedName = name.trim();
+    // Student names should have at least 2 characters and contain letters
+    return trimmedName.length >= 2 && /[a-zA-Zа-яА-ЯёЁ]/.test(trimmedName);
+}
+
+// Extract dates from a header row
+function extractDatesFromRow(row, startColIndex = 2) {
+    const dates = [];
+
+    for (let j = startColIndex; j < row.length; j++) {
+        const cell = row[j];
+        if (typeof cell === 'number' && cell > 40000 && cell < 50000) {
+            const jsDate = excelSerialToDate(cell);
+            dates.push({
+                colIndex: j,
+                date: jsDate.toISOString().split('T')[0]
+            });
+        }
+    }
+
+    return dates;
+}
+
+// Parse attendance marks from a row
+function parseAttendanceMarks(row, dates) {
+    const attendance = [];
+
+    dates.forEach(dateInfo => {
+        const mark = row[dateInfo.colIndex];
+        if (mark) {
+            const markStr = String(mark).toLowerCase().trim();
+            if (markStr === 'v' || markStr === 'в' || markStr === '+' || markStr === '1') {
+                attendance.push({ date: dateInfo.date, status: 'present' });
+            } else if (markStr === 'н' || markStr === 'x' || markStr === '-' || markStr === '0') {
+                attendance.push({ date: dateInfo.date, status: 'absent' });
+            } else if (markStr === 'б' || markStr === 'e') {
+                attendance.push({ date: dateInfo.date, status: 'excused' });
+            } else if (markStr === 'о' || markStr === 'l') {
+                attendance.push({ date: dateInfo.date, status: 'late' });
+            }
+        }
+    });
+
+    return attendance;
+}
+
+// ============================================
+// MAIN SHEET PARSING FUNCTION
+// ============================================
+
+// Parse attendance data from sheet - detects multiple time slot sections
+function parseAttendanceSheet(jsonData) {
+    const result = {
+        students: [],           // Flat list of all students (for backwards compatibility)
+        dates: [],              // All unique dates found
+        timeSlot: null,         // First time slot found (for backwards compatibility)
+        timeSlotSections: []    // NEW: Array of time slot sections with their students
+    };
+
+    if (jsonData.length < 3) return result;
+
+    const nameColumnIndex = 1;
+    let currentSection = null;
+    let allDates = new Map(); // Track all unique dates by column index
+
+    // First pass: identify all time slot sections and their students
+    for (let i = 0; i < jsonData.length; i++) {
+        const row = jsonData[i];
+
+        // Check if this is a time slot header row
+        if (isTimeSlotHeaderRow(row)) {
+            // Save previous section if exists
+            if (currentSection && currentSection.students.length > 0) {
+                result.timeSlotSections.push(currentSection);
+            }
+
+            // Extract time slot from this row or previous row
+            let timeSlot = extractTimeSlotFromRow(row);
+
+            // If no time slot in this row, check previous row
+            if (!timeSlot && i > 0) {
+                timeSlot = extractTimeSlotFromRow(jsonData[i - 1]);
+            }
+
+            // Extract dates from this header row
+            const sectionDates = extractDatesFromRow(row, nameColumnIndex + 1);
+
+            // Add to all dates tracking
+            sectionDates.forEach(d => {
+                if (!allDates.has(d.colIndex)) {
+                    allDates.set(d.colIndex, d);
+                }
+            });
+
+            // Start new section
+            currentSection = {
+                timeSlot: timeSlot,
+                timeSlotIndex: result.timeSlotSections.length, // Sequential index
+                students: [],
+                dates: sectionDates,
+                headerRowIndex: i
+            };
+
+            // Set first time slot for backwards compatibility
+            if (!result.timeSlot && timeSlot) {
+                result.timeSlot = timeSlot;
+            }
+        }
+        // Check if this is a student row
+        else if (currentSection && isStudentRow(row, nameColumnIndex)) {
+            const name = row[nameColumnIndex].trim();
+
+            // Parse attendance marks for this student
+            const attendance = parseAttendanceMarks(row, currentSection.dates);
+
+            // Only add students with attendance data
+            if (attendance.length > 0) {
+                const student = {
+                    originalName: name,
+                    attendance: attendance,
+                    timeSlotIndex: currentSection.timeSlotIndex,
+                    timeSlot: currentSection.timeSlot
+                };
+
+                currentSection.students.push(student);
+
+                // Also add to flat list for backwards compatibility
+                result.students.push(student);
+            }
+        }
+    }
+
+    // Push last section
+    if (currentSection && currentSection.students.length > 0) {
+        result.timeSlotSections.push(currentSection);
+    }
+
+    // If no sections were found, fall back to old parsing method
+    if (result.timeSlotSections.length === 0) {
+        return parseAttendanceSheetLegacy(jsonData);
+    }
+
+    // Compile all unique dates
+    result.dates = Array.from(allDates.values()).sort((a, b) => a.colIndex - b.colIndex);
+
+    console.log(`Parsed ${result.timeSlotSections.length} time slot sections with ${result.students.length} total students`);
+
+    return result;
+}
+
+// Legacy parsing method for backwards compatibility
+function parseAttendanceSheetLegacy(jsonData) {
+    const result = {
+        students: [],
+        dates: [],
+        timeSlot: null,
+        timeSlotSections: []
+    };
+
+    if (jsonData.length < 3) return result;
+
+    // Try to find header row with dates
+    let headerRowIndex = -1;
+    const nameColumnIndex = 1;
+
+    for (let i = 0; i < Math.min(5, jsonData.length); i++) {
+        const row = jsonData[i];
+        for (let j = 0; j < row.length; j++) {
+            const cell = row[j];
+            // Check if cell contains a time pattern like "10:00-11:00"
+            if (typeof cell === 'string' && /\d{1,2}:\d{2}/.test(cell)) {
+                result.timeSlot = cell;
+            }
+            // Check for Excel serial date numbers (dates appear as numbers > 40000)
+            if (typeof cell === 'number' && cell > 40000 && cell < 50000) {
+                headerRowIndex = i;
+                break;
+            }
+        }
+        if (headerRowIndex !== -1) break;
+    }
+
+    if (headerRowIndex === -1) {
+        headerRowIndex = 1;
+    }
+
+    // Extract dates from header row
+    const headerRow = jsonData[headerRowIndex] || [];
+    for (let j = nameColumnIndex + 1; j < headerRow.length; j++) {
+        const cell = headerRow[j];
+        if (typeof cell === 'number' && cell > 40000 && cell < 50000) {
+            const jsDate = excelSerialToDate(cell);
+            result.dates.push({
+                colIndex: j,
+                date: jsDate.toISOString().split('T')[0]
+            });
+        }
+    }
+
+    // Extract student names and attendance
+    for (let i = headerRowIndex + 1; i < jsonData.length; i++) {
+        const row = jsonData[i];
+        const name = row[nameColumnIndex];
+
+        if (name && typeof name === 'string' && name.trim()) {
+            const student = {
+                originalName: name.trim(),
+                attendance: [],
+                timeSlotIndex: 0,  // Default to first slot
+                timeSlot: result.timeSlot
+            };
+
+            // Get attendance marks for each date
+            student.attendance = parseAttendanceMarks(row, result.dates);
+
+            if (student.attendance.length > 0) {
+                result.students.push(student);
+            }
+        }
+    }
+
+    // Create a single section for backwards compatibility
+    if (result.students.length > 0) {
+        result.timeSlotSections.push({
+            timeSlot: result.timeSlot,
+            timeSlotIndex: 0,
+            students: [...result.students],
+            dates: result.dates,
+            headerRowIndex: headerRowIndex
+        });
+    }
+
+    return result;
+}
+
+// Convert Excel serial date to JavaScript Date
+function excelSerialToDate(serial) {
+    // Excel dates start from 1900-01-01 (serial 1)
+    // But there's a bug where Excel thinks 1900 was a leap year
+    const utcDays = Math.floor(serial - 25569);
+    const utcValue = utcDays * 86400;
+    return new Date(utcValue * 1000);
+}
+
+// Match student names from Excel to database
+async function matchStudentNames(excelStudents, dbStudents) {
+    const matched = [];
+
+    for (const excelStudent of excelStudents) {
+        const name = excelStudent.originalName;
+        let match = null;
+        let confidence = 0;
+        let matchType = 'unmatched';
+
+        // 1. Check exact alias match (aliasName is camelCase from supabase-data.js)
+        const aliasMatch = attendanceStudentAliases.find(a =>
+            a.aliasName.toLowerCase() === name.toLowerCase()
+        );
+        if (aliasMatch) {
+            const student = dbStudents.find(s => s.id === aliasMatch.studentId);
+            if (student) {
+                match = student;
+                confidence = 100;
+                matchType = 'alias';
+            }
+        }
+
+        // 2. Try exact English name match
+        if (!match) {
+            const exactMatch = dbStudents.find(s =>
+                `${s.firstName} ${s.lastName}`.toLowerCase() === name.toLowerCase()
+            );
+            if (exactMatch) {
+                match = exactMatch;
+                confidence = 100;
+                matchType = 'exact';
+            }
+        }
+
+        // 3. Try transliteration + fuzzy match
+        if (!match) {
+            const transliterated = transliterateRussian(name);
+            const fuzzyResult = findBestFuzzyMatch(transliterated, dbStudents);
+            // Lower threshold to 60% to account for transliteration variations
+            if (fuzzyResult && fuzzyResult.confidence >= 60) {
+                match = fuzzyResult.student;
+                confidence = fuzzyResult.confidence;
+                matchType = 'fuzzy';
+            }
+        }
+
+        matched.push({
+            originalName: name,
+            match,
+            confidence,
+            matchType,
+            attendance: excelStudent.attendance,
+            selectedStudentId: match ? match.id : null,
+            // Preserve time slot info from Excel parsing
+            timeSlotIndex: excelStudent.timeSlotIndex,
+            timeSlot: excelStudent.timeSlot
+        });
+    }
+
+    return matched;
+}
+
+// Transliterate Russian text to Latin
+function transliterateRussian(text) {
+    return text.split('').map(char => CYRILLIC_TO_LATIN[char] || char).join('');
+}
+
+// Calculate Levenshtein distance
+function levenshteinDistance(str1, str2) {
+    const m = str1.length;
+    const n = str2.length;
+    const dp = Array(m + 1).fill(null).map(() => Array(n + 1).fill(0));
+
+    for (let i = 0; i <= m; i++) dp[i][0] = i;
+    for (let j = 0; j <= n; j++) dp[0][j] = j;
+
+    for (let i = 1; i <= m; i++) {
+        for (let j = 1; j <= n; j++) {
+            if (str1[i - 1] === str2[j - 1]) {
+                dp[i][j] = dp[i - 1][j - 1];
+            } else {
+                dp[i][j] = Math.min(
+                    dp[i - 1][j - 1] + 1,
+                    dp[i - 1][j] + 1,
+                    dp[i][j - 1] + 1
+                );
+            }
+        }
+    }
+
+    return dp[m][n];
+}
+
+// Find best fuzzy match for a name
+// Handles Russian name order (LastName FirstName) vs English (FirstName LastName)
+function findBestFuzzyMatch(transliteratedName, students) {
+    let bestMatch = null;
+    let bestConfidence = 0;
+
+    const nameLower = transliteratedName.toLowerCase().trim();
+
+    // Also try reversed name order (Russian: "Иванов Демьян" → "Demyan Ivanov")
+    const nameParts = nameLower.split(/\s+/);
+    const nameReversed = nameParts.length >= 2
+        ? nameParts.slice(1).join(' ') + ' ' + nameParts[0]
+        : nameLower;
+
+    for (const student of students) {
+        // Try both "FirstName LastName" and "LastName FirstName" formats
+        const fullNameNormal = `${student.firstName} ${student.lastName}`.toLowerCase();
+        const fullNameReversed = `${student.lastName} ${student.firstName}`.toLowerCase();
+
+        // Calculate similarity for normal order
+        const distanceNormal = levenshteinDistance(nameLower, fullNameNormal);
+        const maxLenNormal = Math.max(nameLower.length, fullNameNormal.length);
+        const similarityNormal = ((maxLenNormal - distanceNormal) / maxLenNormal) * 100;
+
+        // Calculate similarity for reversed input against normal DB order
+        const distanceReversed = levenshteinDistance(nameReversed, fullNameNormal);
+        const maxLenReversed = Math.max(nameReversed.length, fullNameNormal.length);
+        const similarityReversed = ((maxLenReversed - distanceReversed) / maxLenReversed) * 100;
+
+        // Calculate similarity for normal input against reversed DB order
+        const distanceDbReversed = levenshteinDistance(nameLower, fullNameReversed);
+        const maxLenDbReversed = Math.max(nameLower.length, fullNameReversed.length);
+        const similarityDbReversed = ((maxLenDbReversed - distanceDbReversed) / maxLenDbReversed) * 100;
+
+        // Take the best match from all three comparisons
+        const bestSimilarity = Math.max(similarityNormal, similarityReversed, similarityDbReversed);
+
+        if (bestSimilarity > bestConfidence) {
+            bestConfidence = bestSimilarity;
+            bestMatch = student;
+        }
+    }
+
+    return bestMatch ? { student: bestMatch, confidence: Math.round(bestConfidence) } : null;
+}
+
+// Render name matching table
+function renderNameMatchingTable() {
+    const tbody = document.getElementById('nameMatchingBody');
+    if (!tbody) return;
+
+    const branchName = document.getElementById('importBranchSelect').value;
+    const branchStudents = window.students.filter(s => s.branch === branchName);
+    const scheduleType = attendanceExcelParsedData?.scheduleType || null;
+    const timeSlots = getTimeSlotsForBranch(branchName, scheduleType);
+
+    tbody.innerHTML = attendanceMatchedNames.map((item, index) => {
+        const statusClass = item.matchType === 'unmatched' ? 'unmatched' :
+                           item.confidence === 100 ? 'matched' : 'partial';
+
+        const statusBadge = item.matchType === 'alias' ? t('admin.attendance.aliasMatch') :
+                           item.matchType === 'exact' ? t('admin.attendance.exactMatch') :
+                           item.matchType === 'fuzzy' ? `${item.confidence}% ${t('admin.attendance.match')}` :
+                           t('admin.attendance.unmatched');
+
+        // Get time slot display - either from Excel parsing or unknown
+        const timeSlotDisplay = item.timeSlot || (item.timeSlotIndex !== undefined ? timeSlots[item.timeSlotIndex] : null);
+        const timeSlotBadgeColor = timeSlotDisplay ? '#3b82f6' : '#94a3b8';
+
+        return `
+            <tr class="name-matching-row ${statusClass}">
+                <td style="padding: 0.75rem;">
+                    <strong>${item.originalName}</strong>
+                </td>
+                <td style="padding: 0.75rem; text-align: center;">
+                    <span style="display: inline-block; padding: 0.25rem 0.5rem; background: ${timeSlotBadgeColor}20; color: ${timeSlotBadgeColor}; border-radius: 0.25rem; font-size: 0.75rem; font-weight: 500;">
+                        ${timeSlotDisplay || '—'}
+                    </span>
+                </td>
+                <td style="padding: 0.75rem;">
+                    <select class="name-match-select" onchange="updateNameMatch(${index}, this.value)">
+                        <option value="">${t('admin.attendance.selectStudent')}</option>
+                        ${branchStudents.map(s => `
+                            <option value="${s.id}" ${item.selectedStudentId === s.id ? 'selected' : ''}>
+                                ${s.firstName} ${s.lastName}
+                            </option>
+                        `).join('')}
+                    </select>
+                </td>
+                <td style="padding: 0.75rem;">
+                    <span class="match-status-badge ${statusClass}">${statusBadge}</span>
+                </td>
+                <td style="padding: 0.75rem;">
+                    ${item.selectedStudentId && item.matchType !== 'alias' ? `
+                        <button class="btn-icon" onclick="saveNameAlias(${index})" title="${t('admin.attendance.saveAlias')}">
+                            <i data-lucide="save" style="width: 16px; height: 16px;"></i>
+                        </button>
+                    ` : ''}
+                </td>
+            </tr>
+        `;
+    }).join('');
+
+    lucide.createIcons();
+
+    // Update summary with time slot info
+    const matchedCount = attendanceMatchedNames.filter(m => m.selectedStudentId).length;
+    const unmatchedCount = attendanceMatchedNames.filter(m => !m.selectedStudentId).length;
+    const withTimeSlot = attendanceMatchedNames.filter(m => m.timeSlot || m.timeSlotIndex !== undefined).length;
+
+    const summary = document.getElementById('nameMatchingSummary');
+    if (summary) {
+        let summaryHtml = `
+            <span style="color: #10b981;">${matchedCount} ${t('admin.attendance.matched')}</span> |
+            <span style="color: #ef4444;">${unmatchedCount} ${t('admin.attendance.unmatched')}</span>
+        `;
+        if (withTimeSlot > 0) {
+            summaryHtml += ` | <span style="color: #3b82f6;">${withTimeSlot} with time slots</span>`;
+        }
+        summary.innerHTML = summaryHtml;
+    }
+}
+
+// Update name match selection
+function updateNameMatch(index, studentId) {
+    if (index >= 0 && index < attendanceMatchedNames.length) {
+        attendanceMatchedNames[index].selectedStudentId = studentId || null;
+        if (studentId) {
+            attendanceMatchedNames[index].matchType = 'manual';
+            attendanceMatchedNames[index].confidence = 100;
+        } else {
+            attendanceMatchedNames[index].matchType = 'unmatched';
+            attendanceMatchedNames[index].confidence = 0;
+        }
+        renderNameMatchingTable();
+    }
+}
+
+// Save name alias for future imports
+async function saveNameAlias(index) {
+    const item = attendanceMatchedNames[index];
+    if (!item || !item.selectedStudentId) return;
+
+    try {
+        if (window.supabaseData && typeof window.supabaseData.addStudentNameAlias === 'function') {
+            await window.supabaseData.addStudentNameAlias(item.selectedStudentId, item.originalName);
+
+            // Add to local aliases list (use camelCase to match supabase-data.js format)
+            attendanceStudentAliases.push({
+                studentId: item.selectedStudentId,
+                aliasName: item.originalName
+            });
+
+            // Update match type
+            item.matchType = 'alias';
+            renderNameMatchingTable();
+
+            showToast(t('admin.attendance.aliasSaved'), 'success');
+        }
+    } catch (error) {
+        console.error('Error saving alias:', error);
+        showToast(t('admin.attendance.aliasSaveError'), 'error');
+    }
+}
+
+// Submit attendance import
+async function submitAttendanceImport() {
+    const matchedStudents = attendanceMatchedNames.filter(m => m.selectedStudentId);
+
+    if (matchedStudents.length === 0) {
+        showToast(t('admin.attendance.noMatchedStudents'), 'error');
+        return;
+    }
+
+    const branchName = document.getElementById('importBranchSelect').value;
+    const branchObj = window.branches.find(b => b.name === branchName);
+    if (!branchObj) {
+        showToast(t('admin.attendance.branchNotFound'), 'error');
+        return;
+    }
+
+    const nextBtn = document.getElementById('importNextBtn');
+    if (nextBtn) {
+        nextBtn.disabled = true;
+        nextBtn.innerHTML = '<i data-lucide="loader" class="spin" style="width: 18px; height: 18px;"></i>';
+    }
+
+    try {
+        // Prepare records for bulk insert
+        const records = [];
+
+        // Track time slot assignments from Excel
+        const timeSlotAssignments = new Map(); // studentId -> { timeSlotIndex, timeSlot }
+
+        for (const item of matchedStudents) {
+            // Use the student's individual time slot from Excel parsing
+            const studentTimeSlot = item.timeSlot || attendanceExcelParsedData.parsedData.timeSlot;
+
+            // Calculate the actual time slot index for this branch (use schedule type for Sat-Sun)
+            const timeSlotIndex = item.timeSlotIndex !== undefined
+                ? findTimeSlotIndexForBranch(studentTimeSlot, branchName, attendanceExcelParsedData.scheduleType)
+                : -1;
+
+            // Store assignment for later application
+            if (timeSlotIndex >= 0) {
+                timeSlotAssignments.set(item.selectedStudentId, {
+                    timeSlotIndex: timeSlotIndex,
+                    timeSlot: studentTimeSlot
+                });
+            }
+
+            for (const att of item.attendance) {
+                records.push({
+                    studentId: item.selectedStudentId,
+                    branchId: branchObj.id,
+                    attendanceDate: att.date,
+                    scheduleType: attendanceExcelParsedData.scheduleType,
+                    timeSlot: studentTimeSlot,
+                    status: att.status
+                });
+            }
+        }
+
+        // Bulk upsert attendance records
+        if (window.supabaseData && typeof window.supabaseData.bulkUpsertAttendance === 'function') {
+            const result = await window.supabaseData.bulkUpsertAttendance(records);
+
+            // Apply time slot assignments to calendar data
+            if (timeSlotAssignments.size > 0) {
+                await applyTimeSlotAssignmentsFromImport(timeSlotAssignments, branchObj.id);
+            }
+
+            showToast(t('admin.attendance.importSuccess', { count: records.length }), 'success');
+            closeAttendanceImportModal();
+
+            // Reload attendance data
+            attendanceCurrentBranch = branchName;
+            loadAttendanceData();
+        }
+
+    } catch (error) {
+        console.error('Error importing attendance:', error);
+        showToast(t('admin.attendance.importError'), 'error');
+    } finally {
+        if (nextBtn) {
+            nextBtn.disabled = false;
+            nextBtn.innerHTML = t('admin.attendance.import');
+        }
+        lucide.createIcons();
+    }
+}
+
+// Apply time slot assignments from Excel import to students in calendar
+async function applyTimeSlotAssignmentsFromImport(assignments, branchId) {
+    console.log(`Applying time slot assignments to ${assignments.size} students`);
+
+    // Update local calendar data immediately
+    for (const [studentId, slotInfo] of assignments) {
+        const student = attendanceCalendarData.find(s => s.id === studentId);
+        if (student) {
+            student.time_slot_index = slotInfo.timeSlotIndex;
+            console.log(`Assigned ${student.first_name} ${student.last_name} to slot ${slotInfo.timeSlotIndex} (${slotInfo.timeSlot})`);
+        }
+    }
+
+    // Optionally update in database if the students table has time_slot_index column
+    // For now, the assignment persists via the attendance records' time_slot field
+    // and will be reloaded from there when the calendar is refreshed
+}
+
+// Export attendance to Excel
+async function exportAttendanceExcel() {
+    if (!attendanceCurrentBranch) {
+        showToast(t('admin.attendance.selectBranchError'), 'error');
+        return;
+    }
+
+    const branchObj = window.branches.find(b => b.name === attendanceCurrentBranch);
+    if (!branchObj) return;
+
+    try {
+        // Create workbook
+        const wb = XLSX.utils.book_new();
+
+        // Get days in month
+        const daysInMonth = new Date(attendanceCurrentYear, attendanceCurrentMonth + 1, 0).getDate();
+
+        // Create header row
+        const headers = [t('admin.table.student')];
+        for (let day = 1; day <= daysInMonth; day++) {
+            headers.push(day.toString());
+        }
+        headers.push('%');
+
+        // Create data rows
+        const data = [headers];
+
+        attendanceCalendarData.forEach(student => {
+            const row = [`${student.first_name} ${student.last_name}`];
+            let presentCount = 0;
+            let totalDays = 0;
+
+            for (let day = 1; day <= daysInMonth; day++) {
+                const dateStr = `${attendanceCurrentYear}-${String(attendanceCurrentMonth + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+                const attendance = student.attendance.find(a => a.attendance_date === dateStr);
+
+                if (attendance) {
+                    totalDays++;
+                    switch (attendance.status) {
+                        case 'present':
+                            row.push('V');
+                            presentCount++;
+                            break;
+                        case 'absent':
+                            row.push('X');
+                            break;
+                        case 'late':
+                            row.push('L');
+                            presentCount += 0.5;
+                            break;
+                        case 'excused':
+                            row.push('E');
+                            break;
+                        default:
+                            row.push('');
+                    }
+                } else {
+                    row.push('');
+                }
+            }
+
+            const rate = totalDays > 0 ? Math.round((presentCount / totalDays) * 100) : 0;
+            row.push(`${rate}%`);
+
+            data.push(row);
+        });
+
+        // Create worksheet
+        const ws = XLSX.utils.aoa_to_sheet(data);
+
+        // Add to workbook with schedule name
+        const scheduleNames = {
+            'mon_wed': getCurrentLanguage() === 'ru' ? 'Пн-Ср' : 'Mon-Wed',
+            'tue_thu': getCurrentLanguage() === 'ru' ? 'Вт-Чт' : 'Tue-Thu',
+            'sat_sun': getCurrentLanguage() === 'ru' ? 'Сб-Вс' : 'Sat-Sun'
+        };
+        XLSX.utils.book_append_sheet(wb, ws, scheduleNames[attendanceCurrentSchedule]);
+
+        // Generate filename
+        const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+        const filename = `attendance_${attendanceCurrentBranch}_${monthNames[attendanceCurrentMonth]}_${attendanceCurrentYear}.xlsx`;
+
+        // Download
+        XLSX.writeFile(wb, filename);
+
+        showToast(t('admin.attendance.exportSuccess'), 'success');
+
+    } catch (error) {
+        console.error('Error exporting attendance:', error);
+        showToast(t('admin.attendance.exportError'), 'error');
+    }
+}
+
+// Handle file drop for attendance import
+function setupAttendanceFileDrop() {
+    const dropZone = document.getElementById('attendanceDropZone');
+    const fileInput = document.getElementById('attendanceFileInput');
+
+    if (!dropZone || !fileInput) return;
+
+    dropZone.addEventListener('dragover', (e) => {
+        e.preventDefault();
+        dropZone.classList.add('drag-over');
+    });
+
+    dropZone.addEventListener('dragleave', () => {
+        dropZone.classList.remove('drag-over');
+    });
+
+    dropZone.addEventListener('drop', (e) => {
+        e.preventDefault();
+        dropZone.classList.remove('drag-over');
+
+        const files = e.dataTransfer.files;
+        if (files.length > 0 && files[0].name.endsWith('.xlsx')) {
+            fileInput.files = files;
+            onAttendanceFileSelect();
+        } else {
+            showToast(t('admin.attendance.invalidFileType'), 'error');
+        }
+    });
+}
+
+// Handle file selection
+async function onAttendanceFileSelect() {
+    const fileInput = document.getElementById('attendanceFileInput');
+    const fileNameDisplay = document.getElementById('attendanceFileName');
+    const nextBtn = document.getElementById('importNextBtn');
+    const branchSelect = document.getElementById('importBranchSelect');
+
+    if (fileInput.files && fileInput.files.length > 0) {
+        const file = fileInput.files[0];
+        if (fileNameDisplay) {
+            fileNameDisplay.textContent = file.name;
+        }
+
+        // Try to auto-detect branch from filename
+        const detectedBranch = extractBranchFromFilename(file.name);
+        if (detectedBranch && branchSelect) {
+            // Check if the branch exists in the dropdown options
+            const branchOption = Array.from(branchSelect.options).find(opt => opt.value === detectedBranch);
+            if (branchOption) {
+                branchSelect.value = detectedBranch;
+                showToast(`Auto-selected branch: ${i18n.translateBranchName(detectedBranch)}`, 'success');
+            }
+        }
+
+        // Parse the Excel file
+        const success = await parseExcelFile(file);
+
+        // Enable Next button only if file is parsed and branch is selected
+        if (nextBtn && success && branchSelect && branchSelect.value) {
+            nextBtn.disabled = false;
+        }
+    }
+}
+
+// Initialize attendance file drop zone when DOM is ready
+document.addEventListener('DOMContentLoaded', () => {
+    setupAttendanceFileDrop();
+});
+
+// Close attendance search dropdown when clicking outside
+document.addEventListener('click', function(event) {
+    if (!attendanceSearchDropdownVisible) return;
+
+    const dropdown = document.getElementById('attendanceSearchDropdown');
+    const searchInput = document.getElementById('attendanceStudentSearch');
+
+    // If click is outside dropdown and search input, close dropdown
+    if (dropdown && searchInput &&
+        !dropdown.contains(event.target) &&
+        !searchInput.contains(event.target)) {
+        dropdown.style.display = 'none';
+        attendanceSearchDropdownVisible = false;
+    }
+});
+
+// Close attendance search dropdown on Escape key
+document.addEventListener('keydown', function(event) {
+    if (event.key === 'Escape' && attendanceSearchDropdownVisible) {
+        const dropdown = document.getElementById('attendanceSearchDropdown');
+        if (dropdown) {
+            dropdown.style.display = 'none';
+        }
+        attendanceSearchDropdownVisible = false;
+
+        // Also clear the search input
+        const searchInput = document.getElementById('attendanceStudentSearch');
+        if (searchInput) {
+            searchInput.value = '';
+            searchInput.blur();
+        }
+    }
+});
+
+// Initialize attendance month navigation buttons
+document.addEventListener('DOMContentLoaded', () => {
+    const prevBtn = document.getElementById('attendancePrevMonthBtn');
+    const nextBtn = document.getElementById('attendanceNextMonthBtn');
+
+    if (prevBtn) {
+        prevBtn.addEventListener('click', function(e) {
+            e.preventDefault();
+            e.stopPropagation();
+            navigateAttendanceMonth(-1);
+        });
+    }
+
+    if (nextBtn) {
+        nextBtn.addEventListener('click', function(e) {
+            e.preventDefault();
+            e.stopPropagation();
+            navigateAttendanceMonth(1);
+        });
+    }
+
+    // Initialize month display
+    updateAttendanceMonthDisplay();
+});
 

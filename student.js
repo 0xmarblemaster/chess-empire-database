@@ -171,6 +171,15 @@ async function loadStudentProfileData(studentId) {
             }
         }
 
+        // Load puzzle rankings (branch + school ranks by puzzle score)
+        // This runs for both paths (full profile or fallback)
+        if (typeof window.supabaseData.getStudentPuzzleRankings === 'function') {
+            studentProfileData.puzzleRankings = await window.supabaseData.getStudentPuzzleRankings(studentId);
+            console.log('Puzzle rankings loaded:', studentProfileData.puzzleRankings);
+        } else {
+            console.log('getStudentPuzzleRankings function not available');
+        }
+
         return studentProfileData;
     } catch (error) {
         console.error('Error loading student profile data:', error);
@@ -385,6 +394,82 @@ function renderLevelRankInfoBoxes(rankings) {
     return { branchRankHTML, schoolRankHTML };
 }
 
+// Render puzzle score rank info boxes for the survival/puzzle tab
+// Shows position like "5 / 70" based on puzzle (survival) best score
+function renderPuzzleRankInfoBoxes(puzzleRankings) {
+    console.log('renderPuzzleRankInfoBoxes called with:', puzzleRankings);
+    if (!puzzleRankings) {
+        console.log('No puzzle rankings data, returning empty');
+        return '';
+    }
+
+    const { branchPuzzle, schoolPuzzle } = puzzleRankings;
+
+    // Branch puzzle rank
+    const branchRank = branchPuzzle?.rankInBranch;
+    const branchTotal = branchPuzzle?.totalInBranch;
+
+    let branchHTML = '';
+    if (branchRank && branchTotal) {
+        const rankLabel = formatRankPosition(branchRank, branchTotal);
+        const tierInfo = getBranchRankTier(branchRank);
+
+        const tierClass = tierInfo ? `branch-rank-${tierInfo.tier}` : '';
+        const animatedClass = tierInfo?.animated ? 'branch-rank-animated' : '';
+        const topBadgeHTML = tierInfo
+            ? `<span class="branch-rank-badge branch-rank-badge--${tierInfo.tier}">${tierInfo.label}</span>`
+            : '';
+
+        branchHTML = `
+            <div class="info-item rank-info-item puzzle-rank-item ${tierClass} ${animatedClass}">
+                ${topBadgeHTML}
+                <div class="info-label">
+                    <i data-lucide="users" style="width: 14px; height: 14px;"></i>
+                    ${t('rankings.branchRank') || 'Branch Rank'}
+                </div>
+                <div class="info-value rank-value">${rankLabel}</div>
+            </div>
+        `;
+    }
+
+    // School puzzle rank
+    const schoolRank = schoolPuzzle?.rankInSchool;
+    const schoolTotal = schoolPuzzle?.totalInSchool;
+
+    let schoolHTML = '';
+    if (schoolRank && schoolTotal) {
+        const rankLabel = formatRankPosition(schoolRank, schoolTotal);
+        const tierInfo = getSchoolRankTier(schoolRank);
+
+        const tierClass = tierInfo ? `school-rank-${tierInfo.tier}` : '';
+        const animatedClass = tierInfo?.animated ? 'school-rank-animated' : '';
+        const topBadgeHTML = tierInfo
+            ? `<span class="school-rank-badge school-rank-badge--${tierInfo.tier}">${tierInfo.label}</span>`
+            : '';
+
+        schoolHTML = `
+            <div class="info-item rank-info-item puzzle-rank-item ${tierClass} ${animatedClass}">
+                ${topBadgeHTML}
+                <div class="info-label">
+                    <i data-lucide="school" style="width: 14px; height: 14px;"></i>
+                    ${t('rankings.schoolRank') || 'School Rank'}
+                </div>
+                <div class="info-value rank-value">${rankLabel}</div>
+            </div>
+        `;
+    }
+
+    // Return container with both boxes
+    if (!branchHTML && !schoolHTML) return '';
+
+    return `
+        <div class="puzzle-rank-container">
+            ${branchHTML}
+            ${schoolHTML}
+        </div>
+    `;
+}
+
 // Switch tab
 function switchTab(tabName) {
     currentTab = tabName;
@@ -542,17 +627,17 @@ function renderSurvivalContent() {
         grandmaster: { label: t('puzzleRush.tierGrandmaster') || 'Grandmaster', color: '#ef4444', icon: 'flame' }
     };
 
-    // Hero section with best score
+    // Get puzzle rankings for the rank boxes
+    const puzzleRankings = studentProfileData?.puzzleRankings;
+
+    // Hero section with best score and puzzle rankings
     let html = `
         <div class="survival-hero">
             <div class="survival-score-display" style="--tier-color: ${survivalInfo.color}">
                 <div class="survival-score-value">${bestScore}</div>
                 <div class="survival-score-label">${t('puzzleRush.bestScore') || 'Best Score'}</div>
             </div>
-            <div class="survival-tier-badge tier-${survivalInfo.tier || 'beginner'}">
-                <i data-lucide="zap" style="width: 18px; height: 18px;"></i>
-                <span>${survivalInfo.label}</span>
-            </div>
+            ${renderPuzzleRankInfoBoxes(puzzleRankings)}
         </div>
     `;
 

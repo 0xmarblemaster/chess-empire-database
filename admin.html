@@ -120,6 +120,10 @@
                     <i data-lucide="database" style="width: 20px; height: 20px;"></i>
                     <span data-i18n="admin.sidebar.dataManagement">Data Management</span>
                 </div>
+                <div class="nav-item" id="menuAttendance" onclick="showAttendanceManagement()" style="display: none;">
+                    <i data-lucide="calendar-check" style="width: 20px; height: 20px;"></i>
+                    <span data-i18n="admin.sidebar.attendance">Attendance</span>
+                </div>
             </nav>
 
             <!-- User Info -->
@@ -685,6 +689,180 @@
                 </div>
             </div>
             <!-- End Ratings Section -->
+
+            <!-- Attendance Management Section -->
+            <div id="attendanceSection" class="content-section">
+                <!-- Header -->
+                <div class="header">
+                    <h1 class="header-title" data-i18n="admin.attendance.title">Attendance Tracking</h1>
+                    <div class="header-actions">
+                        <button class="btn btn-secondary" onclick="openAttendanceImportModal()">
+                            <i data-lucide="upload" style="width: 18px; height: 18px;"></i>
+                            <span data-i18n="admin.attendance.importExcel">Import Excel</span>
+                        </button>
+                        <button class="btn btn-secondary" onclick="exportAttendanceExcel()">
+                            <i data-lucide="download" style="width: 18px; height: 18px;"></i>
+                            <span data-i18n="admin.attendance.exportExcel">Export Excel</span>
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Attendance Stats -->
+                <div class="stats-grid">
+                    <div class="stat-card">
+                        <div class="stat-header">
+                            <div>
+                                <div class="stat-value" id="attendanceTotalSessions">0</div>
+                                <div class="stat-label" data-i18n="admin.attendance.totalSessions">Total Sessions</div>
+                            </div>
+                            <div class="stat-icon blue">
+                                <i data-lucide="calendar" style="width: 24px; height: 24px;"></i>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="stat-card">
+                        <div class="stat-header">
+                            <div>
+                                <div class="stat-value" id="attendanceAvgRate">0%</div>
+                                <div class="stat-label" data-i18n="admin.attendance.avgRate">Avg Attendance</div>
+                            </div>
+                            <div class="stat-icon green">
+                                <i data-lucide="percent" style="width: 24px; height: 24px;"></i>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="stat-card">
+                        <div class="stat-header">
+                            <div>
+                                <div class="stat-value" id="attendanceLowCount">0</div>
+                                <div class="stat-label" data-i18n="admin.attendance.lowAttendance">Low Attendance</div>
+                            </div>
+                            <div class="stat-icon amber">
+                                <i data-lucide="alert-triangle" style="width: 24px; height: 24px;"></i>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="stat-card">
+                        <div class="stat-header">
+                            <div>
+                                <div class="stat-value" id="attendanceStudentsCount">0</div>
+                                <div class="stat-label" data-i18n="admin.attendance.studentsTracked">Students Tracked</div>
+                            </div>
+                            <div class="stat-icon purple">
+                                <i data-lucide="users" style="width: 24px; height: 24px;"></i>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Filters -->
+                <div class="filters" style="margin-bottom: 1.5rem;">
+                    <div class="filters-grid">
+                        <div class="filter-group">
+                            <label class="filter-label" data-i18n="admin.attendance.branch">Branch</label>
+                            <select class="filter-select" id="attendanceBranchFilter" onchange="onAttendanceBranchChange()">
+                                <option value="" data-i18n="admin.attendance.selectBranch">Select Branch</option>
+                            </select>
+                        </div>
+                        <div class="filter-group">
+                            <label class="filter-label" data-i18n="admin.attendance.schedule">Schedule</label>
+                            <select class="filter-select" id="attendanceScheduleFilter" onchange="onAttendanceScheduleChange()">
+                                <option value="" data-i18n="admin.attendance.allSchedules">All Schedules</option>
+                                <option value="mon_wed" data-i18n="admin.attendance.monWed">Mon-Wed</option>
+                                <option value="tue_thu" data-i18n="admin.attendance.tueThu">Tue-Thu</option>
+                                <option value="sat_sun" data-i18n="admin.attendance.satSun">Sat-Sun</option>
+                            </select>
+                        </div>
+                        <div class="filter-group">
+                            <label class="filter-label" data-i18n="admin.attendance.timeSlot">Time Slot</label>
+                            <select class="filter-select" id="attendanceTimeSlotFilter" onchange="onAttendanceTimeSlotChange()">
+                                <option value="" data-i18n="admin.attendance.allTimeSlots">All Time Slots</option>
+                            </select>
+                        </div>
+                        <div class="filter-group">
+                            <label class="filter-label" data-i18n="admin.attendance.month">Month</label>
+                            <input type="month" class="filter-select" id="attendanceMonthFilter" onchange="loadAttendanceData()">
+                        </div>
+                        <div class="filter-group" style="display: flex; align-items: flex-end;">
+                            <label class="toggle-switch" style="display: flex; align-items: center; gap: 0.5rem; cursor: pointer;">
+                                <input type="checkbox" id="hideEmptyRowsToggle" onchange="toggleHideEmptyRows()" checked>
+                                <span class="toggle-slider"></span>
+                                <span class="filter-label" style="margin-bottom: 0;" data-i18n="admin.attendance.hideEmptyRows">Hide Empty Rows</span>
+                            </label>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Month Navigation -->
+                <div class="attendance-month-nav" style="display: flex; align-items: center; justify-content: center; gap: 1rem; margin-bottom: 1.5rem;">
+                    <button id="attendancePrevMonthBtn" class="btn btn-secondary" style="padding: 0.5rem; cursor: pointer; display: flex; align-items: center; justify-content: center;">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m15 18-6-6 6-6"/></svg>
+                    </button>
+                    <h2 id="attendanceMonthTitle" style="font-size: 1.25rem; font-weight: 600; color: #1e293b; min-width: 180px; text-align: center;">December 2025</h2>
+                    <button id="attendanceNextMonthBtn" class="btn btn-secondary" style="padding: 0.5rem; cursor: pointer; display: flex; align-items: center; justify-content: center;">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+                    </button>
+                </div>
+
+                <!-- Attendance Calendar Grid -->
+                <div class="branch-card" style="margin-bottom: 1.5rem;">
+                    <div id="attendanceCalendarContainer" style="overflow-x: auto;">
+                        <div id="attendanceCalendarPlaceholder" style="padding: 3rem; text-align: center; color: #64748b;">
+                            <i data-lucide="calendar" style="width: 48px; height: 48px; margin-bottom: 1rem; opacity: 0.5;"></i>
+                            <p data-i18n="admin.attendance.selectBranchPrompt">Select a branch to view attendance calendar</p>
+                        </div>
+                        <table id="attendanceCalendarTable" class="attendance-calendar" style="display: none; width: 100%; border-collapse: collapse;">
+                            <thead id="attendanceCalendarHead">
+                                <!-- Calendar header with dates will be populated by JavaScript -->
+                            </thead>
+                            <tbody id="attendanceCalendarBody">
+                                <!-- Calendar rows with students will be populated by JavaScript -->
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <!-- Attendance Legend -->
+                <div class="attendance-legend" style="display: flex; gap: 1.5rem; flex-wrap: wrap; margin-bottom: 1.5rem; padding: 1rem; background: #f8fafc; border-radius: 0.75rem;">
+                    <div style="display: flex; align-items: center; gap: 0.5rem;">
+                        <span class="attendance-cell present" style="width: 24px; height: 24px; display: inline-flex; align-items: center; justify-content: center; border-radius: 4px; font-size: 0.75rem; font-weight: 600;">V</span>
+                        <span style="font-size: 0.875rem; color: #475569;" data-i18n="admin.attendance.present">Present</span>
+                    </div>
+                    <div style="display: flex; align-items: center; gap: 0.5rem;">
+                        <span class="attendance-cell absent" style="width: 24px; height: 24px; display: inline-flex; align-items: center; justify-content: center; border-radius: 4px; font-size: 0.75rem; font-weight: 600;">X</span>
+                        <span style="font-size: 0.875rem; color: #475569;" data-i18n="admin.attendance.absent">Absent</span>
+                    </div>
+                    <div style="display: flex; align-items: center; gap: 0.5rem;">
+                        <span class="attendance-cell late" style="width: 24px; height: 24px; display: inline-flex; align-items: center; justify-content: center; border-radius: 4px; font-size: 0.75rem; font-weight: 600;">L</span>
+                        <span style="font-size: 0.875rem; color: #475569;" data-i18n="admin.attendance.late">Late</span>
+                    </div>
+                    <div style="display: flex; align-items: center; gap: 0.5rem;">
+                        <span class="attendance-cell excused" style="width: 24px; height: 24px; display: inline-flex; align-items: center; justify-content: center; border-radius: 4px; font-size: 0.75rem; font-weight: 600;">E</span>
+                        <span style="font-size: 0.875rem; color: #475569;" data-i18n="admin.attendance.excused">Excused</span>
+                    </div>
+                    <div style="margin-left: auto; font-size: 0.875rem; color: #64748b;">
+                        <span data-i18n="admin.attendance.clickToChange">Click cell to change status</span>
+                    </div>
+                </div>
+
+                <!-- Low Attendance Alerts -->
+                <div class="branch-card" id="lowAttendanceAlertsCard">
+                    <div class="card-header-inline">
+                        <h2 class="card-title-inline">
+                            <i data-lucide="alert-triangle" style="width: 20px; height: 20px; color: #f59e0b;"></i>
+                            <span data-i18n="admin.attendance.lowAttendanceAlerts">Low Attendance Alerts</span>
+                            <span id="lowAttendanceAlertCount" style="margin-left: 8px; font-weight: 600; color: #f59e0b;"></span>
+                        </h2>
+                    </div>
+                    <div id="lowAttendanceAlertsList" style="padding: 1rem;">
+                        <p style="color: #64748b; text-align: center;" data-i18n="admin.attendance.noAlerts">No low attendance alerts</p>
+                    </div>
+                </div>
+            </div>
+            <!-- End Attendance Section -->
 
         </main>
 
@@ -1339,6 +1517,227 @@
         </div>
     </div>
 
+    <!-- Attendance Import Modal (3-step wizard) -->
+    <div id="attendanceImportModal" class="modal">
+        <div class="modal-overlay" onclick="closeAttendanceImportModal()"></div>
+        <div class="modal-content" style="max-width: 800px;">
+            <div class="modal-header">
+                <h2 class="modal-title" data-i18n="admin.attendance.importExcel">Import Attendance from Excel</h2>
+                <button class="modal-close" onclick="closeAttendanceImportModal()">
+                    <i data-lucide="x" style="width: 24px; height: 24px;"></i>
+                </button>
+            </div>
+
+            <div class="modal-body">
+                <!-- Step Indicators -->
+                <div class="import-wizard-steps" style="display: flex; justify-content: center; gap: 2rem; margin-bottom: 2rem;">
+                    <div class="wizard-step active" id="wizardStep1">
+                        <div class="wizard-step-number">1</div>
+                        <div class="wizard-step-label" data-i18n="admin.attendance.step1Upload">Upload File</div>
+                    </div>
+                    <div class="wizard-step-connector"></div>
+                    <div class="wizard-step" id="wizardStep2">
+                        <div class="wizard-step-number">2</div>
+                        <div class="wizard-step-label" data-i18n="admin.attendance.step2Sheet">Select Sheet</div>
+                    </div>
+                    <div class="wizard-step-connector"></div>
+                    <div class="wizard-step" id="wizardStep3">
+                        <div class="wizard-step-number">3</div>
+                        <div class="wizard-step-label" data-i18n="admin.attendance.step3Match">Match Names</div>
+                    </div>
+                </div>
+
+                <!-- Step 1: File Upload -->
+                <div id="importStep1" class="import-step">
+                    <div class="form-section">
+                        <h3 class="form-section-title" data-i18n="admin.attendance.selectBranchFirst">Select Branch</h3>
+                        <select id="importBranchSelect" class="form-input" style="margin-bottom: 1.5rem;">
+                            <option value="" data-i18n="admin.attendance.selectBranch">Select Branch</option>
+                        </select>
+                    </div>
+
+                    <div class="form-section">
+                        <h3 class="form-section-title" data-i18n="admin.attendance.uploadExcelFile">Upload Excel File</h3>
+                        <p style="color: #64748b; font-size: 0.875rem; margin-bottom: 1rem;" data-i18n="admin.attendance.excelFormatHint">
+                            Excel file should have sheets for each schedule (Mon-Wed, Tue-Thu, Sat-Sun) with student names in column B and "V" marks for attendance.
+                        </p>
+                        <div class="photo-upload-container" style="border: 2px dashed #e2e8f0; border-radius: 0.75rem; padding: 2rem; text-align: center; cursor: pointer;" id="excelDropZone">
+                            <div class="photo-upload-actions" style="width: 100%;">
+                                <i data-lucide="file-spreadsheet" style="width: 48px; height: 48px; color: #94a3b8; margin-bottom: 1rem;"></i>
+                                <label for="attendanceFileInput" class="btn-upload" style="width: auto; justify-content: center; cursor: pointer;">
+                                    <i data-lucide="upload" style="width: 18px; height: 18px;"></i>
+                                    <span data-i18n="admin.attendance.chooseFile">Choose Excel File</span>
+                                </label>
+                                <input type="file" id="attendanceFileInput" accept=".xlsx,.xls" style="display: none;" onchange="onAttendanceFileSelect()">
+                                <p class="upload-hint" style="margin-top: 0.75rem;" data-i18n="admin.attendance.dragDropHint">or drag and drop your file here</p>
+                                <p class="upload-hint" id="attendanceFileName" style="color: #64748b; margin-top: 0.5rem;">No file selected</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Step 2: Sheet Selection -->
+                <div id="importStep2" class="import-step" style="display: none;">
+                    <div class="form-section">
+                        <h3 class="form-section-title" data-i18n="admin.attendance.selectSheets">Select Sheets to Import</h3>
+                        <p style="color: #64748b; font-size: 0.875rem; margin-bottom: 1rem;" data-i18n="admin.attendance.sheetSelectionHint">
+                            Choose which sheets contain attendance data to import.
+                        </p>
+                        <div id="sheetTabsContainer" class="sheet-tabs" style="display: flex; gap: 0.5rem; flex-wrap: wrap; margin-bottom: 1.5rem;">
+                            <!-- Sheet tabs will be populated by JavaScript -->
+                        </div>
+                    </div>
+
+                    <div class="form-section">
+                        <h3 class="form-section-title" data-i18n="admin.attendance.sheetPreview">Sheet Preview</h3>
+                        <div id="sheetPreviewContainer" style="max-height: 300px; overflow: auto; border: 1px solid #e2e8f0; border-radius: 0.5rem;">
+                            <p style="padding: 2rem; text-align: center; color: #64748b;" data-i18n="admin.attendance.selectSheetToPreview">Select a sheet to preview</p>
+                        </div>
+                        <div style="margin-top: 1rem; display: flex; gap: 1rem; font-size: 0.875rem;">
+                            <span><strong id="sheetRowCount">0</strong> <span data-i18n="admin.attendance.rowsFound">rows found</span></span>
+                            <span><strong id="sheetDateCount">0</strong> <span data-i18n="admin.attendance.datesFound">dates found</span></span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Step 3: Name Matching -->
+                <div id="importStep3" class="import-step" style="display: none;">
+                    <div class="form-section">
+                        <h3 class="form-section-title" data-i18n="admin.attendance.matchStudentNames">Match Student Names</h3>
+                        <p style="color: #64748b; font-size: 0.875rem; margin-bottom: 1rem;" data-i18n="admin.attendance.nameMatchingHint">
+                            Review and confirm the matching between Russian names from Excel and students in the database.
+                        </p>
+
+                        <!-- Match Summary -->
+                        <div style="display: flex; gap: 1.5rem; margin-bottom: 1.5rem; padding: 1rem; background: #f8fafc; border-radius: 0.75rem;">
+                            <div style="text-align: center;">
+                                <div style="font-size: 1.5rem; font-weight: 700; color: #10b981;" id="matchedCount">0</div>
+                                <div style="font-size: 0.75rem; color: #64748b;" data-i18n="admin.attendance.matched">Matched</div>
+                            </div>
+                            <div style="text-align: center;">
+                                <div style="font-size: 1.5rem; font-weight: 700; color: #f59e0b;" id="unmatchedCount">0</div>
+                                <div style="font-size: 0.75rem; color: #64748b;" data-i18n="admin.attendance.unmatched">Unmatched</div>
+                            </div>
+                            <div style="text-align: center;">
+                                <div style="font-size: 1.5rem; font-weight: 700; color: #3b82f6;" id="totalRecordsCount">0</div>
+                                <div style="font-size: 0.75rem; color: #64748b;" data-i18n="admin.attendance.totalRecords">Records</div>
+                            </div>
+                        </div>
+
+                        <!-- Name Matching Table -->
+                        <div style="max-height: 350px; overflow-y: auto; border: 1px solid #e2e8f0; border-radius: 0.5rem;">
+                            <table style="width: 100%; font-size: 0.875rem; border-collapse: collapse;">
+                                <thead style="background: #f8fafc; position: sticky; top: 0;">
+                                    <tr>
+                                        <th style="padding: 0.75rem; text-align: left; border-bottom: 1px solid #e2e8f0;" data-i18n="admin.attendance.excelName">Name in Excel</th>
+                                        <th style="padding: 0.75rem; text-align: center; border-bottom: 1px solid #e2e8f0;" data-i18n="admin.attendance.timeSlot">Time Slot</th>
+                                        <th style="padding: 0.75rem; text-align: left; border-bottom: 1px solid #e2e8f0;" data-i18n="admin.attendance.matchedStudent">Matched Student</th>
+                                        <th style="padding: 0.75rem; text-align: center; border-bottom: 1px solid #e2e8f0;" data-i18n="admin.attendance.confidence">Confidence</th>
+                                        <th style="padding: 0.75rem; text-align: center; border-bottom: 1px solid #e2e8f0;" data-i18n="admin.attendance.actions">Actions</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="nameMatchingBody">
+                                    <!-- Name matching rows will be populated by JavaScript -->
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="modal-footer" style="display: flex; justify-content: space-between;">
+                <button type="button" class="btn-secondary" id="importBackBtn" onclick="importWizardBack()" style="display: none;">
+                    <i data-lucide="arrow-left" style="width: 18px; height: 18px;"></i>
+                    <span data-i18n="common.back">Back</span>
+                </button>
+                <div style="display: flex; gap: 0.75rem; margin-left: auto;">
+                    <button type="button" class="btn-secondary" onclick="closeAttendanceImportModal()" data-i18n="admin.modals.add.cancel">Cancel</button>
+                    <button type="button" class="btn-primary" id="importNextBtn" onclick="importWizardNext()" disabled>
+                        <span data-i18n="common.next">Next</span>
+                        <i data-lucide="arrow-right" style="width: 18px; height: 18px;"></i>
+                    </button>
+                    <button type="button" class="btn-primary" id="importSubmitBtn" onclick="submitAttendanceImport()" style="display: none;">
+                        <i data-lucide="upload" style="width: 18px; height: 18px;"></i>
+                        <span data-i18n="admin.attendance.importData">Import Data</span>
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Add Student to Calendar Modal -->
+    <div id="addStudentToCalendarModal" class="modal">
+        <div class="modal-overlay" onclick="closeAddStudentToCalendarModal()"></div>
+        <div class="modal-content" style="max-width: 500px;">
+            <div class="modal-header">
+                <h2 class="modal-title" data-i18n="admin.attendance.addStudentToCalendar">Add Student to Calendar</h2>
+                <button class="modal-close" onclick="closeAddStudentToCalendarModal()">
+                    <i data-lucide="x" style="width: 24px; height: 24px;"></i>
+                </button>
+            </div>
+
+            <div class="modal-body">
+                <!-- Branch Selection -->
+                <div class="form-group" style="margin-bottom: 1.25rem;">
+                    <label class="form-label" data-i18n="admin.attendance.branch">Branch</label>
+                    <select id="addStudentBranchSelect" class="form-input" onchange="onAddStudentBranchChange()">
+                        <option value="" data-i18n="admin.attendance.selectBranch">Select Branch</option>
+                    </select>
+                </div>
+
+                <!-- Student Search/Selection -->
+                <div class="form-group" style="margin-bottom: 1.25rem;">
+                    <label class="form-label" data-i18n="admin.attendance.student">Student</label>
+                    <div class="add-student-search-container">
+                        <input type="text"
+                               id="addStudentSearchInput"
+                               class="form-input"
+                               placeholder="Search student..."
+                               data-i18n-placeholder="admin.attendance.searchStudent"
+                               oninput="handleAddStudentSearch(this.value)"
+                               onfocus="handleAddStudentSearch(this.value)"
+                               autocomplete="off">
+                        <svg class="add-student-search-icon" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <circle cx="11" cy="11" r="8"></circle>
+                            <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+                        </svg>
+                        <div id="addStudentSearchDropdown" class="add-student-search-dropdown"></div>
+                    </div>
+                    <input type="hidden" id="addStudentSelectedId">
+                    <div id="addStudentSelectedDisplay" class="add-student-selected-display" style="display: none;">
+                        <span id="addStudentSelectedName"></span>
+                        <button type="button" class="add-student-clear-btn" onclick="clearSelectedStudent()">
+                            <i data-lucide="x" style="width: 14px; height: 14px;"></i>
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Schedule Type Selection -->
+                <div class="form-group" style="margin-bottom: 1.25rem;">
+                    <label class="form-label" data-i18n="admin.attendance.scheduleType">Days</label>
+                    <select id="addStudentScheduleSelect" class="form-input" onchange="onAddStudentScheduleChange()">
+                        <option value="mon_wed" data-i18n="admin.attendance.monWed">Monday - Wednesday</option>
+                        <option value="tue_thu" data-i18n="admin.attendance.tueThu">Tuesday - Thursday</option>
+                        <option value="sat_sun" data-i18n="admin.attendance.satSun">Saturday - Sunday</option>
+                    </select>
+                </div>
+
+                <!-- Time Slot Selection -->
+                <div class="form-group" style="margin-bottom: 1.5rem;">
+                    <label class="form-label" data-i18n="admin.attendance.timeSlot">Time Slot</label>
+                    <select id="addStudentTimeSlotSelect" class="form-input">
+                        <option value="" data-i18n="admin.attendance.selectTimeSlot">Select Time Slot</option>
+                    </select>
+                </div>
+            </div>
+
+            <div class="modal-footer">
+                <button class="btn btn-secondary" onclick="closeAddStudentToCalendarModal()" data-i18n="admin.modals.add.cancel">Cancel</button>
+                <button class="btn btn-primary" onclick="submitAddStudentToCalendar()" data-i18n="admin.attendance.addStudent">Add Student</button>
+            </div>
+        </div>
+    </div>
+
     <!-- Include CRUD Modals -->
     <div id="crud-modals-container"></div>
 
@@ -1374,6 +1773,8 @@
     <script src="supabase-data.js?v=1762426908"></script>
     <script src="constants.js?v=1765296000"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <!-- SheetJS for Excel parsing/export -->
+    <script src="https://cdn.sheetjs.com/xlsx-0.20.0/package/dist/xlsx.full.min.js"></script>
     <script src="data.js?v=1762345505"></script>
     <script src="crud.js?v=1762429177"></script>
     <script src="crud-handlers.js?v=1762345505"></script>

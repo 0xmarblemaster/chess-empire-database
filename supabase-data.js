@@ -619,24 +619,29 @@ const supabaseData = {
 
     // Get current (latest) rating for a student
     async getCurrentRating(studentId) {
-        const { data, error } = await window.supabaseClient
-            .from('student_current_ratings')
-            .select('*')
-            .eq('student_id', studentId)
-            .single();
+        try {
+            const { data, error } = await window.supabaseClient
+                .from('student_current_ratings')
+                .select('*')
+                .eq('student_id', studentId)
+                .single();
 
-        if (error) {
-            // No rating found is not an error - return defaults
+            if (error) {
+                // No rating found or view doesn't exist - return defaults silently
+                return { rating: 0, league: 'Beginner', leagueTier: 'none', ratingDate: null };
+            }
+
+            return {
+                studentId: data.student_id,
+                rating: data.rating,
+                ratingDate: data.rating_date,
+                league: data.league,
+                leagueTier: data.league_tier
+            };
+        } catch (e) {
+            // View might not exist - return defaults silently
             return { rating: 0, league: 'Beginner', leagueTier: 'none', ratingDate: null };
         }
-
-        return {
-            studentId: data.student_id,
-            rating: data.rating,
-            ratingDate: data.rating_date,
-            league: data.league,
-            leagueTier: data.league_tier
-        };
     },
 
     // Add a new rating entry for a student
@@ -1016,6 +1021,61 @@ const supabaseData = {
     },
 
     // ============================================
+    // PUZZLE SCORE RANKINGS
+    // ============================================
+
+    // Get student's PUZZLE SCORE ranking within their branch
+    // Returns rank position based on best puzzle/survival score
+    async getStudentBranchPuzzleRank(studentId) {
+        const { data, error } = await window.supabaseClient
+            .rpc('get_student_branch_puzzle_rank', { p_student_id: studentId });
+
+        if (error) {
+            console.error('Error fetching branch puzzle rank:', error);
+            return { totalInBranch: 0, rankInBranch: 0, bestScore: 0 };
+        }
+
+        const result = data?.[0] || {};
+        return {
+            totalInBranch: result.total_in_branch || 0,
+            rankInBranch: result.rank_in_branch || 0,
+            bestScore: result.best_score || 0
+        };
+    },
+
+    // Get student's PUZZLE SCORE school-wide ranking
+    // Returns rank position based on best puzzle/survival score
+    async getStudentSchoolPuzzleRank(studentId) {
+        const { data, error } = await window.supabaseClient
+            .rpc('get_student_school_puzzle_rank', { p_student_id: studentId });
+
+        if (error) {
+            console.error('Error fetching school puzzle rank:', error);
+            return { totalInSchool: 0, rankInSchool: 0, bestScore: 0 };
+        }
+
+        const result = data?.[0] || {};
+        return {
+            totalInSchool: result.total_in_school || 0,
+            rankInSchool: result.rank_in_school || 0,
+            bestScore: result.best_score || 0
+        };
+    },
+
+    // Get both puzzle rankings at once (convenience method)
+    async getStudentPuzzleRankings(studentId) {
+        const [branchPuzzle, schoolPuzzle] = await Promise.all([
+            this.getStudentBranchPuzzleRank(studentId),
+            this.getStudentSchoolPuzzleRank(studentId)
+        ]);
+
+        return {
+            branchPuzzle,
+            schoolPuzzle
+        };
+    },
+
+    // ============================================
     // ACHIEVEMENTS
     // ============================================
 
@@ -1209,48 +1269,53 @@ const supabaseData = {
 
     // Get rating leaderboard
     async getRatingLeaderboard(branchId = null, limit = 20) {
-        let query = window.supabaseClient
-            .from('student_current_ratings')
-            .select('*')
-            .order('rating', { ascending: false })
-            .limit(limit);
+        try {
+            let query = window.supabaseClient
+                .from('student_current_ratings')
+                .select('*')
+                .order('rating', { ascending: false })
+                .limit(limit);
 
-        const { data, error } = await query;
+            const { data, error } = await query;
 
-        if (error) {
-            console.error('Error fetching rating leaderboard:', error);
+            if (error) {
+                // View might not exist - return empty silently
+                return [];
+            }
+
+            // Fetch student details
+            const studentIds = data.map(d => d.student_id);
+            let studentsQuery = window.supabaseClient
+                .from('students')
+                .select('id, first_name, last_name, branch_id, branch:branches(name)')
+                .in('id', studentIds);
+
+            if (branchId) {
+                studentsQuery = studentsQuery.eq('branch_id', branchId);
+            }
+
+            const { data: students } = await studentsQuery;
+            const studentMap = new Map(students?.map(s => [s.id, s]) || []);
+
+            return data
+                .filter(entry => studentMap.has(entry.student_id))
+                .map((entry, index) => {
+                    const student = studentMap.get(entry.student_id);
+                    return {
+                        rank: index + 1,
+                        studentId: entry.student_id,
+                        firstName: student?.first_name || '',
+                        lastName: student?.last_name || '',
+                        branch: student?.branch?.name || '',
+                        rating: entry.rating,
+                        league: entry.league,
+                        leagueTier: entry.league_tier
+                    };
+                });
+        } catch (e) {
+            // View might not exist - return empty silently
             return [];
         }
-
-        // Fetch student details
-        const studentIds = data.map(d => d.student_id);
-        let studentsQuery = window.supabaseClient
-            .from('students')
-            .select('id, first_name, last_name, branch_id, branch:branches(name)')
-            .in('id', studentIds);
-
-        if (branchId) {
-            studentsQuery = studentsQuery.eq('branch_id', branchId);
-        }
-
-        const { data: students } = await studentsQuery;
-        const studentMap = new Map(students?.map(s => [s.id, s]) || []);
-
-        return data
-            .filter(entry => studentMap.has(entry.student_id))
-            .map((entry, index) => {
-                const student = studentMap.get(entry.student_id);
-                return {
-                    rank: index + 1,
-                    studentId: entry.student_id,
-                    firstName: student?.first_name || '',
-                    lastName: student?.last_name || '',
-                    branch: student?.branch?.name || '',
-                    rating: entry.rating,
-                    league: entry.league,
-                    leagueTier: entry.league_tier
-                };
-            });
     },
 
     // Get bot battle leaderboard (most bots defeated)
@@ -1347,6 +1412,616 @@ const supabaseData = {
             rankings,
             achievements
         };
+    },
+
+    // ============================================
+    // ATTENDANCE TRACKING
+    // ============================================
+
+    /**
+     * Get attendance records with filters
+     * @param {Object} filters - Filter options
+     * @param {string} filters.branchId - Branch UUID (required)
+     * @param {string} filters.scheduleType - 'mon_wed', 'tue_thu', or 'sat_sun'
+     * @param {string} filters.timeSlot - Time slot string (e.g., '10:00-11:00')
+     * @param {number} filters.year - Year (e.g., 2025)
+     * @param {number} filters.month - Month (1-12)
+     * @returns {Array} Attendance records with student info
+     */
+    async getAttendance(filters = {}) {
+        const { branchId, scheduleType, timeSlot, year, month } = filters;
+
+        if (!branchId) {
+            console.error('Branch ID is required for attendance query');
+            return [];
+        }
+
+        let query = window.supabaseClient
+            .from('attendance')
+            .select(`
+                *,
+                student:students(id, first_name, last_name)
+            `)
+            .eq('branch_id', branchId)
+            .order('attendance_date', { ascending: true });
+
+        if (scheduleType) {
+            query = query.eq('schedule_type', scheduleType);
+        }
+
+        if (timeSlot) {
+            query = query.eq('time_slot', timeSlot);
+        }
+
+        // Filter by year and month if provided
+        if (year && month) {
+            const startDate = `${year}-${String(month).padStart(2, '0')}-01`;
+            const endDate = new Date(year, month, 0).toISOString().split('T')[0]; // Last day of month
+            query = query.gte('attendance_date', startDate).lte('attendance_date', endDate);
+        }
+
+        const { data, error } = await query;
+
+        if (error) {
+            console.error('Error fetching attendance:', error);
+            return [];
+        }
+
+        return data.map(record => ({
+            id: record.id,
+            studentId: record.student_id,
+            studentFirstName: record.student?.first_name || '',
+            studentLastName: record.student?.last_name || '',
+            branchId: record.branch_id,
+            attendanceDate: record.attendance_date,
+            scheduleType: record.schedule_type,
+            timeSlot: record.time_slot,
+            status: record.status,
+            notes: record.notes,
+            createdAt: record.created_at,
+            updatedAt: record.updated_at
+        }));
+    },
+
+    /**
+     * Get students with their attendance for a specific branch/schedule/month
+     * Returns a structure optimized for calendar rendering
+     */
+    async getAttendanceCalendarData(branchId, scheduleType, year, month) {
+        // Calculate date range
+        const startDate = `${year}-${String(month).padStart(2, '0')}-01`;
+        const endDate = new Date(year, month, 0).toISOString().split('T')[0];
+
+        // Build attendance query
+        let attendanceQuery = window.supabaseClient
+            .from('attendance')
+            .select('*')
+            .eq('branch_id', branchId)
+            .gte('attendance_date', startDate)
+            .lte('attendance_date', endDate);
+
+        if (scheduleType) {
+            attendanceQuery = attendanceQuery.eq('schedule_type', scheduleType);
+        }
+
+        // Run both queries in parallel for faster loading
+        const [studentsResult, attendanceResult] = await Promise.all([
+            window.supabaseClient
+                .from('students')
+                .select('id, first_name, last_name')
+                .eq('branch_id', branchId)
+                .eq('status', 'active')
+                .order('last_name'),
+            attendanceQuery
+        ]);
+
+        const { data: students, error: studentsError } = studentsResult;
+        const { data: attendanceRecords, error: attendanceError } = attendanceResult;
+
+        if (studentsError) {
+            console.error('Error fetching students:', studentsError);
+            return { students: [], attendance: {} };
+        }
+
+        // Build attendance map: { studentId: { 'YYYY-MM-DD': { status, timeSlot } } }
+        const attendanceMap = {};
+        if (!attendanceError && attendanceRecords) {
+            attendanceRecords.forEach(record => {
+                if (!attendanceMap[record.student_id]) {
+                    attendanceMap[record.student_id] = {};
+                }
+                const key = record.time_slot
+                    ? `${record.attendance_date}_${record.time_slot}`
+                    : record.attendance_date;
+                attendanceMap[record.student_id][key] = {
+                    id: record.id,
+                    status: record.status,
+                    timeSlot: record.time_slot,
+                    notes: record.notes
+                };
+            });
+        } else if (attendanceError) {
+            console.error('Error fetching attendance records:', attendanceError);
+        }
+
+        return {
+            students: students.map(s => ({
+                id: s.id,
+                firstName: s.first_name,
+                lastName: s.last_name
+            })),
+            attendance: attendanceMap
+        };
+    },
+
+    /**
+     * Upsert a single attendance record
+     * Uses ON CONFLICT to update if exists, insert if new
+     */
+    async upsertAttendance(attendanceData) {
+        const { studentId, branchId, attendanceDate, scheduleType, timeSlot, status, notes } = attendanceData;
+
+        const { data, error } = await window.supabaseClient
+            .from('attendance')
+            .upsert([{
+                student_id: studentId,
+                branch_id: branchId,
+                attendance_date: attendanceDate,
+                schedule_type: scheduleType,
+                time_slot: timeSlot || null,
+                status: status,
+                notes: notes || null,
+                updated_at: new Date().toISOString()
+            }], {
+                onConflict: 'student_id,attendance_date,schedule_type,time_slot'
+            })
+            .select()
+            .single();
+
+        if (error) {
+            console.error('Error upserting attendance:', error);
+            throw error;
+        }
+
+        return {
+            id: data.id,
+            studentId: data.student_id,
+            branchId: data.branch_id,
+            attendanceDate: data.attendance_date,
+            scheduleType: data.schedule_type,
+            timeSlot: data.time_slot,
+            status: data.status,
+            notes: data.notes
+        };
+    },
+
+    /**
+     * Bulk upsert attendance records (for Excel import)
+     * @param {Array} records - Array of attendance records
+     * @returns {Object} { inserted: number, updated: number, errors: Array }
+     */
+    async bulkUpsertAttendance(records) {
+        if (!records || records.length === 0) {
+            return { inserted: 0, updated: 0, errors: [] };
+        }
+
+        const insertData = records.map(r => ({
+            student_id: r.studentId,
+            branch_id: r.branchId,
+            attendance_date: r.attendanceDate,
+            schedule_type: r.scheduleType,
+            time_slot: r.timeSlot || null,
+            status: r.status || 'present',
+            notes: r.notes || null,
+            updated_at: new Date().toISOString()
+        }));
+
+        const { data, error } = await window.supabaseClient
+            .from('attendance')
+            .upsert(insertData, {
+                onConflict: 'student_id,attendance_date,schedule_type,time_slot'
+            })
+            .select();
+
+        if (error) {
+            console.error('Error bulk upserting attendance:', error);
+            return { inserted: 0, updated: 0, errors: [error.message] };
+        }
+
+        return {
+            inserted: data.length,
+            updated: 0, // Supabase doesn't distinguish, but all were processed
+            errors: []
+        };
+    },
+
+    /**
+     * Delete an attendance record
+     */
+    async deleteAttendance(attendanceId) {
+        const { error } = await window.supabaseClient
+            .from('attendance')
+            .delete()
+            .eq('id', attendanceId);
+
+        if (error) {
+            console.error('Error deleting attendance:', error);
+            throw error;
+        }
+
+        return true;
+    },
+
+    // ============================================
+    // STUDENT NAME ALIASES (for Excel import matching)
+    // ============================================
+
+    /**
+     * Get all student name aliases
+     * Used for matching Russian names from Excel to students
+     */
+    async getStudentNameAliases() {
+        const { data, error } = await window.supabaseClient
+            .from('student_name_aliases')
+            .select(`
+                *,
+                student:students(id, first_name, last_name)
+            `)
+            .order('alias_name');
+
+        if (error) {
+            console.error('Error fetching name aliases:', error);
+            return [];
+        }
+
+        return data.map(alias => ({
+            id: alias.id,
+            studentId: alias.student_id,
+            aliasName: alias.alias_name,
+            studentFirstName: alias.student?.first_name || '',
+            studentLastName: alias.student?.last_name || '',
+            createdAt: alias.created_at
+        }));
+    },
+
+    /**
+     * Add a new student name alias
+     * Used to save successful name matches for future imports
+     */
+    async addStudentNameAlias(studentId, aliasName) {
+        // Check if alias already exists
+        const { data: existing } = await window.supabaseClient
+            .from('student_name_aliases')
+            .select('id')
+            .eq('alias_name', aliasName)
+            .single();
+
+        if (existing) {
+            // Update existing alias to point to new student
+            const { data, error } = await window.supabaseClient
+                .from('student_name_aliases')
+                .update({ student_id: studentId })
+                .eq('alias_name', aliasName)
+                .select()
+                .single();
+
+            if (error) {
+                console.error('Error updating name alias:', error);
+                throw error;
+            }
+
+            return { id: data.id, studentId: data.student_id, aliasName: data.alias_name };
+        }
+
+        // Insert new alias
+        const { data, error } = await window.supabaseClient
+            .from('student_name_aliases')
+            .insert([{
+                student_id: studentId,
+                alias_name: aliasName
+            }])
+            .select()
+            .single();
+
+        if (error) {
+            console.error('Error adding name alias:', error);
+            throw error;
+        }
+
+        return {
+            id: data.id,
+            studentId: data.student_id,
+            aliasName: data.alias_name
+        };
+    },
+
+    /**
+     * Delete a student name alias
+     */
+    async deleteStudentNameAlias(aliasId) {
+        const { error } = await window.supabaseClient
+            .from('student_name_aliases')
+            .delete()
+            .eq('id', aliasId);
+
+        if (error) {
+            console.error('Error deleting name alias:', error);
+            throw error;
+        }
+
+        return true;
+    },
+
+    /**
+     * Find student by alias name (for Excel import)
+     */
+    async findStudentByAlias(aliasName) {
+        const { data, error } = await window.supabaseClient
+            .from('student_name_aliases')
+            .select(`
+                student_id,
+                student:students(id, first_name, last_name, branch_id)
+            `)
+            .eq('alias_name', aliasName)
+            .single();
+
+        if (error || !data) {
+            return null;
+        }
+
+        return {
+            studentId: data.student_id,
+            firstName: data.student?.first_name || '',
+            lastName: data.student?.last_name || '',
+            branchId: data.student?.branch_id
+        };
+    },
+
+    // ============================================
+    // ATTENDANCE STATISTICS
+    // ============================================
+
+    /**
+     * Get attendance rates for students in a branch
+     * Uses the student_attendance_rates view
+     */
+    async getStudentAttendanceRates(branchId, scheduleType = null) {
+        try {
+            let query = window.supabaseClient
+                .from('student_attendance_rates')
+                .select('*')
+                .eq('branch_id', branchId);
+
+            if (scheduleType) {
+                query = query.eq('schedule_type', scheduleType);
+            }
+
+            const { data, error } = await query.order('attendance_rate', { ascending: true });
+
+            if (error) {
+                // View might not exist - return empty silently
+                return [];
+            }
+
+            return data.map(r => ({
+                studentId: r.student_id,
+                firstName: r.first_name,
+                lastName: r.last_name,
+                branchId: r.branch_id,
+                scheduleType: r.schedule_type,
+                totalSessions: r.total_sessions,
+                presentCount: r.present_count,
+                attendanceRate: r.attendance_rate
+            }));
+        } catch (e) {
+            // View might not exist - return empty silently
+            return [];
+        }
+    },
+
+    /**
+     * Get branch attendance summary
+     * @param {string} branchId - Branch UUID
+     * @param {number} year - Year (e.g., 2025)
+     * @param {number} month - Month (1-12)
+     */
+    async getBranchAttendanceSummary(branchId, year, month) {
+        // Calculate start and end dates from year and month
+        const startDate = `${year}-${String(month).padStart(2, '0')}-01`;
+        const endDate = new Date(year, month, 0).toISOString().split('T')[0]; // Last day of month
+
+        const { data, error } = await window.supabaseClient
+            .rpc('get_branch_attendance_summary', {
+                p_branch_id: branchId,
+                p_start_date: startDate,
+                p_end_date: endDate
+            });
+
+        if (error) {
+            console.error('Error fetching branch attendance summary:', error);
+            return null;
+        }
+
+        // The function returns a single row, not an array
+        if (data && data.length > 0) {
+            const r = data[0];
+            return {
+                totalStudents: r.total_students || 0,
+                totalSessions: r.total_sessions || 0,
+                avgAttendanceRate: r.avg_attendance_rate || 0,
+                studentsBelow70: r.students_below_70 || 0
+            };
+        }
+
+        return {
+            totalStudents: 0,
+            totalSessions: 0,
+            avgAttendanceRate: 0,
+            studentsBelow70: 0
+        };
+    },
+
+    /**
+     * Get low attendance alerts (students below threshold)
+     * @param {string} branchId - Branch UUID
+     * @param {number} threshold - Attendance rate threshold (default 70%)
+     */
+    async getLowAttendanceAlerts(branchId, threshold = 70) {
+        const rates = await this.getStudentAttendanceRates(branchId);
+
+        return rates
+            .filter(r => r.totalSessions >= 3 && r.attendanceRate < threshold)
+            .sort((a, b) => a.attendanceRate - b.attendanceRate);
+    },
+
+    /**
+     * Get distinct time slots used for a branch/schedule
+     */
+    async getAttendanceTimeSlots(branchId, scheduleType) {
+        const { data, error } = await window.supabaseClient
+            .from('attendance')
+            .select('time_slot')
+            .eq('branch_id', branchId)
+            .eq('schedule_type', scheduleType)
+            .not('time_slot', 'is', null);
+
+        if (error) {
+            console.error('Error fetching time slots:', error);
+            return [];
+        }
+
+        // Get unique time slots
+        const uniqueSlots = [...new Set(data.map(d => d.time_slot))].filter(Boolean);
+        return uniqueSlots.sort();
+    },
+
+    // ============================================
+    // STUDENT TIME SLOT ASSIGNMENTS
+    // ============================================
+
+    /**
+     * Get time slot assignments for students in a branch/schedule
+     * @param {string} branchId - Branch UUID
+     * @param {string} scheduleType - 'mon_wed', 'tue_thu', or 'sat_sun'
+     * @returns {Array} Array of { studentId, timeSlotIndex }
+     */
+    async getTimeSlotAssignments(branchId, scheduleType) {
+        try {
+            const { data, error } = await window.supabaseClient
+                .from('student_time_slot_assignments')
+                .select('student_id, time_slot_index')
+                .eq('branch_id', branchId)
+                .eq('schedule_type', scheduleType);
+
+            if (error) {
+                // Table might not exist yet - return empty silently
+                console.log('Time slot assignments table not available:', error.message);
+                return [];
+            }
+
+            return data.map(d => ({
+                studentId: d.student_id,
+                timeSlotIndex: d.time_slot_index
+            }));
+        } catch (e) {
+            // Table might not exist - return empty silently
+            return [];
+        }
+    },
+
+    /**
+     * Update or create a time slot assignment for a student
+     * @param {string} studentId - Student UUID
+     * @param {string} branchId - Branch UUID
+     * @param {string} scheduleType - 'mon_wed', 'tue_thu', or 'sat_sun'
+     * @param {number} timeSlotIndex - The time slot index (0-based)
+     * @returns {Object} The upserted assignment
+     */
+    async upsertTimeSlotAssignment(studentId, branchId, scheduleType, timeSlotIndex) {
+        const { data, error } = await window.supabaseClient
+            .from('student_time_slot_assignments')
+            .upsert([{
+                student_id: studentId,
+                branch_id: branchId,
+                schedule_type: scheduleType,
+                time_slot_index: timeSlotIndex,
+                updated_at: new Date().toISOString()
+            }], {
+                onConflict: 'student_id,branch_id,schedule_type'
+            })
+            .select()
+            .single();
+
+        if (error) {
+            console.error('Error upserting time slot assignment:', error);
+            throw error;
+        }
+
+        return {
+            id: data.id,
+            studentId: data.student_id,
+            branchId: data.branch_id,
+            scheduleType: data.schedule_type,
+            timeSlotIndex: data.time_slot_index
+        };
+    },
+
+    /**
+     * Bulk upsert time slot assignments (for initializing or importing)
+     * @param {Array} assignments - Array of { studentId, branchId, scheduleType, timeSlotIndex }
+     * @returns {Object} { success: number, errors: Array }
+     */
+    async bulkUpsertTimeSlotAssignments(assignments) {
+        if (!assignments || assignments.length === 0) {
+            return { success: 0, errors: [] };
+        }
+
+        const insertData = assignments.map(a => ({
+            student_id: a.studentId,
+            branch_id: a.branchId,
+            schedule_type: a.scheduleType,
+            time_slot_index: a.timeSlotIndex,
+            updated_at: new Date().toISOString()
+        }));
+
+        const { data, error } = await window.supabaseClient
+            .from('student_time_slot_assignments')
+            .upsert(insertData, {
+                onConflict: 'student_id,branch_id,schedule_type'
+            })
+            .select();
+
+        if (error) {
+            console.error('Error bulk upserting time slot assignments:', error);
+            return { success: 0, errors: [error.message] };
+        }
+
+        return {
+            success: data.length,
+            errors: []
+        };
+    },
+
+    /**
+     * Delete a time slot assignment
+     * @param {string} studentId - Student UUID
+     * @param {string} branchId - Branch UUID
+     * @param {string} scheduleType - 'mon_wed', 'tue_thu', or 'sat_sun'
+     */
+    async deleteTimeSlotAssignment(studentId, branchId, scheduleType) {
+        const { error } = await window.supabaseClient
+            .from('student_time_slot_assignments')
+            .delete()
+            .eq('student_id', studentId)
+            .eq('branch_id', branchId)
+            .eq('schedule_type', scheduleType);
+
+        if (error) {
+            console.error('Error deleting time slot assignment:', error);
+            throw error;
+        }
+
+        return true;
     }
 };
 
