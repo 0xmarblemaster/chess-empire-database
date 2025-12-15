@@ -3189,8 +3189,9 @@ function showAttendanceManagement() {
         attendanceMenuItem.classList.add('active');
     }
 
-    // Populate branch dropdown
+    // Populate branch dropdown (both desktop and mobile)
     populateAttendanceBranchDropdown();
+    populateMobileBranchFilter();
 
     // Initialize schedule filter from dropdown
     const scheduleSelect = document.getElementById('attendanceScheduleFilter');
@@ -3278,6 +3279,59 @@ function onAttendanceTimeSlotChange() {
     const select = document.getElementById('attendanceTimeSlotFilter');
     attendanceCurrentTimeSlot = select.value;
     loadAttendanceData();
+}
+
+// Mobile filter handlers - sync with desktop filters
+function onMobileAttendanceBranchChange() {
+    const mobileSelect = document.getElementById('mobileBranchFilter');
+    const desktopSelect = document.getElementById('attendanceBranchFilter');
+
+    attendanceCurrentBranch = mobileSelect.value;
+    if (desktopSelect) desktopSelect.value = mobileSelect.value;
+
+    // Also populate mobile schedule filter if needed
+    populateMobileAttendanceSchedules();
+    populateAttendanceTimeSlots();
+    loadAttendanceData();
+}
+
+function onMobileAttendanceScheduleChange() {
+    const mobileSelect = document.getElementById('mobileScheduleFilter');
+    const desktopSelect = document.getElementById('attendanceScheduleFilter');
+
+    attendanceCurrentSchedule = mobileSelect.value;
+    if (desktopSelect) desktopSelect.value = mobileSelect.value;
+
+    populateAttendanceTimeSlots();
+    loadAttendanceData();
+}
+
+// Populate mobile branch filter
+function populateMobileBranchFilter() {
+    const select = document.getElementById('mobileBranchFilter');
+    if (!select) return;
+
+    // Get unique branches from students (same as desktop)
+    const uniqueBranches = [...new Set(window.students.map(s => s.branch))].filter(Boolean);
+
+    select.innerHTML = `
+        <option value="">${t('admin.attendance.selectBranch')}</option>
+        ${uniqueBranches.map(branch => `
+            <option value="${branch}" ${attendanceCurrentBranch === branch ? 'selected' : ''}>
+                ${i18n.translateBranchName(branch)}
+            </option>
+        `).join('')}
+    `;
+
+    // Sync with desktop dropdown
+    if (attendanceCurrentBranch) {
+        select.value = attendanceCurrentBranch;
+    }
+}
+
+// Populate mobile schedule filter (no changes needed, options are static in HTML)
+function populateMobileAttendanceSchedules() {
+    // Schedules are already in HTML, no need to populate
 }
 
 // Populate time slots dropdown based on current branch and schedule

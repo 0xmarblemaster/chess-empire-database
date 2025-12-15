@@ -758,6 +758,26 @@
                     </div>
                 </div>
 
+                <!-- Mobile Filters (replaces stats on mobile) -->
+                <div class="mobile-attendance-filters" style="display: none;">
+                    <div class="mobile-filter-card">
+                        <label for="mobileBranchFilter" data-i18n="admin.attendance.branch">Branch</label>
+                        <select id="mobileBranchFilter" onchange="onMobileAttendanceBranchChange()">
+                            <option value="" data-i18n="admin.attendance.selectBranch">Select Branch</option>
+                        </select>
+                    </div>
+
+                    <div class="mobile-filter-card">
+                        <label for="mobileScheduleFilter" data-i18n="admin.attendance.schedule">Schedule</label>
+                        <select id="mobileScheduleFilter" onchange="onMobileAttendanceScheduleChange()">
+                            <option value="" data-i18n="admin.attendance.allSchedules">All Schedules</option>
+                            <option value="mon_wed" data-i18n="admin.attendance.monWed">Mon-Wed</option>
+                            <option value="tue_thu" data-i18n="admin.attendance.tueThu">Tue-Thu</option>
+                            <option value="sat_sun" data-i18n="admin.attendance.satSun">Sat-Sun</option>
+                        </select>
+                    </div>
+                </div>
+
                 <!-- Filters -->
                 <div class="filters" style="margin-bottom: 1.5rem;">
                     <div class="filters-grid">

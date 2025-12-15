@@ -3494,19 +3494,89 @@ tr[data-student-id] {
         width: 100%;
     }
 
+    /* Hide desktop stats, show mobile filter cards instead */
     #attendanceSection .stats-grid {
-        grid-template-columns: 1fr 1fr;
+        display: none !important;
+    }
+
+    /* Mobile filter cards (replacing stats) */
+    .mobile-attendance-filters {
+        display: flex !important;
+        flex-direction: column;
         gap: 0.75rem;
+        margin-bottom: 1rem;
+    }
+
+    /* Hide desktop filters on mobile */
+    #attendanceSection .filters {
+        display: none !important;
+    }
+
+    .mobile-filter-card {
+        background: white;
+        border-radius: 0.75rem;
+        padding: 1rem;
+        box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+    }
+
+    .mobile-filter-card label {
+        display: block;
+        font-size: 0.875rem;
+        font-weight: 600;
+        color: #475569;
+        margin-bottom: 0.5rem;
+    }
+
+    .mobile-filter-card select {
+        width: 100%;
+        padding: 0.75rem;
+        border: 1px solid #e2e8f0;
+        border-radius: 0.5rem;
+        font-size: 0.9375rem;
+        color: #1e293b;
+        background: #f8fafc;
+        transition: all 0.2s ease;
+    }
+
+    .mobile-filter-card select:focus {
+        outline: none;
+        border-color: #5F192B;
+        background: white;
     }
 
     /* Month navigation optimized for mobile */
     .attendance-month-nav {
         margin-bottom: 1rem !important;
+        padding: 0.75rem 1rem;
+        background: white;
+        border-radius: 0.75rem;
+        box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
     }
 
     .attendance-month-nav h2 {
-        font-size: 1rem !important;
-        min-width: 140px !important;
+        font-size: 1.125rem !important;
+        font-weight: 700 !important;
+        min-width: 160px !important;
+        color: #1e293b;
+    }
+
+    .attendance-month-nav button {
+        padding: 0.625rem !important;
+        border-radius: 0.5rem !important;
+        background: #f8fafc !important;
+        border: 1px solid #e2e8f0 !important;
+        transition: all 0.2s ease !important;
+    }
+
+    .attendance-month-nav button:active {
+        background: #e2e8f0 !important;
+        transform: scale(0.95);
+    }
+
+    .attendance-month-nav button svg {
+        width: 20px !important;
+        height: 20px !important;
+        color: #475569;
     }
 
     /* Calendar grid optimizations */
@@ -3539,6 +3609,22 @@ tr[data-student-id] {
         background: white;
         z-index: 2;
         box-shadow: 2px 0 4px rgba(0,0,0,0.05);
+    }
+
+    /* Delete button - always visible on mobile */
+    .attendance-delete-student-btn {
+        opacity: 1 !important;
+        margin-right: 0.5rem;
+        width: 28px !important;
+        height: 28px !important;
+        background: #fef2f2 !important;
+        color: #ef4444 !important;
+        border-radius: 6px !important;
+    }
+
+    .attendance-delete-student-btn:active {
+        background: #fee2e2 !important;
+        transform: scale(0.9) !important;
     }
 
     /* Legend optimized for mobile */
