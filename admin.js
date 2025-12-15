@@ -3900,31 +3900,36 @@ function renderAttendanceCalendar(preFilteredData = null) {
                         style="${isExpanded ? '' : 'display: none;'}">
                         <td class="attendance-student-cell">
                             <div style="display: flex; align-items: center; gap: 0.5rem; width: 100%;">
-                                <div class="drag-handle" style="cursor: grab; color: #94a3b8; display: flex; align-items: center;">
-                                    <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                                        <circle cx="9" cy="5" r="1"></circle>
-                                        <circle cx="9" cy="12" r="1"></circle>
-                                        <circle cx="9" cy="19" r="1"></circle>
-                                        <circle cx="15" cy="5" r="1"></circle>
-                                        <circle cx="15" cy="12" r="1"></circle>
-                                        <circle cx="15" cy="19" r="1"></circle>
-                                    </svg>
+                                <div class="drag-handle-container" style="position: relative;">
+                                    <div class="drag-handle"
+                                         style="cursor: grab; color: #94a3b8; display: flex; align-items: center;"
+                                         onclick="event.stopPropagation(); toggleStudentMenu(event, '${student.id}', '${firstName} ${lastName}')">
+                                        <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                            <circle cx="9" cy="5" r="1"></circle>
+                                            <circle cx="9" cy="12" r="1"></circle>
+                                            <circle cx="9" cy="19" r="1"></circle>
+                                            <circle cx="15" cy="5" r="1"></circle>
+                                            <circle cx="15" cy="12" r="1"></circle>
+                                            <circle cx="15" cy="19" r="1"></circle>
+                                        </svg>
+                                    </div>
+                                    <div id="student-menu-${student.id}" class="student-action-menu" style="display: none;">
+                                        <button onclick="event.stopPropagation(); deleteStudentFromCalendar('${student.id}', '${firstName} ${lastName}'); closeStudentMenu('${student.id}')">
+                                            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                                <path d="M3 6h18"></path>
+                                                <path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"></path>
+                                                <path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"></path>
+                                                <line x1="10" y1="11" x2="10" y2="17"></line>
+                                                <line x1="14" y1="11" x2="14" y2="17"></line>
+                                            </svg>
+                                            <span>${t('admin.attendance.deleteFromCalendar') || 'Delete'}</span>
+                                        </button>
+                                    </div>
                                 </div>
                                 <div class="student-avatar" style="width: 28px; height: 28px; font-size: 0.75rem;">
                                     ${initials}
                                 </div>
                                 <span style="flex: 1;">${firstName} ${lastName}</span>
-                                <button class="attendance-delete-student-btn"
-                                        onclick="event.stopPropagation(); deleteStudentFromCalendar('${student.id}', '${firstName} ${lastName}')"
-                                        title="${t('admin.attendance.deleteFromCalendar') || 'Remove from calendar'}">
-                                    <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                                        <path d="M3 6h18"></path>
-                                        <path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"></path>
-                                        <path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"></path>
-                                        <line x1="10" y1="11" x2="10" y2="17"></line>
-                                        <line x1="14" y1="11" x2="14" y2="17"></line>
-                                    </svg>
-                                </button>
                             </div>
                         </td>
                 `;
@@ -4882,6 +4887,44 @@ document.addEventListener('click', function(event) {
         !searchInput.contains(event.target)) {
         dropdown.style.display = 'none';
         addStudentSearchDropdownVisible = false;
+    }
+});
+
+// Toggle student action menu (shows delete option in drag handle dropdown)
+function toggleStudentMenu(event, studentId, studentName) {
+    event.stopPropagation();
+    const menu = document.getElementById(`student-menu-${studentId}`);
+    if (!menu) return;
+
+    // Close all other open menus first
+    document.querySelectorAll('.student-action-menu').forEach(m => {
+        if (m.id !== `student-menu-${studentId}`) {
+            m.style.display = 'none';
+        }
+    });
+
+    // Toggle current menu
+    if (menu.style.display === 'none' || menu.style.display === '') {
+        menu.style.display = 'block';
+    } else {
+        menu.style.display = 'none';
+    }
+}
+
+// Close student action menu
+function closeStudentMenu(studentId) {
+    const menu = document.getElementById(`student-menu-${studentId}`);
+    if (menu) {
+        menu.style.display = 'none';
+    }
+}
+
+// Close all student menus when clicking outside
+document.addEventListener('click', (event) => {
+    if (!event.target.closest('.drag-handle-container')) {
+        document.querySelectorAll('.student-action-menu').forEach(menu => {
+            menu.style.display = 'none';
+        });
     }
 });
 

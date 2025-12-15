@@ -3032,40 +3032,54 @@ tr[data-student-id] {
     min-width: 180px;
 }
 
-/* Delete button for student rows */
-.attendance-delete-student-btn {
+/* Student action menu - dropdown from drag handle */
+.student-action-menu {
+    position: absolute;
+    top: 100%;
+    left: 0;
+    margin-top: 4px;
+    background: white;
+    border: 1px solid #e2e8f0;
+    border-radius: 6px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+    z-index: 1000;
+    min-width: 140px;
+    overflow: hidden;
+}
+
+.student-action-menu button {
     display: flex;
     align-items: center;
-    justify-content: center;
-    width: 24px;
-    height: 24px;
-    padding: 0;
-    background: transparent;
+    gap: 0.5rem;
+    width: 100%;
+    padding: 0.5rem 0.75rem;
+    background: white;
     border: none;
-    border-radius: 4px;
-    color: #94a3b8;
+    color: #dc2626;
+    font-size: 0.875rem;
     cursor: pointer;
-    opacity: 0;
-    transition: all 0.15s ease;
+    transition: background 0.15s ease;
+    text-align: left;
+}
+
+.student-action-menu button:hover {
+    background: #fef2f2;
+}
+
+.student-action-menu button svg {
+    width: 14px;
+    height: 14px;
     flex-shrink: 0;
 }
 
-.time-slot-student-row:hover .attendance-delete-student-btn {
-    opacity: 1;
+/* Make drag handle clickable with hover feedback */
+.drag-handle {
+    transition: color 0.15s ease;
+    cursor: pointer;
 }
 
-.attendance-delete-student-btn:hover {
-    background: #fee2e2;
-    color: #dc2626;
-}
-
-.attendance-delete-student-btn:active {
-    transform: scale(0.95);
-}
-
-.attendance-delete-student-btn svg {
-    width: 14px;
-    height: 14px;
+.drag-handle:hover {
+    color: #64748b !important;
 }
 
 .attendance-day-header {
@@ -3673,29 +3687,35 @@ tr[data-student-id] {
 
     /* Reduce checkbox size on mobile to fit more columns */
     .attendance-checkbox {
-        width: 24px !important;
-        height: 24px !important;
+        width: 20px !important;
+        height: 20px !important;
     }
 
     .attendance-checkbox svg {
-        width: 14px !important;
-        height: 14px !important;
+        width: 12px !important;
+        height: 12px !important;
     }
 
     .attendance-checkbox.checked svg {
-        width: 14px !important;
-        height: 14px !important;
+        width: 12px !important;
+        height: 12px !important;
     }
 
-    /* Reduce checkbox cell padding on mobile */
+    /* Reduce checkbox cell padding and set minimum width on mobile */
     .attendance-checkbox-cell {
-        padding: 0.3rem !important;
+        padding: 0.25rem !important;
+        min-width: 44px !important;
+        width: 44px !important;
+        max-width: 44px !important;
     }
 
-    /* Reduce day header font on mobile */
+    /* Reduce day header font on mobile and set width */
     .attendance-day-header {
         font-size: 0.65rem !important;
         padding: 0.35rem 0.25rem !important;
+        min-width: 44px !important;
+        width: 44px !important;
+        max-width: 44px !important;
     }
 
     .attendance-day-header > div {
@@ -3735,26 +3755,20 @@ tr[data-student-id] {
         height: 12px !important;
     }
 
-    /* Delete button - smaller on mobile */
-    .attendance-delete-student-btn {
-        opacity: 1 !important;
-        margin-right: 0 !important;
-        width: 24px !important;
-        height: 24px !important;
-        background: #fef2f2 !important;
-        color: #ef4444 !important;
-        border-radius: 4px !important;
-        padding: 2px !important;
+    /* Student action menu - mobile optimized */
+    .student-action-menu {
+        min-width: 120px;
+        font-size: 0.8rem;
     }
 
-    .attendance-delete-student-btn svg {
-        width: 12px !important;
-        height: 12px !important;
+    .student-action-menu button {
+        padding: 0.4rem 0.6rem;
+        font-size: 0.8rem;
     }
 
-    .attendance-delete-student-btn:active {
-        background: #fee2e2 !important;
-        transform: scale(0.9) !important;
+    .student-action-menu button svg {
+        width: 12px;
+        height: 12px;
     }
 
     /* Reduce gap between elements in student cell */
