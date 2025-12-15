@@ -3551,12 +3551,17 @@ tr[data-student-id] {
         background: white;
         border-radius: 0.75rem;
         box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+        width: 100% !important;
+        max-width: 100% !important;
+        box-sizing: border-box !important;
     }
 
     .attendance-month-nav h2 {
         font-size: 1.125rem !important;
         font-weight: 700 !important;
-        min-width: 160px !important;
+        min-width: auto !important;
+        max-width: none !important;
+        flex: 1 !important;
         color: #1e293b;
     }
 
