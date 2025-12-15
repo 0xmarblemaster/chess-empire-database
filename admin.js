@@ -68,6 +68,11 @@ function updateMenuVisibility() {
         return;
     }
 
+    // Coaches always have access to attendance tracking
+    if (userRole.role === 'coach') {
+        if (menuAttendance) menuAttendance.style.display = 'flex';
+    }
+
     // For non-admins, show based on specific permissions
     let hasAnyManagementAccess = false;
 
@@ -576,11 +581,14 @@ function showSection(section) {
     } else if (section === 'coaches') {
         // Show coaches list view
         showCoachesListView();
+    } else if (section === 'attendance') {
+        // Show attendance management
+        showAttendanceManagement();
     }
-    
+
     // Update mobile bottom nav active state
     updateMobileBottomNav(section);
-    
+
     // Close mobile menu if open
     closeMobileMenu();
 }
@@ -2255,7 +2263,7 @@ document.addEventListener('keydown', function(event) {
 const mobileSectionTitles = {
     students: 'admin.header.students',
     coaches: 'admin.header.coaches',
-    branches: 'admin.header.branches',
+    attendance: 'admin.header.attendance',
     settings: 'admin.header.settings'
 };
 

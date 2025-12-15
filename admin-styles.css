@@ -8,7 +8,7 @@
 
 /* Mobile language menu - hidden by default on desktop */
 .mobile-language-menu {
-    display: none !important;
+    display: none;
 }
 
 /* Mobile responsive positioning - hide fixed dropdown on mobile, use header button instead */
@@ -3484,6 +3484,32 @@ tr[data-student-id] {
 
 /* Mobile Responsive Attendance */
 @media (max-width: 768px) {
+    /* Mobile-optimized filters for attendance */
+    #attendanceSection .filters-grid {
+        grid-template-columns: 1fr;
+        gap: 0.75rem;
+    }
+
+    #attendanceSection .filter-group {
+        width: 100%;
+    }
+
+    #attendanceSection .stats-grid {
+        grid-template-columns: 1fr 1fr;
+        gap: 0.75rem;
+    }
+
+    /* Month navigation optimized for mobile */
+    .attendance-month-nav {
+        margin-bottom: 1rem !important;
+    }
+
+    .attendance-month-nav h2 {
+        font-size: 1rem !important;
+        min-width: 140px !important;
+    }
+
+    /* Calendar grid optimizations */
     .attendance-calendar th,
     .attendance-calendar td {
         padding: 0.25rem;
@@ -3491,15 +3517,38 @@ tr[data-student-id] {
     }
 
     .attendance-cell {
-        width: 24px;
-        height: 24px;
-        font-size: 0.625rem;
+        width: 32px !important;
+        height: 32px !important;
+        font-size: 0.75rem;
+        border-radius: 6px;
+        cursor: pointer;
+        transition: all 0.2s ease;
+    }
+
+    .attendance-cell:active {
+        transform: scale(0.9);
     }
 
     .attendance-calendar th.student-name-header,
     .attendance-calendar td.student-name-cell {
-        min-width: 120px;
+        min-width: 100px;
+        max-width: 120px;
         font-size: 0.75rem;
+        position: sticky;
+        left: 0;
+        background: white;
+        z-index: 2;
+        box-shadow: 2px 0 4px rgba(0,0,0,0.05);
+    }
+
+    /* Legend optimized for mobile */
+    .attendance-legend {
+        gap: 1rem !important;
+        padding: 0.75rem !important;
+    }
+
+    .attendance-legend > div {
+        flex: 1 1 auto;
     }
 
     .wizard-step-connector {
