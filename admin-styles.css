@@ -957,6 +957,15 @@ td {
 @media (max-width: 768px) {
     .main-content {
         padding: 1rem;
+        max-width: 100vw;
+        overflow-x: hidden;
+        box-sizing: border-box;
+    }
+
+    .content-section {
+        max-width: 100%;
+        overflow-x: auto;
+        box-sizing: border-box;
     }
 
     .header {
