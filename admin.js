@@ -3811,7 +3811,6 @@ function renderAttendanceCalendar(preFilteredData = null) {
     });
 
     headerHtml += `
-            <th class="attendance-rate-header">%</th>
         </tr>
     `;
     thead.innerHTML = headerHtml;
@@ -3821,7 +3820,7 @@ function renderAttendanceCalendar(preFilteredData = null) {
 
     // Get time slots for current branch and schedule type (Sat-Sun has different slots)
     const timeSlots = getTimeSlotsForBranch(attendanceCurrentBranch, attendanceCurrentSchedule);
-    const totalColumns = scheduleDates.length + 2; // Student column + date columns + % column
+    const totalColumns = scheduleDates.length + 1; // Student column + date columns
 
     // Group students into time slot sections by their time_slot_index property
     // Always show ALL time slots, even if empty
@@ -3865,9 +3864,6 @@ function renderAttendanceCalendar(preFilteredData = null) {
         scheduleDates.forEach(() => {
             bodyHtml += `<td class="attendance-time-slot-cell attendance-time-slot-date-cell"></td>`;
         });
-
-        // Add empty cell for percentage column
-        bodyHtml += `<td class="attendance-time-slot-cell attendance-time-slot-percent-cell"></td>`;
 
         bodyHtml += `</tr>`;
 
@@ -3952,14 +3948,7 @@ function renderAttendanceCalendar(preFilteredData = null) {
                     `;
                 });
 
-                // Calculate attendance rate based on 8 lessons per month
-                const rate = Math.round((presentCount / LESSONS_PER_MONTH) * 100);
-                const rateClass = rate >= 70 ? 'good' : rate >= 50 ? 'warning' : 'low';
-
                 bodyHtml += `
-                        <td class="attendance-rate-cell">
-                            <span class="attendance-rate-badge ${rateClass}">${rate}%</span>
-                        </td>
                     </tr>
                 `;
             } else {
@@ -3997,9 +3986,6 @@ function renderAttendanceCalendar(preFilteredData = null) {
                 });
 
                 bodyHtml += `
-                        <td class="attendance-rate-cell">
-                            <span class="attendance-rate-badge" style="background: #f1f5f9; color: #94a3b8;">--%</span>
-                        </td>
                     </tr>
                 `;
             }

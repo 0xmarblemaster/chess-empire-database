@@ -3081,20 +3081,11 @@ tr[data-student-id] {
 }
 
 .attendance-rate-header {
-    min-width: 60px;
-    position: sticky;
-    right: 0;
-    background: #f8fafc;
-    z-index: 20;
-    border-left: 2px solid #e2e8f0;
+    display: none;
 }
 
 .attendance-rate-cell {
-    position: sticky;
-    right: 0;
-    background: #ffffff;
-    z-index: 10;
-    border-left: 2px solid #e2e8f0;
+    display: none;
 }
 
 /* Attendance Rate Badge */
@@ -3198,13 +3189,6 @@ tr[data-student-id] {
 .attendance-time-slot-date-cell {
     width: 50px !important;
     min-width: 50px !important;
-    padding: 0.5rem !important;
-}
-
-/* Empty percent cell in time slot row */
-.attendance-time-slot-percent-cell {
-    width: 60px !important;
-    min-width: 60px !important;
     padding: 0.5rem !important;
 }
 
@@ -3655,16 +3639,17 @@ tr[data-student-id] {
         box-shadow: 2px 0 4px rgba(0,0,0,0.05);
     }
 
-    /* Time slot label cell - sticky on mobile for horizontal scrolling */
+    /* Time slot label cell - sticky on mobile for horizontal scrolling - reduced width to fit more dates */
     .attendance-time-slot-label-cell {
         position: sticky !important;
         left: 0 !important;
         z-index: 15 !important;
         background: #f1f5f9 !important;
-        min-width: 140px !important;
-        max-width: 140px !important;
-        width: 140px !important;
+        min-width: 110px !important;
+        max-width: 110px !important;
+        width: 110px !important;
         box-shadow: 2px 0 4px rgba(0,0,0,0.08) !important;
+        padding: 0.35rem 0.5rem !important;
     }
 
     .attendance-time-slot-header:hover .attendance-time-slot-label-cell {
@@ -3673,33 +3658,106 @@ tr[data-student-id] {
 
     /* Time slot label - compact on mobile */
     .time-slot-label {
-        font-size: 0.7rem !important;
-        gap: 0.35rem !important;
+        font-size: 0.65rem !important;
+        gap: 0.25rem !important;
     }
 
     .time-slot-label svg {
+        width: 11px !important;
+        height: 11px !important;
+    }
+
+    .time-slot-count {
+        font-size: 0.6rem !important;
+    }
+
+    /* Reduce checkbox size on mobile to fit more columns */
+    .attendance-checkbox {
+        width: 24px !important;
+        height: 24px !important;
+    }
+
+    .attendance-checkbox svg {
+        width: 14px !important;
+        height: 14px !important;
+    }
+
+    .attendance-checkbox.checked svg {
+        width: 14px !important;
+        height: 14px !important;
+    }
+
+    /* Reduce checkbox cell padding on mobile */
+    .attendance-checkbox-cell {
+        padding: 0.3rem !important;
+    }
+
+    /* Reduce day header font on mobile */
+    .attendance-day-header {
+        font-size: 0.65rem !important;
+        padding: 0.35rem 0.25rem !important;
+    }
+
+    .attendance-day-header > div {
+        gap: 1px !important;
+    }
+
+    .attendance-day-header span:first-child {
+        font-size: 0.6rem !important;
+    }
+
+    /* Reduce student cell width on mobile */
+    .attendance-student-cell {
+        min-width: 110px !important;
+        max-width: 110px !important;
+        width: 110px !important;
+        position: sticky !important;
+        left: 0 !important;
+        background: white !important;
+        z-index: 10 !important;
+        box-shadow: 2px 0 4px rgba(0,0,0,0.05) !important;
+        padding: 0.35rem 0.4rem !important;
+        font-size: 0.65rem !important;
+    }
+
+    /* Smaller avatars on mobile */
+    .student-avatar {
+        width: 24px !important;
+        height: 24px !important;
+        font-size: 0.65rem !important;
+    }
+
+    /* Smaller drag handle on mobile */
+    .drag-handle svg {
         width: 12px !important;
         height: 12px !important;
     }
 
-    .time-slot-count {
-        font-size: 0.65rem !important;
-    }
-
-    /* Delete button - always visible on mobile */
+    /* Delete button - smaller on mobile */
     .attendance-delete-student-btn {
         opacity: 1 !important;
-        margin-right: 0.5rem;
-        width: 28px !important;
-        height: 28px !important;
+        margin-right: 0 !important;
+        width: 24px !important;
+        height: 24px !important;
         background: #fef2f2 !important;
         color: #ef4444 !important;
-        border-radius: 6px !important;
+        border-radius: 4px !important;
+        padding: 2px !important;
+    }
+
+    .attendance-delete-student-btn svg {
+        width: 12px !important;
+        height: 12px !important;
     }
 
     .attendance-delete-student-btn:active {
         background: #fee2e2 !important;
         transform: scale(0.9) !important;
+    }
+
+    /* Reduce gap between elements in student cell */
+    .attendance-student-cell > div {
+        gap: 0.3rem !important;
     }
 
     /* Legend optimized for mobile */
@@ -3892,14 +3950,22 @@ tr[data-student-id] {
 /* Mobile responsive for Add Student button */
 @media (max-width: 768px) {
     .attendance-add-student-btn {
-        padding: 0.375rem 0.625rem;
-        font-size: 0.75rem;
-        gap: 0.375rem;
+        padding: 0.35rem 0.5rem;
+        font-size: 0.65rem;
+        gap: 0.3rem;
     }
 
     .attendance-add-student-btn svg {
-        width: 12px;
-        height: 12px;
+        width: 11px;
+        height: 11px;
+    }
+
+    /* Reduce student header width on mobile to match student cells */
+    .attendance-student-header {
+        min-width: 110px !important;
+        max-width: 110px !important;
+        width: 110px !important;
+        padding: 0.35rem 0.4rem !important;
     }
 
     .add-student-search-dropdown {
