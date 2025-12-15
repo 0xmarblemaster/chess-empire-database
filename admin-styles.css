@@ -3713,11 +3713,13 @@ tr[data-student-id] {
         width: 110px !important;
         position: sticky !important;
         left: 0 !important;
-        background: white !important;
-        z-index: 10 !important;
-        box-shadow: 2px 0 4px rgba(0,0,0,0.05) !important;
+        background: #ffffff !important;
+        background-color: #ffffff !important;
+        z-index: 20 !important;
+        box-shadow: 2px 0 4px rgba(0,0,0,0.1) !important;
         padding: 0.35rem 0.4rem !important;
         font-size: 0.65rem !important;
+        opacity: 1 !important;
     }
 
     /* Smaller avatars on mobile */
@@ -3758,6 +3760,18 @@ tr[data-student-id] {
     /* Reduce gap between elements in student cell */
     .attendance-student-cell > div {
         gap: 0.3rem !important;
+    }
+
+    /* Ensure student rows have solid white background on mobile */
+    .time-slot-student-row .attendance-student-cell {
+        background: #ffffff !important;
+        background-color: #ffffff !important;
+    }
+
+    .time-slot-student-row:hover .attendance-student-cell,
+    .time-slot-student-row.dragging .attendance-student-cell {
+        background: #ffffff !important;
+        background-color: #ffffff !important;
     }
 
     /* Legend optimized for mobile */
