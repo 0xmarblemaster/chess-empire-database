@@ -3835,16 +3835,18 @@ function renderAttendanceCalendar(preFilteredData = null) {
 
         // Always add time slot header row (even for empty slots)
         const studentCount = slotStudents.length;
+
+        // Build time slot header row with sticky label cell + individual date cells
         bodyHtml += `
             <tr class="attendance-time-slot-header"
                 data-slot-id="${slotId}"
                 data-slot-index="${slotIndex}"
-                onclick="toggleTimeSlotExpanded('${slotId}')"
                 ondragover="handleSlotDragOver(event, '${slotId}')"
                 ondragleave="handleSlotDragLeave(event)"
                 ondrop="handleSlotDrop(event, '${slotId}', ${slotIndex})"
                 style="cursor: pointer;">
-                <td colspan="${totalColumns}" class="attendance-time-slot-cell">
+                <td class="attendance-time-slot-cell attendance-time-slot-label-cell"
+                    onclick="toggleTimeSlotExpanded('${slotId}')">
                     <div class="time-slot-label">
                         <svg class="time-slot-chevron ${isExpanded ? 'expanded' : ''}" xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                             <polyline points="9 18 15 12 9 6"></polyline>
@@ -3857,8 +3859,18 @@ function renderAttendanceCalendar(preFilteredData = null) {
                         <span class="time-slot-count">(${studentCount}/${STUDENTS_PER_TIME_SLOT})</span>
                     </div>
                 </td>
-            </tr>
         `;
+
+        // Add empty cells for each date column
+        scheduleDates.forEach(() => {
+            bodyHtml += `<td class="attendance-time-slot-cell attendance-time-slot-date-cell"></td>`;
+        });
+
+        // Add empty cell for percentage column
+        bodyHtml += `<td class="attendance-time-slot-cell attendance-time-slot-percent-cell"></td>`;
+
+        bodyHtml += `</tr>`;
+
 
         // Render all 10 student slots (filled with actual students or empty placeholders)
         for (let rowIndex = 0; rowIndex < STUDENTS_PER_TIME_SLOT; rowIndex++) {
