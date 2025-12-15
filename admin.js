@@ -3661,9 +3661,13 @@ function getScheduleDates(year, month, scheduleType) {
             targetDays = [0, 6]; // Saturday, Sunday
             break;
         default:
-            // If no schedule selected, return all days
+            // If no schedule selected, return first 4 days
             for (let day = 1; day <= daysInMonth; day++) {
                 dates.push(day);
+                // Limit to 4 dates for mobile optimization
+                if (dates.length >= 4) {
+                    break;
+                }
             }
             return dates;
     }
@@ -3674,6 +3678,10 @@ function getScheduleDates(year, month, scheduleType) {
         const dayOfWeek = date.getDay();
         if (targetDays.includes(dayOfWeek)) {
             dates.push(day);
+        }
+        // Limit to 4 dates for mobile optimization
+        if (dates.length >= 4) {
+            break;
         }
     }
 
