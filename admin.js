@@ -4896,7 +4896,7 @@ function toggleStudentMenu(event, studentId, studentName) {
     const menu = document.getElementById(`student-menu-${studentId}`);
     if (!menu) return;
 
-    // Close all other open menus first
+    // Close all other open menus first and return them to their original parents
     document.querySelectorAll('.student-action-menu').forEach(m => {
         if (m.id !== `student-menu-${studentId}`) {
             m.style.display = 'none';
@@ -4905,11 +4905,18 @@ function toggleStudentMenu(event, studentId, studentName) {
 
     // Toggle current menu
     if (menu.style.display === 'none' || menu.style.display === '') {
+        // Move menu to body to escape overflow:hidden clipping from parent cells
+        if (menu.parentElement !== document.body) {
+            document.body.appendChild(menu);
+        }
+
         // Position the menu near the click using fixed positioning
         const rect = event.currentTarget.getBoundingClientRect();
         menu.style.display = 'block';
+        menu.style.position = 'fixed';
         menu.style.left = `${rect.left}px`;
         menu.style.top = `${rect.bottom + 4}px`;
+        menu.style.zIndex = '99999';
 
         // Ensure menu doesn't go off-screen
         const menuRect = menu.getBoundingClientRect();
