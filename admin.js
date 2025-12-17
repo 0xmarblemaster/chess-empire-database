@@ -3645,6 +3645,8 @@ async function loadLowAttendanceAlerts(branchId) {
 function getScheduleDates(year, month, scheduleType) {
     const dates = [];
     const daysInMonth = new Date(year, month + 1, 0).getDate();
+    const isMobile = window.innerWidth <= 768;
+    const maxDates = isMobile ? 4 : null; // Limit to 4 on mobile, unlimited on desktop
 
     // Define which days of week correspond to each schedule
     // 0 = Sunday, 1 = Monday, 2 = Tuesday, 3 = Wednesday, 4 = Thursday, 5 = Friday, 6 = Saturday
@@ -3661,11 +3663,11 @@ function getScheduleDates(year, month, scheduleType) {
             targetDays = [0, 6]; // Saturday, Sunday
             break;
         default:
-            // If no schedule selected, return first 4 days
+            // If no schedule selected, return all days (or limited on mobile)
             for (let day = 1; day <= daysInMonth; day++) {
                 dates.push(day);
-                // Limit to 4 dates for mobile optimization
-                if (dates.length >= 4) {
+                // Limit to 4 dates for mobile optimization only
+                if (maxDates && dates.length >= maxDates) {
                     break;
                 }
             }
@@ -3679,8 +3681,8 @@ function getScheduleDates(year, month, scheduleType) {
         if (targetDays.includes(dayOfWeek)) {
             dates.push(day);
         }
-        // Limit to 4 dates for mobile optimization
-        if (dates.length >= 4) {
+        // Limit to 4 dates for mobile optimization only
+        if (maxDates && dates.length >= maxDates) {
             break;
         }
     }
