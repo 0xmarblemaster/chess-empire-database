@@ -3931,7 +3931,7 @@ function renderAttendanceCalendar(preFilteredData = null) {
                                 <div class="student-avatar" style="width: 28px; height: 28px; font-size: 0.75rem;">
                                     ${initials}
                                 </div>
-                                <span style="flex: 1;">${firstName} ${lastName}</span>
+                                <span class="student-name-text" style="flex: 1;"><span class="first-name">${firstName}</span> <span class="last-name">${lastName}</span></span>
                             </div>
                         </td>
                 `;

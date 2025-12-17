@@ -3753,16 +3753,35 @@ tr[data-student-id] {
         overflow: hidden !important;
     }
 
-    /* Truncate student name text on mobile */
+    /* Stack student name vertically on mobile */
     .attendance-student-cell > div {
         overflow: hidden !important;
     }
 
-    .attendance-student-cell span {
+    .attendance-student-cell .student-name-text {
+        display: flex !important;
+        flex-direction: column !important;
+        line-height: 1.1 !important;
+        gap: 0 !important;
+    }
+
+    .attendance-student-cell .student-name-text .first-name,
+    .attendance-student-cell .student-name-text .last-name {
+        display: block !important;
         overflow: hidden !important;
         text-overflow: ellipsis !important;
         white-space: nowrap !important;
-        max-width: 60px !important;
+        max-width: 75px !important;
+        font-size: 0.75rem !important;
+    }
+
+    .attendance-student-cell .student-name-text .first-name {
+        font-weight: 600 !important;
+    }
+
+    .attendance-student-cell .student-name-text .last-name {
+        font-weight: 400 !important;
+        color: #64748b !important;
     }
 
     /* Smaller avatars on mobile */
