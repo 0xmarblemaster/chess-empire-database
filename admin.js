@@ -4905,7 +4905,20 @@ function toggleStudentMenu(event, studentId, studentName) {
 
     // Toggle current menu
     if (menu.style.display === 'none' || menu.style.display === '') {
+        // Position the menu near the click using fixed positioning
+        const rect = event.currentTarget.getBoundingClientRect();
         menu.style.display = 'block';
+        menu.style.left = `${rect.left}px`;
+        menu.style.top = `${rect.bottom + 4}px`;
+
+        // Ensure menu doesn't go off-screen
+        const menuRect = menu.getBoundingClientRect();
+        if (menuRect.right > window.innerWidth) {
+            menu.style.left = `${window.innerWidth - menuRect.width - 10}px`;
+        }
+        if (menuRect.bottom > window.innerHeight) {
+            menu.style.top = `${rect.top - menuRect.height - 4}px`;
+        }
     } else {
         menu.style.display = 'none';
     }
