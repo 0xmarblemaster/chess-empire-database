@@ -1,5 +1,35 @@
 // Admin Dashboard JavaScript
 
+// Calculate age from date of birth
+function calculateAge(dateOfBirth) {
+    if (!dateOfBirth) return null;
+    const today = new Date();
+    const birth = new Date(dateOfBirth);
+    let age = today.getFullYear() - birth.getFullYear();
+    const monthDiff = today.getMonth() - birth.getMonth();
+    if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < birth.getDate())) {
+        age--;
+    }
+    return age;
+}
+
+// Update age display when date of birth changes
+function updateAgeDisplay(dateInputId, ageDisplayId) {
+    const dateInput = document.getElementById(dateInputId);
+    const ageDisplay = document.getElementById(ageDisplayId);
+    if (!dateInput || !ageDisplay) return;
+
+    const dateOfBirth = dateInput.value;
+    if (dateOfBirth) {
+        const age = calculateAge(dateOfBirth);
+        ageDisplay.textContent = t('student.calculatedAge', { count: age });
+        ageDisplay.style.display = 'block';
+    } else {
+        ageDisplay.textContent = '';
+        ageDisplay.style.display = 'none';
+    }
+}
+
 // Current filters
 let currentFilters = {
     status: 'all',
@@ -1861,7 +1891,18 @@ function editStudent(studentId) {
     document.getElementById('editStudentId').value = student.id;
     document.getElementById('editFirstName').value = student.firstName;
     document.getElementById('editLastName').value = student.lastName;
-    document.getElementById('editAge').value = student.age;
+    // Set date of birth and update age display
+    const dateOfBirthInput = document.getElementById('editDateOfBirth');
+    if (student.dateOfBirth) {
+        dateOfBirthInput.value = student.dateOfBirth;
+    } else {
+        dateOfBirthInput.value = '';
+    }
+    updateAgeDisplay('editDateOfBirth', 'editAgeDisplay');
+
+    // Add event listener for date change
+    dateOfBirthInput.addEventListener('change', () => updateAgeDisplay('editDateOfBirth', 'editAgeDisplay'));
+
     document.getElementById('editGender').value = student.gender || '';
     document.getElementById('editRazryadSelect').value = student.razryad || '';
     document.getElementById('editStatusSelect').value = student.status || 'active';
@@ -2143,11 +2184,16 @@ async function submitEditStudent(event) {
     const coach = window.coaches.find(c => `${c.firstName} ${c.lastName}` === coachName);
     const coachId = coach ? coach.id : null;
 
+    // Get date of birth and calculate age
+    const dateOfBirth = formData.get('dateOfBirth') || null;
+    const calculatedAge = dateOfBirth ? calculateAge(dateOfBirth) : null;
+
     // Prepare student data with IDs (Supabase format)
     const studentData = {
         firstName: formData.get('firstName'),
         lastName: formData.get('lastName'),
-        age: parseInt(formData.get('age')) || null,
+        dateOfBirth: dateOfBirth,
+        age: calculatedAge,
         gender: formData.get('gender') || null,
         branchId: branchId,
         coachId: coachId,

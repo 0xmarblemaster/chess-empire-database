@@ -1,5 +1,35 @@
 // CRUD Modal Handlers and Event Functions
 
+// Calculate age from date of birth
+function calculateAgeFromDOB(dateOfBirth) {
+    if (!dateOfBirth) return null;
+    const today = new Date();
+    const birth = new Date(dateOfBirth);
+    let age = today.getFullYear() - birth.getFullYear();
+    const monthDiff = today.getMonth() - birth.getMonth();
+    if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < birth.getDate())) {
+        age--;
+    }
+    return age;
+}
+
+// Update age display when date of birth changes
+function updateStudentAgeDisplay() {
+    const dateInput = document.getElementById('studentDateOfBirth');
+    const ageDisplay = document.getElementById('studentAgeDisplay');
+    if (!dateInput || !ageDisplay) return;
+
+    const dateOfBirth = dateInput.value;
+    if (dateOfBirth) {
+        const age = calculateAgeFromDOB(dateOfBirth);
+        ageDisplay.textContent = window.t ? t('student.calculatedAge', { count: age }) : `Age: ${age} years`;
+        ageDisplay.style.display = 'block';
+    } else {
+        ageDisplay.textContent = '';
+        ageDisplay.style.display = 'none';
+    }
+}
+
 // ==================== STUDENT MODAL FUNCTIONS ====================
 
 // Open student modal for creating new student
@@ -7,6 +37,14 @@ function addNewStudent() {
     document.getElementById('studentModalTitle').textContent = 'Add New Student';
     document.getElementById('studentForm').reset();
     document.getElementById('studentId').value = '';
+
+    // Clear age display and add event listener
+    const dateInput = document.getElementById('studentDateOfBirth');
+    if (dateInput) {
+        dateInput.value = '';
+        dateInput.addEventListener('change', updateStudentAgeDisplay);
+    }
+    updateStudentAgeDisplay();
 
     // Populate branch dropdown
     const branchSelect = document.getElementById('studentBranch');
@@ -36,7 +74,8 @@ function editStudent(studentId) {
     document.getElementById('studentId').value = student.id;
     document.getElementById('studentFirstName').value = student.firstName;
     document.getElementById('studentLastName').value = student.lastName;
-    document.getElementById('studentAge').value = student.age;
+    document.getElementById('studentDateOfBirth').value = student.dateOfBirth || '';
+    updateStudentAgeDisplay();
     document.getElementById('studentStatus').value = student.status;
     document.getElementById('studentLevel').value = student.currentLevel;
     document.getElementById('studentRazryad').value = student.razryad || '';
@@ -89,10 +128,14 @@ function updateCoachOptions() {
 function saveStudent(event) {
     event.preventDefault();
 
+    const dateOfBirth = document.getElementById('studentDateOfBirth').value || null;
+    const calculatedAge = dateOfBirth ? calculateAgeFromDOB(dateOfBirth) : null;
+
     const studentData = {
         firstName: document.getElementById('studentFirstName').value.trim(),
         lastName: document.getElementById('studentLastName').value.trim(),
-        age: document.getElementById('studentAge').value,
+        dateOfBirth: dateOfBirth,
+        age: calculatedAge,
         branch: document.getElementById('studentBranch').value,
         coach: document.getElementById('studentCoach').value,
         razryad: document.getElementById('studentRazryad').value || null,

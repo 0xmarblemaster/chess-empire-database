@@ -1,3 +1,33 @@
+// Calculate age from date of birth
+function calculateAge(dateOfBirth) {
+    if (!dateOfBirth) return null;
+    const today = new Date();
+    const birth = new Date(dateOfBirth);
+    let age = today.getFullYear() - birth.getFullYear();
+    const monthDiff = today.getMonth() - birth.getMonth();
+    if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < birth.getDate())) {
+        age--;
+    }
+    return age;
+}
+
+// Update age display when date of birth changes
+function updateAgeDisplay(dateInputId, ageDisplayId) {
+    const dateInput = document.getElementById(dateInputId);
+    const ageDisplay = document.getElementById(ageDisplayId);
+    if (!dateInput || !ageDisplay) return;
+
+    const dateOfBirth = dateInput.value;
+    if (dateOfBirth) {
+        const age = calculateAge(dateOfBirth);
+        ageDisplay.textContent = t('student.calculatedAge', { count: age });
+        ageDisplay.style.display = 'block';
+    } else {
+        ageDisplay.textContent = '';
+        ageDisplay.style.display = 'none';
+    }
+}
+
 // Check if user is logged in (has any account on the platform)
 function isLoggedIn() {
     return sessionStorage.getItem('userRole') !== null;
@@ -979,7 +1009,7 @@ async function renderProfile() {
                         <i data-lucide="calendar" style="width: 14px; height: 14px;"></i>
                         ${t('student.age')}
                     </div>
-                    <div class="info-value">${t('student.ageValue', { count: student.age })}</div>
+                    <div class="info-value">${t('student.ageValue', { count: student.dateOfBirth ? calculateAge(student.dateOfBirth) : student.age })}</div>
                 </div>
 
                 <!-- Mobile order: 6. Branch -->
@@ -1203,7 +1233,19 @@ async function openEditModal() {
     // Populate basic fields
     document.getElementById('editFirstName').value = student.firstName || '';
     document.getElementById('editLastName').value = student.lastName || '';
-    document.getElementById('editAge').value = student.age || '';
+
+    // Set date of birth and update age display
+    const dateOfBirthInput = document.getElementById('editDateOfBirth');
+    if (student.dateOfBirth) {
+        dateOfBirthInput.value = student.dateOfBirth;
+    } else {
+        dateOfBirthInput.value = '';
+    }
+    updateAgeDisplay('editDateOfBirth', 'editAgeDisplay');
+
+    // Add event listener for date change
+    dateOfBirthInput.addEventListener('change', () => updateAgeDisplay('editDateOfBirth', 'editAgeDisplay'));
+
     document.getElementById('editGender').value = student.gender || '';
 
     // Populate photo
@@ -1398,7 +1440,8 @@ async function saveStudentEdits(event) {
     // Get form values
     const firstName = document.getElementById('editFirstName').value.trim();
     const lastName = document.getElementById('editLastName').value.trim();
-    const age = parseInt(document.getElementById('editAge').value) || null;
+    const dateOfBirth = document.getElementById('editDateOfBirth').value || null;
+    const calculatedAge = dateOfBirth ? calculateAge(dateOfBirth) : null;
     const gender = document.getElementById('editGender').value || null;
     const razryad = document.getElementById('editRazryadSelect').value || 'none';
     const status = document.getElementById('editStatusSelect').value || 'active';
@@ -1419,7 +1462,8 @@ async function saveStudentEdits(event) {
     const studentData = {
         firstName: firstName,
         lastName: lastName,
-        age: age,
+        dateOfBirth: dateOfBirth,
+        age: calculatedAge,
         gender: gender,
         branchId: branchId,
         coachId: coachId,
