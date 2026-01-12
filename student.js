@@ -1442,10 +1442,11 @@ async function saveRatingFromModal(studentId) {
     const newRating = parseInt(ratingInput.value) || 0;
     const currentRating = studentProfileData?.ratings?.current?.rating || studentProfileData?.rating?.rating || 0;
 
-    // Only save if rating changed
-    if (newRating !== currentRating) {
+    // Only save if rating changed and new rating is valid
+    if (newRating !== currentRating && newRating > 0) {
         try {
-            await window.supabaseData.addStudentRating(studentId, newRating, 'manual_edit');
+            // Use 'manual' as source - allowed values are: 'manual', 'csv_import', 'tournament'
+            await window.supabaseData.addStudentRating(studentId, newRating, 'manual');
         } catch (error) {
             console.error('Error saving rating:', error);
         }

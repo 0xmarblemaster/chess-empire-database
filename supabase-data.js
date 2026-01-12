@@ -660,11 +660,14 @@ const supabaseData = {
 
     // Add a new rating entry for a student
     async addStudentRating(studentId, rating, source = 'manual', notes = '') {
+        const today = new Date().toISOString().split('T')[0]; // YYYY-MM-DD format
+
         const { data, error } = await window.supabaseClient
             .from('student_ratings')
             .insert([{
                 student_id: studentId,
                 rating: rating,
+                rating_date: today,
                 source: source,
                 notes: notes
             }])
@@ -921,58 +924,24 @@ const supabaseData = {
     // ============================================
 
     // Get student's ranking within their branch
+    // TODO: Implement get_student_branch_rank() function in database
     async getStudentBranchRank(studentId) {
-        const { data, error } = await window.supabaseClient
-            .rpc('get_student_branch_rank', { p_student_id: studentId });
-
-        if (error) {
-            console.error('Error fetching branch rank:', error);
-            return { totalInBranch: 0, rankInBranch: 0, percentile: 0 };
-        }
-
-        const result = data?.[0] || {};
-        return {
-            totalInBranch: result.total_in_branch || 0,
-            rankInBranch: result.rank_in_branch || 0,
-            percentile: result.percentile || 0
-        };
+        // Function not implemented in database yet - return defaults
+        return { totalInBranch: 0, rankInBranch: 0, percentile: 0 };
     },
 
     // Get student's school-wide ranking
+    // TODO: Implement get_student_school_rank() function in database
     async getStudentSchoolRank(studentId) {
-        const { data, error } = await window.supabaseClient
-            .rpc('get_student_school_rank', { p_student_id: studentId });
-
-        if (error) {
-            console.error('Error fetching school rank:', error);
-            return { totalInSchool: 0, rankInSchool: 0, percentile: 0 };
-        }
-
-        const result = data?.[0] || {};
-        return {
-            totalInSchool: result.total_in_school || 0,
-            rankInSchool: result.rank_in_school || 0,
-            percentile: result.percentile || 0
-        };
+        // Function not implemented in database yet - return defaults
+        return { totalInSchool: 0, rankInSchool: 0, percentile: 0 };
     },
 
     // Get student's survival mode ranking
+    // TODO: Implement get_student_survival_rank() function in database
     async getStudentSurvivalRank(studentId, mode = 'survival_3') {
-        const { data, error } = await window.supabaseClient
-            .rpc('get_student_survival_rank', { p_student_id: studentId, p_mode: mode });
-
-        if (error) {
-            console.error('Error fetching survival rank:', error);
-            return { totalPlayers: 0, rank: 0, percentile: 0, bestScore: 0 };
-        }
-
-        const result = data?.[0] || {};
-        return {
-            totalPlayers: result.total_players || 0,
-            rank: result.rank || 0,
-            percentile: result.percentile || 0,
-            bestScore: result.best_score || 0
-        };
+        // Function not implemented in database yet - return defaults
+        return { totalPlayers: 0, rank: 0, percentile: 0, bestScore: 0 };
     },
 
     // Get all rankings for a student (convenience method)
@@ -1124,38 +1093,10 @@ const supabaseData = {
     },
 
     // Get achievements earned by a student
+    // TODO: Implement student_achievements table in database
     async getStudentAchievements(studentId) {
-        const { data, error } = await window.supabaseClient
-            .from('student_achievements')
-            .select(`
-                *,
-                achievement:achievements(*)
-            `)
-            .eq('student_id', studentId)
-            .order('earned_at', { ascending: false });
-
-        if (error) {
-            console.error('Error fetching student achievements:', error);
-            return [];
-        }
-
-        return data.map(sa => ({
-            id: sa.id,
-            studentId: sa.student_id,
-            achievementId: sa.achievement_id,
-            earnedAt: sa.earned_at,
-            notes: sa.notes,
-            achievement: sa.achievement ? {
-                code: sa.achievement.code,
-                nameEn: sa.achievement.name_en,
-                nameRu: sa.achievement.name_ru,
-                nameKk: sa.achievement.name_kk,
-                category: sa.achievement.category,
-                icon: sa.achievement.icon,
-                tier: sa.achievement.tier,
-                thresholdValue: sa.achievement.threshold_value
-            } : null
-        }));
+        // Table not implemented in database yet - return empty array
+        return [];
     },
 
     // Award an achievement to a student
