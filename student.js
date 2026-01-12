@@ -1286,6 +1286,10 @@ async function openEditModal() {
     // Populate status
     document.getElementById('editStatusSelect').value = student.status || 'active';
 
+    // Populate rating from profile data
+    const currentRating = studentProfileData?.ratings?.current?.rating || studentProfileData?.rating?.rating || 0;
+    document.getElementById('editRating').value = currentRating || '';
+
     // Populate level and lesson
     document.getElementById('editCurrentLevel').value = student.currentLevel || 1;
     document.getElementById('editCurrentLesson').value = student.currentLesson || 1;
@@ -1430,6 +1434,24 @@ async function savePuzzleRushFromModal(studentId) {
     }
 }
 
+// Save rating from edit modal
+async function saveRatingFromModal(studentId) {
+    const ratingInput = document.getElementById('editRating');
+    if (!ratingInput || !window.supabaseData) return;
+
+    const newRating = parseInt(ratingInput.value) || 0;
+    const currentRating = studentProfileData?.ratings?.current?.rating || studentProfileData?.rating?.rating || 0;
+
+    // Only save if rating changed
+    if (newRating !== currentRating) {
+        try {
+            await window.supabaseData.addStudentRating(studentId, newRating, 'manual_edit');
+        } catch (error) {
+            console.error('Error saving rating:', error);
+        }
+    }
+}
+
 // Save student edits
 async function saveStudentEdits(event) {
     if (event) event.preventDefault();
@@ -1521,6 +1543,9 @@ async function saveStudentEdits(event) {
 
             // Save puzzle rush score if changed
             await savePuzzleRushFromModal(student.id);
+
+            // Save rating if changed
+            await saveRatingFromModal(student.id);
 
             // Reload profile data to reflect bot/puzzle changes
             await loadStudentProfileData(student.id);
