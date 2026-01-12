@@ -2690,12 +2690,22 @@ function getLeagueFromRating(rating) {
 // Render ratings table
 function renderRatingsTable(studentsWithRatings) {
     const tbody = document.getElementById('ratingsTableBody');
-    if (!tbody) return;
+    if (!tbody) {
+        console.error('ratingsTableBody element not found!');
+        return;
+    }
+
+    console.log('renderRatingsTable called with', studentsWithRatings.length, 'students');
 
     // Filter to only students with ratings, then sort by rating (highest first)
     const sorted = [...studentsWithRatings]
         .filter(s => s.currentRating !== null && s.currentRating > 0)
         .sort((a, b) => b.currentRating - a.currentRating);
+
+    console.log('After filtering:', sorted.length, 'students with ratings');
+    if (sorted.length > 0) {
+        console.log('First 3 students:', sorted.slice(0, 3).map(s => ({ name: `${s.firstName} ${s.lastName}`, rating: s.currentRating })));
+    }
 
     // Show empty state if no students have ratings
     if (sorted.length === 0) {
