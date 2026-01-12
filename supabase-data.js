@@ -617,29 +617,43 @@ const supabaseData = {
         }));
     },
 
+    // Helper function to calculate league from rating
+    _calculateLeague(rating) {
+        if (rating >= 1200) return { league: 'League A+', leagueTier: 'diamond' };
+        if (rating >= 900) return { league: 'League A', leagueTier: 'gold' };
+        if (rating >= 500) return { league: 'League B', leagueTier: 'silver' };
+        if (rating >= 0) return { league: 'League C', leagueTier: 'bronze' };
+        return { league: 'Beginner', leagueTier: 'none' };
+    },
+
     // Get current (latest) rating for a student
     async getCurrentRating(studentId) {
         try {
+            // Query student_ratings table directly instead of view to avoid 406 errors
             const { data, error } = await window.supabaseClient
-                .from('student_current_ratings')
-                .select('*')
+                .from('student_ratings')
+                .select('student_id, rating, rating_date')
                 .eq('student_id', studentId)
-                .single();
+                .order('rating_date', { ascending: false })
+                .limit(1);
 
-            if (error) {
-                // No rating found or view doesn't exist - return defaults silently
+            if (error || !data || data.length === 0) {
+                // No rating found - return defaults silently
                 return { rating: 0, league: 'Beginner', leagueTier: 'none', ratingDate: null };
             }
 
+            const row = data[0];
+            const { league, leagueTier } = this._calculateLeague(row.rating);
+
             return {
-                studentId: data.student_id,
-                rating: data.rating,
-                ratingDate: data.rating_date,
-                league: data.league,
-                leagueTier: data.league_tier
+                studentId: row.student_id,
+                rating: row.rating,
+                ratingDate: row.rating_date,
+                league: league,
+                leagueTier: leagueTier
             };
         } catch (e) {
-            // View might not exist - return defaults silently
+            // No rating or error - return defaults silently
             return { rating: 0, league: 'Beginner', leagueTier: 'none', ratingDate: null };
         }
     },
@@ -1270,21 +1284,36 @@ const supabaseData = {
     // Get rating leaderboard
     async getRatingLeaderboard(branchId = null, limit = 20) {
         try {
-            let query = window.supabaseClient
-                .from('student_current_ratings')
-                .select('*')
-                .order('rating', { ascending: false })
-                .limit(limit);
+            // Query student_ratings table directly and get latest rating per student
+            // Using RPC or manual distinct logic since we can't use DISTINCT ON via REST API
+            const { data: allRatings, error } = await window.supabaseClient
+                .from('student_ratings')
+                .select('student_id, rating, rating_date')
+                .order('rating_date', { ascending: false });
 
-            const { data, error } = await query;
+            if (error || !allRatings) {
+                return [];
+            }
 
-            if (error) {
-                // View might not exist - return empty silently
+            // Get latest rating per student (manual DISTINCT ON)
+            const latestRatings = new Map();
+            for (const r of allRatings) {
+                if (!latestRatings.has(r.student_id)) {
+                    latestRatings.set(r.student_id, r);
+                }
+            }
+
+            // Sort by rating descending and limit
+            const sortedRatings = Array.from(latestRatings.values())
+                .sort((a, b) => b.rating - a.rating)
+                .slice(0, limit);
+
+            if (sortedRatings.length === 0) {
                 return [];
             }
 
             // Fetch student details
-            const studentIds = data.map(d => d.student_id);
+            const studentIds = sortedRatings.map(d => d.student_id);
             let studentsQuery = window.supabaseClient
                 .from('students')
                 .select('id, first_name, last_name, branch_id, branch:branches(name)')
@@ -1297,10 +1326,11 @@ const supabaseData = {
             const { data: students } = await studentsQuery;
             const studentMap = new Map(students?.map(s => [s.id, s]) || []);
 
-            return data
+            return sortedRatings
                 .filter(entry => studentMap.has(entry.student_id))
                 .map((entry, index) => {
                     const student = studentMap.get(entry.student_id);
+                    const { league, leagueTier } = this._calculateLeague(entry.rating);
                     return {
                         rank: index + 1,
                         studentId: entry.student_id,
@@ -1308,12 +1338,12 @@ const supabaseData = {
                         lastName: student?.last_name || '',
                         branch: student?.branch?.name || '',
                         rating: entry.rating,
-                        league: entry.league,
-                        leagueTier: entry.league_tier
+                        league: league,
+                        leagueTier: leagueTier
                     };
                 });
         } catch (e) {
-            // View might not exist - return empty silently
+            console.error('Error fetching rating leaderboard:', e);
             return [];
         }
     },
@@ -1404,7 +1434,8 @@ const supabaseData = {
         return {
             ...basicInfo,
             rating: currentRating,
-            ratingHistory: ratingHistory.slice(0, 10), // Last 10 ratings
+            ratings: { current: currentRating, history: ratingHistory.slice(0, 10) }, // Nested structure for compatibility
+            ratingHistory: ratingHistory.slice(0, 10), // Last 10 ratings (kept for backward compatibility)
             botBattles,
             botProgress,
             survivalScores: survivalScores.slice(0, 10), // Last 10 scores (kept for compatibility)

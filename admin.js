@@ -2507,8 +2507,63 @@ window.addEventListener('resize', function() {
 // RATINGS MANAGEMENT FUNCTIONALITY
 // ========================================
 
-// CSV data storage for import
+// CSV/Excel data storage for import
 let csvParsedData = null;
+let unmatchedStudentsData = [];
+
+// Fuzzy name matching function for Excel/CSV import
+function fuzzyMatchStudent(excelName, students) {
+    if (!excelName || !students || students.length === 0) {
+        return { matched: false, student: null, confidence: 0 };
+    }
+
+    const normalizedExcel = excelName.trim().toLowerCase();
+    const parts = normalizedExcel.split(/\s+/).filter(p => p.length > 0);
+
+    // Try exact match first (lastName firstName or firstName lastName)
+    for (const student of students) {
+        const firstName = (student.firstName || '').toLowerCase();
+        const lastName = (student.lastName || '').toLowerCase();
+        const fullName1 = `${lastName} ${firstName}`;
+        const fullName2 = `${firstName} ${lastName}`;
+
+        if (normalizedExcel === fullName1 || normalizedExcel === fullName2) {
+            return { matched: true, student, confidence: 100 };
+        }
+    }
+
+    // Try partial match (all parts present in student name)
+    for (const student of students) {
+        const firstName = (student.firstName || '').toLowerCase();
+        const lastName = (student.lastName || '').toLowerCase();
+        const studentParts = [firstName, lastName];
+
+        const allPartsMatch = parts.every(part =>
+            studentParts.some(sp => sp.includes(part) || part.includes(sp))
+        );
+        if (allPartsMatch && parts.length >= 2) {
+            return { matched: true, student, confidence: 80 };
+        }
+    }
+
+    // Try matching with slight variations (first or last name matches exactly)
+    for (const student of students) {
+        const firstName = (student.firstName || '').toLowerCase();
+        const lastName = (student.lastName || '').toLowerCase();
+
+        if (parts.some(p => p === firstName) || parts.some(p => p === lastName)) {
+            // Check if other parts are similar
+            const otherParts = parts.filter(p => p !== firstName && p !== lastName);
+            if (otherParts.length === 0 || otherParts.some(p =>
+                firstName.includes(p) || lastName.includes(p) || p.includes(firstName) || p.includes(lastName)
+            )) {
+                return { matched: true, student, confidence: 60 };
+            }
+        }
+    }
+
+    return { matched: false, student: null, confidence: 0 };
+}
 
 // Show Ratings Management section
 function showRatingsManagement() {
@@ -2947,98 +3002,144 @@ function closeCSVImportModal() {
     }
 }
 
-// Preview CSV file
-async function previewCSVFile(event) {
+// Preview Rating file (Excel or CSV)
+async function previewRatingFile(event) {
     const file = event.target.files[0];
     if (!file) return;
 
     document.getElementById('csvFileName').textContent = file.name;
 
     try {
-        const text = await file.text();
-        const lines = text.split('\n').filter(line => line.trim());
+        const fileExt = file.name.split('.').pop().toLowerCase();
+        let rows = [];
 
-        if (lines.length < 2) {
+        if (fileExt === 'xlsx' || fileExt === 'xls') {
+            // Parse Excel file using SheetJS
+            const data = await file.arrayBuffer();
+            const workbook = XLSX.read(data, { type: 'array' });
+            const sheetName = workbook.SheetNames[0];
+            const worksheet = workbook.Sheets[sheetName];
+            const jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1 });
+
+            // Excel format: Column A = Name, Column B = Rating
+            // Skip header row (row 0)
+            for (let i = 1; i < jsonData.length; i++) {
+                const row = jsonData[i];
+                if (row && row[0]) {
+                    rows.push({
+                        name: String(row[0] || '').trim(),
+                        rating: parseInt(row[1]) || 0,
+                        rowNum: i + 1
+                    });
+                }
+            }
+        } else {
+            // Parse CSV file
+            const text = await file.text();
+            const lines = text.split('\n').filter(line => line.trim());
+
+            if (lines.length < 2) {
+                showToast(t('admin.ratings.csvEmpty'), 'error');
+                return;
+            }
+
+            // Parse header
+            const headers = lines[0].split(',').map(h => h.trim().toLowerCase());
+            const nameIndex = headers.findIndex(h => h === 'student_name' || h === 'name');
+            const firstNameIndex = headers.findIndex(h => h === 'first_name' || h === 'firstname');
+            const lastNameIndex = headers.findIndex(h => h === 'last_name' || h === 'lastname');
+            const ratingIndex = headers.findIndex(h => h === 'rating');
+
+            if (ratingIndex === -1) {
+                showToast(t('admin.ratings.csvMissingRating'), 'error');
+                return;
+            }
+
+            if (nameIndex === -1 && (firstNameIndex === -1 || lastNameIndex === -1)) {
+                showToast(t('admin.ratings.csvMissingName'), 'error');
+                return;
+            }
+
+            for (let i = 1; i < lines.length; i++) {
+                const values = lines[i].split(',').map(v => v.trim());
+                let studentName;
+                if (nameIndex !== -1) {
+                    studentName = values[nameIndex];
+                } else {
+                    studentName = `${values[firstNameIndex]} ${values[lastNameIndex]}`;
+                }
+                rows.push({
+                    name: studentName,
+                    rating: parseInt(values[ratingIndex]) || 0,
+                    rowNum: i + 1
+                });
+            }
+        }
+
+        if (rows.length === 0) {
             showToast(t('admin.ratings.csvEmpty'), 'error');
             return;
         }
 
-        // Parse header
-        const headers = lines[0].split(',').map(h => h.trim().toLowerCase());
-
-        // Find column indices
-        const nameIndex = headers.findIndex(h => h === 'student_name' || h === 'name');
-        const firstNameIndex = headers.findIndex(h => h === 'first_name' || h === 'firstname');
-        const lastNameIndex = headers.findIndex(h => h === 'last_name' || h === 'lastname');
-        const ratingIndex = headers.findIndex(h => h === 'rating');
-        const dateIndex = headers.findIndex(h => h === 'date');
-
-        if (ratingIndex === -1) {
-            showToast(t('admin.ratings.csvMissingRating'), 'error');
-            return;
-        }
-
-        if (nameIndex === -1 && (firstNameIndex === -1 || lastNameIndex === -1)) {
-            showToast(t('admin.ratings.csvMissingName'), 'error');
-            return;
-        }
-
-        // Parse data rows
+        // Process rows with fuzzy matching
         csvParsedData = [];
+        unmatchedStudentsData = [];
         let validCount = 0;
         let warningCount = 0;
         let errorCount = 0;
 
         const previewRows = [];
+        const today = new Date().toISOString().split('T')[0];
 
-        for (let i = 1; i < lines.length; i++) {
-            const values = lines[i].split(',').map(v => v.trim());
+        for (const row of rows) {
+            if (!row.name) continue;
 
-            let studentName;
-            if (nameIndex !== -1) {
-                studentName = values[nameIndex];
-            } else {
-                studentName = `${values[firstNameIndex]} ${values[lastNameIndex]}`;
-            }
+            // Use fuzzy matching to find student
+            const matchResult = fuzzyMatchStudent(row.name, window.students);
 
-            const rating = parseInt(values[ratingIndex]);
-            const date = dateIndex !== -1 ? values[dateIndex] : new Date().toISOString().split('T')[0];
-
-            // Find matching student
-            const student = window.students.find(s =>
-                `${s.firstName} ${s.lastName}`.toLowerCase() === studentName.toLowerCase()
-            );
-
-            let status = 'valid';
-            let statusText = 'OK';
+            let statusText = '';
             let statusColor = '#10b981';
+            let statusIcon = '✓';
 
-            if (!student) {
-                status = 'error';
-                statusText = t('admin.ratings.studentNotFound');
+            if (!matchResult.matched) {
+                statusText = t('admin.ratings.unmatched');
                 statusColor = '#ef4444';
+                statusIcon = '✗';
                 errorCount++;
-            } else if (isNaN(rating) || rating < 100 || rating > 3000) {
-                status = 'error';
+                unmatchedStudentsData.push({
+                    rowNum: row.rowNum,
+                    name: row.name,
+                    rating: row.rating
+                });
+            } else if (isNaN(row.rating) || row.rating < 0 || row.rating > 3000) {
                 statusText = t('admin.ratings.invalidRating');
-                statusColor = '#ef4444';
-                errorCount++;
+                statusColor = '#f59e0b';
+                statusIcon = '⚠';
+                warningCount++;
             } else {
+                statusText = t('admin.ratings.matched');
+                if (matchResult.confidence < 100) {
+                    statusText += ` (${matchResult.confidence}%)`;
+                    statusColor = '#22c55e';
+                }
                 validCount++;
                 csvParsedData.push({
-                    studentId: student.id,
-                    studentName,
-                    rating,
-                    date
+                    studentId: matchResult.student.id,
+                    studentName: row.name,
+                    matchedName: `${matchResult.student.firstName} ${matchResult.student.lastName}`,
+                    rating: row.rating,
+                    date: today
                 });
             }
 
             previewRows.push(`
                 <tr>
-                    <td style="padding: 0.5rem; border-bottom: 1px solid #f1f5f9;">${studentName}</td>
-                    <td style="padding: 0.5rem; border-bottom: 1px solid #f1f5f9;">${rating || '-'}</td>
-                    <td style="padding: 0.5rem; border-bottom: 1px solid #f1f5f9;">${date}</td>
-                    <td style="padding: 0.5rem; border-bottom: 1px solid #f1f5f9; color: ${statusColor};">${statusText}</td>
+                    <td style="padding: 0.5rem; border-bottom: 1px solid #f1f5f9;">${row.name}</td>
+                    <td style="padding: 0.5rem; border-bottom: 1px solid #f1f5f9;">${row.rating || '-'}</td>
+                    <td style="padding: 0.5rem; border-bottom: 1px solid #f1f5f9;">${today}</td>
+                    <td style="padding: 0.5rem; border-bottom: 1px solid #f1f5f9; color: ${statusColor};">
+                        <span style="font-weight: 600;">${statusIcon}</span> ${statusText}
+                    </td>
                 </tr>
             `);
         }
@@ -3054,50 +3155,195 @@ async function previewCSVFile(event) {
         document.getElementById('importCSVBtn').disabled = validCount === 0;
 
     } catch (error) {
-        console.error('Error parsing CSV:', error);
+        console.error('Error parsing file:', error);
         showToast(t('admin.ratings.csvParseError'), 'error');
     }
 }
 
-// Import CSV ratings
+// Legacy function name for backward compatibility
+async function previewCSVFile(event) {
+    return previewRatingFile(event);
+}
+
+// Import CSV/Excel ratings
 async function importCSVRatings() {
+    console.log('=== IMPORT RATINGS START ===');
+    console.log('csvParsedData:', csvParsedData);
+    console.log('csvParsedData length:', csvParsedData ? csvParsedData.length : 'null');
+
     if (!csvParsedData || csvParsedData.length === 0) {
+        console.error('NO VALID DATA TO IMPORT');
         showToast(t('admin.ratings.noValidData'), 'error');
         return;
     }
 
     const importBtn = document.getElementById('importCSVBtn');
+    const cancelBtn = document.querySelector('#csvImportModal .btn-secondary');
     importBtn.disabled = true;
+    if (cancelBtn) cancelBtn.disabled = true;
     importBtn.innerHTML = '<i data-lucide="loader" class="spin" style="width: 18px; height: 18px;"></i> Importing...';
+
+    // Show progress indicator
+    const progressContainer = document.getElementById('importProgressContainer');
+    const progressBar = document.getElementById('importProgressBar');
+    const progressPercent = document.getElementById('importProgressPercent');
+    const progressCount = document.getElementById('importProgressCount');
+    const progressStatus = document.getElementById('importProgressStatus');
+    const progressText = document.getElementById('importProgressText');
+
+    if (progressContainer) {
+        progressContainer.style.display = 'block';
+        progressBar.style.width = '0%';
+        progressPercent.textContent = '0%';
+        progressCount.textContent = `0 / ${csvParsedData.length}`;
+        progressStatus.textContent = t('admin.ratings.processing') || 'Processing...';
+        progressText.textContent = t('admin.ratings.importingRatings') || 'Importing ratings...';
+    }
+
+    console.log('supabaseData available:', !!window.supabaseData);
+    console.log('addStudentRating function:', typeof window.supabaseData?.addStudentRating);
 
     try {
         let successCount = 0;
         let errorCount = 0;
+        const total = csvParsedData.length;
 
-        for (const item of csvParsedData) {
+        for (let i = 0; i < csvParsedData.length; i++) {
+            const item = csvParsedData[i];
             try {
+                console.log(`[${i+1}/${csvParsedData.length}] Importing: ${item.studentName}, ID: ${item.studentId}, Rating: ${item.rating}`);
+
                 if (window.supabaseData && typeof window.supabaseData.addStudentRating === 'function') {
-                    await window.supabaseData.addStudentRating(item.studentId, item.rating, item.date, 'csv_import');
+                    const result = await window.supabaseData.addStudentRating(item.studentId, item.rating, 'xlsx_import');
+                    console.log(`[${i+1}] SUCCESS:`, result);
                     successCount++;
+                } else {
+                    console.error(`[${i+1}] supabaseData.addStudentRating not available!`);
+                    errorCount++;
                 }
             } catch (e) {
-                console.error('Error importing rating for', item.studentName, e);
+                console.error(`[${i+1}] ERROR importing rating for ${item.studentName}:`, e);
                 errorCount++;
+            }
+
+            // Update progress indicator
+            const progress = Math.round(((i + 1) / total) * 100);
+            if (progressContainer) {
+                progressBar.style.width = `${progress}%`;
+                progressPercent.textContent = `${progress}%`;
+                progressCount.textContent = `${i + 1} / ${total}`;
+                progressStatus.textContent = `✓ ${successCount} | ✗ ${errorCount}`;
+            }
+
+            // Log progress every 50 items
+            if ((i + 1) % 50 === 0) {
+                console.log(`Progress: ${i+1}/${csvParsedData.length} (${successCount} success, ${errorCount} errors)`);
             }
         }
 
-        showToast(t('admin.ratings.importComplete', { success: successCount, errors: errorCount }), 'success');
-        closeCSVImportModal();
-        loadRatingsData();
+        console.log('=== IMPORT COMPLETE ===');
+        console.log(`Total: ${successCount} success, ${errorCount} errors`);
+
+        // Update progress to complete state
+        if (progressContainer) {
+            progressBar.style.background = 'linear-gradient(90deg, #10b981, #059669)';
+            progressText.textContent = t('admin.ratings.importComplete') || 'Import complete!';
+            progressStatus.textContent = `✓ ${successCount} imported | ✗ ${errorCount} failed`;
+        }
+
+        // Show success message with summary
+        const unmatchedCount = unmatchedStudentsData.length;
+        showToast(t('admin.ratings.importSummary', { matched: successCount, unmatched: unmatchedCount }), 'success');
+
+        // Delay closing to show completion status
+        setTimeout(() => {
+            closeCSVImportModal();
+            loadRatingsData();
+
+            // Show unmatched students popup if there are any
+            if (unmatchedStudentsData.length > 0) {
+                showUnmatchedStudentsModal();
+            }
+        }, 1500);
 
     } catch (error) {
-        console.error('Error importing CSV:', error);
+        console.error('=== IMPORT FAILED ===', error);
         showToast(t('admin.ratings.importError'), 'error');
+
+        // Update progress to error state
+        if (progressContainer) {
+            progressBar.style.background = '#ef4444';
+            progressText.textContent = t('admin.ratings.importFailed') || 'Import failed!';
+        }
     } finally {
         importBtn.disabled = false;
+        if (cancelBtn) cancelBtn.disabled = false;
         importBtn.innerHTML = `<i data-lucide="upload" style="width: 18px; height: 18px;"></i> ${t('admin.ratings.import')}`;
         lucide.createIcons();
     }
+}
+
+// Show unmatched students modal
+function showUnmatchedStudentsModal() {
+    const modal = document.getElementById('unmatchedStudentsModal');
+    if (!modal) return;
+
+    const listContainer = document.getElementById('unmatchedStudentsList');
+    const countElement = document.getElementById('unmatchedCount');
+
+    // Build the list HTML
+    let listHtml = '<table style="width: 100%; border-collapse: collapse;">';
+    listHtml += `
+        <thead>
+            <tr style="background: #f8fafc;">
+                <th style="padding: 0.75rem; text-align: left; border-bottom: 2px solid #e2e8f0; font-weight: 600;">#</th>
+                <th style="padding: 0.75rem; text-align: left; border-bottom: 2px solid #e2e8f0; font-weight: 600;">Name</th>
+                <th style="padding: 0.75rem; text-align: right; border-bottom: 2px solid #e2e8f0; font-weight: 600;">Rating</th>
+            </tr>
+        </thead>
+        <tbody>
+    `;
+
+    for (const student of unmatchedStudentsData) {
+        listHtml += `
+            <tr>
+                <td style="padding: 0.5rem 0.75rem; border-bottom: 1px solid #f1f5f9; color: #64748b;">${student.rowNum}</td>
+                <td style="padding: 0.5rem 0.75rem; border-bottom: 1px solid #f1f5f9;">${student.name}</td>
+                <td style="padding: 0.5rem 0.75rem; border-bottom: 1px solid #f1f5f9; text-align: right; font-weight: 500;">${student.rating}</td>
+            </tr>
+        `;
+    }
+
+    listHtml += '</tbody></table>';
+
+    listContainer.innerHTML = listHtml;
+    countElement.textContent = unmatchedStudentsData.length;
+
+    modal.classList.add('active');
+    lucide.createIcons();
+}
+
+// Close unmatched students modal
+function closeUnmatchedModal() {
+    const modal = document.getElementById('unmatchedStudentsModal');
+    if (modal) {
+        modal.classList.remove('active');
+    }
+}
+
+// Copy unmatched students list to clipboard
+function copyUnmatchedList() {
+    if (!unmatchedStudentsData || unmatchedStudentsData.length === 0) return;
+
+    const text = unmatchedStudentsData
+        .map(s => `${s.rowNum}. ${s.name} - ${s.rating}`)
+        .join('\n');
+
+    navigator.clipboard.writeText(text).then(() => {
+        showToast(t('admin.ratings.listCopied'), 'success');
+    }).catch(err => {
+        console.error('Failed to copy:', err);
+    });
 }
 
 // ========================================

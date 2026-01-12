@@ -229,11 +229,11 @@ function getLeagueInfo(rating) {
         return { name: leagueName, ...league };
     }
 
-    // Fallback
-    if (rating >= 1500) return { name: 'League A+', tier: 'diamond', color: '#0ea5e9' };
-    if (rating >= 1200) return { name: 'League A', tier: 'gold', color: '#ffd700' };
-    if (rating >= 900) return { name: 'League B', tier: 'silver', color: '#c0c0c0' };
-    if (rating >= 400) return { name: 'League C', tier: 'bronze', color: '#cd7f32' };
+    // Fallback - thresholds: 1200+ A+, 900+ A, 500+ B, 0+ C
+    if (rating >= 1200) return { name: 'League A+', tier: 'diamond', color: '#0ea5e9' };
+    if (rating >= 900) return { name: 'League A', tier: 'gold', color: '#ffd700' };
+    if (rating >= 500) return { name: 'League B', tier: 'silver', color: '#c0c0c0' };
+    if (rating >= 0) return { name: 'League C', tier: 'bronze', color: '#cd7f32' };
     return { name: t('rankings.beginner') || 'Beginner', tier: 'none', color: '#94a3b8' };
 }
 
@@ -993,7 +993,7 @@ async function renderProfile() {
                                 <i data-lucide="trending-up" style="width: 16px; height: 16px;"></i>
                                 ${t('stats.rating') || 'Rating'}
                             </div>
-                            <div class="progress-percentage rating-value-large">${currentRating || '—'}</div>
+                            <div class="progress-percentage rating-value-large">${currentRating !== null && currentRating !== undefined ? currentRating : '—'}</div>
                         </div>
                         <div class="progress-detail rating-rank-detail">
                             ${rankings.schoolLevel?.rankInSchool

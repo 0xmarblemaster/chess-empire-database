@@ -1440,12 +1440,12 @@
         </div>
     </div>
 
-    <!-- CSV Import Modal -->
+    <!-- CSV/Excel Import Modal -->
     <div id="csvImportModal" class="modal">
         <div class="modal-overlay" onclick="closeCSVImportModal()"></div>
         <div class="modal-content">
             <div class="modal-header">
-                <h2 class="modal-title" data-i18n="admin.ratings.importCSV">Import Ratings from CSV</h2>
+                <h2 class="modal-title" data-i18n="admin.ratings.importExcel">Import Ratings from Excel/CSV</h2>
                 <button class="modal-close" onclick="closeCSVImportModal()">
                     <i data-lucide="x" style="width: 24px; height: 24px;"></i>
                 </button>
@@ -1453,14 +1453,14 @@
 
             <div class="modal-body">
                 <div class="form-section">
-                    <h3 class="form-section-title" data-i18n="admin.ratings.csvFormat">CSV Format</h3>
-                    <p style="color: #64748b; font-size: 0.875rem; margin-bottom: 1rem;" data-i18n="admin.ratings.csvFormatHint">
-                        CSV should have columns: student_name (or first_name, last_name), rating, date (optional)
+                    <h3 class="form-section-title" data-i18n="admin.ratings.fileFormat">Supported Formats</h3>
+                    <p style="color: #64748b; font-size: 0.875rem; margin-bottom: 1rem;" data-i18n="admin.ratings.fileFormatHint">
+                        Excel (.xlsx, .xls) or CSV with columns: Name (LastName FirstName), Rating
                     </p>
                     <div style="background: #f8fafc; border-radius: 0.5rem; padding: 1rem; font-family: monospace; font-size: 0.8rem; color: #475569; margin-bottom: 1rem;">
-                        student_name,rating,date<br>
-                        John Smith,850,2024-01-15<br>
-                        Maria Garcia,1200,2024-01-15
+                        <strong>Excel:</strong> Column A = Name, Column B = Rating<br>
+                        <strong>CSV:</strong> student_name,rating<br>
+                        Example: Ivanov Ivan,1250
                     </div>
                 </div>
 
@@ -1470,10 +1470,10 @@
                         <div class="photo-upload-actions" style="width: 100%;">
                             <label for="csvFileInput" class="btn-upload" style="width: 100%; justify-content: center;">
                                 <i data-lucide="upload" style="width: 18px; height: 18px;"></i>
-                                <span data-i18n="admin.ratings.chooseFile">Choose CSV File</span>
+                                <span data-i18n="admin.ratings.chooseFile">Choose Excel/CSV File</span>
                             </label>
-                            <input type="file" id="csvFileInput" accept=".csv" style="display: none;" onchange="previewCSVFile(event)">
-                            <p class="upload-hint" id="csvFileName" style="text-align: center;">No file selected</p>
+                            <input type="file" id="csvFileInput" accept=".xlsx,.xls,.csv" style="display: none;" onchange="previewRatingFile(event)">
+                            <p class="upload-hint" id="csvFileName" style="text-align: center;" data-i18n="admin.ratings.noFileSelected">No file selected</p>
                         </div>
                     </div>
                 </div>
@@ -1505,12 +1505,65 @@
                 </div>
             </div>
 
+            <!-- Import Progress Indicator -->
+            <div id="importProgressContainer" style="display: none; padding: 1rem 1.5rem; border-top: 1px solid var(--border-color);">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem;">
+                    <span id="importProgressText" style="font-size: 0.875rem; color: var(--text-secondary);">Importing ratings...</span>
+                    <span id="importProgressPercent" style="font-size: 0.875rem; font-weight: 600; color: var(--primary-color);">0%</span>
+                </div>
+                <div style="width: 100%; height: 8px; background: var(--bg-secondary); border-radius: 4px; overflow: hidden;">
+                    <div id="importProgressBar" style="width: 0%; height: 100%; background: linear-gradient(90deg, #10b981, #059669); border-radius: 4px; transition: width 0.3s ease;"></div>
+                </div>
+                <div style="display: flex; justify-content: space-between; margin-top: 0.5rem; font-size: 0.75rem; color: var(--text-secondary);">
+                    <span id="importProgressCount">0 / 0</span>
+                    <span id="importProgressStatus">Processing...</span>
+                </div>
+            </div>
+
             <div class="modal-footer">
                 <button type="button" class="btn-secondary" onclick="closeCSVImportModal()" data-i18n="admin.modals.add.cancel">Cancel</button>
                 <button type="button" class="btn-primary" id="importCSVBtn" onclick="importCSVRatings()" disabled>
                     <i data-lucide="upload" style="width: 18px; height: 18px;"></i>
                     <span data-i18n="admin.ratings.import">Import</span>
                 </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Unmatched Students Modal -->
+    <div id="unmatchedStudentsModal" class="modal">
+        <div class="modal-overlay" onclick="closeUnmatchedModal()"></div>
+        <div class="modal-content" style="max-width: 600px;">
+            <div class="modal-header">
+                <h2 class="modal-title" data-i18n="admin.ratings.unmatchedStudents">Unmatched Students</h2>
+                <button class="modal-close" onclick="closeUnmatchedModal()">
+                    <i data-lucide="x" style="width: 24px; height: 24px;"></i>
+                </button>
+            </div>
+
+            <div class="modal-body">
+                <div style="background: #fef3c7; border: 1px solid #f59e0b; border-radius: 0.5rem; padding: 1rem; margin-bottom: 1rem;">
+                    <p style="color: #92400e; font-size: 0.875rem; margin: 0;" data-i18n="admin.ratings.unmatchedHint">
+                        The following students from the rating list were not found in the database and were skipped:
+                    </p>
+                </div>
+                <div id="unmatchedStudentsList" style="max-height: 400px; overflow-y: auto;">
+                    <!-- Unmatched students will be listed here -->
+                </div>
+                <div style="margin-top: 1rem; padding-top: 1rem; border-top: 1px solid #e2e8f0;">
+                    <p style="font-size: 0.875rem; color: #64748b;">
+                        <span data-i18n="admin.ratings.totalUnmatched">Total unmatched:</span>
+                        <strong id="unmatchedCount">0</strong>
+                    </p>
+                </div>
+            </div>
+
+            <div class="modal-footer">
+                <button type="button" class="btn-secondary" onclick="copyUnmatchedList()">
+                    <i data-lucide="copy" style="width: 18px; height: 18px;"></i>
+                    <span data-i18n="admin.ratings.copyList">Copy List</span>
+                </button>
+                <button type="button" class="btn-primary" onclick="closeUnmatchedModal()" data-i18n="common.close">Close</button>
             </div>
         </div>
     </div>

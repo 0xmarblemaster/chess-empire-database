@@ -102,31 +102,31 @@ const LEAGUES = {
     }
 };
 
-// Get league from rating
+// Get league from rating - thresholds: 1200+ A+, 900+ A, 500+ B, 0+ C
 function getLeagueFromRating(rating) {
-    if (rating >= 1500) return LEAGUES['League A+'];
-    if (rating >= 1200) return LEAGUES['League A'];
-    if (rating >= 900) return LEAGUES['League B'];
-    if (rating >= 400) return LEAGUES['League C'];
+    if (rating >= 1200) return LEAGUES['League A+'];
+    if (rating >= 900) return LEAGUES['League A'];
+    if (rating >= 500) return LEAGUES['League B'];
+    if (rating >= 0) return LEAGUES['League C'];
     return LEAGUES['Beginner'];
 }
 
 // Get league name from rating
 function getLeagueName(rating) {
-    if (rating >= 1500) return 'League A+';
-    if (rating >= 1200) return 'League A';
-    if (rating >= 900) return 'League B';
-    if (rating >= 400) return 'League C';
+    if (rating >= 1200) return 'League A+';
+    if (rating >= 900) return 'League A';
+    if (rating >= 500) return 'League B';
+    if (rating >= 0) return 'League C';
     return 'Beginner';
 }
 
 // Get points needed for next league
 function getPointsToNextLeague(rating) {
-    if (rating >= 1500) return { next: null, needed: 0 };
-    if (rating >= 1200) return { next: 'League A+', needed: 1500 - rating };
-    if (rating >= 900) return { next: 'League A', needed: 1200 - rating };
-    if (rating >= 400) return { next: 'League B', needed: 900 - rating };
-    return { next: 'League C', needed: 400 - rating };
+    if (rating >= 1200) return { next: null, needed: 0 };
+    if (rating >= 900) return { next: 'League A+', needed: 1200 - rating };
+    if (rating >= 500) return { next: 'League A', needed: 900 - rating };
+    if (rating >= 0) return { next: 'League B', needed: 500 - rating };
+    return { next: 'League C', needed: 0 };
 }
 
 // ============================================
