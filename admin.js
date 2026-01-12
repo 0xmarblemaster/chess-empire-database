@@ -3165,6 +3165,244 @@ async function previewCSVFile(event) {
     return previewRatingFile(event);
 }
 
+// Process rating file (extracted for reuse by file upload and Google Sheets loader)
+async function processRatingFile(file, fileName = null) {
+    const displayName = fileName || file.name;
+    document.getElementById('csvFileName').textContent = displayName;
+
+    try {
+        const fileExt = displayName.split('.').pop().toLowerCase();
+        let rows = [];
+
+        if (fileExt === 'xlsx' || fileExt === 'xls') {
+            // Parse Excel file using SheetJS
+            const data = await file.arrayBuffer();
+            const workbook = XLSX.read(data, { type: 'array' });
+            const sheetName = workbook.SheetNames[0];
+            const worksheet = workbook.Sheets[sheetName];
+            const jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1 });
+
+            // Excel format: Column A = Name, Column B = Rating
+            // Skip header row (row 0)
+            for (let i = 1; i < jsonData.length; i++) {
+                const row = jsonData[i];
+                if (row && row[0]) {
+                    rows.push({
+                        name: String(row[0] || '').trim(),
+                        rating: parseInt(row[1]) || 0,
+                        rowNum: i + 1
+                    });
+                }
+            }
+        } else {
+            // Parse CSV file
+            const text = await file.text();
+            const lines = text.split('\n').filter(line => line.trim());
+
+            if (lines.length < 2) {
+                showToast(t('admin.ratings.csvEmpty'), 'error');
+                return false;
+            }
+
+            // Parse header
+            const headers = lines[0].split(',').map(h => h.trim().toLowerCase());
+            const nameIndex = headers.findIndex(h => h === 'student_name' || h === 'name');
+            const firstNameIndex = headers.findIndex(h => h === 'first_name' || h === 'firstname');
+            const lastNameIndex = headers.findIndex(h => h === 'last_name' || h === 'lastname');
+            const ratingIndex = headers.findIndex(h => h === 'rating');
+
+            if (ratingIndex === -1) {
+                showToast(t('admin.ratings.csvMissingRating'), 'error');
+                return false;
+            }
+
+            if (nameIndex === -1 && (firstNameIndex === -1 || lastNameIndex === -1)) {
+                showToast(t('admin.ratings.csvMissingName'), 'error');
+                return false;
+            }
+
+            for (let i = 1; i < lines.length; i++) {
+                const values = lines[i].split(',').map(v => v.trim());
+                let studentName;
+                if (nameIndex !== -1) {
+                    studentName = values[nameIndex];
+                } else {
+                    studentName = `${values[firstNameIndex]} ${values[lastNameIndex]}`;
+                }
+                rows.push({
+                    name: studentName,
+                    rating: parseInt(values[ratingIndex]) || 0,
+                    rowNum: i + 1
+                });
+            }
+        }
+
+        if (rows.length === 0) {
+            showToast(t('admin.ratings.csvEmpty'), 'error');
+            return false;
+        }
+
+        // Process rows with fuzzy matching
+        csvParsedData = [];
+        unmatchedStudentsData = [];
+        let validCount = 0;
+        let warningCount = 0;
+        let errorCount = 0;
+
+        const previewRows = [];
+        const today = new Date().toISOString().split('T')[0];
+
+        for (const row of rows) {
+            if (!row.name) continue;
+
+            // Use fuzzy matching to find student
+            const matchResult = fuzzyMatchStudent(row.name, window.students);
+
+            let statusText = '';
+            let statusColor = '#10b981';
+            let statusIcon = '✓';
+
+            if (!matchResult.matched) {
+                statusText = t('admin.ratings.unmatched');
+                statusColor = '#ef4444';
+                statusIcon = '✗';
+                errorCount++;
+                unmatchedStudentsData.push({
+                    rowNum: row.rowNum,
+                    name: row.name,
+                    rating: row.rating
+                });
+            } else if (isNaN(row.rating) || row.rating < 0 || row.rating > 3000) {
+                statusText = t('admin.ratings.invalidRating');
+                statusColor = '#f59e0b';
+                statusIcon = '⚠';
+                warningCount++;
+            } else {
+                statusText = t('admin.ratings.matched');
+                if (matchResult.confidence < 100) {
+                    statusText += ` (${matchResult.confidence}%)`;
+                    statusColor = '#22c55e';
+                }
+                validCount++;
+                csvParsedData.push({
+                    studentId: matchResult.student.id,
+                    studentName: row.name,
+                    matchedName: `${matchResult.student.firstName} ${matchResult.student.lastName}`,
+                    rating: row.rating,
+                    date: today
+                });
+            }
+
+            previewRows.push(`
+                <tr>
+                    <td style="padding: 0.5rem; border-bottom: 1px solid #f1f5f9;">${row.name}</td>
+                    <td style="padding: 0.5rem; border-bottom: 1px solid #f1f5f9;">${row.rating || '-'}</td>
+                    <td style="padding: 0.5rem; border-bottom: 1px solid #f1f5f9;">${today}</td>
+                    <td style="padding: 0.5rem; border-bottom: 1px solid #f1f5f9; color: ${statusColor};">
+                        <span style="font-weight: 600;">${statusIcon}</span> ${statusText}
+                    </td>
+                </tr>
+            `);
+        }
+
+        // Update preview
+        document.getElementById('csvPreviewBody').innerHTML = previewRows.join('');
+        document.getElementById('csvValidCount').textContent = validCount;
+        document.getElementById('csvWarningCount').textContent = warningCount;
+        document.getElementById('csvErrorCount').textContent = errorCount;
+        document.getElementById('csvPreviewSection').style.display = 'block';
+
+        // Enable import button if we have valid data
+        document.getElementById('importCSVBtn').disabled = validCount === 0;
+
+        return true;
+
+    } catch (error) {
+        console.error('Error parsing file:', error);
+        showToast(t('admin.ratings.csvParseError'), 'error');
+        return false;
+    }
+}
+
+// Parse Google Sheets URL and extract spreadsheet ID and gid
+function parseGoogleSheetsUrl(url) {
+    // Match patterns like:
+    // https://docs.google.com/spreadsheets/d/SPREADSHEET_ID/edit?gid=SHEET_GID#gid=SHEET_GID
+    // https://docs.google.com/spreadsheets/d/SPREADSHEET_ID/edit#gid=SHEET_GID
+    const spreadsheetMatch = url.match(/\/spreadsheets\/d\/([a-zA-Z0-9-_]+)/);
+    const gidMatch = url.match(/gid=(\d+)/);
+
+    if (!spreadsheetMatch) {
+        return null;
+    }
+
+    return {
+        spreadsheetId: spreadsheetMatch[1],
+        gid: gidMatch ? gidMatch[1] : '0' // Default to first sheet
+    };
+}
+
+// Load Google Sheet and process it
+async function loadGoogleSheet() {
+    const urlInput = document.getElementById('googleSheetUrl');
+    const url = urlInput.value.trim();
+
+    if (!url) {
+        showToast(t('admin.ratings.enterUrl') || 'Please enter a Google Sheets URL', 'error');
+        return;
+    }
+
+    const parsed = parseGoogleSheetsUrl(url);
+    if (!parsed) {
+        showToast(t('admin.ratings.invalidUrl') || 'Invalid Google Sheets URL', 'error');
+        return;
+    }
+
+    // Construct export URL
+    const exportUrl = `https://docs.google.com/spreadsheets/d/${parsed.spreadsheetId}/export?format=xlsx&gid=${parsed.gid}`;
+
+    // Show loading state on button
+    const loadBtn = document.getElementById('loadGoogleSheetBtn');
+    const originalContent = loadBtn.innerHTML;
+    loadBtn.disabled = true;
+    loadBtn.innerHTML = '<i data-lucide="loader" class="spin" style="width: 18px; height: 18px;"></i>';
+    if (typeof lucide !== 'undefined') lucide.createIcons();
+
+    try {
+        // Show loading toast
+        showToast(t('admin.ratings.loading') || 'Loading spreadsheet...', 'info');
+
+        // Fetch the XLSX file
+        const response = await fetch(exportUrl);
+        if (!response.ok) {
+            throw new Error(t('admin.ratings.fetchFailed') || 'Failed to fetch spreadsheet. Make sure it is publicly accessible.');
+        }
+
+        const blob = await response.blob();
+
+        // Create a File object from the blob
+        const file = new File([blob], 'google-sheet.xlsx', {
+            type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+        });
+
+        // Use the reusable processing function
+        const success = await processRatingFile(file, 'Google Sheet');
+
+        if (success) {
+            showToast(t('admin.ratings.loadSuccess') || 'Spreadsheet loaded successfully', 'success');
+        }
+
+    } catch (error) {
+        console.error('Error loading Google Sheet:', error);
+        showToast(error.message || t('admin.ratings.loadFailed') || 'Failed to load spreadsheet', 'error');
+    } finally {
+        // Restore button state
+        loadBtn.disabled = false;
+        loadBtn.innerHTML = originalContent;
+        if (typeof lucide !== 'undefined') lucide.createIcons();
+    }
+}
+
 // Import CSV/Excel ratings
 async function importCSVRatings() {
     console.log('=== IMPORT RATINGS START ===');

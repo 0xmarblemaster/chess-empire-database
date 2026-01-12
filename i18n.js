@@ -525,6 +525,15 @@ const translations = {
         "admin.ratings.importingRatings": "Importing ratings...",
         "admin.ratings.importComplete": "Import complete!",
         "admin.ratings.importFailed": "Import failed!",
+        "admin.ratings.googleSheetUrl": "Google Sheets URL",
+        "admin.ratings.googleSheetHint": "Sheet must be publicly accessible (shared with \"Anyone with the link\")",
+        "admin.ratings.load": "Load",
+        "admin.ratings.enterUrl": "Please enter a Google Sheets URL",
+        "admin.ratings.invalidUrl": "Invalid Google Sheets URL",
+        "admin.ratings.loading": "Loading spreadsheet...",
+        "admin.ratings.loadSuccess": "Spreadsheet loaded successfully",
+        "admin.ratings.loadFailed": "Failed to load spreadsheet",
+        "admin.ratings.fetchFailed": "Failed to fetch spreadsheet. Make sure it is publicly accessible.",
 
         // Admin Attendance
         "admin.attendance.title": "Attendance Tracking",
@@ -1120,6 +1129,15 @@ const translations = {
         "admin.ratings.importingRatings": "Рейтингтер импортталуда...",
         "admin.ratings.importComplete": "Импорт аяқталды!",
         "admin.ratings.importFailed": "Импорт сәтсіз!",
+        "admin.ratings.googleSheetUrl": "Google Sheets URL",
+        "admin.ratings.googleSheetHint": "Парақ жалпыға қолжетімді болуы керек (\"Сілтемесі бар кез келген адам\" арқылы ортақ пайдалану)",
+        "admin.ratings.load": "Жүктеу",
+        "admin.ratings.enterUrl": "Google Sheets URL мекенжайын енгізіңіз",
+        "admin.ratings.invalidUrl": "Google Sheets URL мекенжайы жарамсыз",
+        "admin.ratings.loading": "Электрондық кесте жүктелуде...",
+        "admin.ratings.loadSuccess": "Электрондық кесте сәтті жүктелді",
+        "admin.ratings.loadFailed": "Электрондық кестені жүктеу сәтсіз аяқталды",
+        "admin.ratings.fetchFailed": "Электрондық кестені алу сәтсіз. Оның жалпыға қолжетімді екеніне көз жеткізіңіз.",
 
         // Admin Attendance
         "admin.attendance.title": "Қатысуды бақылау",
@@ -1759,6 +1777,15 @@ const translations = {
         "admin.ratings.importingRatings": "Импорт рейтингов...",
         "admin.ratings.importComplete": "Импорт завершён!",
         "admin.ratings.importFailed": "Импорт не удался!",
+        "admin.ratings.googleSheetUrl": "URL Google Таблицы",
+        "admin.ratings.googleSheetHint": "Таблица должна быть общедоступной (поделена через \"Все, у кого есть ссылка\")",
+        "admin.ratings.load": "Загрузить",
+        "admin.ratings.enterUrl": "Введите URL Google Таблицы",
+        "admin.ratings.invalidUrl": "Неверный URL Google Таблицы",
+        "admin.ratings.loading": "Загрузка таблицы...",
+        "admin.ratings.loadSuccess": "Таблица успешно загружена",
+        "admin.ratings.loadFailed": "Не удалось загрузить таблицу",
+        "admin.ratings.fetchFailed": "Не удалось получить таблицу. Убедитесь, что она общедоступна.",
 
         // Admin Attendance
         "admin.attendance.title": "Учёт посещаемости",

@@ -1478,6 +1478,22 @@
                     </div>
                 </div>
 
+                <!-- Google Sheets URL Section -->
+                <div class="form-section" style="margin-top: 0.5rem;">
+                    <p style="text-align: center; color: var(--text-secondary); font-size: 0.875rem; margin: 0.5rem 0;">— or —</p>
+                    <label class="form-label" data-i18n="admin.ratings.googleSheetUrl">Google Sheets URL</label>
+                    <div style="display: flex; gap: 0.5rem;">
+                        <input type="text" id="googleSheetUrl" class="form-input"
+                               placeholder="https://docs.google.com/spreadsheets/d/..."
+                               style="flex: 1;">
+                        <button type="button" class="btn-secondary" onclick="loadGoogleSheet()" id="loadGoogleSheetBtn">
+                            <i data-lucide="download" style="width: 18px; height: 18px;"></i>
+                            <span data-i18n="admin.ratings.load">Load</span>
+                        </button>
+                    </div>
+                    <p class="upload-hint" data-i18n="admin.ratings.googleSheetHint">Sheet must be publicly accessible (shared with "Anyone with the link")</p>
+                </div>
+
                 <!-- Preview Section -->
                 <div id="csvPreviewSection" style="display: none;">
                     <div class="form-section">
