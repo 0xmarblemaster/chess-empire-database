@@ -2750,7 +2750,9 @@ function renderRatingsTable(studentsWithRatings) {
         return;
     }
 
-    tbody.innerHTML = sorted.map(student => {
+    console.log('📋 About to set tbody.innerHTML with', sorted.length, 'rows');
+
+    const htmlContent = sorted.map(student => {
         const leagueInfo = getLeagueFromRating(student.currentRating);
         const branchName = i18n.translateBranchName(student.branch || '');
 
@@ -2798,6 +2800,9 @@ function renderRatingsTable(studentsWithRatings) {
             </tr>
         `;
     }).join('');
+
+    tbody.innerHTML = htmlContent;
+    console.log('📋 tbody.innerHTML set, length:', htmlContent.length);
 
     lucide.createIcons();
 }
