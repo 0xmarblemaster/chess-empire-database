@@ -2597,11 +2597,21 @@ function showRatingsManagement() {
 // Load ratings data and populate table
 async function loadRatingsData() {
     try {
+        console.log('📊 loadRatingsData() starting...');
+        console.log('📊 window.students available:', !!window.students, 'count:', window.students?.length);
+
         // Get all current ratings in one efficient query
         let ratingsMap = new Map();
         if (window.supabaseData && typeof window.supabaseData.getAllCurrentRatings === 'function') {
             ratingsMap = await window.supabaseData.getAllCurrentRatings();
-            console.log('Loaded', ratingsMap.size, 'ratings from database');
+            console.log('📊 Loaded', ratingsMap.size, 'ratings from database');
+            // Log first few entries from the map
+            if (ratingsMap.size > 0) {
+                const firstEntries = Array.from(ratingsMap.entries()).slice(0, 3);
+                console.log('📊 First 3 rating map entries:', firstEntries.map(([k, v]) => ({ studentId: k, rating: v.rating })));
+            }
+        } else {
+            console.error('📊 supabaseData.getAllCurrentRatings not available!');
         }
 
         // Build students with ratings list
@@ -2612,6 +2622,11 @@ async function loadRatingsData() {
         let recentUpdates = 0;
         const oneWeekAgo = new Date();
         oneWeekAgo.setDate(oneWeekAgo.getDate() - 7);
+
+        // Log first few student IDs for comparison
+        if (window.students?.length > 0) {
+            console.log('📊 First 3 student IDs:', window.students.slice(0, 3).map(s => s.id));
+        }
 
         for (const student of window.students) {
             let currentRating = null;
@@ -2689,22 +2704,35 @@ function getLeagueFromRating(rating) {
 
 // Render ratings table
 function renderRatingsTable(studentsWithRatings) {
+    console.log('📋 renderRatingsTable() called');
     const tbody = document.getElementById('ratingsTableBody');
     if (!tbody) {
-        console.error('ratingsTableBody element not found!');
+        console.error('📋 ratingsTableBody element NOT FOUND!');
         return;
     }
+    console.log('📋 ratingsTableBody found:', tbody);
 
-    console.log('renderRatingsTable called with', studentsWithRatings.length, 'students');
+    console.log('📋 renderRatingsTable called with', studentsWithRatings.length, 'students');
+
+    // Count how many have ratings before filtering
+    const withRatingsCount = studentsWithRatings.filter(s => s.currentRating !== null && s.currentRating > 0).length;
+    console.log('📋 Students with currentRating > 0:', withRatingsCount);
 
     // Filter to only students with ratings, then sort by rating (highest first)
     const sorted = [...studentsWithRatings]
         .filter(s => s.currentRating !== null && s.currentRating > 0)
         .sort((a, b) => b.currentRating - a.currentRating);
 
-    console.log('After filtering:', sorted.length, 'students with ratings');
+    console.log('📋 After filtering and sorting:', sorted.length, 'students with ratings');
     if (sorted.length > 0) {
-        console.log('First 3 students:', sorted.slice(0, 3).map(s => ({ name: `${s.firstName} ${s.lastName}`, rating: s.currentRating })));
+        console.log('📋 First 3 students:', sorted.slice(0, 3).map(s => ({ name: `${s.firstName} ${s.lastName}`, rating: s.currentRating })));
+    } else {
+        // Debug: log some students to see why they don't have ratings
+        console.log('📋 Sample of students passed in:', studentsWithRatings.slice(0, 5).map(s => ({
+            id: s.id,
+            name: `${s.firstName} ${s.lastName}`,
+            currentRating: s.currentRating
+        })));
     }
 
     // Show empty state if no students have ratings
