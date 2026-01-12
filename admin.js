@@ -2691,15 +2691,25 @@ function renderRatingsTable(studentsWithRatings) {
     const tbody = document.getElementById('ratingsTableBody');
     if (!tbody) return;
 
-    // Sort by rating (highest first), then by name
-    const sorted = [...studentsWithRatings].sort((a, b) => {
-        if (b.currentRating === null && a.currentRating === null) {
-            return `${a.firstName} ${a.lastName}`.localeCompare(`${b.firstName} ${b.lastName}`);
-        }
-        if (b.currentRating === null) return -1;
-        if (a.currentRating === null) return 1;
-        return b.currentRating - a.currentRating;
-    });
+    // Filter to only students with ratings, then sort by rating (highest first)
+    const sorted = [...studentsWithRatings]
+        .filter(s => s.currentRating !== null && s.currentRating > 0)
+        .sort((a, b) => b.currentRating - a.currentRating);
+
+    // Show empty state if no students have ratings
+    if (sorted.length === 0) {
+        tbody.innerHTML = `
+            <tr>
+                <td colspan="6" style="text-align: center; padding: 3rem 1rem; color: #64748b;">
+                    <i data-lucide="trophy" style="width: 48px; height: 48px; margin: 0 auto 1rem; display: block; opacity: 0.3;"></i>
+                    <p style="font-size: 1rem; margin-bottom: 0.5rem;">${t('admin.ratings.noRatingsYet') || 'No students with ratings yet'}</p>
+                    <p style="font-size: 0.875rem;">${t('admin.ratings.importHint') || 'Import ratings from Excel/CSV or add them manually above'}</p>
+                </td>
+            </tr>
+        `;
+        lucide.createIcons();
+        return;
+    }
 
     tbody.innerHTML = sorted.map(student => {
         const leagueInfo = getLeagueFromRating(student.currentRating);
