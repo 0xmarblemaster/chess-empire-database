@@ -15,11 +15,13 @@ const supabaseData = {
 
     // Get all students
     async getStudents() {
-        console.log('🔍 supabaseData.getStudents() - Fetching students from database...');
         const { data, error } = await window.supabaseClient
             .from('students')
             .select(`
-                *,
+                id, first_name, last_name, age, date_of_birth, gender,
+                photo_url, branch_id, coach_id, razryad, status,
+                current_level, current_lesson, total_lessons,
+                parent_name, parent_phone, parent_email,
                 branch:branches(id, name, location),
                 coach:coaches(id, first_name, last_name)
             `)
@@ -30,11 +32,8 @@ const supabaseData = {
             return [];
         }
 
-        console.log('✅ supabaseData.getStudents() - Received', data?.length || 0, 'students from database');
-        console.log('   First 3 students from DB:', data?.slice(0, 3).map(s => ({id: s.id, name: `${s.first_name} ${s.last_name}`})));
-
         // Transform to match data.js format
-        const transformedStudents = data.map(student => ({
+        return data.map(student => ({
             id: student.id,
             firstName: student.first_name,
             lastName: student.last_name,
@@ -55,9 +54,6 @@ const supabaseData = {
             parentPhone: student.parent_phone,
             parentEmail: student.parent_email
         }));
-
-        console.log('✅ supabaseData.getStudents() - Transformed', transformedStudents.length, 'students');
-        return transformedStudents;
     },
 
     // Get student by ID

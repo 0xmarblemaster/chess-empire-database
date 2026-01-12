@@ -1,5 +1,10 @@
 // Admin Dashboard JavaScript
 
+// Pagination state
+const STUDENTS_PER_PAGE = 50;
+let currentStudentPage = 1;
+let totalStudentPages = 1;
+
 // Calculate age from date of birth
 function calculateAge(dateOfBirth) {
     if (!dateOfBirth) return null;
@@ -138,31 +143,21 @@ function updateMenuVisibility() {
         managementSectionTitle.style.display = hasAnyManagementAccess ? 'block' : 'none';
     }
 
-    console.log('Menu visibility updated. Has management access:', hasAnyManagementAccess);
 }
 
 // Initialize dashboard
 document.addEventListener('DOMContentLoaded', async () => {
     document.title = t('admin.title');
 
-    // DEBUG: Check Supabase availability
-    console.log('🔧 Admin Dashboard Initialization');
-    console.log('  window.supabaseClient:', typeof window.supabaseClient);
-    console.log('  window.supabaseData:', typeof window.supabaseData);
-    console.log('  typeof initializeData:', typeof initializeData);
-    console.log('  window.initializeData:', typeof window.initializeData);
-
     // Wait for data to load from Supabase
     const initFn = (typeof window.initializeData === 'function') ? window.initializeData :
                    (typeof initializeData === 'function') ? initializeData : null;
 
     if (initFn) {
-        console.log('✅ Calling initializeData...');
         await initFn();
         // initializeData() already calls refreshAllUIComponents()
         // which populates dropdowns and loads students
     } else {
-        console.error('❌ initializeData not found, using fallback');
         // Fallback if initializeData doesn't exist
         loadStatistics();
         populateFilterDropdowns();
@@ -199,54 +194,16 @@ function loadStatistics() {
     const totalBranches = uniqueBranches.length;
     const activeStudents = students.filter(s => s.status === 'active').length;
 
-    // DEBUG: Comprehensive logging to trace the issue
-    console.log('📊 loadStatistics() - COMPREHENSIVE DEBUG');
-    console.log('  =====================================');
-    console.log('  students variable type:', typeof students);
-    console.log('  students.length:', students.length);
-    console.log('  Is students an array?:', Array.isArray(students));
-    console.log('  Total students (calculated):', totalStudents);
-    console.log('  Active students:', activeStudents);
-    console.log('  =====================================');
-    console.log('  coaches.length:', coaches.length);
-    console.log('  Total coaches (calculated):', totalCoaches);
-    console.log('  =====================================');
-    console.log('  branches.length:', branches.length);
-    console.log('  uniqueBranches.length:', uniqueBranches.length);
-    console.log('  Total branches (calculated):', totalBranches);
-    console.log('  Unique branch names:', uniqueBranches);
-    console.log('  =====================================');
-    console.log('  First 3 students:', students.slice(0, 3).map(s => ({id: s.id, name: `${s.firstName} ${s.lastName}`})));
-    console.log('  window.students === students?:', window.students === students);
-    console.log('  window.students?.length:', window.students?.length);
-
     // Update main stats
     const totalStudentsElement = document.getElementById('totalStudents');
     const totalCoachesElement = document.getElementById('totalCoaches');
     const totalBranchesElement = document.getElementById('totalBranches');
     const activeStudentsElement = document.getElementById('activeStudents');
 
-    console.log('  =====================================');
-    console.log('📝 DOM Elements Before Update:');
-    console.log('  totalStudentsElement exists?:', !!totalStudentsElement);
-    console.log('  totalStudentsElement.id:', totalStudentsElement?.id);
-    console.log('  totalStudentsElement.textContent (before):', totalStudentsElement?.textContent);
-    console.log('  totalCoachesElement.textContent (before):', totalCoachesElement?.textContent);
-    console.log('  totalBranchesElement.textContent (before):', totalBranchesElement?.textContent);
-    console.log('  activeStudentsElement.textContent (before):', activeStudentsElement?.textContent);
-
-    // Perform the updates
-    totalStudentsElement.textContent = totalStudents;
-    totalCoachesElement.textContent = totalCoaches;
-    totalBranchesElement.textContent = totalBranches;
-    activeStudentsElement.textContent = activeStudents;
-
-    console.log('  =====================================');
-    console.log('📝 DOM Elements After Update:');
-    console.log('  totalStudentsElement.textContent (after):', totalStudentsElement.textContent);
-    console.log('  Value set:', totalStudents, 'vs displayed:', totalStudentsElement.textContent);
-    console.log('  ARE THEY EQUAL?:', totalStudentsElement.textContent === String(totalStudents));
-    console.log('  =====================================');
+    if (totalStudentsElement) totalStudentsElement.textContent = totalStudents;
+    if (totalCoachesElement) totalCoachesElement.textContent = totalCoaches;
+    if (totalBranchesElement) totalBranchesElement.textContent = totalBranches;
+    if (activeStudentsElement) activeStudentsElement.textContent = activeStudents;
 
     // Update nav badge
     const studentCountBadge = document.getElementById('studentCount');
@@ -336,6 +293,14 @@ function loadStudents() {
     const tbody = document.getElementById('studentTableBody');
     const filteredStudents = getFilteredStudents();
 
+    // Calculate pagination
+    totalStudentPages = Math.ceil(filteredStudents.length / STUDENTS_PER_PAGE);
+    if (currentStudentPage > totalStudentPages) currentStudentPage = 1;
+
+    const startIndex = (currentStudentPage - 1) * STUDENTS_PER_PAGE;
+    const endIndex = startIndex + STUDENTS_PER_PAGE;
+    const paginatedStudents = filteredStudents.slice(startIndex, endIndex);
+
     if (filteredStudents.length === 0) {
         tbody.innerHTML = `
             <tr>
@@ -346,8 +311,9 @@ function loadStudents() {
                 </td>
             </tr>
         `;
+        renderPagination(0);
     } else {
-        tbody.innerHTML = filteredStudents.map(student => {
+        tbody.innerHTML = paginatedStudents.map(student => {
             // Create avatar HTML - use photo if available, otherwise initials
             const avatarHTML = student.photoUrl
                 ? `<div class="student-avatar" style="background: none; padding: 0; overflow: hidden;">
@@ -364,7 +330,7 @@ function loadStudents() {
                     </div>
                 </td>`;
         }).map((rowStart, index) => {
-            const student = filteredStudents[index];
+            const student = paginatedStudents[index];
             return rowStart + `
                 <td>${student.age}</td>
                 <td>
@@ -394,6 +360,9 @@ function loadStudents() {
                 </td>
             </tr>`;
         }).join('');
+
+        // Render pagination controls
+        renderPagination(filteredStudents.length);
     }
 
     // Update result count
@@ -404,7 +373,7 @@ function loadStudents() {
     if (window.innerWidth <= 768) {
         // Defer mobile cards rendering to next animation frame for better performance
         requestAnimationFrame(() => {
-            renderMobileStudentCards(filteredStudents);
+            renderMobileStudentCards(paginatedStudents);
             // Initialize icons once after all rendering is complete
             lucide.createIcons();
         });
@@ -412,6 +381,66 @@ function loadStudents() {
         // On desktop, just initialize icons for the table
         lucide.createIcons();
     }
+}
+
+// Render pagination controls
+function renderPagination(totalCount) {
+    let paginationContainer = document.getElementById('paginationContainer');
+
+    // Create pagination container if it doesn't exist
+    if (!paginationContainer) {
+        const tableWrapper = document.querySelector('.students-table-wrapper') || document.querySelector('.table-wrapper');
+        if (tableWrapper) {
+            paginationContainer = document.createElement('div');
+            paginationContainer.id = 'paginationContainer';
+            paginationContainer.style.cssText = 'display: flex; justify-content: center; align-items: center; gap: 1rem; padding: 1rem; border-top: 1px solid #e5e7eb;';
+            tableWrapper.appendChild(paginationContainer);
+        }
+    }
+
+    if (!paginationContainer) return;
+
+    // Hide pagination if only one page
+    if (totalStudentPages <= 1) {
+        paginationContainer.style.display = 'none';
+        return;
+    }
+
+    paginationContainer.style.display = 'flex';
+
+    const startIndex = (currentStudentPage - 1) * STUDENTS_PER_PAGE + 1;
+    const endIndex = Math.min(currentStudentPage * STUDENTS_PER_PAGE, totalCount);
+
+    paginationContainer.innerHTML = `
+        <button class="btn-secondary" onclick="goToStudentPage(${currentStudentPage - 1})" ${currentStudentPage === 1 ? 'disabled' : ''} style="padding: 0.5rem 1rem; ${currentStudentPage === 1 ? 'opacity: 0.5; cursor: not-allowed;' : ''}">
+            <i data-lucide="chevron-left" style="width: 16px; height: 16px;"></i>
+        </button>
+        <span style="color: #64748b; font-size: 0.875rem;">
+            ${startIndex}-${endIndex} of ${totalCount}
+        </span>
+        <button class="btn-secondary" onclick="goToStudentPage(${currentStudentPage + 1})" ${currentStudentPage === totalStudentPages ? 'disabled' : ''} style="padding: 0.5rem 1rem; ${currentStudentPage === totalStudentPages ? 'opacity: 0.5; cursor: not-allowed;' : ''}">
+            <i data-lucide="chevron-right" style="width: 16px; height: 16px;"></i>
+        </button>
+    `;
+
+    lucide.createIcons();
+}
+
+// Navigate to specific student page
+function goToStudentPage(page) {
+    if (page < 1 || page > totalStudentPages) return;
+    currentStudentPage = page;
+    loadStudents();
+    // Scroll to top of table
+    const tableWrapper = document.querySelector('.students-table-wrapper') || document.querySelector('.table-wrapper');
+    if (tableWrapper) {
+        tableWrapper.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+}
+
+// Reset pagination when filters change
+function resetPagination() {
+    currentStudentPage = 1;
 }
 
 // Render mobile student cards
@@ -2597,21 +2626,10 @@ function showRatingsManagement() {
 // Load ratings data and populate table
 async function loadRatingsData() {
     try {
-        console.log('📊 loadRatingsData() starting...');
-        console.log('📊 window.students available:', !!window.students, 'count:', window.students?.length);
-
         // Get all current ratings in one efficient query
         let ratingsMap = new Map();
         if (window.supabaseData && typeof window.supabaseData.getAllCurrentRatings === 'function') {
             ratingsMap = await window.supabaseData.getAllCurrentRatings();
-            console.log('📊 Loaded', ratingsMap.size, 'ratings from database');
-            // Log first few entries from the map
-            if (ratingsMap.size > 0) {
-                const firstEntries = Array.from(ratingsMap.entries()).slice(0, 3);
-                console.log('📊 First 3 rating map entries:', firstEntries.map(([k, v]) => ({ studentId: k, rating: v.rating })));
-            }
-        } else {
-            console.error('📊 supabaseData.getAllCurrentRatings not available!');
         }
 
         // Build students with ratings list
@@ -2622,11 +2640,6 @@ async function loadRatingsData() {
         let recentUpdates = 0;
         const oneWeekAgo = new Date();
         oneWeekAgo.setDate(oneWeekAgo.getDate() - 7);
-
-        // Log first few student IDs for comparison
-        if (window.students?.length > 0) {
-            console.log('📊 First 3 student IDs:', window.students.slice(0, 3).map(s => s.id));
-        }
 
         for (const student of window.students) {
             let currentRating = null;
@@ -2704,36 +2717,13 @@ function getLeagueFromRating(rating) {
 
 // Render ratings table
 function renderRatingsTable(studentsWithRatings) {
-    console.log('📋 renderRatingsTable() called');
     const tbody = document.getElementById('ratingsTableBody');
-    if (!tbody) {
-        console.error('📋 ratingsTableBody element NOT FOUND!');
-        return;
-    }
-    console.log('📋 ratingsTableBody found:', tbody);
-
-    console.log('📋 renderRatingsTable called with', studentsWithRatings.length, 'students');
-
-    // Count how many have ratings before filtering
-    const withRatingsCount = studentsWithRatings.filter(s => s.currentRating !== null && s.currentRating > 0).length;
-    console.log('📋 Students with currentRating > 0:', withRatingsCount);
+    if (!tbody) return;
 
     // Filter to only students with ratings, then sort by rating (highest first)
     const sorted = [...studentsWithRatings]
         .filter(s => s.currentRating !== null && s.currentRating > 0)
         .sort((a, b) => b.currentRating - a.currentRating);
-
-    console.log('📋 After filtering and sorting:', sorted.length, 'students with ratings');
-    if (sorted.length > 0) {
-        console.log('📋 First 3 students:', sorted.slice(0, 3).map(s => ({ name: `${s.firstName} ${s.lastName}`, rating: s.currentRating })));
-    } else {
-        // Debug: log some students to see why they don't have ratings
-        console.log('📋 Sample of students passed in:', studentsWithRatings.slice(0, 5).map(s => ({
-            id: s.id,
-            name: `${s.firstName} ${s.lastName}`,
-            currentRating: s.currentRating
-        })));
-    }
 
     // Show empty state if no students have ratings
     if (sorted.length === 0) {
@@ -2749,8 +2739,6 @@ function renderRatingsTable(studentsWithRatings) {
         lucide.createIcons();
         return;
     }
-
-    console.log('📋 About to set tbody.innerHTML with', sorted.length, 'rows');
 
     const htmlContent = sorted.map((student, index) => {
         const rank = index + 1;
@@ -2804,8 +2792,6 @@ function renderRatingsTable(studentsWithRatings) {
     }).join('');
 
     tbody.innerHTML = htmlContent;
-    console.log('📋 tbody.innerHTML set, length:', htmlContent.length);
-
     lucide.createIcons();
 }
 

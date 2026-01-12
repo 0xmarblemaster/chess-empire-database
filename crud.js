@@ -2,8 +2,6 @@
 // This module handles Create, Read, Update, Delete operations for students, coaches, and branches
 // IMPORTANT: Uses global variables from data.js (students, coaches, branches)
 
-console.log('✅ crud.js loaded and executing - initializeData will be defined');
-
 // Helper function to check if Supabase is available
 function isSupabaseAvailable() {
     return typeof window !== 'undefined' && window.supabaseClient && window.supabaseData;
@@ -11,23 +9,11 @@ function isSupabaseAvailable() {
 
 // Initialize data - load from Supabase or fallback to localStorage
 async function initializeData() {
-    // Check if Supabase is available at runtime (not at module load time)
-    console.log('🔧 Checking Supabase availability...');
-    console.log('  window.supabaseClient:', typeof window.supabaseClient);
-    console.log('  window.supabaseData:', typeof window.supabaseData);
-
     const useSupabase = isSupabaseAvailable();
 
-    console.log('  useSupabase:', useSupabase);
-
     if (useSupabase) {
-        console.log('📊 Initializing data from Supabase...');
         await loadDataFromSupabase();
     } else {
-        console.log('📊 Supabase not available, using localStorage fallback...');
-        console.log('  window:', typeof window);
-        console.log('  window.supabaseClient:', window.supabaseClient);
-        console.log('  window.supabaseData:', window.supabaseData);
         loadDataFromStorage();
     }
 }
@@ -57,13 +43,6 @@ async function loadDataFromSupabase() {
         window.students = students;
         window.coaches = coaches;
         window.branches = branches;
-
-        console.log('✅ Loaded from Supabase:', {
-            students: students.length,
-            coaches: coaches.length,
-            branches: branches.length
-        });
-        console.log('👥 Coaches loaded:', coaches.map(c => `${c.firstName} ${c.lastName}`).join(', '));
 
         // Trigger UI refresh after data is loaded
         refreshAllUIComponents();
@@ -172,8 +151,6 @@ function refreshAllUIComponents() {
                 loadBranches();
             }
         }
-
-        console.log('🔄 UI components refreshed with Supabase data');
     });
 }
 
