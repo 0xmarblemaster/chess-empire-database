@@ -2811,7 +2811,8 @@ function renderRatingsTable(studentsWithRatings) {
 function formatDate(dateStr) {
     if (!dateStr) return '-';
     const date = new Date(dateStr);
-    return date.toLocaleDateString(getCurrentLanguage() === 'ru' ? 'ru-RU' : 'en-US', {
+    const lang = (typeof i18n !== 'undefined' && i18n.getCurrentLanguage) ? i18n.getCurrentLanguage() : 'en';
+    return date.toLocaleDateString(lang === 'ru' ? 'ru-RU' : 'en-US', {
         year: 'numeric',
         month: 'short',
         day: 'numeric'
@@ -6686,10 +6687,11 @@ async function exportAttendanceExcel() {
         const ws = XLSX.utils.aoa_to_sheet(data);
 
         // Add to workbook with schedule name
+        const currentLang = (typeof i18n !== 'undefined' && i18n.getCurrentLanguage) ? i18n.getCurrentLanguage() : 'en';
         const scheduleNames = {
-            'mon_wed': getCurrentLanguage() === 'ru' ? 'Пн-Ср' : 'Mon-Wed',
-            'tue_thu': getCurrentLanguage() === 'ru' ? 'Вт-Чт' : 'Tue-Thu',
-            'sat_sun': getCurrentLanguage() === 'ru' ? 'Сб-Вс' : 'Sat-Sun'
+            'mon_wed': currentLang === 'ru' ? 'Пн-Ср' : 'Mon-Wed',
+            'tue_thu': currentLang === 'ru' ? 'Вт-Чт' : 'Tue-Thu',
+            'sat_sun': currentLang === 'ru' ? 'Сб-Вс' : 'Sat-Sun'
         };
         XLSX.utils.book_append_sheet(wb, ws, scheduleNames[attendanceCurrentSchedule]);
 
