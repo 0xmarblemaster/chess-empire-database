@@ -862,12 +862,19 @@ async function renderProfile() {
     const rankings = studentProfileData?.rankings || {};
     const avatarRingTier = getBestRankTier(rankings);
 
-    // Create avatar HTML with ranking-based tier ring
-    const avatarHTML = student.photoUrl
+    // Create avatar HTML with ranking-based tier ring and status indicator
+    const studentStatus = student.status || 'active';
+    const avatarContent = student.photoUrl
         ? `<div class="avatar avatar-ring--${avatarRingTier}" style="background: none; padding: 0; overflow: hidden;">
                <img src="${student.photoUrl}" alt="${student.firstName}" style="width: 100%; height: 100%; object-fit: cover; border-radius: 50%;">
            </div>`
         : `<div class="avatar avatar-ring--${avatarRingTier}">${initials}</div>`;
+
+    const avatarHTML = `
+        <div class="avatar-wrapper">
+            ${avatarContent}
+            <span class="avatar-status-indicator status-${studentStatus}"></span>
+        </div>`;
 
     // Check if user can edit and add edit button
     const hasEditPermission = canEditStudent();
@@ -919,10 +926,6 @@ async function renderProfile() {
             <div class="profile-info">
                 <h1 class="student-name">${student.firstName} ${student.lastName}</h1>
                 <div class="student-meta">
-                    <span class="student-status">
-                        <span class="status-dot"></span>
-                        ${statusLabel}
-                    </span>
                     <span class="student-details">${i18n.translateBranchName(student.branch)} • ${student.coach}</span>
                 </div>
                 <div class="badge-row">

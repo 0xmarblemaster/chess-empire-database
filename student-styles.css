@@ -2407,3 +2407,57 @@ body {
         letter-spacing: 0.05em;
     }
 }
+
+/* ============================================
+   AVATAR STATUS INDICATOR
+   ============================================ */
+
+.avatar-wrapper {
+    position: relative;
+    display: inline-block;
+    flex-shrink: 0;
+}
+
+.avatar-status-indicator {
+    position: absolute;
+    bottom: 8px;
+    right: 8px;
+    width: 20px;
+    height: 20px;
+    border-radius: 50%;
+    border: 3px solid white;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.15);
+}
+
+.avatar-status-indicator.status-active {
+    background-color: #10b981;
+}
+
+.avatar-status-indicator.status-frozen {
+    background-color: #3b82f6;
+}
+
+.avatar-status-indicator.status-left {
+    background-color: #ef4444;
+}
+
+/* Responsive adjustments for status indicator */
+@media (max-width: 768px) {
+    .avatar-status-indicator {
+        width: 16px;
+        height: 16px;
+        bottom: 6px;
+        right: 6px;
+        border-width: 2px;
+    }
+}
+
+@media (max-width: 480px) {
+    .avatar-status-indicator {
+        width: 14px;
+        height: 14px;
+        bottom: 4px;
+        right: 4px;
+        border-width: 2px;
+    }
+}
