@@ -3386,7 +3386,10 @@ async function loadGoogleSheet() {
         });
 
         // Use the reusable processing function
-        const success = await processRatingFile(file, 'Google Sheet');
+        // Pass null to use the file's actual name (google-sheet.xlsx) for extension detection
+        // The display name is set separately
+        document.getElementById('csvFileName').textContent = 'Google Sheet';
+        const success = await processRatingFile(file, null);
 
         if (success) {
             showToast(t('admin.ratings.loadSuccess') || 'Spreadsheet loaded successfully', 'success');
