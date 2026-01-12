@@ -90,25 +90,25 @@ function hideLoadingOverlay() {
 
 // Refresh all UI components after data loads
 function refreshAllUIComponents() {
-    // Load students list first (most important) - synchronous
+    // CRITICAL PATH: Load statistics first (shows data to user immediately)
+    if (typeof loadStatistics === 'function') {
+        loadStatistics();
+    }
+
+    // Load students table (main content)
     if (typeof loadStudents === 'function') {
         loadStudents();
     }
 
-    // Defer all other updates to a single animation frame (removed excessive nesting)
-    requestAnimationFrame(() => {
-        // Load statistics
-        if (typeof loadStatistics === 'function') {
-            loadStatistics();
-        }
-
-        // Refresh dashboard stats - use ID for reliability instead of icon selector
+    // DEFER non-critical UI updates to allow browser to paint first
+    setTimeout(() => {
+        // Update coaches count in nav
         const totalCoachesElement = document.getElementById('totalCoaches');
         if (totalCoachesElement) {
             totalCoachesElement.textContent = window.coaches.length;
         }
 
-        // Populate sidebar dropdowns with Supabase data
+        // Populate dropdowns (deferred - not visible on initial load)
         if (typeof populateCoachDropdown === 'function') {
             populateCoachDropdown();
         }
@@ -117,18 +117,15 @@ function refreshAllUIComponents() {
             populateBranchDropdown();
         }
 
-        // Update filter dropdowns
         if (typeof populateFilterDropdowns === 'function') {
             populateFilterDropdowns();
         }
 
-        // Only refresh section-specific views if they're visible
-        // Refresh coaches management if it's visible
+        // Section-specific views only if visible
         if (typeof loadCoaches === 'function') {
             const coachesSection = document.getElementById('coachesSection');
             if (coachesSection && coachesSection.classList.contains('active')) {
                 loadCoaches();
-                // Update stats
                 const totalCoachesManage = document.getElementById('totalCoachesManage');
                 if (totalCoachesManage) {
                     totalCoachesManage.textContent = window.coaches.length;
@@ -136,7 +133,6 @@ function refreshAllUIComponents() {
             }
         }
 
-        // Refresh coaches list view (Main menu) if it's visible
         if (typeof refreshCoachesListView === 'function') {
             const coachesListSection = document.getElementById('coachesListSection');
             if (coachesListSection && coachesListSection.classList.contains('active')) {
@@ -144,14 +140,18 @@ function refreshAllUIComponents() {
             }
         }
 
-        // Refresh branches management if it's visible
         if (typeof loadBranches === 'function') {
             const branchesSection = document.getElementById('branchesSection');
             if (branchesSection && branchesSection.classList.contains('active')) {
                 loadBranches();
             }
         }
-    });
+
+        // Single lucide icons initialization at the end
+        if (typeof lucide !== 'undefined') {
+            lucide.createIcons();
+        }
+    }, 0);
 }
 
 // Load data from localStorage (fallback)

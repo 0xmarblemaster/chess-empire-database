@@ -369,18 +369,12 @@ function loadStudents() {
     updateResultCount(filteredStudents.length);
 
     // Only render mobile cards on mobile/tablet devices (performance optimization)
-    // Check viewport width to avoid unnecessary rendering on desktop
     if (window.innerWidth <= 768) {
-        // Defer mobile cards rendering to next animation frame for better performance
         requestAnimationFrame(() => {
             renderMobileStudentCards(paginatedStudents);
-            // Initialize icons once after all rendering is complete
-            lucide.createIcons();
         });
-    } else {
-        // On desktop, just initialize icons for the table
-        lucide.createIcons();
     }
+    // Note: lucide.createIcons() is called once in refreshAllUIComponents() - don't duplicate
 }
 
 // Render pagination controls
@@ -422,8 +416,10 @@ function renderPagination(totalCount) {
             <i data-lucide="chevron-right" style="width: 16px; height: 16px;"></i>
         </button>
     `;
-
-    lucide.createIcons();
+    // Initialize icons only within the pagination container (much faster than full document)
+    if (typeof lucide !== 'undefined') {
+        lucide.createIcons({ nodes: [paginationContainer] });
+    }
 }
 
 // Navigate to specific student page
