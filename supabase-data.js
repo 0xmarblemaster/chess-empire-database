@@ -689,6 +689,42 @@ const supabaseData = {
         };
     },
 
+    // Get all current ratings (latest rating for each student) - much more efficient than individual queries
+    async getAllCurrentRatings() {
+        try {
+            // Get all ratings ordered by date descending
+            const { data, error } = await window.supabaseClient
+                .from('student_ratings')
+                .select('student_id, rating, rating_date')
+                .order('rating_date', { ascending: false });
+
+            if (error) {
+                console.error('Error fetching all ratings:', error);
+                return new Map();
+            }
+
+            // Build a map of student_id -> latest rating (first occurrence since sorted by date desc)
+            const ratingsMap = new Map();
+            for (const row of data) {
+                if (!ratingsMap.has(row.student_id)) {
+                    const { league, leagueTier } = this._calculateLeague(row.rating);
+                    ratingsMap.set(row.student_id, {
+                        studentId: row.student_id,
+                        rating: row.rating,
+                        ratingDate: row.rating_date,
+                        league: league,
+                        leagueTier: leagueTier
+                    });
+                }
+            }
+
+            return ratingsMap;
+        } catch (e) {
+            console.error('Error in getAllCurrentRatings:', e);
+            return new Map();
+        }
+    },
+
     // Bulk import ratings (from CSV)
     async bulkImportRatings(ratingsArray) {
         // ratingsArray: [{studentId, rating, ratingDate?, source?}]

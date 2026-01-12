@@ -2597,7 +2597,14 @@ function showRatingsManagement() {
 // Load ratings data and populate table
 async function loadRatingsData() {
     try {
-        // Get all students with their current ratings
+        // Get all current ratings in one efficient query
+        let ratingsMap = new Map();
+        if (window.supabaseData && typeof window.supabaseData.getAllCurrentRatings === 'function') {
+            ratingsMap = await window.supabaseData.getAllCurrentRatings();
+            console.log('Loaded', ratingsMap.size, 'ratings from database');
+        }
+
+        // Build students with ratings list
         const studentsWithRatings = [];
         let ratedCount = 0;
         let totalRating = 0;
@@ -2612,22 +2619,16 @@ async function loadRatingsData() {
             let leagueName = t('rankings.beginner');
             let leagueTier = 'none';
 
-            // Try to get rating from supabase if available
-            if (window.supabaseData && typeof window.supabaseData.getCurrentRating === 'function') {
-                try {
-                    const ratingData = await window.supabaseData.getCurrentRating(student.id);
-                    if (ratingData) {
-                        currentRating = ratingData.rating;
-                        lastUpdated = ratingData.rating_date;
+            // Look up rating from the pre-fetched map
+            const ratingData = ratingsMap.get(student.id);
+            if (ratingData && ratingData.rating > 0) {
+                currentRating = ratingData.rating;
+                lastUpdated = ratingData.ratingDate;
 
-                        // Get league info
-                        const leagueInfo = getLeagueFromRating(currentRating);
-                        leagueName = leagueInfo.name;
-                        leagueTier = leagueInfo.tier;
-                    }
-                } catch (e) {
-                    console.warn('Could not fetch rating for student:', student.id);
-                }
+                // Get league info
+                const leagueInfo = getLeagueFromRating(currentRating);
+                leagueName = leagueInfo.name;
+                leagueTier = leagueInfo.tier;
             }
 
             studentsWithRatings.push({
@@ -2638,12 +2639,12 @@ async function loadRatingsData() {
                 leagueTier
             });
 
-            if (currentRating !== null) {
+            if (currentRating !== null && currentRating > 0) {
                 ratedCount++;
                 totalRating += currentRating;
 
                 // Check if League A or A+
-                if (currentRating >= 1200) {
+                if (currentRating >= 900) {
                     leagueACount++;
                 }
 
