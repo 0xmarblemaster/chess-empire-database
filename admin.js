@@ -2739,7 +2739,7 @@ function renderRatingsTable(studentsWithRatings) {
     if (sorted.length === 0) {
         tbody.innerHTML = `
             <tr>
-                <td colspan="6" style="text-align: center; padding: 3rem 1rem; color: #64748b;">
+                <td colspan="7" style="text-align: center; padding: 3rem 1rem; color: #64748b;">
                     <i data-lucide="trophy" style="width: 48px; height: 48px; margin: 0 auto 1rem; display: block; opacity: 0.3;"></i>
                     <p style="font-size: 1rem; margin-bottom: 0.5rem;">${t('admin.ratings.noRatingsYet') || 'No students with ratings yet'}</p>
                     <p style="font-size: 0.875rem;">${t('admin.ratings.importHint') || 'Import ratings from Excel/CSV or add them manually above'}</p>
@@ -2752,12 +2752,14 @@ function renderRatingsTable(studentsWithRatings) {
 
     console.log('📋 About to set tbody.innerHTML with', sorted.length, 'rows');
 
-    const htmlContent = sorted.map(student => {
+    const htmlContent = sorted.map((student, index) => {
+        const rank = index + 1;
         const leagueInfo = getLeagueFromRating(student.currentRating);
         const branchName = i18n.translateBranchName(student.branch || '');
 
         return `
             <tr>
+                <td style="font-weight: 600; color: #64748b; text-align: center;">${rank}</td>
                 <td>
                     <div style="display: flex; align-items: center; gap: 0.75rem;">
                         <div class="student-avatar" style="width: 36px; height: 36px; border-radius: 50%; background: #f1f5f9; display: flex; align-items: center; justify-content: center; overflow: hidden;">
