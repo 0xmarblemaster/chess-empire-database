@@ -374,7 +374,11 @@ function loadStudents() {
             renderMobileStudentCards(paginatedStudents);
         });
     }
-    // Note: lucide.createIcons() is called once in refreshAllUIComponents() - don't duplicate
+
+    // Initialize icons within the table body only (required after search/filter re-renders)
+    if (typeof lucide !== 'undefined' && tbody) {
+        lucide.createIcons({ nodes: [tbody] });
+    }
 }
 
 // Render pagination controls
