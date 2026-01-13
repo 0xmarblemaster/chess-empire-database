@@ -2017,10 +2017,17 @@ async function loadEditStudentProgressData(studentId) {
             }
         }
 
+        // Fetch current chess rating
+        let currentRating = { rating: 0 };
+        if (window.supabaseData && typeof window.supabaseData.getCurrentRating === 'function') {
+            currentRating = await window.supabaseData.getCurrentRating(studentId);
+        }
+
         // Cache the data for saving later
         window.editStudentProgressData = {
             botProgress: botProgress,
-            survival: { best: survivalBest }
+            survival: { best: survivalBest },
+            rating: currentRating
         };
 
         // Populate the bot grid
@@ -2030,6 +2037,13 @@ async function loadEditStudentProgressData(studentId) {
         const scoreInput = document.getElementById('editPuzzleRushScore');
         if (scoreInput) {
             scoreInput.value = survivalBest?.score || '';
+        }
+
+        // Set chess rating
+        const ratingInput = document.getElementById('editChessRating');
+        if (ratingInput) {
+            ratingInput.value = currentRating.rating || '';
+            ratingInput.dataset.originalRating = currentRating.rating || 0;
         }
     } catch (error) {
         console.error('Error loading student progress data:', error);
@@ -2146,6 +2160,24 @@ async function savePuzzleRushFromModal(studentId) {
             await window.supabaseData.addSurvivalScore(studentId, newScore, 'puzzle_rush', 'Updated via admin edit form');
         } catch (error) {
             console.error('Error saving puzzle rush score:', error);
+        }
+    }
+}
+
+// Save chess rating from edit modal
+async function saveChessRatingFromModal(studentId) {
+    const ratingInput = document.getElementById('editChessRating');
+    if (!ratingInput || !window.supabaseData) return;
+
+    const newRating = parseInt(ratingInput.value) || 0;
+    const originalRating = parseInt(ratingInput.dataset.originalRating) || 0;
+
+    // Only save if rating changed and is valid
+    if (newRating > 0 && newRating !== originalRating) {
+        try {
+            await window.supabaseData.addStudentRating(studentId, newRating, 'manual');
+        } catch (error) {
+            console.error('Error saving chess rating:', error);
         }
     }
 }
@@ -2279,6 +2311,9 @@ async function submitEditStudent(event) {
 
             // Save puzzle rush score if changed
             await savePuzzleRushFromModal(studentId);
+
+            // Save chess rating if changed
+            await saveChessRatingFromModal(studentId);
 
             // Close modal
             closeEditStudentModal();

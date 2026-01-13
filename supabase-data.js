@@ -654,24 +654,27 @@ const supabaseData = {
         }
     },
 
-    // Add a new rating entry for a student
+    // Add or update a rating entry for a student (upsert - one rating per student per day)
     async addStudentRating(studentId, rating, source = 'manual', notes = '') {
         const today = new Date().toISOString().split('T')[0]; // YYYY-MM-DD format
 
         const { data, error } = await window.supabaseClient
             .from('student_ratings')
-            .insert([{
+            .upsert({
                 student_id: studentId,
                 rating: rating,
                 rating_date: today,
                 source: source,
                 notes: notes
-            }])
+            }, {
+                onConflict: 'student_id,rating_date',
+                ignoreDuplicates: false  // Update existing record if same student+date
+            })
             .select()
             .single();
 
         if (error) {
-            console.error('Error adding student rating:', error);
+            console.error('Error adding/updating student rating:', error);
             throw error;
         }
 
