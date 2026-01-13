@@ -1833,13 +1833,18 @@ async function submitAddStudent(event) {
         // First create the student to get their ID
         const result = await createStudent(studentData);
 
-        if (result.success && result.data) {
+        if (result.success && result.student) {
             // If a photo was selected, upload it now that we have the student ID
             if (window.addPhotoFile) {
                 try {
-                    const photoUrl = await window.supabaseData.uploadStudentPhoto(window.addPhotoFile, result.data.id);
-                    // Update student with photo URL
-                    await window.supabaseData.updateStudent(result.data.id, { ...studentData, photoUrl: photoUrl });
+                    const photoUrl = await window.supabaseData.uploadStudentPhoto(window.addPhotoFile, result.student.id);
+                    // Update student with photo URL in database
+                    await window.supabaseData.updateStudent(result.student.id, { ...studentData, photoUrl: photoUrl });
+                    // Also update local cache immediately
+                    const studentIndex = window.students.findIndex(s => String(s.id) === String(result.student.id));
+                    if (studentIndex !== -1) {
+                        window.students[studentIndex].photoUrl = photoUrl;
+                    }
                 } catch (photoError) {
                     console.error('⚠️ Photo upload failed, student created without photo:', photoError);
                     showToast(t('admin.form.photoUploadFailed'), 'warning');
