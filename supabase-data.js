@@ -1042,39 +1042,55 @@ const supabaseData = {
     // Get student's PUZZLE SCORE ranking within their branch
     // Returns rank position based on best puzzle/survival score
     async getStudentBranchPuzzleRank(studentId) {
-        const { data, error } = await window.supabaseClient
-            .rpc('get_student_branch_puzzle_rank', { p_student_id: studentId });
+        try {
+            const { data, error } = await window.supabaseClient
+                .rpc('get_student_branch_puzzle_rank', { p_student_id: studentId });
 
-        if (error) {
-            console.error('Error fetching branch puzzle rank:', error);
+            if (error) {
+                // Silently handle 406 (function not found) - not a critical error
+                if (error.code !== '42883' && error.message?.indexOf('406') === -1) {
+                    console.error('Error fetching branch puzzle rank:', error);
+                }
+                return { totalInBranch: 0, rankInBranch: 0, bestScore: 0 };
+            }
+
+            const result = data?.[0] || {};
+            return {
+                totalInBranch: result.total_in_branch || 0,
+                rankInBranch: result.rank_in_branch || 0,
+                bestScore: result.best_score || 0
+            };
+        } catch (err) {
+            // Silently fail - function may not exist yet
             return { totalInBranch: 0, rankInBranch: 0, bestScore: 0 };
         }
-
-        const result = data?.[0] || {};
-        return {
-            totalInBranch: result.total_in_branch || 0,
-            rankInBranch: result.rank_in_branch || 0,
-            bestScore: result.best_score || 0
-        };
     },
 
     // Get student's PUZZLE SCORE school-wide ranking
     // Returns rank position based on best puzzle/survival score
     async getStudentSchoolPuzzleRank(studentId) {
-        const { data, error } = await window.supabaseClient
-            .rpc('get_student_school_puzzle_rank', { p_student_id: studentId });
+        try {
+            const { data, error } = await window.supabaseClient
+                .rpc('get_student_school_puzzle_rank', { p_student_id: studentId });
 
-        if (error) {
-            console.error('Error fetching school puzzle rank:', error);
+            if (error) {
+                // Silently handle 406 (function not found) - not a critical error
+                if (error.code !== '42883' && error.message?.indexOf('406') === -1) {
+                    console.error('Error fetching school puzzle rank:', error);
+                }
+                return { totalInSchool: 0, rankInSchool: 0, bestScore: 0 };
+            }
+
+            const result = data?.[0] || {};
+            return {
+                totalInSchool: result.total_in_school || 0,
+                rankInSchool: result.rank_in_school || 0,
+                bestScore: result.best_score || 0
+            };
+        } catch (err) {
+            // Silently fail - function may not exist yet
             return { totalInSchool: 0, rankInSchool: 0, bestScore: 0 };
         }
-
-        const result = data?.[0] || {};
-        return {
-            totalInSchool: result.total_in_school || 0,
-            rankInSchool: result.rank_in_school || 0,
-            bestScore: result.best_score || 0
-        };
     },
 
     // Get both puzzle rankings at once (convenience method)
