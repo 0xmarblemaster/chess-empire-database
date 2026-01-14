@@ -122,7 +122,7 @@ function renderCoachProfile() {
     const avgLevel = coachStudents.length > 0
         ? (coachStudents.reduce((sum, s) => sum + (s.currentLevel || 1), 0) / coachStudents.length).toFixed(1)
         : '0';
-    const titledStudents = coachStudents.filter(s => s.razryad && s.razryad !== '').length;
+    const titledStudents = coachStudents.filter(s => s.razryad && s.razryad !== '' && s.razryad !== 'none' && s.razryad !== 'None').length;
 
     // Avatar content (clickable to open lightbox)
     const coachFullName = `${coach.firstName} ${coach.lastName}`;
