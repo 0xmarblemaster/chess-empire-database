@@ -4276,33 +4276,39 @@ async function loadAttendanceData() {
 // Load student schedule assignments (determine which schedule each student belongs to)
 async function loadStudentScheduleAssignments(branchId) {
     try {
-        // Query all attendance records for this branch to determine schedule assignments
-        const { data, error } = await window.supabaseClient
-            .from('attendance')
-            .select('student_id, schedule_type')
-            .eq('branch_id', branchId)
-            .eq('status', 'present');
+        // Query both attendance records AND time slot assignments to determine schedule assignments
+        // Time slot assignments are needed for students who have been added but not yet marked present
+        const [attendanceResult, timeSlotResult] = await Promise.allSettled([
+            window.supabaseClient
+                .from('attendance')
+                .select('student_id, schedule_type')
+                .eq('branch_id', branchId)
+                .eq('status', 'present'),
+            window.supabaseClient
+                .from('student_time_slot_assignments')
+                .select('student_id, schedule_type, time_slot_index')
+                .eq('branch_id', branchId)
+                .neq('time_slot_index', -1) // Exclude deleted assignments
+        ]);
 
-        if (error) {
-            console.error('Error loading schedule assignments:', error);
-            return;
+        // Build assignment map
+        attendanceStudentScheduleAssignments = {};
+        const studentScheduleCounts = {}; // Track how many attendance records per schedule per student
+
+        // Process attendance records
+        if (attendanceResult.status === 'fulfilled' && attendanceResult.value.data) {
+            attendanceResult.value.data.forEach(record => {
+                const studentId = record.student_id;
+                const scheduleType = record.schedule_type;
+
+                if (!studentScheduleCounts[studentId]) {
+                    studentScheduleCounts[studentId] = {};
+                }
+                studentScheduleCounts[studentId][scheduleType] = (studentScheduleCounts[studentId][scheduleType] || 0) + 1;
+            });
         }
 
-        // Build assignment map: first attendance record determines the schedule
-        attendanceStudentScheduleAssignments = {};
-        const studentScheduleCounts = {}; // Track how many records per schedule per student
-
-        data.forEach(record => {
-            const studentId = record.student_id;
-            const scheduleType = record.schedule_type;
-
-            if (!studentScheduleCounts[studentId]) {
-                studentScheduleCounts[studentId] = {};
-            }
-            studentScheduleCounts[studentId][scheduleType] = (studentScheduleCounts[studentId][scheduleType] || 0) + 1;
-        });
-
-        // Assign each student to their most used schedule (or first one if tied)
+        // Assign each student to their most used schedule based on attendance (or first one if tied)
         Object.entries(studentScheduleCounts).forEach(([studentId, schedules]) => {
             let maxCount = 0;
             let assignedSchedule = null;
@@ -4318,6 +4324,20 @@ async function loadStudentScheduleAssignments(branchId) {
                 attendanceStudentScheduleAssignments[studentId] = assignedSchedule;
             }
         });
+
+        // Also add students from time slot assignments who don't have attendance records yet
+        // This ensures newly-added students appear in the correct schedule
+        if (timeSlotResult.status === 'fulfilled' && timeSlotResult.value.data) {
+            timeSlotResult.value.data.forEach(assignment => {
+                const studentId = assignment.student_id;
+                const scheduleType = assignment.schedule_type;
+
+                // Only add if student doesn't already have an assignment from attendance records
+                if (!attendanceStudentScheduleAssignments[studentId]) {
+                    attendanceStudentScheduleAssignments[studentId] = scheduleType;
+                }
+            });
+        }
 
         console.log('Loaded schedule assignments for', Object.keys(attendanceStudentScheduleAssignments).length, 'students');
     } catch (error) {
