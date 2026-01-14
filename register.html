@@ -214,8 +214,9 @@
             align-items: center;
             gap: 0.5rem;
             color: #475569;
-            text-decoration: none;
             font-weight: 600;
+            font-size: 1rem;
+            cursor: pointer;
             transition: all 0.2s;
             z-index: 20;
         }
@@ -369,10 +370,10 @@
 </head>
 <body class="login-page">
     <div class="login-container">
-        <a href="index.html" class="back-button">
+        <button onclick="history.back()" class="back-button">
             <i data-lucide="arrow-left" style="width: 18px; height: 18px;"></i>
             <span data-i18n="register.backToHome">Back to Home</span>
-        </a>
+        </button>
 
         <div class="chess-pattern"></div>
 
