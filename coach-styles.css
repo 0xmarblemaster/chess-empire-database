@@ -223,6 +223,25 @@ body {
     transform: translateY(0);
 }
 
+/* Hide edit button text on mobile, show icon only */
+.edit-button .edit-text {
+    display: inline;
+}
+
+@media (max-width: 768px) {
+    .edit-button {
+        padding: 0.625rem;
+        border-radius: 50%;
+        width: 40px;
+        height: 40px;
+        justify-content: center;
+    }
+
+    .edit-button .edit-text {
+        display: none;
+    }
+}
+
 .coach-avatar {
     width: 100px;
     height: 100px;

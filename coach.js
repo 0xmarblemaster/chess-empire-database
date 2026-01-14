@@ -219,7 +219,7 @@ function renderCoachProfile() {
     const editButtonHTML = canEditCoach() ? `
         <button class="edit-button" onclick="openEditCoachModal()">
             <i data-lucide="edit" style="width: 16px; height: 16px;"></i>
-            <span>${t('coach.edit') || 'Edit'}</span>
+            <span class="edit-text">${t('coach.edit') || 'Edit'}</span>
         </button>
     ` : '';
 
