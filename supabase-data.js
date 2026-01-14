@@ -346,7 +346,77 @@ const supabaseData = {
             fullName: `${coach.first_name} ${coach.last_name}`,
             phone: coach.phone,
             email: coach.email,
+            photoUrl: coach.photo_url,
+            bio: coach.bio,
+            instagramUrl: coach.instagram_url,
+            whatsappUrl: coach.whatsapp_url,
             branch: coach.branch?.name || '',
+            branchName: coach.branch?.name || '',
+            branchId: coach.branch_id
+        }));
+    },
+
+    async getCoachById(coachId) {
+        const { data, error } = await window.supabaseClient
+            .from('coaches')
+            .select(`
+                *,
+                branch:branches(id, name)
+            `)
+            .eq('id', coachId)
+            .single();
+
+        if (error) {
+            console.error('Error fetching coach by ID:', error);
+            return null;
+        }
+
+        return {
+            id: data.id,
+            firstName: data.first_name,
+            lastName: data.last_name,
+            fullName: `${data.first_name} ${data.last_name}`,
+            phone: data.phone,
+            email: data.email,
+            photoUrl: data.photo_url,
+            bio: data.bio,
+            instagramUrl: data.instagram_url,
+            whatsappUrl: data.whatsapp_url,
+            branch: data.branch?.name || '',
+            branchName: data.branch?.name || '',
+            branchId: data.branch_id
+        };
+    },
+
+    async searchCoaches(searchTerm) {
+        const { data, error } = await window.supabaseClient
+            .from('coaches')
+            .select(`
+                *,
+                branch:branches(id, name)
+            `)
+            .or(`first_name.ilike.%${searchTerm}%,last_name.ilike.%${searchTerm}%`)
+            .order('last_name')
+            .limit(5);
+
+        if (error) {
+            console.error('Error searching coaches:', error);
+            return [];
+        }
+
+        return data.map(coach => ({
+            id: coach.id,
+            firstName: coach.first_name,
+            lastName: coach.last_name,
+            fullName: `${coach.first_name} ${coach.last_name}`,
+            phone: coach.phone,
+            email: coach.email,
+            photoUrl: coach.photo_url,
+            bio: coach.bio,
+            instagramUrl: coach.instagram_url,
+            whatsappUrl: coach.whatsapp_url,
+            branch: coach.branch?.name || '',
+            branchName: coach.branch?.name || '',
             branchId: coach.branch_id
         }));
     },
@@ -359,6 +429,10 @@ const supabaseData = {
                 last_name: coachData.lastName,
                 phone: coachData.phone,
                 email: coachData.email,
+                photo_url: coachData.photoUrl || null,
+                bio: coachData.bio || null,
+                instagram_url: coachData.instagramUrl || null,
+                whatsapp_url: coachData.whatsappUrl || null,
                 branch_id: coachData.branchId
             }])
             .select(`
@@ -380,21 +454,33 @@ const supabaseData = {
             fullName: `${data.first_name} ${data.last_name}`,
             phone: data.phone,
             email: data.email,
+            photoUrl: data.photo_url,
+            bio: data.bio,
+            instagramUrl: data.instagram_url,
+            whatsappUrl: data.whatsapp_url,
             branch: data.branch?.name || '',
             branchId: data.branch_id
         };
     },
 
     async updateCoach(id, coachData) {
+        const updateData = {
+            first_name: coachData.firstName,
+            last_name: coachData.lastName,
+            phone: coachData.phone,
+            email: coachData.email,
+            branch_id: coachData.branchId
+        };
+
+        // Only include optional fields if they are provided
+        if (coachData.photoUrl !== undefined) updateData.photo_url = coachData.photoUrl;
+        if (coachData.bio !== undefined) updateData.bio = coachData.bio;
+        if (coachData.instagramUrl !== undefined) updateData.instagram_url = coachData.instagramUrl;
+        if (coachData.whatsappUrl !== undefined) updateData.whatsapp_url = coachData.whatsappUrl;
+
         const { data, error } = await window.supabaseClient
             .from('coaches')
-            .update({
-                first_name: coachData.firstName,
-                last_name: coachData.lastName,
-                phone: coachData.phone,
-                email: coachData.email,
-                branch_id: coachData.branchId
-            })
+            .update(updateData)
             .eq('id', id)
             .select(`
                 *,
@@ -415,6 +501,10 @@ const supabaseData = {
             fullName: `${data.first_name} ${data.last_name}`,
             phone: data.phone,
             email: data.email,
+            photoUrl: data.photo_url,
+            bio: data.bio,
+            instagramUrl: data.instagram_url,
+            whatsappUrl: data.whatsapp_url,
             branch: data.branch?.name || '',
             branchId: data.branch_id
         };
@@ -489,7 +579,7 @@ const supabaseData = {
             }
 
             const filePath = urlParts[1];
-            console.log('🗑️ Deleting photo from storage:', filePath);
+            console.log('Deleting photo from storage:', filePath);
 
             const { error } = await window.supabaseClient
                 .storage
@@ -502,10 +592,80 @@ const supabaseData = {
                 return false;
             }
 
-            console.log('✅ Photo deleted successfully');
+            console.log('Photo deleted successfully');
             return true;
         } catch (err) {
             console.error('Error in deleteStudentPhoto:', err);
+            return false;
+        }
+    },
+
+    // Upload coach photo to Supabase Storage
+    async uploadCoachPhoto(file, coachId) {
+        if (!file) {
+            console.error('No file provided for upload');
+            return null;
+        }
+
+        // Generate unique filename with coach ID and timestamp
+        const fileExt = file.name.split('.').pop();
+        const fileName = `${coachId}_${Date.now()}.${fileExt}`;
+        const filePath = `coaches/${fileName}`;
+
+        console.log('Uploading coach photo to Supabase Storage:', filePath);
+
+        const { data, error } = await window.supabaseClient
+            .storage
+            .from('coach-photos')
+            .upload(filePath, file, {
+                cacheControl: '3600',
+                upsert: false
+            });
+
+        if (error) {
+            console.error('Error uploading coach photo:', error);
+            throw error;
+        }
+
+        // Get public URL for the uploaded file
+        const { data: urlData } = window.supabaseClient
+            .storage
+            .from('coach-photos')
+            .getPublicUrl(filePath);
+
+        console.log('Coach photo uploaded successfully:', urlData.publicUrl);
+        return urlData.publicUrl;
+    },
+
+    // Delete coach photo from Supabase Storage
+    async deleteCoachPhoto(photoUrl) {
+        if (!photoUrl) return true;
+
+        try {
+            // Extract file path from URL
+            const urlParts = photoUrl.split('/coach-photos/');
+            if (urlParts.length < 2) {
+                console.warn('Could not parse coach photo URL for deletion:', photoUrl);
+                return true;
+            }
+
+            const filePath = urlParts[1];
+            console.log('Deleting coach photo from storage:', filePath);
+
+            const { error } = await window.supabaseClient
+                .storage
+                .from('coach-photos')
+                .remove([filePath]);
+
+            if (error) {
+                console.error('Error deleting coach photo:', error);
+                return false;
+            }
+
+            console.log('Coach photo deleted successfully');
+            return true;
+        } catch (err) {
+            console.error('Error in deleteCoachPhoto:', err);
             return false;
         }
     },
@@ -793,22 +953,27 @@ const supabaseData = {
 
     // Get bot battle progress summary for a student
     async getStudentBotProgress(studentId) {
-        const { data, error } = await window.supabaseClient
-            .from('student_bot_progress')
-            .select('*')
-            .eq('student_id', studentId)
-            .single();
+        try {
+            const { data, error } = await window.supabaseClient
+                .from('student_bot_progress')
+                .select('*')
+                .eq('student_id', studentId)
+                .maybeSingle();
 
-        if (error) {
-            // No progress found - return defaults
+            if (error || !data) {
+                // No progress found - return defaults
+                return { botsDefeated: 0, highestBotRating: 0, defeatedBots: [] };
+            }
+
+            return {
+                botsDefeated: data.bots_defeated,
+                highestBotRating: data.highest_bot_rating,
+                defeatedBots: data.defeated_bots || []
+            };
+        } catch (err) {
+            // Silently handle missing table/view
             return { botsDefeated: 0, highestBotRating: 0, defeatedBots: [] };
         }
-
-        return {
-            botsDefeated: data.bots_defeated,
-            highestBotRating: data.highest_bot_rating,
-            defeatedBots: data.defeated_bots || []
-        };
     },
 
     // Add a bot battle win
@@ -866,50 +1031,59 @@ const supabaseData = {
 
     // Get all survival scores for a student
     async getStudentSurvivalScores(studentId, mode = null) {
-        let query = window.supabaseClient
-            .from('survival_scores')
-            .select('*')
-            .eq('student_id', studentId)
-            .order('score', { ascending: false });
+        try {
+            let query = window.supabaseClient
+                .from('survival_scores')
+                .select('*')
+                .eq('student_id', studentId)
+                .order('score', { ascending: false });
 
-        if (mode) {
-            query = query.eq('mode', mode);
-        }
+            if (mode) {
+                query = query.eq('mode', mode);
+            }
 
-        const { data, error } = await query;
+            const { data, error } = await query;
 
-        if (error) {
-            console.error('Error fetching survival scores:', error);
+            if (error || !data) {
+                return [];
+            }
+
+            return data.map(s => ({
+                id: s.id,
+                studentId: s.student_id,
+                score: s.score,
+                mode: s.mode,
+                achievedAt: s.achieved_at,
+                notes: s.notes
+            }));
+        } catch (err) {
+            // Silently handle missing table
             return [];
         }
-
-        return data.map(s => ({
-            id: s.id,
-            studentId: s.student_id,
-            score: s.score,
-            mode: s.mode,
-            achievedAt: s.achieved_at,
-            notes: s.notes
-        }));
     },
 
     // Get best survival score for a student
     async getBestSurvivalScore(studentId, mode = 'survival_3') {
-        const { data, error } = await window.supabaseClient
-            .from('student_best_survival')
-            .select('*')
-            .eq('student_id', studentId)
-            .eq('mode', mode)
-            .single();
+        try {
+            const { data, error } = await window.supabaseClient
+                .from('student_best_survival')
+                .select('*')
+                .eq('student_id', studentId)
+                .eq('mode', mode)
+                .maybeSingle();
 
-        if (error) {
+            if (error || !data) {
+                return { bestScore: 0, achievedAt: null };
+            }
+
+            return {
+                bestScore: data.best_score,
+                achievedAt: data.achieved_at
+            };
+        } catch (err) {
+            // Silently handle missing table/view
             return { bestScore: 0, achievedAt: null };
         }
-
-        return {
-            bestScore: data.best_score,
-            achievedAt: data.achieved_at
-        };
     },
 
     // Add a new survival score

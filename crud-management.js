@@ -35,12 +35,17 @@ function loadCoaches() {
         const coachFullName = `${coach.firstName} ${coach.lastName}`;
         const studentCount = studentsArray.filter(s => s.coach === coachFullName).length;
 
+        // Avatar content - show photo if available, otherwise show initials
+        const avatarContent = coach.photoUrl
+            ? `<img src="${coach.photoUrl}" alt="${coachFullName}" style="width: 100%; height: 100%; object-fit: cover; border-radius: 50%;">`
+            : `${coach.firstName[0]}${coach.lastName[0]}`;
+
         return `
             <tr>
                 <td>
-                    <div class="student-cell">
-                        <div class="student-avatar">${coach.firstName[0]}${coach.lastName[0]}</div>
-                        <div class="student-name">${coachFullName}</div>
+                    <div class="student-cell clickable-coach" onclick="viewCoachProfile('${coach.id}')" style="cursor: pointer;">
+                        <div class="student-avatar coach-table-avatar">${avatarContent}</div>
+                        <div class="student-name" style="color: #14b8a6; text-decoration: underline; text-decoration-color: transparent; transition: text-decoration-color 0.2s;">${coachFullName}</div>
                     </div>
                 </td>
                 <td>${coach.branch}</td>
@@ -49,7 +54,7 @@ function loadCoaches() {
                 <td><span class="level-badge">${studentCount}</span></td>
                 <td>
                     <div class="action-buttons">
-                        <button class="icon-button" onclick="viewCoach('${coachFullName}')" title="View Coach">
+                        <button class="icon-button" onclick="viewCoachProfile('${coach.id}')" title="View Coach">
                             <i data-lucide="eye"></i>
                         </button>
                         <button class="icon-button" onclick="editCoach('${coach.id}')" title="Edit Coach">
@@ -69,64 +74,27 @@ function loadCoaches() {
 // Expose to global scope
 window.loadCoaches = loadCoaches;
 
-// View coach details
-function viewCoach(coachName) {
-    const coach = window.coaches.find(c => `${c.firstName} ${c.lastName}` === coachName);
-    if (!coach) {
+// View coach profile page
+function viewCoachProfile(coachId) {
+    if (!coachId) {
         showToast('Coach not found', 'error');
         return;
     }
-
-    const coachStudents = window.students.filter(s => s.coach === coachName);
-    const studentsList = coachStudents.length > 0
-        ? coachStudents.map(s => `• ${s.firstName} ${s.lastName} (Level ${s.level})`).join('\n')
-        : 'No students assigned';
-
-    showToast(`Coach Details\n\nName: ${coachName}\nBranch: ${coach.branch}\nEmail: ${coach.email}\nPhone: ${coach.phone}\nStudents (${coachStudents.length}):\n${studentsList}`, 'info', 5000);
+    localStorage.setItem('selectedCoachId', coachId);
+    window.location.href = 'coach.html';
 }
 // Expose to global scope for onclick handlers
-window.viewCoach = viewCoach;
+window.viewCoachProfile = viewCoachProfile;
 
-// Open edit coach modal
+// Open edit coach - navigates to coach profile page with edit mode
 function editCoach(coachId) {
-    console.log('🔧 editCoach called with ID:', coachId, 'Type:', typeof coachId);
-    console.log('📊 Available coaches:', window.coaches);
-
-    // Coach IDs from Supabase are strings (UUIDs), so compare as strings
-    const coach = window.coaches.find(c => String(c.id) === String(coachId));
-    if (!coach) {
-        console.error('❌ Coach not found with ID:', coachId);
-        console.error('Available IDs:', window.coaches.map(c => c.id));
+    if (!coachId) {
         showToast('Coach not found', 'error');
         return;
     }
-
-    console.log('✅ Found coach:', coach);
-
-    // Populate form fields
-    document.getElementById('editCoachId').value = coach.id;
-    document.getElementById('editCoachFirstName').value = coach.firstName;
-    document.getElementById('editCoachLastName').value = coach.lastName;
-    document.getElementById('editCoachEmail').value = coach.email;
-    document.getElementById('editCoachPhone').value = coach.phone;
-
-    // Populate branch dropdown
-    const branchSelect = document.getElementById('editCoachBranchSelect');
-    branchSelect.innerHTML = '<option value="">Select Branch</option>';
-    window.branches.forEach(branch => {
-        const option = document.createElement('option');
-        option.value = branch.id;
-        option.textContent = branch.name;
-        option.setAttribute('data-branch-name', branch.name);
-        if (branch.id === coach.branchId) {
-            option.selected = true;
-        }
-        branchSelect.appendChild(option);
-    });
-
-    // Show modal
-    document.getElementById('editCoachModal').classList.add('active');
-    lucide.createIcons();
+    localStorage.setItem('selectedCoachId', coachId);
+    localStorage.setItem('openCoachEdit', 'true');
+    window.location.href = 'coach.html';
 }
 // Expose to global scope for onclick handlers
 window.editCoach = editCoach;
@@ -419,6 +387,11 @@ function showCoachesManagement() {
     // Apply translations after icons are created
     if (typeof i18n !== 'undefined' && typeof i18n.applyTranslations === 'function') {
         i18n.applyTranslations();
+    }
+
+    // Update URL hash for browser history (back button support)
+    if (window.location.hash !== '#manageCoaches') {
+        history.pushState({ section: 'manageCoaches' }, '', '#manageCoaches');
     }
 }
 window.showCoachesManagement = showCoachesManagement;
@@ -796,6 +769,11 @@ function showBranchesManagement() {
     if (typeof i18n !== 'undefined' && typeof i18n.applyTranslations === 'function') {
         i18n.applyTranslations();
     }
+
+    // Update URL hash for browser history (back button support)
+    if (window.location.hash !== '#manageBranches') {
+        history.pushState({ section: 'manageBranches' }, '', '#manageBranches');
+    }
 }
 
 // ==================== DATA MANAGEMENT ====================
@@ -896,6 +874,11 @@ function showDataManagement() {
     // Apply translations after icons are created
     if (typeof i18n !== 'undefined' && typeof i18n.applyTranslations === 'function') {
         i18n.applyTranslations();
+    }
+
+    // Update URL hash for browser history (back button support)
+    if (window.location.hash !== '#manageData') {
+        history.pushState({ section: 'manageData' }, '', '#manageData');
     }
 }
 
@@ -1014,7 +997,7 @@ async function showAppAccessManagement() {
 
     // Show the section
     appAccessSection.classList.add('active');
-    
+
     // Load data asynchronously
     loadAppAccessData().catch(err => console.error('Error loading app access data:', err));
 
@@ -1022,6 +1005,11 @@ async function showAppAccessManagement() {
 
     if (window.i18n && window.i18n.translatePage) {
         window.i18n.translatePage(appAccessSection);
+    }
+
+    // Update URL hash for browser history (back button support)
+    if (window.location.hash !== '#appAccess') {
+        history.pushState({ section: 'appAccess' }, '', '#appAccess');
     }
 }
 

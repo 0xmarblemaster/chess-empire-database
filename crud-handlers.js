@@ -198,15 +198,86 @@ async function deleteStudentConfirm(studentId) {
 
 // ==================== COACH MODAL FUNCTIONS ====================
 
+// Global variable to store selected coach photo file
+window.coachPhotoFile = null;
+
+// Handle coach photo file selection
+function handleCoachPhotoChange(event) {
+    const file = event.target.files[0];
+    if (!file) return;
+
+    // Validate file type and size
+    const validTypes = ['image/jpeg', 'image/png', 'image/webp'];
+    if (!validTypes.includes(file.type)) {
+        showError('Please select a valid image file (JPEG, PNG, or WebP)');
+        return;
+    }
+    if (file.size > 5 * 1024 * 1024) {
+        showError('Image file size must be less than 5MB');
+        return;
+    }
+
+    window.coachPhotoFile = file;
+
+    // Show preview
+    const reader = new FileReader();
+    reader.onload = function(e) {
+        document.getElementById('coachPhotoPreview').innerHTML =
+            `<img src="${e.target.result}" alt="Preview" style="width: 100%; height: 100%; object-fit: cover; border-radius: 50%;">`;
+        document.getElementById('clearCoachPhotoBtn').style.display = 'flex';
+    };
+    reader.readAsDataURL(file);
+}
+window.handleCoachPhotoChange = handleCoachPhotoChange;
+
+// Clear coach photo
+function clearCoachPhoto() {
+    window.coachPhotoFile = null;
+    document.getElementById('coachPhotoInput').value = '';
+    document.getElementById('coachPhotoPreview').innerHTML =
+        '<i data-lucide="camera" style="width: 28px; height: 28px; color: rgba(255,255,255,0.7);"></i>';
+    document.getElementById('clearCoachPhotoBtn').style.display = 'none';
+    document.getElementById('coachCurrentPhotoUrl').value = '';
+    lucide.createIcons();
+}
+window.clearCoachPhoto = clearCoachPhoto;
+
+// Reset coach photo preview to default
+function resetCoachPhotoPreview() {
+    window.coachPhotoFile = null;
+    const photoInput = document.getElementById('coachPhotoInput');
+    if (photoInput) photoInput.value = '';
+    const photoPreview = document.getElementById('coachPhotoPreview');
+    if (photoPreview) {
+        photoPreview.innerHTML = '<i data-lucide="camera" style="width: 28px; height: 28px; color: rgba(255,255,255,0.7);"></i>';
+    }
+    const clearBtn = document.getElementById('clearCoachPhotoBtn');
+    if (clearBtn) clearBtn.style.display = 'none';
+    const currentPhotoUrl = document.getElementById('coachCurrentPhotoUrl');
+    if (currentPhotoUrl) currentPhotoUrl.value = '';
+    lucide.createIcons();
+}
+
 // Open coach modal for creating new coach
 function addNewCoach() {
-    document.getElementById('coachModalTitle').textContent = 'Add New Coach';
+    document.getElementById('coachModalTitle').textContent = t('admin.modals.coach.addTitle') || 'Add New Coach';
     document.getElementById('coachForm').reset();
     document.getElementById('coachId').value = '';
 
+    // Reset photo preview
+    resetCoachPhotoPreview();
+
+    // Clear new fields
+    const bioField = document.getElementById('coachBio');
+    if (bioField) bioField.value = '';
+    const instagramField = document.getElementById('coachInstagram');
+    if (instagramField) instagramField.value = '';
+    const whatsappField = document.getElementById('coachWhatsapp');
+    if (whatsappField) whatsappField.value = '';
+
     // Populate branch dropdown
     const branchSelect = document.getElementById('coachBranch');
-    branchSelect.innerHTML = '<option value="">Select branch...</option>';
+    branchSelect.innerHTML = `<option value="">${t('admin.modals.coach.selectBranch') || 'Select branch...'}</option>`;
     branches.forEach(branch => {
         const option = document.createElement('option');
         option.value = branch.name;
@@ -215,6 +286,7 @@ function addNewCoach() {
     });
 
     openModal('coachModal');
+    lucide.createIcons();
 }
 
 // Open coach modal for editing
@@ -225,16 +297,33 @@ function editCoach(coachId) {
         return;
     }
 
-    document.getElementById('coachModalTitle').textContent = 'Edit Coach';
+    document.getElementById('coachModalTitle').textContent = t('admin.modals.coach.editTitle') || 'Edit Coach';
     document.getElementById('coachId').value = coach.id;
     document.getElementById('coachFirstName').value = coach.firstName;
     document.getElementById('coachLastName').value = coach.lastName;
     document.getElementById('coachEmail').value = coach.email;
     document.getElementById('coachPhone').value = coach.phone;
 
+    // Set new fields
+    const bioField = document.getElementById('coachBio');
+    if (bioField) bioField.value = coach.bio || '';
+    const instagramField = document.getElementById('coachInstagram');
+    if (instagramField) instagramField.value = coach.instagramUrl || '';
+    const whatsappField = document.getElementById('coachWhatsapp');
+    if (whatsappField) whatsappField.value = coach.whatsappUrl || '';
+
+    // Set photo preview
+    resetCoachPhotoPreview();
+    if (coach.photoUrl) {
+        document.getElementById('coachCurrentPhotoUrl').value = coach.photoUrl;
+        document.getElementById('coachPhotoPreview').innerHTML =
+            `<img src="${coach.photoUrl}" alt="${coach.firstName}" style="width: 100%; height: 100%; object-fit: cover; border-radius: 50%;">`;
+        document.getElementById('clearCoachPhotoBtn').style.display = 'flex';
+    }
+
     // Populate branch dropdown
     const branchSelect = document.getElementById('coachBranch');
-    branchSelect.innerHTML = '<option value="">Select branch...</option>';
+    branchSelect.innerHTML = `<option value="">${t('admin.modals.coach.selectBranch') || 'Select branch...'}</option>`;
     branches.forEach(branch => {
         const option = document.createElement('option');
         option.value = branch.name;
@@ -246,10 +335,11 @@ function editCoach(coachId) {
     });
 
     openModal('coachModal');
+    lucide.createIcons();
 }
 
 // Save coach (create or update)
-function saveCoach(event) {
+async function saveCoach(event) {
     event.preventDefault();
 
     const coachData = {
@@ -257,36 +347,70 @@ function saveCoach(event) {
         lastName: document.getElementById('coachLastName').value.trim(),
         branch: document.getElementById('coachBranch').value,
         email: document.getElementById('coachEmail').value.trim(),
-        phone: document.getElementById('coachPhone').value.trim()
+        phone: document.getElementById('coachPhone').value.trim(),
+        bio: document.getElementById('coachBio')?.value.trim() || null,
+        instagramUrl: document.getElementById('coachInstagram')?.value.trim() || null,
+        whatsappUrl: document.getElementById('coachWhatsapp')?.value.trim() || null,
+        photoUrl: document.getElementById('coachCurrentPhotoUrl')?.value || null
     };
 
     const coachId = document.getElementById('coachId').value;
-    let result;
 
-    if (coachId) {
-        // Update existing coach
-        result = updateCoach(coachId, coachData);
-    } else {
-        // Create new coach
-        result = createCoach(coachData);
-    }
+    try {
+        let result;
 
-    if (result.success) {
-        closeCoachModal();
-        // Refresh coach list if we're on coaches view
-        if (typeof loadCoaches === 'function') {
-            loadCoaches();
+        if (coachId) {
+            // Update existing coach
+            result = await updateCoach(coachId, coachData);
+        } else {
+            // Create new coach
+            result = await createCoach(coachData);
         }
-        populateCoachDropdown();
-        populateFilterDropdowns();
-        showSuccess(coachId ? 'admin.modals.coach.editSuccess' : 'admin.modals.coach.addSuccess');
-    } else {
-        showError(result.error);
+
+        if (result.success) {
+            const savedCoachId = coachId || result.data?.id;
+
+            // Upload photo if a new file was selected
+            if (window.coachPhotoFile && savedCoachId && window.supabaseData) {
+                try {
+                    const photoUrl = await window.supabaseData.uploadCoachPhoto(window.coachPhotoFile, savedCoachId);
+                    if (photoUrl) {
+                        // Update the coach with the new photo URL
+                        await window.supabaseData.updateCoach(savedCoachId, { ...coachData, photoUrl: photoUrl });
+                        // Update local cache
+                        const coachInArray = window.coaches?.find(c => c.id === savedCoachId);
+                        if (coachInArray) coachInArray.photoUrl = photoUrl;
+                    }
+                } catch (photoError) {
+                    console.error('Error uploading coach photo:', photoError);
+                }
+            }
+
+            closeCoachModal();
+            window.coachPhotoFile = null;
+
+            // Refresh coach list
+            if (typeof loadCoaches === 'function') {
+                loadCoaches();
+            }
+            if (typeof refreshCoachesListView === 'function') {
+                refreshCoachesListView();
+            }
+            populateCoachDropdown();
+            populateFilterDropdowns();
+            showSuccess(coachId ? 'admin.modals.coach.editSuccess' : 'admin.modals.coach.addSuccess');
+        } else {
+            showError(result.error);
+        }
+    } catch (error) {
+        console.error('Error saving coach:', error);
+        showError('Error saving coach: ' + error.message);
     }
 }
 
 // Close coach modal
 function closeCoachModal() {
+    window.coachPhotoFile = null;
     closeModal('coachModal');
 }
 

@@ -534,3 +534,185 @@
         width: 100%;
     }
 }
+
+/* ==================== Avatar Lightbox ==================== */
+
+.avatar-lightbox {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 2000;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    opacity: 0;
+    visibility: hidden;
+    transition: opacity 0.3s ease, visibility 0.3s ease;
+}
+
+.avatar-lightbox.active {
+    opacity: 1;
+    visibility: visible;
+}
+
+.avatar-lightbox-overlay {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(0, 0, 0, 0.85);
+    backdrop-filter: blur(8px);
+    cursor: pointer;
+}
+
+.avatar-lightbox-content {
+    position: relative;
+    z-index: 1;
+    max-width: 90vw;
+    max-height: 90vh;
+    transform: scale(0.9);
+    transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.avatar-lightbox.active .avatar-lightbox-content {
+    transform: scale(1);
+}
+
+.avatar-lightbox-image {
+    max-width: 90vw;
+    max-height: 80vh;
+    width: auto;
+    height: auto;
+    border-radius: 1rem;
+    box-shadow: 0 25px 80px rgba(0, 0, 0, 0.5);
+    object-fit: contain;
+}
+
+.avatar-lightbox-initials {
+    width: 300px;
+    height: 300px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 6rem;
+    font-weight: 800;
+    color: white;
+    box-shadow: 0 25px 80px rgba(0, 0, 0, 0.5);
+}
+
+.avatar-lightbox-initials.coach-avatar {
+    background: linear-gradient(135deg, #14b8a6 0%, #0d9488 100%);
+}
+
+.avatar-lightbox-initials.student-avatar {
+    background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%);
+}
+
+.avatar-lightbox-close {
+    position: absolute;
+    top: -50px;
+    right: -10px;
+    width: 44px;
+    height: 44px;
+    border-radius: 50%;
+    border: none;
+    background: rgba(255, 255, 255, 0.15);
+    color: white;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.2s ease;
+    backdrop-filter: blur(4px);
+}
+
+.avatar-lightbox-close:hover {
+    background: rgba(255, 255, 255, 0.25);
+    transform: scale(1.1);
+}
+
+.avatar-lightbox-name {
+    position: absolute;
+    bottom: -60px;
+    left: 50%;
+    transform: translateX(-50%);
+    color: white;
+    font-size: 1.25rem;
+    font-weight: 600;
+    text-align: center;
+    white-space: nowrap;
+    text-shadow: 0 2px 10px rgba(0, 0, 0, 0.5);
+}
+
+/* Clickable avatar styling */
+.avatar-clickable {
+    cursor: pointer;
+    transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.avatar-clickable:hover {
+    transform: scale(1.05);
+    box-shadow: 0 8px 25px rgba(0, 0, 0, 0.15);
+}
+
+.avatar-clickable:active {
+    transform: scale(0.98);
+}
+
+/* Hint icon on avatar hover */
+.avatar-wrapper.clickable {
+    position: relative;
+    cursor: pointer;
+}
+
+.avatar-wrapper.clickable::after {
+    content: '';
+    position: absolute;
+    bottom: 4px;
+    right: 4px;
+    width: 24px;
+    height: 24px;
+    background: rgba(255, 255, 255, 0.95);
+    border-radius: 50%;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+    opacity: 0;
+    transform: scale(0.8);
+    transition: opacity 0.2s ease, transform 0.2s ease;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='14' height='14' viewBox='0 0 24 24' fill='none' stroke='%23475569' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M15 3h6v6'/%3E%3Cpath d='M10 14 21 3'/%3E%3Cpath d='M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: center;
+    background-size: 14px;
+}
+
+.avatar-wrapper.clickable:hover::after {
+    opacity: 1;
+    transform: scale(1);
+}
+
+@media (max-width: 768px) {
+    .avatar-lightbox-image {
+        max-width: 95vw;
+        max-height: 70vh;
+        border-radius: 0.75rem;
+    }
+
+    .avatar-lightbox-initials {
+        width: 200px;
+        height: 200px;
+        font-size: 4rem;
+    }
+
+    .avatar-lightbox-close {
+        top: -45px;
+        right: 0;
+    }
+
+    .avatar-lightbox-name {
+        bottom: -50px;
+        font-size: 1rem;
+    }
+}

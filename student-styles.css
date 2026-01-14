@@ -198,6 +198,17 @@ body {
     color: white;
     font-family: 'Outfit', sans-serif;
     box-shadow: 0 10px 25px -5px rgb(102 126 234 / 0.4);
+    cursor: pointer;
+    transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.avatar:hover {
+    transform: scale(1.05);
+    box-shadow: 0 15px 35px -5px rgb(102 126 234 / 0.5);
+}
+
+.avatar:active {
+    transform: scale(0.98);
 }
 
 .profile-info {
@@ -405,6 +416,37 @@ body {
     color: #92400e;
     margin-bottom: 0;
     font-size: 1rem;
+}
+
+/* Coach link styles */
+.coach-link {
+    color: #14b8a6;
+    text-decoration: none;
+    font-weight: 600;
+    transition: all 0.2s;
+}
+
+.coach-link:hover {
+    color: #0d9488;
+    text-decoration: underline;
+}
+
+.clickable-coach {
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.clickable-coach:hover {
+    background: #f0fdfa;
+    transform: translateX(4px);
+}
+
+.coach-link-value {
+    display: flex;
+    align-items: center;
+    gap: 0.375rem;
+    color: #14b8a6;
+    font-weight: 600;
 }
 
 .achievements {

@@ -2,7 +2,7 @@ const searchInput = document.getElementById('searchInput');
 const clearButton = document.getElementById('clearButton');
 const dropdown = document.getElementById('dropdown');
 
-let latestResults = [];
+let latestResults = { students: [], coaches: [] };
 let searchTimeout;
 
 // Search students - uses Supabase if available, otherwise local cache
@@ -17,7 +17,7 @@ async function searchStudents(query) {
     if (window.supabaseData && typeof window.supabaseData.searchStudents === 'function') {
         try {
             const results = await window.supabaseData.searchStudents(searchTerm);
-            return results.slice(0, 10);
+            return results.slice(0, 8);
         } catch (error) {
             console.error('Supabase search error, falling back to local search:', error);
         }
@@ -27,7 +27,7 @@ async function searchStudents(query) {
     if (typeof students !== 'undefined' && Array.isArray(students) && students.length > 0) {
         return students
             .filter(student => `${student.firstName} ${student.lastName}`.toLowerCase().includes(searchTerm))
-            .slice(0, 10);
+            .slice(0, 8);
     }
 
     // If no data source is available, return empty array
@@ -35,37 +35,118 @@ async function searchStudents(query) {
     return [];
 }
 
+// Search coaches - uses Supabase if available, otherwise local cache
+async function searchCoaches(query) {
+    if (!query) {
+        return [];
+    }
+
+    const searchTerm = query.toLowerCase().trim();
+
+    // Try Supabase search first
+    if (window.supabaseData && typeof window.supabaseData.searchCoaches === 'function') {
+        try {
+            const results = await window.supabaseData.searchCoaches(searchTerm);
+            return results.slice(0, 3);
+        } catch (error) {
+            console.error('Supabase coach search error, falling back to local search:', error);
+        }
+    }
+
+    // Fallback to local search
+    if (typeof coaches !== 'undefined' && Array.isArray(coaches) && coaches.length > 0) {
+        return coaches
+            .filter(coach => `${coach.firstName} ${coach.lastName}`.toLowerCase().includes(searchTerm))
+            .slice(0, 3);
+    }
+
+    return [];
+}
+
+// Combined search for students and coaches
+async function searchAll(query) {
+    const [studentResults, coachResults] = await Promise.all([
+        searchStudents(query),
+        searchCoaches(query)
+    ]);
+
+    return { students: studentResults, coaches: coachResults };
+}
+
 function renderDropdown(results) {
     latestResults = results;
+    const { students: studentResults, coaches: coachResults } = results;
 
-    if (results.length === 0) {
+    if (studentResults.length === 0 && coachResults.length === 0) {
         dropdown.innerHTML = `
             <div class="dropdown-item" style="cursor: default; border-left: none;">
-                <div style="color: #64748b;">${t('index.noStudents')}</div>
+                <div style="color: #64748b;">${t('index.noResults') || t('index.noStudents')}</div>
             </div>
         `;
         return;
     }
 
-    dropdown.innerHTML = results.map(student => `
-        <div class="dropdown-item" onclick="viewStudent('${student.id}')">
-            <div>
-                <div class="student-name">${student.firstName} ${student.lastName}</div>
-                <div class="student-meta">
-                    <span>${i18n.translateBranchName(student.branch)}</span>
-                    <span>•</span>
-                    <span>${t('index.coachLabel', { coach: student.coach })}</span>
+    let html = '';
+
+    // Render coaches first (if any)
+    if (coachResults.length > 0) {
+        html += `
+            <div class="dropdown-section-header">
+                <i data-lucide="award" style="width: 14px; height: 14px; color: #14b8a6;"></i>
+                <span>${t('index.coaches') || 'Coaches'}</span>
+            </div>
+        `;
+        html += coachResults.map(coach => `
+            <div class="dropdown-item dropdown-item-coach" onclick="viewCoach('${coach.id}')">
+                <div class="dropdown-item-avatar coach-avatar-small">
+                    ${coach.photoUrl
+                        ? `<img src="${coach.photoUrl}" alt="${coach.firstName}">`
+                        : `${coach.firstName[0]}${coach.lastName[0]}`
+                    }
+                </div>
+                <div>
+                    <div class="student-name">${coach.firstName} ${coach.lastName}</div>
+                    <div class="student-meta">
+                        <span>${i18n.translateBranchName(coach.branch || coach.branchName)}</span>
+                        <span>•</span>
+                        <span style="color: #14b8a6; font-weight: 600;">${t('index.coachBadge') || 'Coach'}</span>
+                    </div>
                 </div>
             </div>
-            ${student.razryad ? `
-                <span class="badge">
-                    <i data-lucide="award" style="width: 12px; height: 12px;"></i>
-                    ${t('index.razryadBadge', { razryad: translateRazryad(student.razryad, { fallback: '' }) })}
-                </span>
-            ` : ''}
-        </div>
-    `).join('');
+        `).join('');
+    }
 
+    // Render students
+    if (studentResults.length > 0) {
+        if (coachResults.length > 0) {
+            html += `
+                <div class="dropdown-section-header">
+                    <i data-lucide="users" style="width: 14px; height: 14px; color: #667eea;"></i>
+                    <span>${t('index.students') || 'Students'}</span>
+                </div>
+            `;
+        }
+        html += studentResults.map(student => `
+            <div class="dropdown-item" onclick="viewStudent('${student.id}')">
+                <div>
+                    <div class="student-name">${student.firstName} ${student.lastName}</div>
+                    <div class="student-meta">
+                        <span>${i18n.translateBranchName(student.branch)}</span>
+                        <span>•</span>
+                        <span>${t('index.coachLabel', { coach: student.coach })}</span>
+                    </div>
+                </div>
+                ${student.razryad ? `
+                    <span class="badge">
+                        <i data-lucide="award" style="width: 12px; height: 12px;"></i>
+                        ${t('index.razryadBadge', { razryad: translateRazryad(student.razryad, { fallback: '' }) })}
+                    </span>
+                ` : ''}
+            </div>
+        `).join('');
+    }
+
+    dropdown.innerHTML = html;
     lucide.createIcons();
 }
 
@@ -90,7 +171,7 @@ searchInput.addEventListener('input', async (e) => {
 
         // Debounce search for Supabase queries
         searchTimeout = setTimeout(async () => {
-            const results = await searchStudents(value);
+            const results = await searchAll(value);
             renderDropdown(results);
         }, 300);
     } else {
@@ -117,15 +198,20 @@ function viewStudent(studentId) {
     window.location.href = 'student.html';
 }
 
+function viewCoach(coachId) {
+    localStorage.setItem('selectedCoachId', coachId);
+    window.location.href = 'coach.html';
+}
+
 document.addEventListener('languagechange', async () => {
     if (searchInput.value.trim().length > 0) {
-        if (!latestResults.length) {
-            latestResults = await searchStudents(searchInput.value);
+        if (!latestResults.students?.length && !latestResults.coaches?.length) {
+            latestResults = await searchAll(searchInput.value);
         }
         renderDropdown(latestResults);
         dropdown.classList.add('active');
     } else if (dropdown.classList.contains('active')) {
-        renderDropdown([]);
+        renderDropdown({ students: [], coaches: [] });
         dropdown.classList.remove('active');
     }
 });

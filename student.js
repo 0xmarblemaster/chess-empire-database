@@ -63,66 +63,28 @@ function updateDashboardButton() {
 async function initializeStudentProfile() {
     const studentId = localStorage.getItem('selectedStudentId');
 
-    console.log('🔍 Student ID from localStorage:', studentId);
-
     if (!studentId) {
-        console.log('❌ No student ID in localStorage, redirecting to index');
         window.location.href = 'index.html';
         return;
     }
 
     let student = null;
 
-    // APPROACH 1: Load student directly from Supabase (bypasses all caching/initialization issues)
+    // Load student directly from Supabase (fast, single query)
     if (window.supabaseData && typeof window.supabaseData.getStudentById === 'function') {
-        console.log('✅ Loading student directly from Supabase...');
         try {
             student = await window.supabaseData.getStudentById(studentId);
-            console.log('🎯 Student loaded from Supabase:', student);
         } catch (error) {
-            console.error('❌ Error loading student from Supabase:', error);
-        }
-    } else {
-        console.warn('⚠️ Supabase direct query not available');
-    }
-
-    // APPROACH 2: Fallback to initializeData + students array (if approach 1 failed)
-    if (!student) {
-        console.log('📥 Falling back to students array approach...');
-
-        // Clear old student data from localStorage to force fresh Supabase load
-        console.log('🧹 Clearing old student data from localStorage');
-        localStorage.removeItem('students');
-        localStorage.removeItem('coaches');
-        localStorage.removeItem('branches');
-
-        // Try to call initializeData (check both global and window scope)
-        const initFn = (typeof window.initializeData === 'function') ? window.initializeData :
-                       (typeof initializeData === 'function') ? initializeData : null;
-
-        if (initFn) {
-            console.log('✅ Calling initializeData...');
-            await initFn();
-            console.log('✅ Data loaded. Students array length:', students.length);
-            console.log('📋 Students in array:', students.map(s => `${s.firstName} ${s.lastName} (${s.id})`).slice(0, 5));
-
-            student = students.find(s => String(s.id) === String(studentId));
-        } else {
-            console.error('❌ initializeData function not found!');
-            console.error('  typeof initializeData:', typeof initializeData);
-            console.error('  window.initializeData:', typeof window.initializeData);
-            console.error('  window.supabaseData:', typeof window.supabaseData);
+            console.error('Error loading student:', error);
         }
     }
 
-    console.log('🔎 Final lookup - Student ID:', studentId);
-    console.log('🎯 Found student:', student);
+    // Fallback: try to find in students array if direct query failed
+    if (!student && typeof students !== 'undefined' && students.length > 0) {
+        student = students.find(s => String(s.id) === String(studentId));
+    }
 
     if (!student) {
-        console.error('❌ Student not found with ID:', studentId);
-        if (students && students.length > 0) {
-            console.error('Available student IDs:', students.map(s => s.id).slice(0, 10));
-        }
         showToast('Student not found. Redirecting to home page.', 'error');
         window.location.href = 'index.html';
         return;
@@ -160,54 +122,49 @@ async function loadStudentProfileData(studentId) {
     if (!window.supabaseData) return null;
 
     try {
-        // Try to use the comprehensive getStudentFullProfile function
+        // Try to use the comprehensive getStudentFullProfile function (already uses Promise.all)
         if (typeof window.supabaseData.getStudentFullProfile === 'function') {
-            studentProfileData = await window.supabaseData.getStudentFullProfile(studentId);
-        } else {
-            // Fallback: load individual pieces
-            studentProfileData = {
-                ratings: { current: null, history: [] },
-                botProgress: { defeated: [], count: 0, total: window.TOTAL_BOTS || 17 },
-                survival: { best: null, scores: [] },
-                rankings: { branch: null, school: null, survival: null },
-                achievements: []
-            };
-
-            // Load available data
-            if (typeof window.supabaseData.getCurrentRating === 'function') {
-                studentProfileData.ratings.current = await window.supabaseData.getCurrentRating(studentId);
+            // Load full profile and puzzle rankings in parallel
+            const [fullProfile, puzzleRankings] = await Promise.all([
+                window.supabaseData.getStudentFullProfile(studentId),
+                typeof window.supabaseData.getStudentPuzzleRankings === 'function'
+                    ? window.supabaseData.getStudentPuzzleRankings(studentId)
+                    : Promise.resolve(null)
+            ]);
+            studentProfileData = fullProfile;
+            if (puzzleRankings) {
+                studentProfileData.puzzleRankings = puzzleRankings;
             }
-            if (typeof window.supabaseData.getStudentBotProgress === 'function') {
-                const botProgressData = await window.supabaseData.getStudentBotProgress(studentId);
-                studentProfileData.botProgress = {
+        } else {
+            // Fallback: load all pieces IN PARALLEL for speed
+            const [currentRating, botProgressData, survivalData, rankings, achievements, puzzleRankings] = await Promise.all([
+                typeof window.supabaseData.getCurrentRating === 'function'
+                    ? window.supabaseData.getCurrentRating(studentId) : Promise.resolve(null),
+                typeof window.supabaseData.getStudentBotProgress === 'function'
+                    ? window.supabaseData.getStudentBotProgress(studentId) : Promise.resolve(null),
+                typeof window.supabaseData.getBestSurvivalScore === 'function'
+                    ? window.supabaseData.getBestSurvivalScore(studentId, 'puzzle_rush') : Promise.resolve(null),
+                typeof window.supabaseData.getStudentRankings === 'function'
+                    ? window.supabaseData.getStudentRankings(studentId) : Promise.resolve(null),
+                typeof window.supabaseData.getStudentAchievements === 'function'
+                    ? window.supabaseData.getStudentAchievements(studentId) : Promise.resolve([]),
+                typeof window.supabaseData.getStudentPuzzleRankings === 'function'
+                    ? window.supabaseData.getStudentPuzzleRankings(studentId) : Promise.resolve(null)
+            ]);
+
+            studentProfileData = {
+                ratings: { current: currentRating, history: [] },
+                botProgress: botProgressData ? {
                     count: botProgressData.botsDefeated || 0,
                     total: window.TOTAL_BOTS || 17,
                     defeated: (botProgressData.defeatedBots || []).map(name => ({ bot_name: name })),
                     highestRating: botProgressData.highestBotRating || 0
-                };
-            }
-            if (typeof window.supabaseData.getBestSurvivalScore === 'function') {
-                const survivalData = await window.supabaseData.getBestSurvivalScore(studentId, 'puzzle_rush');
-                studentProfileData.survival.best = {
-                    score: survivalData.bestScore || 0,
-                    achievedAt: survivalData.achievedAt
-                };
-            }
-            if (typeof window.supabaseData.getStudentRankings === 'function') {
-                studentProfileData.rankings = await window.supabaseData.getStudentRankings(studentId);
-            }
-            if (typeof window.supabaseData.getStudentAchievements === 'function') {
-                studentProfileData.achievements = await window.supabaseData.getStudentAchievements(studentId);
-            }
-        }
-
-        // Load puzzle rankings (branch + school ranks by puzzle score)
-        // This runs for both paths (full profile or fallback)
-        if (typeof window.supabaseData.getStudentPuzzleRankings === 'function') {
-            studentProfileData.puzzleRankings = await window.supabaseData.getStudentPuzzleRankings(studentId);
-            console.log('Puzzle rankings loaded:', studentProfileData.puzzleRankings);
-        } else {
-            console.log('getStudentPuzzleRankings function not available');
+                } : { defeated: [], count: 0, total: window.TOTAL_BOTS || 17 },
+                survival: { best: survivalData ? { score: survivalData.bestScore || 0, achievedAt: survivalData.achievedAt } : null, scores: [] },
+                rankings: rankings || { branch: null, school: null, survival: null },
+                achievements: achievements || [],
+                puzzleRankings: puzzleRankings
+            };
         }
 
         return studentProfileData;
@@ -862,16 +819,17 @@ async function renderProfile() {
     const rankings = studentProfileData?.rankings || {};
     const avatarRingTier = getBestRankTier(rankings);
 
-    // Create avatar HTML with ranking-based tier ring and status indicator
+    // Create avatar HTML with ranking-based tier ring and status indicator (clickable for lightbox)
     const studentStatus = student.status || 'active';
+    const studentFullName = `${student.firstName} ${student.lastName}`;
     const avatarContent = student.photoUrl
-        ? `<div class="avatar avatar-ring--${avatarRingTier}" style="background: none; padding: 0; overflow: hidden;">
+        ? `<div class="avatar avatar-ring--${avatarRingTier} avatar-clickable" style="background: none; padding: 0; overflow: hidden; cursor: pointer;" onclick="openAvatarLightbox('${student.photoUrl}', '${studentFullName}', 'student')">
                <img src="${student.photoUrl}" alt="${student.firstName}" style="width: 100%; height: 100%; object-fit: cover; border-radius: 50%;">
            </div>`
-        : `<div class="avatar avatar-ring--${avatarRingTier}">${initials}</div>`;
+        : `<div class="avatar avatar-ring--${avatarRingTier} avatar-clickable" style="cursor: pointer;" onclick="openAvatarLightbox(null, '${studentFullName}', 'student', '${initials}')">${initials}</div>`;
 
     const avatarHTML = `
-        <div class="avatar-wrapper">
+        <div class="avatar-wrapper clickable">
             ${avatarContent}
             <span class="avatar-status-indicator status-${studentStatus}"></span>
         </div>`;
@@ -926,7 +884,7 @@ async function renderProfile() {
             <div class="profile-info">
                 <h1 class="student-name">${student.firstName} ${student.lastName}</h1>
                 <div class="student-meta">
-                    <span class="student-details">${i18n.translateBranchName(student.branch)} • ${student.coach}</span>
+                    <span class="student-details">${i18n.translateBranchName(student.branch)} • <a href="#" class="coach-link" onclick="navigateToCoach('${student.coachId}', event)">${student.coach}</a></span>
                 </div>
                 <div class="badge-row">
                     ${leagueBadgeHTML}
@@ -1025,12 +983,12 @@ async function renderProfile() {
                 </div>
 
                 <!-- Mobile order: 7. Coach -->
-                <div class="info-item mobile-order-7">
+                <div class="info-item mobile-order-7 clickable-coach" onclick="navigateToCoach('${student.coachId}', event)">
                     <div class="info-label">
                         <i data-lucide="user" style="width: 14px; height: 14px;"></i>
                         ${t('student.coach')}
                     </div>
-                    <div class="info-value">${student.coach}</div>
+                    <div class="info-value coach-link-value">${student.coach} <i data-lucide="chevron-right" style="width: 14px; height: 14px; opacity: 0.5;"></i></div>
                 </div>
 
                 <!-- Mobile order: 8. Strongest bot defeated -->
@@ -1586,6 +1544,82 @@ async function saveStudentEdits(event) {
     }
 }
 
+// Navigate to coach profile page
+function navigateToCoach(coachId, event) {
+    if (event) {
+        event.preventDefault();
+        event.stopPropagation();
+    }
+    if (!coachId || coachId === 'null' || coachId === 'undefined') {
+        showToast(t('coach.notFound') || 'Coach not found', 'warning');
+        return;
+    }
+    localStorage.setItem('selectedCoachId', coachId);
+    window.location.href = 'coach.html';
+}
+
+// ==================== Avatar Lightbox ====================
+
+// Open avatar lightbox to show enlarged photo
+function openAvatarLightbox(photoUrl, name, type = 'student', initials = '') {
+    // Remove existing lightbox if any
+    closeAvatarLightbox();
+
+    // Create lightbox HTML
+    const lightboxHTML = `
+        <div id="avatarLightbox" class="avatar-lightbox">
+            <div class="avatar-lightbox-overlay" onclick="closeAvatarLightbox()"></div>
+            <div class="avatar-lightbox-content">
+                <button class="avatar-lightbox-close" onclick="closeAvatarLightbox()">
+                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <line x1="18" y1="6" x2="6" y2="18"></line>
+                        <line x1="6" y1="6" x2="18" y2="18"></line>
+                    </svg>
+                </button>
+                ${photoUrl
+                    ? `<img src="${photoUrl}" alt="${name}" class="avatar-lightbox-image">`
+                    : `<div class="avatar-lightbox-initials ${type}-avatar">${initials}</div>`
+                }
+                <div class="avatar-lightbox-name">${name}</div>
+            </div>
+        </div>
+    `;
+
+    // Add to DOM
+    document.body.insertAdjacentHTML('beforeend', lightboxHTML);
+
+    // Trigger animation
+    requestAnimationFrame(() => {
+        document.getElementById('avatarLightbox').classList.add('active');
+    });
+
+    // Prevent body scroll
+    document.body.style.overflow = 'hidden';
+
+    // Close on Escape key
+    document.addEventListener('keydown', handleLightboxEscape);
+}
+
+// Close avatar lightbox
+function closeAvatarLightbox() {
+    const lightbox = document.getElementById('avatarLightbox');
+    if (lightbox) {
+        lightbox.classList.remove('active');
+        setTimeout(() => {
+            lightbox.remove();
+            document.body.style.overflow = '';
+        }, 300);
+    }
+    document.removeEventListener('keydown', handleLightboxEscape);
+}
+
+// Handle Escape key to close lightbox
+function handleLightboxEscape(e) {
+    if (e.key === 'Escape') {
+        closeAvatarLightbox();
+    }
+}
+
 // Make functions globally available
 window.canEditStudent = canEditStudent;
 window.openEditModal = openEditModal;
@@ -1594,6 +1628,9 @@ window.saveStudentEdits = saveStudentEdits;
 window.previewEditPhoto = previewEditPhoto;
 window.removeEditPhoto = removeEditPhoto;
 window.updateEditCoachOptions = updateEditCoachOptions;
+window.navigateToCoach = navigateToCoach;
+window.openAvatarLightbox = openAvatarLightbox;
+window.closeAvatarLightbox = closeAvatarLightbox;
 
 // Re-render on language change
 document.addEventListener('languagechange', () => {

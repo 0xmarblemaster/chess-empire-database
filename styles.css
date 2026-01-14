@@ -332,6 +332,58 @@ body {
     transform: scale(0.98);
 }
 
+/* Search dropdown section headers */
+.dropdown-section-header {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.5rem 1rem;
+    background: #f8fafc;
+    font-size: 0.75rem;
+    font-weight: 700;
+    color: #64748b;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    border-bottom: 1px solid #e2e8f0;
+}
+
+/* Coach item in search dropdown */
+.dropdown-item-coach {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    border-left-color: #14b8a6;
+}
+
+.dropdown-item-coach:hover {
+    border-left-color: #0d9488;
+    background: #f0fdfa;
+}
+
+.dropdown-item-avatar {
+    width: 40px;
+    height: 40px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.875rem;
+    font-weight: 600;
+    color: white;
+    flex-shrink: 0;
+    overflow: hidden;
+}
+
+.dropdown-item-avatar.coach-avatar-small {
+    background: linear-gradient(135deg, #14b8a6 0%, #0d9488 100%);
+}
+
+.dropdown-item-avatar img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+}
+
 .student-name {
     font-weight: 600;
     color: #1e293b;

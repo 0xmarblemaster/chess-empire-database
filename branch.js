@@ -326,9 +326,14 @@ function viewStudent(studentId) {
     window.location.href = 'student.html';
 }
 
-// View coach profile (placeholder)
+// View coach profile
 function viewCoach(coachId) {
-    showToast(t('branch.alert.coachSoon', { id: coachId }), 'info');
+    if (!coachId) {
+        showToast(t('coach.notFound') || 'Coach not found', 'error');
+        return;
+    }
+    localStorage.setItem('selectedCoachId', coachId);
+    window.location.href = 'coach.html';
 }
 
 function handleEditBranch() {

@@ -310,6 +310,42 @@ const translations = {
         "admin.modals.coach.deleteConfirm": "Are you sure you want to delete coach \"{{name}}\"?",
         "admin.modals.coach.deleteWarning": "Warning: This coach has {{count}} student(s) assigned. These students will need to be reassigned.",
         "admin.modals.coach.notFound": "Coach not found",
+        "admin.modals.coach.photo": "Photo",
+        "admin.modals.coach.uploadPhoto": "Upload Photo",
+        "admin.modals.coach.removePhoto": "Remove",
+        "admin.modals.coach.bio": "Bio",
+        "admin.modals.coach.bioPlaceholder": "Tell us about your coaching experience...",
+        "admin.modals.coach.socialLinks": "Social Links",
+        "admin.modals.coach.selectBranch": "Select branch...",
+        "admin.modals.coach.save": "Save Coach",
+
+        // Coach Card translations
+        "admin.coaches.noCoaches": "No coaches found",
+        "admin.coaches.loadingData": "Coaches data is loading...",
+        "admin.coaches.defaultBio": "Chess coach at Chess Empire",
+        "admin.coaches.students": "Students",
+        "admin.coaches.unassigned": "Unassigned",
+
+        // Coach Profile Page
+        "coach.title": "Coach Profile - Chess Empire",
+        "coach.back": "Back",
+        "coach.edit": "Edit",
+        "coach.notFound": "Coach not found",
+        "coach.noBranch": "No Branch",
+        "coach.totalStudents": "Total Students",
+        "coach.activeStudents": "Active",
+        "coach.avgLevel": "Avg Level",
+        "coach.titledStudents": "Titled",
+        "coach.contactInfo": "Contact Information",
+        "coach.myStudents": "My Students",
+        "coach.level": "Level",
+        "coach.andMore": "And {{count}} more students...",
+
+        // Search Results
+        "index.coaches": "Coaches",
+        "index.students": "Students",
+        "index.coachBadge": "Coach",
+        "index.noResults": "No results found",
 
         // Branch Management Modals
         "admin.modals.branch.addTitle": "Add New Branch",
@@ -910,6 +946,42 @@ const translations = {
         "admin.modals.coach.deleteConfirm": "\"{{name}}\" тренерін жоюға сенімдісіз бе?",
         "admin.modals.coach.deleteWarning": "Ескерту: Бұл тренерге {{count}} оқушы бекітілген. Оларды басқа тренерге ауыстыру керек.",
         "admin.modals.coach.notFound": "Тренер табылмады",
+        "admin.modals.coach.photo": "Фото",
+        "admin.modals.coach.uploadPhoto": "Фото жүктеу",
+        "admin.modals.coach.removePhoto": "Жою",
+        "admin.modals.coach.bio": "Өмірбаян",
+        "admin.modals.coach.bioPlaceholder": "Тренерлік тәжірибеңіз туралы айтып беріңіз...",
+        "admin.modals.coach.socialLinks": "Әлеуметтік желілер",
+        "admin.modals.coach.selectBranch": "Бөлімшені таңдаңыз...",
+        "admin.modals.coach.save": "Тренерді сақтау",
+
+        // Coach Card translations (Kazakh)
+        "admin.coaches.noCoaches": "Тренерлер табылмады",
+        "admin.coaches.loadingData": "Тренерлер деректері жүктелуде...",
+        "admin.coaches.defaultBio": "Chess Empire шахмат тренері",
+        "admin.coaches.students": "Оқушылар",
+        "admin.coaches.unassigned": "Тағайындалмаған",
+
+        // Coach Profile Page (Kazakh)
+        "coach.title": "Тренер профилі - Chess Empire",
+        "coach.back": "Артқа",
+        "coach.edit": "Өңдеу",
+        "coach.notFound": "Тренер табылмады",
+        "coach.noBranch": "Бөлімшесіз",
+        "coach.totalStudents": "Барлық оқушылар",
+        "coach.activeStudents": "Белсенді",
+        "coach.avgLevel": "Орт. деңгей",
+        "coach.titledStudents": "Разрядтар",
+        "coach.contactInfo": "Байланыс ақпараты",
+        "coach.myStudents": "Менің оқушыларым",
+        "coach.level": "Деңгей",
+        "coach.andMore": "Және тағы {{count}} оқушы...",
+
+        // Search Results (Kazakh)
+        "index.coaches": "Тренерлер",
+        "index.students": "Оқушылар",
+        "index.coachBadge": "Тренер",
+        "index.noResults": "Нәтиже табылмады",
 
         // Branch Management Modals (Kazakh)
         "admin.modals.branch.addTitle": "Жаңа бөлімше қосу",
@@ -1566,6 +1638,42 @@ const translations = {
         "admin.modals.coach.deleteConfirm": "Вы уверены, что хотите удалить тренера \"{{name}}\"?",
         "admin.modals.coach.deleteWarning": "Внимание: К этому тренеру прикреплено {{count}} ученик(ов). Их нужно будет переназначить.",
         "admin.modals.coach.notFound": "Тренер не найден",
+        "admin.modals.coach.photo": "Фото",
+        "admin.modals.coach.uploadPhoto": "Загрузить фото",
+        "admin.modals.coach.removePhoto": "Удалить",
+        "admin.modals.coach.bio": "Биография",
+        "admin.modals.coach.bioPlaceholder": "Расскажите о своём тренерском опыте...",
+        "admin.modals.coach.socialLinks": "Социальные сети",
+        "admin.modals.coach.selectBranch": "Выберите филиал...",
+        "admin.modals.coach.save": "Сохранить тренера",
+
+        // Coach Card translations (Russian)
+        "admin.coaches.noCoaches": "Тренеры не найдены",
+        "admin.coaches.loadingData": "Данные тренеров загружаются...",
+        "admin.coaches.defaultBio": "Тренер по шахматам Chess Empire",
+        "admin.coaches.students": "Ученики",
+        "admin.coaches.unassigned": "Не назначен",
+
+        // Coach Profile Page (Russian)
+        "coach.title": "Профиль тренера - Chess Empire",
+        "coach.back": "Назад",
+        "coach.edit": "Редактировать",
+        "coach.notFound": "Тренер не найден",
+        "coach.noBranch": "Без филиала",
+        "coach.totalStudents": "Всего учеников",
+        "coach.activeStudents": "Активных",
+        "coach.avgLevel": "Ср. уровень",
+        "coach.titledStudents": "Разряды",
+        "coach.contactInfo": "Контактная информация",
+        "coach.myStudents": "Мои ученики",
+        "coach.level": "Уровень",
+        "coach.andMore": "И ещё {{count}} учеников...",
+
+        // Search Results (Russian)
+        "index.coaches": "Тренеры",
+        "index.students": "Ученики",
+        "index.coachBadge": "Тренер",
+        "index.noResults": "Ничего не найдено",
 
         // Branch Management Modals (Russian)
         "admin.modals.branch.addTitle": "Добавить новый филиал",
