@@ -3824,6 +3824,7 @@ let attendanceImportCurrentStep = 1;
 let attendanceMatchedNames = [];
 let attendanceSearchQuery = ''; // Search filter for student names
 let attendanceStudentScheduleAssignments = {}; // { studentId: 'mon_wed' | 'tue_thu' | 'sat_sun' | null }
+let attendanceCurrentScheduleStudents = new Set(); // Students with time slot assignments in CURRENT schedule
 let attendanceHideEmptyRows = true; // Hide empty placeholder rows by default
 
 // Time slot configuration: 8 slots, 10 students per slot
@@ -4231,6 +4232,8 @@ async function loadAttendanceData() {
         const assignedStudentIds = new Set();
         // Track students that have been explicitly deleted (time_slot_index = -1)
         const deletedStudentIds = new Set();
+        // Reset the global set for current schedule students
+        attendanceCurrentScheduleStudents = new Set();
 
         if (timeSlotAssignmentsResult.status === 'fulfilled' && timeSlotAssignmentsResult.value) {
             const savedAssignments = timeSlotAssignmentsResult.value;
@@ -4247,6 +4250,8 @@ async function loadAttendanceData() {
                         deletedStudentIds.add(student.id);
                     } else {
                         student.time_slot_index = savedSlot;
+                        // Track that this student has a time slot in the CURRENT schedule
+                        attendanceCurrentScheduleStudents.add(student.id);
                     }
                     assignedStudentIds.add(student.id);
                 }
@@ -4275,42 +4280,36 @@ async function loadAttendanceData() {
 }
 
 // Load student schedule assignments (determine which schedule each student belongs to)
+// This is based on attendance records - students are assigned to the schedule they attend most
 async function loadStudentScheduleAssignments(branchId) {
     try {
-        // Query both attendance records AND time slot assignments to determine schedule assignments
-        // Time slot assignments are needed for students who have been added but not yet marked present
-        const [attendanceResult, timeSlotResult] = await Promise.allSettled([
-            window.supabaseClient
-                .from('attendance')
-                .select('student_id, schedule_type')
-                .eq('branch_id', branchId)
-                .eq('status', 'present'),
-            window.supabaseClient
-                .from('student_time_slot_assignments')
-                .select('student_id, schedule_type, time_slot_index')
-                .eq('branch_id', branchId)
-                .neq('time_slot_index', -1) // Exclude deleted assignments
-        ]);
+        // Query attendance records to determine schedule assignments
+        const { data, error } = await window.supabaseClient
+            .from('attendance')
+            .select('student_id, schedule_type')
+            .eq('branch_id', branchId)
+            .eq('status', 'present');
 
-        // Build assignment map
-        attendanceStudentScheduleAssignments = {};
-        const studentScheduleCounts = {}; // Track how many attendance records per schedule per student
-
-        // Process attendance records
-        if (attendanceResult.status === 'fulfilled' && attendanceResult.value && !attendanceResult.value.error && attendanceResult.value.data) {
-            console.log('Processing', attendanceResult.value.data.length, 'attendance records for schedule assignments');
-            attendanceResult.value.data.forEach(record => {
-                const studentId = record.student_id;
-                const scheduleType = record.schedule_type;
-
-                if (!studentScheduleCounts[studentId]) {
-                    studentScheduleCounts[studentId] = {};
-                }
-                studentScheduleCounts[studentId][scheduleType] = (studentScheduleCounts[studentId][scheduleType] || 0) + 1;
-            });
+        if (error) {
+            console.error('Error loading schedule assignments:', error);
+            return;
         }
 
-        // Assign each student to their most used schedule based on attendance (or first one if tied)
+        // Build assignment map: track how many records per schedule per student
+        attendanceStudentScheduleAssignments = {};
+        const studentScheduleCounts = {};
+
+        data.forEach(record => {
+            const studentId = record.student_id;
+            const scheduleType = record.schedule_type;
+
+            if (!studentScheduleCounts[studentId]) {
+                studentScheduleCounts[studentId] = {};
+            }
+            studentScheduleCounts[studentId][scheduleType] = (studentScheduleCounts[studentId][scheduleType] || 0) + 1;
+        });
+
+        // Assign each student to their most used schedule (or first one if tied)
         Object.entries(studentScheduleCounts).forEach(([studentId, schedules]) => {
             let maxCount = 0;
             let assignedSchedule = null;
@@ -4326,25 +4325,6 @@ async function loadStudentScheduleAssignments(branchId) {
                 attendanceStudentScheduleAssignments[studentId] = assignedSchedule;
             }
         });
-
-        // Also add students from time slot assignments who don't have attendance records yet
-        // This ensures newly-added students appear in the correct schedule
-        if (timeSlotResult.status === 'fulfilled' && timeSlotResult.value && !timeSlotResult.value.error && timeSlotResult.value.data) {
-            timeSlotResult.value.data.forEach(assignment => {
-                const studentId = assignment.student_id;
-                const scheduleType = assignment.schedule_type;
-
-                // Only add if student doesn't already have an assignment from attendance records
-                if (!attendanceStudentScheduleAssignments[studentId]) {
-                    attendanceStudentScheduleAssignments[studentId] = scheduleType;
-                }
-            });
-            console.log('Added', timeSlotResult.value.data.length, 'students from time slot assignments');
-        } else if (timeSlotResult.status === 'rejected') {
-            console.warn('Time slot assignments query failed:', timeSlotResult.reason);
-        } else if (timeSlotResult.value?.error) {
-            console.warn('Time slot assignments query error:', timeSlotResult.value.error);
-        }
 
         console.log('Loaded schedule assignments for', Object.keys(attendanceStudentScheduleAssignments).length, 'students');
     } catch (error) {
@@ -4522,6 +4502,11 @@ function renderAttendanceCalendar(preFilteredData = null) {
         if (attendanceCurrentSchedule && attendanceCurrentSchedule !== 'all' && attendanceCurrentSchedule !== '') {
             const beforeFilter = filteredData.length;
             filteredData = filteredData.filter(student => {
+                // Always show students who have a time slot assignment in the CURRENT schedule
+                // This ensures newly-added students appear even before they have attendance records
+                if (attendanceCurrentScheduleStudents.has(student.id)) {
+                    return true;
+                }
                 const assignedSchedule = attendanceStudentScheduleAssignments[student.id];
                 // Show student if: not assigned to any schedule yet, OR assigned to current schedule
                 return !assignedSchedule || assignedSchedule === attendanceCurrentSchedule;
@@ -5434,10 +5419,10 @@ function onAddStudentBranchChange() {
     clearSelectedStudent();
     document.getElementById('addStudentSearchInput').value = '';
 
-    // Filter students by selected branch
+    // Filter students by selected branch (only active students)
     if (selectedBranch && window.students) {
         addStudentBranchStudents = window.students
-            .filter(s => s.branch === selectedBranch)
+            .filter(s => s.branch === selectedBranch && s.status === 'active')
             .sort((a, b) => `${a.firstName} ${a.lastName}`.localeCompare(`${b.firstName} ${b.lastName}`));
     } else {
         addStudentBranchStudents = [];
