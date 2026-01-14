@@ -161,28 +161,34 @@ body {
     right: 0;
     display: inline-flex;
     align-items: center;
-    gap: 0.5rem;
-    padding: 0.625rem 1rem;
+    justify-content: center;
+    width: 40px;
+    height: 40px;
+    padding: 0;
     background: white;
     border: 1px solid #e2e8f0;
-    border-radius: 0.75rem;
+    border-radius: 50%;
     color: #475569;
-    font-weight: 600;
-    font-size: 0.875rem;
     cursor: pointer;
     transition: all 0.2s ease;
     box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
 }
 
 .edit-button:hover {
-    background: #f8fafc;
-    border-color: #cbd5e1;
+    background: #fef3c7;
+    border-color: #f59e0b;
+    color: #d97706;
     transform: translateY(-2px);
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+    box-shadow: 0 4px 12px rgba(245, 158, 11, 0.15);
 }
 
 .edit-button:active {
     transform: translateY(0);
+}
+
+/* Always hide edit button text - icon only */
+.edit-button-text {
+    display: none;
 }
 
 .avatar {
@@ -508,17 +514,6 @@ body {
         margin-bottom: 2rem;
         padding-bottom: 1.5rem;
         padding-top: 2.5rem;
-    }
-
-    .edit-button {
-        top: 0;
-        right: 0;
-        padding: 0.5rem 0.875rem;
-        font-size: 0.8125rem;
-    }
-
-    .edit-button-text {
-        display: none;
     }
 
     .avatar {
