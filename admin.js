@@ -4196,6 +4196,7 @@ async function loadAttendanceData() {
         // Process calendar data result
         if (calendarDataResult.status === 'fulfilled' && calendarDataResult.value) {
             const rawData = calendarDataResult.value;
+            console.log('Calendar data: got', rawData?.students?.length || 0, 'students from branch');
             // Transform data: merge students with their attendance records
             // rawData = { students: [...], attendance: { studentId: { date: {...} } } }
             if (rawData && rawData.students) {
@@ -4296,7 +4297,8 @@ async function loadStudentScheduleAssignments(branchId) {
         const studentScheduleCounts = {}; // Track how many attendance records per schedule per student
 
         // Process attendance records
-        if (attendanceResult.status === 'fulfilled' && attendanceResult.value.data) {
+        if (attendanceResult.status === 'fulfilled' && attendanceResult.value && !attendanceResult.value.error && attendanceResult.value.data) {
+            console.log('Processing', attendanceResult.value.data.length, 'attendance records for schedule assignments');
             attendanceResult.value.data.forEach(record => {
                 const studentId = record.student_id;
                 const scheduleType = record.schedule_type;
@@ -4327,7 +4329,7 @@ async function loadStudentScheduleAssignments(branchId) {
 
         // Also add students from time slot assignments who don't have attendance records yet
         // This ensures newly-added students appear in the correct schedule
-        if (timeSlotResult.status === 'fulfilled' && timeSlotResult.value.data) {
+        if (timeSlotResult.status === 'fulfilled' && timeSlotResult.value && !timeSlotResult.value.error && timeSlotResult.value.data) {
             timeSlotResult.value.data.forEach(assignment => {
                 const studentId = assignment.student_id;
                 const scheduleType = assignment.schedule_type;
@@ -4337,6 +4339,11 @@ async function loadStudentScheduleAssignments(branchId) {
                     attendanceStudentScheduleAssignments[studentId] = scheduleType;
                 }
             });
+            console.log('Added', timeSlotResult.value.data.length, 'students from time slot assignments');
+        } else if (timeSlotResult.status === 'rejected') {
+            console.warn('Time slot assignments query failed:', timeSlotResult.reason);
+        } else if (timeSlotResult.value?.error) {
+            console.warn('Time slot assignments query error:', timeSlotResult.value.error);
         }
 
         console.log('Loaded schedule assignments for', Object.keys(attendanceStudentScheduleAssignments).length, 'students');
@@ -4513,11 +4520,13 @@ function renderAttendanceCalendar(preFilteredData = null) {
         // Filter by schedule assignment: only show students who are assigned to current schedule OR unassigned
         // This ensures students only appear in their assigned schedule slot
         if (attendanceCurrentSchedule && attendanceCurrentSchedule !== 'all' && attendanceCurrentSchedule !== '') {
+            const beforeFilter = filteredData.length;
             filteredData = filteredData.filter(student => {
                 const assignedSchedule = attendanceStudentScheduleAssignments[student.id];
                 // Show student if: not assigned to any schedule yet, OR assigned to current schedule
                 return !assignedSchedule || assignedSchedule === attendanceCurrentSchedule;
             });
+            console.log('Schedule filter:', attendanceCurrentSchedule, '- kept', filteredData.length, 'of', beforeFilter, 'students');
         }
 
         // Search query no longer filters table - dropdown navigation is used instead
