@@ -1105,11 +1105,19 @@ function switchToSection(sectionName, updateHash = true) {
 
 // Load branch view with all data
 let branchCharts = {};
+let currentBranchStudents = [];
+let currentLevelFilter = null;
 
 function loadBranchView(branch) {
+    // Reset level filter when loading new branch
+    currentLevelFilter = null;
+
     // Get students and coaches for this branch
     const branchStudents = students.filter(s => s.branch === branch.name);
     const branchCoaches = coaches.filter(c => c.branch === branch.name);
+
+    // Store branch students globally for filtering
+    currentBranchStudents = branchStudents;
 
     // Update header
     document.getElementById('branchViewName').textContent = i18n.translateBranchName(branch.name);
@@ -1185,6 +1193,54 @@ function loadBranchStudents(branchStudents) {
             </div>
         `;
     }).join('');
+}
+
+// Filter students by level (called when clicking chart bar)
+function filterStudentsByLevel(level) {
+    if (currentLevelFilter === level) {
+        // Click same level again = reset to all students
+        currentLevelFilter = null;
+        loadBranchStudents(currentBranchStudents);
+        updateStudentsListHeading(null);
+        highlightChartBar(null);
+    } else {
+        // Filter by selected level
+        currentLevelFilter = level;
+        const filtered = currentBranchStudents.filter(s => s.currentLevel === level);
+        loadBranchStudents(filtered);
+        updateStudentsListHeading(level);
+        highlightChartBar(level);
+    }
+}
+
+// Update students list heading based on filter
+function updateStudentsListHeading(level) {
+    const headingSpan = document.querySelector('#branchSection .branch-card:last-child .card-title-inline span');
+    if (headingSpan) {
+        if (level === null) {
+            headingSpan.textContent = t('branch.students');
+        } else {
+            headingSpan.textContent = t('branch.studentsAtLevel', { level }) || `${t('branch.studentLevel', { level })}`;
+        }
+    }
+}
+
+// Highlight selected bar in level chart
+function highlightChartBar(selectedLevel) {
+    if (!branchCharts.level) return;
+
+    const baseColors = [
+        '#e0f2fe', '#bfdbfe', '#93c5fd', '#60a5fa',
+        '#3b82f6', '#2563eb', '#1d4ed8', '#1e40af'
+    ];
+
+    const newColors = baseColors.map((color, index) => {
+        if (selectedLevel === null) return color; // Reset all
+        return (index + 1 === selectedLevel) ? color : `${color}40`; // Fade unselected
+    });
+
+    branchCharts.level.data.datasets[0].backgroundColor = newColors;
+    branchCharts.level.update();
 }
 
 // Load branch charts
@@ -1328,6 +1384,16 @@ function loadBranchCharts(branchStudents) {
         options: {
             responsive: true,
             maintainAspectRatio: false,
+            onClick: (event, elements) => {
+                if (elements.length > 0) {
+                    const levelIndex = elements[0].index;
+                    const level = levelIndex + 1; // Levels are 1-8
+                    filterStudentsByLevel(level);
+                }
+            },
+            onHover: (event, elements) => {
+                event.native.target.style.cursor = elements.length ? 'pointer' : 'default';
+            },
             plugins: {
                 legend: {
                     display: false
