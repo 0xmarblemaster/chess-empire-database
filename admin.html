@@ -425,6 +425,35 @@
                         </div>
                     </div>
                 </div>
+
+                <!-- Age Distribution Section -->
+                <div class="branch-content-grid" style="margin-top: 1.5rem;">
+                    <!-- Age Distribution Chart -->
+                    <div class="branch-card">
+                        <div class="card-header-inline">
+                            <h2 class="card-title-inline">
+                                <i data-lucide="calendar" style="width: 20px; height: 20px;"></i>
+                                <span data-i18n="branch.ageDistribution">Age Distribution</span>
+                            </h2>
+                        </div>
+                        <div class="branch-chart-container">
+                            <canvas id="branchAgeChart"></canvas>
+                        </div>
+                    </div>
+
+                    <!-- Age Students List -->
+                    <div class="branch-card">
+                        <div class="card-header-inline">
+                            <h2 class="card-title-inline">
+                                <i data-lucide="users" style="width: 20px; height: 20px;"></i>
+                                <span id="ageStudentsHeading" data-i18n="branch.students">All Students</span>
+                            </h2>
+                        </div>
+                        <div class="branch-students-list" id="ageStudentsList">
+                            <!-- Age-filtered students will be loaded here -->
+                        </div>
+                    </div>
+                </div>
             </div>
             <!-- End Branch Section -->
 

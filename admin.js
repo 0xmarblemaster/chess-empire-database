@@ -1107,10 +1107,23 @@ function switchToSection(sectionName, updateHash = true) {
 let branchCharts = {};
 let currentBranchStudents = [];
 let currentLevelFilter = null;
+let currentAgeFilter = null;
+
+// Age groups for Age Distribution chart
+const AGE_GROUPS = [
+    { label: '5-6', min: 5, max: 6 },
+    { label: '7-8', min: 7, max: 8 },
+    { label: '9-10', min: 9, max: 10 },
+    { label: '11-12', min: 11, max: 12 },
+    { label: '13-14', min: 13, max: 14 },
+    { label: '15-16', min: 15, max: 16 },
+    { label: '17+', min: 17, max: 99 }
+];
 
 function loadBranchView(branch) {
-    // Reset level filter when loading new branch
+    // Reset filters when loading new branch
     currentLevelFilter = null;
+    currentAgeFilter = null;
 
     // Get students and coaches for this branch
     const branchStudents = students.filter(s => s.branch === branch.name);
@@ -1147,6 +1160,13 @@ function loadBranchView(branch) {
 
     // Load charts
     loadBranchCharts(branchStudents);
+
+    // Load age students list
+    loadAgeStudents(branchStudents);
+    updateAgeStudentsHeading(null, branchStudents.length);
+
+    // Refresh lucide icons for dynamically added elements
+    lucide.createIcons();
 }
 
 // Load branch coaches list
@@ -1252,6 +1272,86 @@ function highlightChartBar(selectedLevel) {
 
     branchCharts.level.data.datasets[0].backgroundColor = newColors;
     branchCharts.level.update();
+}
+
+// Load age students list
+function loadAgeStudents(studentsToShow) {
+    const container = document.getElementById('ageStudentsList');
+    if (!container) return;
+
+    if (studentsToShow.length === 0) {
+        container.innerHTML = `<div class="empty-state">${t('branch.noStudents')}</div>`;
+        return;
+    }
+
+    container.innerHTML = studentsToShow.map(student => {
+        const age = calculateAge(student.dateOfBirth) || student.age || '?';
+        return `
+            <div class="branch-student-item" onclick="viewStudent('${student.id}')">
+                <div class="branch-student-avatar">${student.firstName[0]}${student.lastName[0]}</div>
+                <div class="branch-student-info">
+                    <div class="branch-student-name">${student.firstName} ${student.lastName}</div>
+                    <div class="branch-student-meta">${t('branch.studentMeta', { age, coach: student.coach })}</div>
+                </div>
+                <div class="branch-student-level">${t('branch.studentLevel', { level: student.currentLevel })}</div>
+            </div>
+        `;
+    }).join('');
+}
+
+// Filter students by age group (called when clicking age chart bar)
+function filterStudentsByAge(groupIndex) {
+    const group = AGE_GROUPS[groupIndex];
+
+    if (currentAgeFilter === groupIndex) {
+        // Click same age group again = reset to all students
+        currentAgeFilter = null;
+        loadAgeStudents(currentBranchStudents);
+        updateAgeStudentsHeading(null, currentBranchStudents.length);
+        highlightAgeChartBar(null);
+    } else {
+        // Filter by selected age group
+        currentAgeFilter = groupIndex;
+        const filtered = currentBranchStudents.filter(s => {
+            const age = calculateAge(s.dateOfBirth) || s.age;
+            return age >= group.min && age <= group.max;
+        });
+        loadAgeStudents(filtered);
+        updateAgeStudentsHeading(group.label, filtered.length);
+        highlightAgeChartBar(groupIndex);
+    }
+}
+
+// Update age students list heading based on filter
+function updateAgeStudentsHeading(ageGroup, count) {
+    const heading = document.getElementById('ageStudentsHeading');
+    if (!heading) return;
+
+    const countText = count !== undefined ? ` (${count})` : '';
+
+    if (ageGroup === null) {
+        heading.textContent = t('branch.students') + countText;
+    } else {
+        heading.textContent = (t('branch.studentsAtAge', { age: ageGroup }) || `Age ${ageGroup} Students`) + countText;
+    }
+}
+
+// Highlight selected bar in age chart
+function highlightAgeChartBar(selectedIndex) {
+    if (!branchCharts.age) return;
+
+    const baseColors = [
+        '#dcfce7', '#bbf7d0', '#86efac', '#4ade80',
+        '#22c55e', '#16a34a', '#15803d'
+    ];
+
+    const newColors = baseColors.map((color, index) => {
+        if (selectedIndex === null) return color; // Reset all
+        return index === selectedIndex ? color : `${color}40`; // Fade unselected
+    });
+
+    branchCharts.age.data.datasets[0].backgroundColor = newColors;
+    branchCharts.age.update();
 }
 
 // Load branch charts
@@ -1443,6 +1543,95 @@ function loadBranchCharts(branchStudents) {
             }
         }
     });
+
+    // Load Age Distribution Chart
+    if (branchCharts.age) {
+        branchCharts.age.destroy();
+    }
+
+    // Count students per age group
+    const ageCounts = AGE_GROUPS.map(group => {
+        return branchStudents.filter(s => {
+            const age = calculateAge(s.dateOfBirth) || s.age;
+            return age >= group.min && age <= group.max;
+        }).length;
+    });
+
+    const ageCtx = document.getElementById('branchAgeChart');
+    if (ageCtx) {
+        const ageLabels = AGE_GROUPS.map(g => g.label);
+
+        branchCharts.age = new Chart(ageCtx, {
+            type: 'bar',
+            data: {
+                labels: ageLabels,
+                datasets: [{
+                    label: t('branch.chart.studentsLabel'),
+                    data: ageCounts,
+                    backgroundColor: [
+                        '#dcfce7',
+                        '#bbf7d0',
+                        '#86efac',
+                        '#4ade80',
+                        '#22c55e',
+                        '#16a34a',
+                        '#15803d'
+                    ],
+                    borderRadius: 6,
+                    borderSkipped: false
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                onClick: (event, elements) => {
+                    if (elements.length > 0) {
+                        const groupIndex = elements[0].index;
+                        filterStudentsByAge(groupIndex);
+                    }
+                },
+                onHover: (event, elements) => {
+                    event.native.target.style.cursor = elements.length ? 'pointer' : 'default';
+                },
+                plugins: {
+                    legend: {
+                        display: false
+                    },
+                    tooltip: {
+                        callbacks: {
+                            label: (context) => t('branch.chart.tooltip', { count: context.parsed.y })
+                        }
+                    }
+                },
+                scales: {
+                    y: {
+                        beginAtZero: true,
+                        ticks: {
+                            stepSize: 1,
+                            font: {
+                                family: "'Inter', sans-serif",
+                                size: 11
+                            }
+                        },
+                        grid: {
+                            color: '#f1f5f9'
+                        }
+                    },
+                    x: {
+                        ticks: {
+                            font: {
+                                family: "'Inter', sans-serif",
+                                size: 11
+                            }
+                        },
+                        grid: {
+                            display: false
+                        }
+                    }
+                }
+            }
+        });
+    }
 }
 
 // ============================================
