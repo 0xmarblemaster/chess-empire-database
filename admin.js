@@ -1142,6 +1142,9 @@ function loadBranchView(branch) {
     // Load students list
     loadBranchStudents(branchStudents);
 
+    // Update students list heading with count
+    updateStudentsListHeading(null, branchStudents.length);
+
     // Load charts
     loadBranchCharts(branchStudents);
 }
@@ -1183,7 +1186,7 @@ function loadBranchStudents(branchStudents) {
 
     studentsList.innerHTML = branchStudents.map(student => {
         return `
-            <div class="branch-student-item" onclick="viewStudent(${student.id})">
+            <div class="branch-student-item" onclick="viewStudent('${student.id}')">
                 <div class="branch-student-avatar">${student.firstName[0]}${student.lastName[0]}</div>
                 <div class="branch-student-info">
                     <div class="branch-student-name">${student.firstName} ${student.lastName}</div>
@@ -1197,28 +1200,24 @@ function loadBranchStudents(branchStudents) {
 
 // Filter students by level (called when clicking chart bar)
 function filterStudentsByLevel(level) {
-    console.log('filterStudentsByLevel called with level:', level);
-    console.log('currentBranchStudents count:', currentBranchStudents.length);
-
     if (currentLevelFilter === level) {
         // Click same level again = reset to all students
         currentLevelFilter = null;
         loadBranchStudents(currentBranchStudents);
-        updateStudentsListHeading(null);
+        updateStudentsListHeading(null, currentBranchStudents.length);
         highlightChartBar(null);
     } else {
         // Filter by selected level
         currentLevelFilter = level;
         const filtered = currentBranchStudents.filter(s => s.currentLevel === level);
-        console.log('Filtered students count:', filtered.length);
         loadBranchStudents(filtered);
-        updateStudentsListHeading(level);
+        updateStudentsListHeading(level, filtered.length);
         highlightChartBar(level);
     }
 }
 
 // Update students list heading based on filter
-function updateStudentsListHeading(level) {
+function updateStudentsListHeading(level, count) {
     // Find the heading span in the same card as branchStudentsList
     const studentsListContainer = document.getElementById('branchStudentsList');
     if (!studentsListContainer) return;
@@ -1228,10 +1227,11 @@ function updateStudentsListHeading(level) {
 
     const headingSpan = parentCard.querySelector('.card-title-inline span');
     if (headingSpan) {
+        const countText = count !== undefined ? ` (${count})` : '';
         if (level === null) {
-            headingSpan.textContent = t('branch.students');
+            headingSpan.textContent = t('branch.students') + countText;
         } else {
-            headingSpan.textContent = t('branch.studentsAtLevel', { level }) || `${t('branch.studentLevel', { level })}`;
+            headingSpan.textContent = (t('branch.studentsAtLevel', { level }) || `${t('branch.studentLevel', { level })}`) + countText;
         }
     }
 }
