@@ -94,13 +94,13 @@ async function loadCoachStudents(coach) {
     if (window.supabaseData && typeof window.supabaseData.getStudents === 'function') {
         try {
             const allStudents = await window.supabaseData.getStudents();
-            window.coachStudents = allStudents.filter(s => s.coach === coachFullName);
+            window.coachStudents = allStudents.filter(s => s.coach === coachFullName && s.status === 'active');
         } catch (error) {
             console.error('Error loading students:', error);
             window.coachStudents = [];
         }
     } else if (typeof students !== 'undefined' && Array.isArray(students)) {
-        window.coachStudents = students.filter(s => s.coach === coachFullName);
+        window.coachStudents = students.filter(s => s.coach === coachFullName && s.status === 'active');
     } else {
         window.coachStudents = [];
     }
