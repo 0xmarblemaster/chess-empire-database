@@ -1663,7 +1663,7 @@ const translations = {
         "coach.totalStudents": "Всего учеников",
         "coach.activeStudents": "Активных",
         "coach.avgLevel": "Ср. ступень",
-        "coach.titledStudents": "Разрядники",
+        "coach.titledStudents": "Разрядников",
         "coach.contactInfo": "Контактная информация",
         "coach.myStudents": "Мои ученики",
         "coach.level": "Уровень",
