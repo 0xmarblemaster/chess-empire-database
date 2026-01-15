@@ -1197,6 +1197,9 @@ function loadBranchStudents(branchStudents) {
 
 // Filter students by level (called when clicking chart bar)
 function filterStudentsByLevel(level) {
+    console.log('filterStudentsByLevel called with level:', level);
+    console.log('currentBranchStudents count:', currentBranchStudents.length);
+
     if (currentLevelFilter === level) {
         // Click same level again = reset to all students
         currentLevelFilter = null;
@@ -1207,6 +1210,7 @@ function filterStudentsByLevel(level) {
         // Filter by selected level
         currentLevelFilter = level;
         const filtered = currentBranchStudents.filter(s => s.currentLevel === level);
+        console.log('Filtered students count:', filtered.length);
         loadBranchStudents(filtered);
         updateStudentsListHeading(level);
         highlightChartBar(level);
@@ -1215,7 +1219,14 @@ function filterStudentsByLevel(level) {
 
 // Update students list heading based on filter
 function updateStudentsListHeading(level) {
-    const headingSpan = document.querySelector('#branchSection .branch-card:last-child .card-title-inline span');
+    // Find the heading span in the same card as branchStudentsList
+    const studentsListContainer = document.getElementById('branchStudentsList');
+    if (!studentsListContainer) return;
+
+    const parentCard = studentsListContainer.closest('.branch-card');
+    if (!parentCard) return;
+
+    const headingSpan = parentCard.querySelector('.card-title-inline span');
     if (headingSpan) {
         if (level === null) {
             headingSpan.textContent = t('branch.students');
