@@ -1129,8 +1129,11 @@ function loadBranchView(branch) {
     const branchStudents = students.filter(s => s.branch === branch.name);
     const branchCoaches = coaches.filter(c => c.branch === branch.name);
 
-    // Store branch students globally for filtering
-    currentBranchStudents = branchStudents;
+    // Filter for active students only (exclude 'left' and 'frozen' for charts/tables)
+    const activeStudentsOnly = branchStudents.filter(s => s.status === 'active');
+
+    // Store active branch students globally for filtering (Level and Age charts)
+    currentBranchStudents = activeStudentsOnly;
 
     // Update header
     document.getElementById('branchViewName').textContent = i18n.translateBranchName(branch.name);
@@ -1138,32 +1141,32 @@ function loadBranchView(branch) {
     document.getElementById('branchViewPhone').textContent = branch.phone;
     document.getElementById('branchViewEmail').textContent = branch.email;
 
-    // Update statistics
-    const activeStudents = branchStudents.filter(s => s.status === 'active').length;
+    // Update statistics (use all students for total count)
+    const activeStudentsCount = branchStudents.filter(s => s.status === 'active').length;
     const avgLevel = branchStudents.length > 0
         ? (branchStudents.reduce((sum, s) => sum + s.currentLevel, 0) / branchStudents.length).toFixed(1)
         : 0;
 
     document.getElementById('branchTotalStudents').textContent = branchStudents.length;
-    document.getElementById('branchActiveStudents').textContent = activeStudents;
+    document.getElementById('branchActiveStudents').textContent = activeStudentsCount;
     document.getElementById('branchTotalCoaches').textContent = branchCoaches.length;
     document.getElementById('branchAvgLevel').textContent = avgLevel;
 
-    // Load coaches list
+    // Load coaches list (show all students per coach)
     loadBranchCoaches(branchCoaches, branchStudents);
 
-    // Load students list
-    loadBranchStudents(branchStudents);
+    // Load students list (active students only for Level Distribution)
+    loadBranchStudents(activeStudentsOnly);
 
-    // Update students list heading with count
-    updateStudentsListHeading(null, branchStudents.length);
+    // Update students list heading with count (active only)
+    updateStudentsListHeading(null, activeStudentsOnly.length);
 
-    // Load charts
-    loadBranchCharts(branchStudents);
+    // Load charts (active students only)
+    loadBranchCharts(activeStudentsOnly);
 
-    // Load age students list
-    loadAgeStudents(branchStudents);
-    updateAgeStudentsHeading(null, branchStudents.length);
+    // Load age students list (active students only)
+    loadAgeStudents(activeStudentsOnly);
+    updateAgeStudentsHeading(null, activeStudentsOnly.length);
 
     // Refresh lucide icons for dynamically added elements
     lucide.createIcons();
