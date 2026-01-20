@@ -1,9 +1,11 @@
--- Clear all time slot assignments except for Halyk Arena (branch_id = 4)
+-- Clear all time slot assignments except for Halyk Arena
 -- This allows admins to manually assign students via "Add Student" button
 -- Halyk Arena already has manual assignments that should be preserved
 
 DELETE FROM student_time_slot_assignments
-WHERE branch_id != 4;
+WHERE branch_id NOT IN (
+    SELECT id FROM branches WHERE name = 'Halyk Arena'
+);
 
 -- Verify the deletion
 SELECT
