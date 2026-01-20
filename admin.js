@@ -4406,6 +4406,12 @@ function onMobileAttendanceBranchChange() {
     attendanceCurrentBranch = mobileSelect.value;
     if (desktopSelect) desktopSelect.value = mobileSelect.value;
 
+    // Reset coach filter to 'all' (new branch = new coaches)
+    attendanceCurrentCoach = 'all';
+
+    // Populate coach dropdown for new branch
+    populateAttendanceCoachDropdown();
+
     // Also populate mobile schedule filter if needed
     populateMobileAttendanceSchedules();
     populateAttendanceTimeSlots();
@@ -4455,7 +4461,9 @@ function syncMobileCoachFilter() {
     // Show/hide mobile card based on desktop visibility
     if (mobileCard) {
         const filterGroup = document.getElementById('attendanceCoachFilterGroup');
-        mobileCard.style.display = filterGroup?.style.display || 'none';
+        // Use 'block' for mobile cards (not 'flex' like desktop)
+        const isVisible = filterGroup?.style.display === 'flex';
+        mobileCard.style.display = isVisible ? 'block' : 'none';
     }
 }
 
