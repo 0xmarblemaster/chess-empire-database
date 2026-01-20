@@ -4086,6 +4086,7 @@ let attendanceCurrentSchedule = 'mon_wed';
 let attendanceCurrentYear = new Date().getFullYear();
 let attendanceCurrentMonth = new Date().getMonth(); // 0-indexed
 let attendanceCurrentTimeSlot = 'all';
+let attendanceCurrentCoach = 'all'; // 'all', coachId UUID, or 'unassigned'
 let attendanceCalendarData = [];
 let attendanceStudentAliases = [];
 let attendanceExcelParsedData = null;
@@ -4269,6 +4270,70 @@ function populateAttendanceBranchDropdown() {
     }
 }
 
+// Populate coach dropdown for attendance
+function populateAttendanceCoachDropdown() {
+    const select = document.getElementById('attendanceCoachFilter');
+    const filterGroup = document.getElementById('attendanceCoachFilterGroup');
+    if (!select) return;
+
+    // Clear dropdown
+    select.innerHTML = `<option value="all">${t('admin.attendance.allCoaches')}</option>`;
+
+    // Hide and disable if no branch selected
+    if (!attendanceCurrentBranch) {
+        select.disabled = true;
+        if (filterGroup) filterGroup.style.display = 'none';
+        return;
+    }
+
+    // Get branch object
+    const branchObj = window.branches.find(b => b.name === attendanceCurrentBranch);
+    if (!branchObj) {
+        select.disabled = true;
+        if (filterGroup) filterGroup.style.display = 'none';
+        return;
+    }
+
+    // Get coaches for selected branch
+    const branchCoaches = window.coaches.filter(c => c.branchId === branchObj.id);
+
+    // Hide filter if only 0-1 coaches
+    if (branchCoaches.length <= 1) {
+        if (filterGroup) filterGroup.style.display = 'none';
+        select.disabled = true;
+        return;
+    }
+
+    // Show and enable filter for multiple coaches
+    if (filterGroup) filterGroup.style.display = 'flex';
+    select.disabled = false;
+
+    // Add coach options
+    branchCoaches.forEach(coach => {
+        const option = document.createElement('option');
+        option.value = coach.id;
+        option.textContent = `${coach.firstName} ${coach.lastName}`;
+        if (attendanceCurrentCoach === coach.id) {
+            option.selected = true;
+        }
+        select.appendChild(option);
+    });
+
+    // Add "Unassigned" option if any students lack coach
+    const hasUnassignedStudents = window.students.some(
+        s => s.branchId === branchObj.id && !s.coachId && s.status === 'active'
+    );
+    if (hasUnassignedStudents) {
+        const option = document.createElement('option');
+        option.value = 'unassigned';
+        option.textContent = t('admin.attendance.unassignedCoach') || 'Unassigned';
+        select.appendChild(option);
+    }
+
+    // Sync mobile filter
+    syncMobileCoachFilter();
+}
+
 // Load student name aliases
 async function loadStudentAliases() {
     if (window.supabaseData && typeof window.supabaseData.getStudentNameAliases === 'function') {
@@ -4285,6 +4350,13 @@ async function loadStudentAliases() {
 function onAttendanceBranchChange() {
     const select = document.getElementById('attendanceBranchFilter');
     attendanceCurrentBranch = select.value;
+
+    // Reset coach filter to 'all' (new branch = new coaches)
+    attendanceCurrentCoach = 'all';
+
+    // Populate coach dropdown for new branch
+    populateAttendanceCoachDropdown();
+
     populateAttendanceTimeSlots();
     loadAttendanceData();
 }
@@ -4301,6 +4373,28 @@ function onAttendanceScheduleChange() {
 function onAttendanceTimeSlotChange() {
     const select = document.getElementById('attendanceTimeSlotFilter');
     attendanceCurrentTimeSlot = select.value;
+    loadAttendanceData();
+}
+
+// Handle coach filter change
+function onAttendanceCoachChange() {
+    const select = document.getElementById('attendanceCoachFilter');
+    attendanceCurrentCoach = select.value;
+
+    // Reset time slot filter (different coaches may have different slots)
+    attendanceCurrentTimeSlot = 'all';
+    const timeSlotSelect = document.getElementById('attendanceTimeSlotFilter');
+    if (timeSlotSelect) {
+        timeSlotSelect.value = 'all';
+    }
+
+    // Sync mobile filter
+    const mobileSelect = document.getElementById('mobileCoachFilter');
+    if (mobileSelect) {
+        mobileSelect.value = attendanceCurrentCoach;
+    }
+
+    // Reload data
     loadAttendanceData();
 }
 
@@ -4327,6 +4421,42 @@ function onMobileAttendanceScheduleChange() {
 
     populateAttendanceTimeSlots();
     loadAttendanceData();
+}
+
+function onMobileAttendanceCoachChange() {
+    const mobileSelect = document.getElementById('mobileCoachFilter');
+    const desktopSelect = document.getElementById('attendanceCoachFilter');
+
+    attendanceCurrentCoach = mobileSelect.value;
+    if (desktopSelect) desktopSelect.value = mobileSelect.value;
+
+    // Reset time slot filter
+    attendanceCurrentTimeSlot = 'all';
+    const timeSlotSelect = document.getElementById('attendanceTimeSlotFilter');
+    if (timeSlotSelect) {
+        timeSlotSelect.value = 'all';
+    }
+
+    loadAttendanceData();
+}
+
+// Sync mobile coach filter with desktop
+function syncMobileCoachFilter() {
+    const mobileSelect = document.getElementById('mobileCoachFilter');
+    const desktopSelect = document.getElementById('attendanceCoachFilter');
+    const mobileCard = document.getElementById('mobileCoachFilterCard');
+
+    if (!mobileSelect || !desktopSelect) return;
+
+    // Copy options from desktop to mobile
+    mobileSelect.innerHTML = desktopSelect.innerHTML;
+    mobileSelect.value = attendanceCurrentCoach;
+
+    // Show/hide mobile card based on desktop visibility
+    if (mobileCard) {
+        const filterGroup = document.getElementById('attendanceCoachFilterGroup');
+        mobileCard.style.display = filterGroup?.style.display || 'none';
+    }
 }
 
 // Populate mobile branch filter
@@ -4455,7 +4585,8 @@ async function loadAttendanceData() {
                 branchObj.id,
                 scheduleFilter,
                 attendanceCurrentYear,
-                attendanceCurrentMonth + 1
+                attendanceCurrentMonth + 1,
+                attendanceCurrentCoach === 'all' ? null : attendanceCurrentCoach
             ),
             // Load saved time slot assignments from database
             scheduleFilter ? window.supabaseData?.getTimeSlotAssignments?.(branchObj.id, scheduleFilter) : Promise.resolve([]),

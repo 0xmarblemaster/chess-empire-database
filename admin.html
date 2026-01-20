@@ -797,6 +797,14 @@
                         </select>
                     </div>
 
+                    <!-- Mobile Coach Filter (shows only for branches with 2+ coaches) -->
+                    <div class="mobile-filter-card" id="mobileCoachFilterCard" style="display: none;">
+                        <label for="mobileCoachFilter" data-i18n="admin.attendance.coach">Coach</label>
+                        <select id="mobileCoachFilter" onchange="onMobileAttendanceCoachChange()">
+                            <option value="all" data-i18n="admin.attendance.allCoaches">All Coaches</option>
+                        </select>
+                    </div>
+
                     <div class="mobile-filter-card">
                         <label for="mobileScheduleFilter" data-i18n="admin.attendance.schedule">Schedule</label>
                         <select id="mobileScheduleFilter" onchange="onMobileAttendanceScheduleChange()">
@@ -815,6 +823,13 @@
                             <label class="filter-label" data-i18n="admin.attendance.branch">Branch</label>
                             <select class="filter-select" id="attendanceBranchFilter" onchange="onAttendanceBranchChange()">
                                 <option value="" data-i18n="admin.attendance.selectBranch">Select Branch</option>
+                            </select>
+                        </div>
+                        <!-- Coach Filter (shows only for branches with 2+ coaches) -->
+                        <div class="filter-group" id="attendanceCoachFilterGroup" style="display: none;">
+                            <label class="filter-label" data-i18n="admin.attendance.coach">Coach</label>
+                            <select class="filter-select" id="attendanceCoachFilter" onchange="onAttendanceCoachChange()" disabled>
+                                <option value="all" data-i18n="admin.attendance.allCoaches">All Coaches</option>
                             </select>
                         </div>
                         <div class="filter-group">

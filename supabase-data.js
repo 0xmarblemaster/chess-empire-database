@@ -1684,7 +1684,7 @@ const supabaseData = {
      * Get students with their attendance for a specific branch/schedule/month
      * Returns a structure optimized for calendar rendering
      */
-    async getAttendanceCalendarData(branchId, scheduleType, year, month) {
+    async getAttendanceCalendarData(branchId, scheduleType, year, month, coachId = null) {
         // Calculate date range
         const startDate = `${year}-${String(month).padStart(2, '0')}-01`;
         const endDate = new Date(year, month, 0).toISOString().split('T')[0];
@@ -1701,14 +1701,24 @@ const supabaseData = {
             attendanceQuery = attendanceQuery.eq('schedule_type', scheduleType);
         }
 
+        // Build students query
+        let studentsQuery = window.supabaseClient
+            .from('students')
+            .select('id, first_name, last_name, coach_id')
+            .eq('branch_id', branchId)
+            .eq('status', 'active')
+            .order('last_name');
+
+        // Apply coach filter if provided
+        if (coachId === 'unassigned') {
+            studentsQuery = studentsQuery.is('coach_id', null);
+        } else if (coachId && coachId !== 'all') {
+            studentsQuery = studentsQuery.eq('coach_id', coachId);
+        }
+
         // Run both queries in parallel for faster loading
         const [studentsResult, attendanceResult] = await Promise.all([
-            window.supabaseClient
-                .from('students')
-                .select('id, first_name, last_name')
-                .eq('branch_id', branchId)
-                .eq('status', 'active')
-                .order('last_name'),
+            studentsQuery,
             attendanceQuery
         ]);
 
