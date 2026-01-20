@@ -4913,7 +4913,7 @@ function getAllMatchingDatesInMonth(year, month, targetDays) {
 // Helper function to get day-of-week numbers for a schedule type
 function getScheduleDaysOfWeek(scheduleType) {
     switch (scheduleType) {
-        case 'mon_wed': return [1, 3]; // Monday, Wednesday
+        case 'mon_wed': return [1, 3, 5]; // Monday, Wednesday, Friday
         case 'tue_thu': return [2, 4]; // Tuesday, Thursday
         case 'sat_sun': return [0, 6]; // Saturday, Sunday
         default: return [];
@@ -4931,7 +4931,7 @@ function getScheduleDates(year, month, scheduleType, offset = 0) {
 
     switch (scheduleType) {
         case 'mon_wed':
-            targetDays = [1, 3]; // Monday, Wednesday
+            targetDays = [1, 3, 5]; // Monday, Wednesday, Friday
             break;
         case 'tue_thu':
             targetDays = [2, 4]; // Tuesday, Thursday
