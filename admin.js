@@ -4151,7 +4151,7 @@ function initializeStudentTimeSlots(skipStudentIds = new Set()) {
 
         if (student.time_slot_index === null || student.time_slot_index === undefined) {
             // Assign based on position: first 10 to slot 0, next 10 to slot 1, etc.
-            student.time_slot_index = Math.floor(index / STUDENTS_PER_TIME_SLOT);
+            student.time_slot_index = Math.floor(index / DEFAULT_TIME_SLOT_ROWS);
             // Clamp to available slots (last slot gets overflow)
             if (student.time_slot_index >= numSlots) {
                 student.time_slot_index = numSlots - 1;
