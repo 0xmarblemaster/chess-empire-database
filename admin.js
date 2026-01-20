@@ -5165,7 +5165,7 @@ function renderAttendanceCalendar(preFilteredData = null) {
 
         // Get localized day name
         let dayName = dayNames[dayOfWeek];
-        const currentLang = window.currentLanguage || 'en';
+        const currentLang = getLanguage();
         if (currentLang === 'ru') {
             dayName = dayNamesRu[dayOfWeek];
         } else if (currentLang === 'kk') {
