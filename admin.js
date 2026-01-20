@@ -4131,7 +4131,8 @@ const ATTENDANCE_TIME_SLOTS_SAT_SUN = [
     '13:00-14:00'
 ];
 
-const STUDENTS_PER_TIME_SLOT = 10;
+const DEFAULT_TIME_SLOT_ROWS = 10;      // Default visible rows
+const MAX_TIME_SLOT_CAPACITY = 15;      // Maximum students per slot
 
 // Initialize time slot indices for all students
 // Students without a time_slot_index get assigned based on their array position
@@ -5040,7 +5041,7 @@ function renderAttendanceCalendar(preFilteredData = null) {
                             <polyline points="12 6 12 12 16 14"></polyline>
                         </svg>
                         <span>${timeSlot}</span>
-                        <span class="time-slot-count">(${studentCount}/${STUDENTS_PER_TIME_SLOT})</span>
+                        <span class="time-slot-count">(${studentCount}/${MAX_TIME_SLOT_CAPACITY})</span>
                     </div>
                 </td>
         `;
@@ -5053,8 +5054,12 @@ function renderAttendanceCalendar(preFilteredData = null) {
         bodyHtml += `</tr>`;
 
 
-        // Render all 10 student slots (filled with actual students or empty placeholders)
-        for (let rowIndex = 0; rowIndex < STUDENTS_PER_TIME_SLOT; rowIndex++) {
+        // Calculate how many rows to render for this slot
+        const actualStudentCount = slotStudents.length;
+        const rowsToRender = Math.max(DEFAULT_TIME_SLOT_ROWS, Math.min(actualStudentCount, MAX_TIME_SLOT_CAPACITY));
+
+        // Render student slots (filled with actual students or empty placeholders)
+        for (let rowIndex = 0; rowIndex < rowsToRender; rowIndex++) {
             const student = slotStudents[rowIndex];
 
             if (student) {
@@ -5363,15 +5368,16 @@ async function moveStudentToTimeSlot(studentId, fromSlotId, toSlotId, toSlotInde
         return;
     }
 
-    // Check if target slot has room (max 10 students per slot)
+    // Check if target slot has room (max 15 students per slot)
     const timeSlots = getTimeSlotsForBranch(attendanceCurrentBranch, attendanceCurrentSchedule);
     const filteredData = window.attendanceFilteredData || [];
     const targetSlotStudents = getStudentsForTimeSlot(toSlotIndex, filteredData);
 
-    if (targetSlotStudents.length >= STUDENTS_PER_TIME_SLOT) {
+    if (targetSlotStudents.length >= MAX_TIME_SLOT_CAPACITY) {
         showToast(
-            (t('admin.attendance.slotFull') || 'Time slot {slot} is full (10 students max)')
-                .replace('{slot}', timeSlots[toSlotIndex] || `Slot ${toSlotIndex + 1}`),
+            (t('admin.attendance.slotFull') || 'Time slot {slot} is full (15 students max)')
+                .replace('{slot}', timeSlots[toSlotIndex] || `Slot ${toSlotIndex + 1}`)
+                .replace('10', MAX_TIME_SLOT_CAPACITY.toString()),
             'error'
         );
         return;
@@ -6005,6 +6011,26 @@ async function submitAddStudentToCalendar() {
         const branchObj = window.branches.find(b => b.name === selectedBranch);
         if (!branchObj) {
             showToast(t('admin.attendance.branchNotFound') || 'Branch not found', 'error');
+            return;
+        }
+
+        // Check slot capacity before adding
+        const timeSlotIndex = parseInt(selectedTimeSlotIndex);
+        const studentsInSlot = (window.students || []).filter(s => {
+            const assignments = s.timeSlotAssignments || {};
+            return s.branchId === branchObj.id &&
+                   s.status === 'active' &&
+                   assignments[selectedSchedule] === timeSlotIndex &&
+                   s.id !== studentId; // Exclude current student in case of reassignment
+        });
+
+        if (studentsInSlot.length >= MAX_TIME_SLOT_CAPACITY) {
+            const timeSlots = getTimeSlotsForBranch(selectedBranch, selectedSchedule);
+            const slotName = timeSlots[timeSlotIndex] || `Slot ${timeSlotIndex + 1}`;
+            showToast(
+                `Time slot ${slotName} is full (${MAX_TIME_SLOT_CAPACITY} students max). Please select a different time slot.`,
+                'error'
+            );
             return;
         }
 
