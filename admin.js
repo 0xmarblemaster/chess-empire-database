@@ -4138,10 +4138,19 @@ const MAX_TIME_SLOT_CAPACITY = 15;      // Maximum students per slot
 // Students without a time_slot_index get assigned based on their array position
 // skipStudentIds: Set of student IDs that already have saved assignments (don't override them)
 function initializeStudentTimeSlots(skipStudentIds = new Set()) {
+    // Only auto-assign for Halyk Arena (branch_id = 4)
+    // All other branches require manual assignment via "Add Student" button
+    const branchObj = window.branches?.find(b => b.name === attendanceCurrentBranch);
+    if (!branchObj || branchObj.id !== 4) {
+        // For non-Halyk Arena branches, leave students unassigned
+        // They will not appear in any time slot until manually assigned
+        return;
+    }
+
     const timeSlots = getTimeSlotsForBranch(attendanceCurrentBranch, attendanceCurrentSchedule);
     const numSlots = timeSlots.length;
 
-    // For students without a slot, assign them sequentially
+    // For students without a slot, assign them sequentially (Halyk Arena only)
     let unassignedCount = 0;
     attendanceCalendarData.forEach((student, index) => {
         // Skip students who already have a saved assignment from the database
