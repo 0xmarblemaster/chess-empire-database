@@ -4096,6 +4096,7 @@ let attendanceSearchQuery = ''; // Search filter for student names
 let attendanceStudentScheduleAssignments = {}; // { studentId: 'mon_wed' | 'tue_thu' | 'sat_sun' | null }
 let attendanceCurrentScheduleStudents = new Set(); // Students with time slot assignments in CURRENT schedule
 let attendanceHideEmptyRows = true; // Hide empty placeholder rows by default
+let mobileCalendarOffset = 0; // Mobile: tracks which 4-day chunk (0, 4, 8, 12...)
 
 // Time slot configuration: 8 slots, 10 students per slot
 // Default slots for all branches (9:00 - 18:00)
@@ -4363,6 +4364,9 @@ function onAttendanceBranchChange() {
     // Reset coach filter to 'all' (new branch = new coaches)
     attendanceCurrentCoach = 'all';
 
+    // Reset mobile calendar offset to first chunk
+    mobileCalendarOffset = 0;
+
     // Populate coach dropdown for new branch
     populateAttendanceCoachDropdown();
 
@@ -4374,6 +4378,10 @@ function onAttendanceBranchChange() {
 function onAttendanceScheduleChange() {
     const select = document.getElementById('attendanceScheduleFilter');
     attendanceCurrentSchedule = select.value;
+
+    // Reset mobile calendar offset to first chunk
+    mobileCalendarOffset = 0;
+
     populateAttendanceTimeSlots();
     loadAttendanceData();
 }
@@ -4418,6 +4426,9 @@ function onMobileAttendanceBranchChange() {
     // Reset coach filter to 'all' (new branch = new coaches)
     attendanceCurrentCoach = 'all';
 
+    // Reset mobile calendar offset to first chunk
+    mobileCalendarOffset = 0;
+
     // Populate coach dropdown for new branch
     populateAttendanceCoachDropdown();
 
@@ -4433,6 +4444,9 @@ function onMobileAttendanceScheduleChange() {
 
     attendanceCurrentSchedule = mobileSelect.value;
     if (desktopSelect) desktopSelect.value = mobileSelect.value;
+
+    // Reset mobile calendar offset to first chunk
+    mobileCalendarOffset = 0;
 
     populateAttendanceTimeSlots();
     loadAttendanceData();
@@ -4556,6 +4570,71 @@ function navigateAttendanceMonth(direction) {
         attendancePrevMonth();
     } else {
         attendanceNextMonth();
+    }
+}
+
+// Navigate mobile calendar by 4-day chunks
+function navigateMobileCalendar(direction) {
+    const isMobile = window.innerWidth <= 768;
+    if (!isMobile) {
+        // Desktop: use old month-switching behavior
+        navigateAttendanceMonth(direction);
+        return;
+    }
+
+    // Get all matching dates for current month
+    const targetDays = getScheduleDaysOfWeek(attendanceCurrentSchedule);
+    const allDates = getAllMatchingDatesInMonth(
+        attendanceCurrentYear,
+        attendanceCurrentMonth,
+        targetDays
+    );
+
+    if (direction > 0) {
+        // Next: advance by 4
+        mobileCalendarOffset += 4;
+
+        // If offset exceeds available dates, go to next month
+        if (mobileCalendarOffset >= allDates.length) {
+            attendanceCurrentMonth++;
+            if (attendanceCurrentMonth > 11) {
+                attendanceCurrentMonth = 0;
+                attendanceCurrentYear++;
+            }
+            mobileCalendarOffset = 0;
+            updateAttendanceMonthDisplay();
+            loadAttendanceData();
+        } else {
+            // Stay in same month, just re-render with new offset
+            renderAttendanceCalendar();
+        }
+    } else {
+        // Previous: go back by 4
+        mobileCalendarOffset -= 4;
+
+        // If offset is negative, go to previous month's last chunk
+        if (mobileCalendarOffset < 0) {
+            attendanceCurrentMonth--;
+            if (attendanceCurrentMonth < 0) {
+                attendanceCurrentMonth = 11;
+                attendanceCurrentYear--;
+            }
+
+            // Calculate offset for last 4-day chunk of previous month
+            const prevMonthDates = getAllMatchingDatesInMonth(
+                attendanceCurrentYear,
+                attendanceCurrentMonth,
+                targetDays
+            );
+            const chunks = Math.ceil(prevMonthDates.length / 4);
+            mobileCalendarOffset = (chunks - 1) * 4;
+
+            updateAttendanceMonthDisplay();
+            loadAttendanceData();
+        } else {
+            // Stay in same month, just re-render with new offset
+            renderAttendanceCalendar();
+        }
     }
 }
 
@@ -4818,12 +4897,33 @@ async function loadLowAttendanceAlerts(branchId) {
     }
 }
 
-// Helper function to get dates for a specific schedule type in a given month
-function getScheduleDates(year, month, scheduleType) {
-    const dates = [];
+// Helper function to get all matching dates in a month for given days of week
+function getAllMatchingDatesInMonth(year, month, targetDays) {
     const daysInMonth = new Date(year, month + 1, 0).getDate();
+    const dates = [];
+    for (let day = 1; day <= daysInMonth; day++) {
+        const date = new Date(year, month, day);
+        if (targetDays.includes(date.getDay())) {
+            dates.push(day);
+        }
+    }
+    return dates;
+}
+
+// Helper function to get day-of-week numbers for a schedule type
+function getScheduleDaysOfWeek(scheduleType) {
+    switch (scheduleType) {
+        case 'mon_wed': return [1, 3]; // Monday, Wednesday
+        case 'tue_thu': return [2, 4]; // Tuesday, Thursday
+        case 'sat_sun': return [0, 6]; // Saturday, Sunday
+        default: return [];
+    }
+}
+
+// Helper function to get dates for a specific schedule type in a given month
+function getScheduleDates(year, month, scheduleType, offset = 0) {
     const isMobile = window.innerWidth <= 768;
-    const maxDates = isMobile ? 4 : null; // Limit to 4 on mobile, unlimited on desktop
+    const daysInMonth = new Date(year, month + 1, 0).getDate();
 
     // Define which days of week correspond to each schedule
     // 0 = Sunday, 1 = Monday, 2 = Tuesday, 3 = Wednesday, 4 = Thursday, 5 = Friday, 6 = Saturday
@@ -4840,31 +4940,33 @@ function getScheduleDates(year, month, scheduleType) {
             targetDays = [0, 6]; // Saturday, Sunday
             break;
         default:
-            // If no schedule selected, return all days (or limited on mobile)
+            // If no schedule selected, return all days (or limited on mobile with offset)
+            const allDays = [];
             for (let day = 1; day <= daysInMonth; day++) {
-                dates.push(day);
-                // Limit to 4 dates for mobile optimization only
-                if (maxDates && dates.length >= maxDates) {
-                    break;
-                }
+                allDays.push(day);
             }
-            return dates;
+            // On mobile, return 4-date window based on offset
+            if (isMobile) {
+                return allDays.slice(offset, offset + 4);
+            }
+            return allDays;
     }
 
-    // Find all dates that match the target days of week
+    // Collect ALL matching dates for the month
+    const allMatchingDates = [];
     for (let day = 1; day <= daysInMonth; day++) {
         const date = new Date(year, month, day);
-        const dayOfWeek = date.getDay();
-        if (targetDays.includes(dayOfWeek)) {
-            dates.push(day);
-        }
-        // Limit to 4 dates for mobile optimization only
-        if (maxDates && dates.length >= maxDates) {
-            break;
+        if (targetDays.includes(date.getDay())) {
+            allMatchingDates.push(day);
         }
     }
 
-    return dates;
+    // On mobile, return 4-date window based on offset
+    if (isMobile) {
+        return allMatchingDates.slice(offset, offset + 4);
+    }
+
+    return allMatchingDates; // Desktop: all dates
 }
 
 // Render empty attendance calendar
@@ -4893,7 +4995,7 @@ function renderAttendanceCalendar(preFilteredData = null) {
     }
 
     // Get dates filtered by schedule type
-    const scheduleDates = getScheduleDates(attendanceCurrentYear, attendanceCurrentMonth, attendanceCurrentSchedule);
+    const scheduleDates = getScheduleDates(attendanceCurrentYear, attendanceCurrentMonth, attendanceCurrentSchedule, mobileCalendarOffset);
 
     // If pre-filtered data is provided (e.g., after drag-and-drop), use it directly
     // and skip re-filtering to preserve the drag-and-drop order
@@ -6250,7 +6352,7 @@ function updateRowAttendanceRate(studentId) {
     const studentData = attendanceCalendarData.find(s => s.id === studentId);
     if (!studentData) return;
 
-    const scheduleDates = getScheduleDates(attendanceCurrentYear, attendanceCurrentMonth, attendanceCurrentSchedule);
+    const scheduleDates = getScheduleDates(attendanceCurrentYear, attendanceCurrentMonth, attendanceCurrentSchedule, mobileCalendarOffset);
     const LESSONS_PER_MONTH = 8; // Fixed: every student is eligible for 8 lessons per month
 
     let presentCount = 0;
@@ -7445,7 +7547,7 @@ document.addEventListener('DOMContentLoaded', () => {
         prevBtn.addEventListener('click', function(e) {
             e.preventDefault();
             e.stopPropagation();
-            navigateAttendanceMonth(-1);
+            navigateMobileCalendar(-1);
         });
     }
 
@@ -7453,7 +7555,7 @@ document.addEventListener('DOMContentLoaded', () => {
         nextBtn.addEventListener('click', function(e) {
             e.preventDefault();
             e.stopPropagation();
-            navigateAttendanceMonth(1);
+            navigateMobileCalendar(1);
         });
     }
 
