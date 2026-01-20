@@ -4227,6 +4227,9 @@ function showAttendanceManagement(updateHash = true) {
     populateAttendanceBranchDropdown();
     populateMobileBranchFilter();
 
+    // Populate schedule dropdown based on branch
+    populateAttendanceScheduleDropdown();
+
     // Initialize schedule filter from dropdown
     const scheduleSelect = document.getElementById('attendanceScheduleFilter');
     if (scheduleSelect) {
@@ -4356,6 +4359,69 @@ async function loadStudentAliases() {
     }
 }
 
+// Populate schedule dropdown based on selected branch
+function populateAttendanceScheduleDropdown() {
+    const desktopSelect = document.getElementById('attendanceScheduleFilter');
+    const mobileSelect = document.getElementById('mobileScheduleFilter');
+    const addStudentSelect = document.getElementById('addStudentScheduleSelect');
+
+    // Determine which schedule type to use based on branch
+    const isDebutBranch = attendanceCurrentBranch && attendanceCurrentBranch.toLowerCase().includes('debut');
+    const monWedValue = isDebutBranch ? 'mon_wed_fri' : 'mon_wed';
+    const monWedLabel = isDebutBranch ? 'admin.attendance.monWedFri' : 'admin.attendance.monWed';
+
+    // Update desktop dropdown
+    if (desktopSelect) {
+        const currentValue = desktopSelect.value;
+        desktopSelect.innerHTML = `
+            <option value="" data-i18n="admin.attendance.allSchedules">All Schedules</option>
+            <option value="${monWedValue}" data-i18n="${monWedLabel}">${t(monWedLabel)}</option>
+            <option value="tue_thu" data-i18n="admin.attendance.tueThu">${t('admin.attendance.tueThu')}</option>
+            <option value="sat_sun" data-i18n="admin.attendance.satSun">${t('admin.attendance.satSun')}</option>
+        `;
+        // Restore previous selection if valid
+        if (currentValue === 'mon_wed' || currentValue === 'mon_wed_fri') {
+            desktopSelect.value = monWedValue;
+            attendanceCurrentSchedule = monWedValue;
+        } else if (currentValue) {
+            desktopSelect.value = currentValue;
+        }
+    }
+
+    // Update mobile dropdown
+    if (mobileSelect) {
+        const currentValue = mobileSelect.value;
+        mobileSelect.innerHTML = `
+            <option value="" data-i18n="admin.attendance.allSchedules">All Schedules</option>
+            <option value="${monWedValue}" data-i18n="${monWedLabel}">${t(monWedLabel)}</option>
+            <option value="tue_thu" data-i18n="admin.attendance.tueThu">${t('admin.attendance.tueThu')}</option>
+            <option value="sat_sun" data-i18n="admin.attendance.satSun">${t('admin.attendance.satSun')}</option>
+        `;
+        // Restore previous selection if valid
+        if (currentValue === 'mon_wed' || currentValue === 'mon_wed_fri') {
+            mobileSelect.value = monWedValue;
+        } else if (currentValue) {
+            mobileSelect.value = currentValue;
+        }
+    }
+
+    // Update add student modal dropdown
+    if (addStudentSelect) {
+        const currentValue = addStudentSelect.value;
+        addStudentSelect.innerHTML = `
+            <option value="${monWedValue}" data-i18n="${monWedLabel}">${t(monWedLabel)}</option>
+            <option value="tue_thu" data-i18n="admin.attendance.tueThu">${t('admin.attendance.tueThu')}</option>
+            <option value="sat_sun" data-i18n="admin.attendance.satSun">${t('admin.attendance.satSun')}</option>
+        `;
+        // Restore previous selection if valid
+        if (currentValue === 'mon_wed' || currentValue === 'mon_wed_fri') {
+            addStudentSelect.value = monWedValue;
+        } else if (currentValue) {
+            addStudentSelect.value = currentValue;
+        }
+    }
+}
+
 // Handle branch filter change
 function onAttendanceBranchChange() {
     const select = document.getElementById('attendanceBranchFilter');
@@ -4366,6 +4432,9 @@ function onAttendanceBranchChange() {
 
     // Reset mobile calendar offset to first chunk
     mobileCalendarOffset = 0;
+
+    // Populate schedule dropdown based on branch
+    populateAttendanceScheduleDropdown();
 
     // Populate coach dropdown for new branch
     populateAttendanceCoachDropdown();
@@ -4428,6 +4497,9 @@ function onMobileAttendanceBranchChange() {
 
     // Reset mobile calendar offset to first chunk
     mobileCalendarOffset = 0;
+
+    // Populate schedule dropdown based on branch
+    populateAttendanceScheduleDropdown();
 
     // Populate coach dropdown for new branch
     populateAttendanceCoachDropdown();
@@ -4913,7 +4985,8 @@ function getAllMatchingDatesInMonth(year, month, targetDays) {
 // Helper function to get day-of-week numbers for a schedule type
 function getScheduleDaysOfWeek(scheduleType) {
     switch (scheduleType) {
-        case 'mon_wed': return [1, 3, 5]; // Monday, Wednesday, Friday
+        case 'mon_wed': return [1, 3]; // Monday, Wednesday
+        case 'mon_wed_fri': return [1, 3, 5]; // Monday, Wednesday, Friday (Debut only)
         case 'tue_thu': return [2, 4]; // Tuesday, Thursday
         case 'sat_sun': return [0, 6]; // Saturday, Sunday
         default: return [];
@@ -4931,7 +5004,10 @@ function getScheduleDates(year, month, scheduleType, offset = 0) {
 
     switch (scheduleType) {
         case 'mon_wed':
-            targetDays = [1, 3, 5]; // Monday, Wednesday, Friday
+            targetDays = [1, 3]; // Monday, Wednesday
+            break;
+        case 'mon_wed_fri':
+            targetDays = [1, 3, 5]; // Monday, Wednesday, Friday (Debut only)
             break;
         case 'tue_thu':
             targetDays = [2, 4]; // Tuesday, Thursday
