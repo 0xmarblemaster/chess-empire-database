@@ -5082,6 +5082,7 @@ function renderAttendanceCalendar(preFilteredData = null) {
                         style="${isExpanded ? '' : 'display: none;'}">
                         <td class="attendance-student-cell">
                             <div style="display: flex; align-items: center; gap: 0.5rem; width: 100%;">
+                                <span style="min-width: 20px; text-align: right; font-size: 0.75rem; color: #94a3b8; font-weight: 500;">${rowIndex + 1}</span>
                                 <div class="drag-handle-container" style="position: relative;">
                                     <div class="drag-handle"
                                          style="cursor: grab; color: #94a3b8; display: flex; align-items: center;"
@@ -5163,10 +5164,11 @@ function renderAttendanceCalendar(preFilteredData = null) {
                         style="${isExpanded ? '' : 'display: none;'}">
                         <td class="attendance-student-cell">
                             <div style="display: flex; align-items: center; gap: 0.5rem; opacity: 0.4;">
+                                <span style="min-width: 20px; text-align: right; font-size: 0.75rem; color: #94a3b8; font-weight: 500;">${rowIndex + 1}</span>
                                 <div class="student-avatar" style="width: 28px; height: 28px; font-size: 0.75rem; background: #e2e8f0; color: #94a3b8;">
                                     --
                                 </div>
-                                <span style="color: #94a3b8; font-style: italic;">Empty slot ${rowIndex + 1}</span>
+                                <span style="color: #94a3b8; font-style: italic;">Empty slot</span>
                             </div>
                         </td>
                 `;
