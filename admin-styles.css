@@ -1262,6 +1262,35 @@ td {
     color: #475569;
 }
 
+.app-access-role-selector {
+    padding: 0.5rem 0.75rem;
+    border-radius: 8px;
+    border: 2px solid #e2e8f0;
+    background: white;
+    font-size: 0.875rem;
+    font-weight: 600;
+    color: #334155;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    outline: none;
+    min-width: 140px;
+}
+
+.app-access-role-selector:hover {
+    border-color: #cbd5e1;
+    background: #f8fafc;
+}
+
+.app-access-role-selector:focus {
+    border-color: #3b82f6;
+    box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+}
+
+.app-access-role-selector option {
+    padding: 0.5rem;
+    font-weight: 600;
+}
+
 .app-access-permission-grid {
     margin-top: 1rem;
     display: grid;

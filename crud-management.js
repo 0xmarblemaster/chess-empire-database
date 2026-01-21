@@ -1151,8 +1151,7 @@ function displayAppAccessUsers(users) {
     }
 
     // Check if current user is admin
-    const currentUserRole = window.supabaseAuth?.getCurrentUserRole();
-    const isCurrentUserAdmin = currentUserRole?.role === 'admin';
+    const isCurrentUserAdmin = window.supabaseAuth?.isAdmin() || false;
 
     container.innerHTML = users.map(user => {
         const roleLabel = getAppAccessRoleLabel(user.role);
@@ -1171,7 +1170,18 @@ function displayAppAccessUsers(users) {
                         </div>
                     </div>
                     <div style="display: flex; align-items: center; gap: 0.75rem;">
-                        <span class="app-access-role-badge app-access-role-${user.role}">${roleLabel}</span>
+                        ${isCurrentUserAdmin ? `
+                            <select class="app-access-role-selector"
+                                    data-user-id="${user.user_id}"
+                                    data-current-role="${user.role}"
+                                    onchange="handleRoleChange(this, '${user.user_id}', '${emailText}')">
+                                <option value="admin" ${user.role === 'admin' ? 'selected' : ''}>${window.t ? window.t('access.roles.admin') : 'Administrator'}</option>
+                                <option value="coach" ${user.role === 'coach' ? 'selected' : ''}>${window.t ? window.t('access.roles.coach') : 'Coach'}</option>
+                                <option value="viewer" ${user.role === 'viewer' ? 'selected' : ''}>${window.t ? window.t('access.roles.viewer') : 'Viewer'}</option>
+                            </select>
+                        ` : `
+                            <span class="app-access-role-badge app-access-role-${user.role}">${roleLabel}</span>
+                        `}
                         ${isCurrentUserAdmin ? `
                             <button class="app-access-delete-btn"
                                     onclick="deleteAppAccessUser('${user.user_id}', '${emailText}')"
@@ -1386,6 +1396,63 @@ async function deleteAppAccessUser(userId, userEmail) {
     }
 }
 window.deleteAppAccessUser = deleteAppAccessUser;
+
+// Handle role change
+async function handleRoleChange(selectElement, userId, userEmail) {
+    const newRole = selectElement.value;
+    const previousRole = selectElement.dataset.currentRole;
+
+    // Confirm the change
+    const confirmMessage = window.t
+        ? window.t('access.users.confirmRoleChange', { email: userEmail, newRole: getAppAccessRoleLabel(newRole) })
+        : `Are you sure you want to change ${userEmail}'s role to ${newRole}?`;
+
+    if (!confirm(confirmMessage)) {
+        // Revert selection if cancelled
+        selectElement.value = previousRole;
+        return;
+    }
+
+    try {
+        console.log(`🔄 Changing role for user ${userId} from ${previousRole} to ${newRole}...`);
+
+        // Update role in database
+        const { error } = await window.supabaseClient
+            .from('user_roles')
+            .update({ role: newRole })
+            .eq('user_id', userId);
+
+        if (error) {
+            throw error;
+        }
+
+        // Update the data attribute
+        selectElement.dataset.currentRole = newRole;
+
+        // Show success message
+        const successMessage = window.t
+            ? window.t('access.users.roleChangeSuccess', { email: userEmail })
+            : `Role updated successfully for ${userEmail}`;
+        showAppAccessMessage('success', successMessage);
+
+        console.log('✅ Role updated successfully');
+
+        // Reload users to refresh UI (including permission visibility)
+        await loadSupabaseAppAccessUsers();
+
+    } catch (error) {
+        console.error('❌ Error updating role:', error);
+
+        // Revert selection on error
+        selectElement.value = previousRole;
+
+        const errorMessage = window.t
+            ? window.t('access.users.roleChangeError')
+            : 'Failed to update role. Please try again.';
+        showAppAccessMessage('error', errorMessage + ' ' + error.message);
+    }
+}
+window.handleRoleChange = handleRoleChange;
 
 async function handleAppAccessInviteSubmit(event) {
     event.preventDefault();
