@@ -1198,6 +1198,9 @@ function displayAppAccessUsers(users) {
                             ${createAppAccessPermissionToggle(user, 'can_edit_students')}
                             ${createAppAccessPermissionToggle(user, 'can_manage_branches')}
                             ${createAppAccessPermissionToggle(user, 'can_manage_coaches')}
+                            ${createAppAccessPermissionToggle(user, 'can_manage_ratings')}
+                            ${createAppAccessPermissionToggle(user, 'can_manage_data')}
+                            ${createAppAccessPermissionToggle(user, 'can_manage_attendance')}
                         </div>`
                     : `<p class="app-access-admin-hint">${adminHint}</p>`
                 }
@@ -1263,7 +1266,10 @@ function getAppAccessPermissionLabel(permissionKey) {
         can_manage_app_access: 'access.permissions.manageAppAccess',
         can_edit_students: 'access.permissions.editStudents',
         can_manage_branches: 'access.permissions.manageBranches',
-        can_manage_coaches: 'access.permissions.manageCoaches'
+        can_manage_coaches: 'access.permissions.manageCoaches',
+        can_manage_ratings: 'access.permissions.manageRatings',
+        can_manage_data: 'access.permissions.manageData',
+        can_manage_attendance: 'access.permissions.manageAttendance'
     };
 
     if (window.t && keyMap[permissionKey]) {
@@ -1274,7 +1280,10 @@ function getAppAccessPermissionLabel(permissionKey) {
         can_manage_app_access: 'App Access',
         can_edit_students: 'Edit Students',
         can_manage_branches: 'Manage Branches',
-        can_manage_coaches: 'Manage Coaches'
+        can_manage_coaches: 'Manage Coaches',
+        can_manage_ratings: 'Ratings Management',
+        can_manage_data: 'Data Management',
+        can_manage_attendance: 'Attendance'
     };
 
     return fallback[permissionKey] || permissionKey;

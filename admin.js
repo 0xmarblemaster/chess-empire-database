@@ -135,8 +135,29 @@ function updateMenuVisibility() {
         }
     }
 
-    // Data management - only for admins
-    // Can be extended with specific permission later if needed
+    // Ratings management
+    if (userRole.can_manage_ratings === true) {
+        if (menuRatings) {
+            menuRatings.style.display = 'flex';
+            hasAnyManagementAccess = true;
+        }
+    }
+
+    // Data management
+    if (userRole.can_manage_data === true) {
+        if (menuDataManagement) {
+            menuDataManagement.style.display = 'flex';
+            hasAnyManagementAccess = true;
+        }
+    }
+
+    // Attendance management
+    if (userRole.can_manage_attendance === true) {
+        if (menuAttendance) {
+            menuAttendance.style.display = 'flex';
+            hasAnyManagementAccess = true;
+        }
+    }
 
     // Show/hide Management section title based on whether user has any management access
     if (managementSectionTitle) {

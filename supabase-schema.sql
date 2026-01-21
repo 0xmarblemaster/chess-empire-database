@@ -63,6 +63,10 @@ CREATE TABLE IF NOT EXISTS user_roles (
     can_edit_students BOOLEAN DEFAULT FALSE,
     can_manage_branches BOOLEAN DEFAULT FALSE,
     can_manage_coaches BOOLEAN DEFAULT FALSE,
+    can_manage_app_access BOOLEAN DEFAULT FALSE,
+    can_manage_ratings BOOLEAN DEFAULT FALSE,
+    can_manage_data BOOLEAN DEFAULT FALSE,
+    can_manage_attendance BOOLEAN DEFAULT FALSE,
 
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
