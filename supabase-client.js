@@ -44,7 +44,7 @@ try {
                 // Fetch and store user role
                 supabaseClient
                     .from('user_roles')
-                    .select('role, can_view_all_students, can_edit_students, can_manage_branches, can_manage_coaches, can_manage_app_access')
+                    .select('role, can_view_all_students, can_edit_students, can_manage_branches, can_manage_coaches, can_manage_app_access, can_manage_ratings, can_manage_data, can_manage_attendance')
                     .eq('user_id', session.user.id)
                     .single()
                     .then(({ data: userRole, error }) => {
