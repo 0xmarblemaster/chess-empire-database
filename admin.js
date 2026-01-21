@@ -103,11 +103,6 @@ function updateMenuVisibility() {
         return;
     }
 
-    // Coaches always have access to attendance tracking
-    if (userRole.role === 'coach') {
-        if (menuAttendance) menuAttendance.style.display = 'flex';
-    }
-
     // For non-admins, show based on specific permissions
     let hasAnyManagementAccess = false;
 
