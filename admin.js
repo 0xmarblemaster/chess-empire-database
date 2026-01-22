@@ -379,7 +379,7 @@ function loadStudents() {
     if (filteredStudents.length === 0) {
         tbody.innerHTML = `
             <tr>
-                <td colspan="8" style="text-align: center; padding: 3rem; color: #94a3b8;">
+                <td colspan="9" style="text-align: center; padding: 3rem; color: #94a3b8;">
                     <i data-lucide="users" style="width: 48px; height: 48px; margin-bottom: 1rem;"></i>
                     <div style="font-size: 1.125rem; font-weight: 600; margin-bottom: 0.5rem;">${t('admin.empty.table')}</div>
                     <div style="font-size: 0.875rem;">${t('admin.empty.hint')}</div>
@@ -388,7 +388,10 @@ function loadStudents() {
         `;
         renderPagination(0);
     } else {
-        tbody.innerHTML = paginatedStudents.map(student => {
+        tbody.innerHTML = paginatedStudents.map((student, index) => {
+            // Calculate the actual row number based on pagination
+            const rowNumber = startIndex + index + 1;
+
             // Create avatar HTML - use photo if available, otherwise initials
             const avatarHTML = student.photoUrl
                 ? `<div class="student-avatar" style="background: none; padding: 0; overflow: hidden;">
@@ -398,6 +401,7 @@ function loadStudents() {
 
             return `
             <tr>
+                <td style="text-align: center; font-weight: 500; color: #64748b;">${rowNumber}</td>
                 <td>
                     <div class="student-cell">
                         ${avatarHTML}
