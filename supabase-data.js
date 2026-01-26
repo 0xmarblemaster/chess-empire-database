@@ -826,9 +826,6 @@ const supabaseData = {
                 rating_date: today,
                 source: source,
                 notes: notes
-            }, {
-                onConflict: 'student_id,rating_date',
-                ignoreDuplicates: false  // Update existing record if same student+date
             })
             .select()
             .single();
