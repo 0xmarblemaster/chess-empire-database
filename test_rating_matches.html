@@ -1,0 +1,266 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Rating Match Analysis</title>
+    <style>
+        body { font-family: monospace; padding: 20px; background: #1e1e1e; color: #fff; }
+        .matched { color: #10b981; }
+        .unmatched { color: #ef4444; }
+        .partial { color: #f59e0b; }
+        table { width: 100%; border-collapse: collapse; margin-top: 20px; }
+        th, td { padding: 8px; text-align: left; border-bottom: 1px solid #333; }
+        th { background: #2a2a2a; }
+        .stats { background: #2a2a2a; padding: 15px; border-radius: 8px; margin-bottom: 20px; }
+    </style>
+</head>
+<body>
+    <h1>Rating File Match Analysis</h1>
+    <div class="stats" id="stats"></div>
+    <table>
+        <thead>
+            <tr>
+                <th>#</th>
+                <th>CSV Name</th>
+                <th>Rating</th>
+                <th>Match Status</th>
+                <th>Matched Student</th>
+                <th>Confidence</th>
+            </tr>
+        </thead>
+        <tbody id="results"></tbody>
+    </table>
+
+    <script>
+        // Paste the CSV content here or load from students API
+        async function analyze() {
+            // Get current students from the database
+            const { data: students, error } = await window.supabaseClient
+                .from('students')
+                .select('id, first_name, last_name');
+
+            if (error) {
+                alert('Error loading students: ' + error.message);
+                return;
+            }
+
+            // Transform to match expected format
+            const studentList = students.map(s => ({
+                id: s.id,
+                firstName: s.first_name,
+                lastName: s.last_name
+            }));
+
+            // Read ratings CSV (you'll need to paste this)
+            const csvText = prompt('Paste CSV content (Name,Rating format):');
+            if (!csvText) return;
+
+            const lines = csvText.trim().split('\n').slice(1); // Skip header
+            const results = [];
+            let matched = 0, unmatched = 0, partial = 0;
+
+            lines.forEach((line, idx) => {
+                const trimmed = line.trim();
+                if (!trimmed) return;
+
+                const lastComma = trimmed.lastIndexOf(',');
+                const name = trimmed.substring(0, lastComma).trim();
+                const rating = parseInt(trimmed.substring(lastComma + 1).trim());
+
+                const matchResult = fuzzyMatchStudent(name, studentList);
+
+                if (matchResult.matched) {
+                    if (matchResult.confidence === 100) matched++;
+                    else partial++;
+                } else {
+                    unmatched++;
+                }
+
+                results.push({
+                    idx: idx + 1,
+                    name,
+                    rating,
+                    matchResult
+                });
+            });
+
+            // Display stats
+            document.getElementById('stats').innerHTML = `
+                <h2>Match Statistics</h2>
+                <p>Total ratings: ${results.length}</p>
+                <p>Total students in DB: ${studentList.length}</p>
+                <p class="matched">✓ Exact matches (100%): ${matched}</p>
+                <p class="partial">⚠ Partial matches (60-80%): ${partial}</p>
+                <p class="unmatched">✗ Unmatched: ${unmatched}</p>
+                <p><strong>Match rate: ${Math.round((matched + partial) / results.length * 100)}%</strong></p>
+            `;
+
+            // Display results table
+            const tbody = document.getElementById('results');
+            tbody.innerHTML = results.map(r => {
+                const statusClass = r.matchResult.matched
+                    ? (r.matchResult.confidence === 100 ? 'matched' : 'partial')
+                    : 'unmatched';
+                const statusIcon = r.matchResult.matched ? '✓' : '✗';
+                const matchedName = r.matchResult.student
+                    ? `${r.matchResult.student.firstName} ${r.matchResult.student.lastName}`
+                    : '-';
+
+                return `
+                    <tr>
+                        <td>${r.idx}</td>
+                        <td>${r.name}</td>
+                        <td>${r.rating}</td>
+                        <td class="${statusClass}">${statusIcon} ${r.matchResult.confidence}%</td>
+                        <td>${matchedName}</td>
+                        <td>${r.matchResult.confidence}%</td>
+                    </tr>
+                `;
+            }).join('');
+        }
+
+        // Levenshtein distance function for fuzzy matching
+        function levenshteinDistance(str1, str2) {
+            const m = str1.length;
+            const n = str2.length;
+            const dp = Array(m + 1).fill(null).map(() => Array(n + 1).fill(0));
+
+            for (let i = 0; i <= m; i++) dp[i][0] = i;
+            for (let j = 0; j <= n; j++) dp[0][j] = j;
+
+            for (let i = 1; i <= m; i++) {
+                for (let j = 1; j <= n; j++) {
+                    if (str1[i - 1] === str2[j - 1]) {
+                        dp[i][j] = dp[i - 1][j - 1];
+                    } else {
+                        dp[i][j] = Math.min(
+                            dp[i - 1][j - 1] + 1,
+                            dp[i - 1][j] + 1,
+                            dp[i][j - 1] + 1
+                        );
+                    }
+                }
+            }
+
+            return dp[m][n];
+        }
+
+        // Fuzzy matching function (same as admin.js)
+        function fuzzyMatchStudent(excelName, students) {
+            if (!excelName || !students || students.length === 0) {
+                return { matched: false, student: null, confidence: 0 };
+            }
+
+            const normalizedExcel = excelName.trim().toLowerCase();
+            const parts = normalizedExcel.split(/\s+/).filter(p => p.length > 0);
+
+            // Try exact match first
+            for (const student of students) {
+                const firstName = (student.firstName || '').toLowerCase();
+                const lastName = (student.lastName || '').toLowerCase();
+                const fullName1 = `${lastName} ${firstName}`;
+                const fullName2 = `${firstName} ${lastName}`;
+
+                if (normalizedExcel === fullName1 || normalizedExcel === fullName2) {
+                    return { matched: true, student, confidence: 100 };
+                }
+            }
+
+            // Try partial match with improved validation (80% confidence)
+            // Configuration constants
+            const MIN_SUBSTRING_LENGTH = 4;        // Prevent "ali" (3 chars) matches
+            const MIN_TOKEN_SIMILARITY = 0.75;     // 75% for spelling variations
+            const MIN_WHOLE_NAME_SIMILARITY = 0.80; // 80% overall similarity
+
+            for (const student of students) {
+                const firstName = (student.firstName || '').toLowerCase();
+                const lastName = (student.lastName || '').toLowerCase();
+                const studentParts = [firstName, lastName];
+
+                let matchedTokens = 0;
+
+                // Check each CSV name part against student name parts
+                for (const part of parts) {
+                    let tokenMatched = false;
+
+                    for (const sp of studentParts) {
+                        if (!sp || sp.length === 0) continue;
+
+                        // Case 1: Exact token match
+                        if (part === sp) {
+                            tokenMatched = true;
+                            break;
+                        }
+
+                        // Case 2: Substring match WITH length threshold
+                        if (part.length >= MIN_SUBSTRING_LENGTH && sp.includes(part)) {
+                            tokenMatched = true;
+                            break;
+                        } else if (sp.length >= MIN_SUBSTRING_LENGTH && part.includes(sp)) {
+                            tokenMatched = true;
+                            break;
+                        }
+
+                        // Case 3: Levenshtein similarity for spelling variations
+                        const distance = levenshteinDistance(part, sp);
+                        const maxLen = Math.max(part.length, sp.length);
+                        const similarity = (maxLen - distance) / maxLen;
+
+                        if (similarity >= MIN_TOKEN_SIMILARITY && maxLen >= MIN_SUBSTRING_LENGTH) {
+                            tokenMatched = true;
+                            break;
+                        }
+                    }
+
+                    if (tokenMatched) matchedTokens++;
+                }
+
+                // Require ALL tokens matched + whole-name validation
+                if (matchedTokens === parts.length && parts.length >= 2) {
+                    // Final validation: Check whole-name similarity
+                    const fullName1 = `${firstName} ${lastName}`;
+                    const fullName2 = `${lastName} ${firstName}`;
+
+                    const dist1 = levenshteinDistance(normalizedExcel, fullName1);
+                    const dist2 = levenshteinDistance(normalizedExcel, fullName2);
+                    const minDist = Math.min(dist1, dist2);
+                    const maxLen = Math.max(normalizedExcel.length, fullName1.length);
+                    const wholeSimilarity = (maxLen - minDist) / maxLen;
+
+                    // Accept only if overall similarity is high
+                    if (wholeSimilarity >= MIN_WHOLE_NAME_SIMILARITY) {
+                        return { matched: true, student, confidence: 80 };
+                    }
+                }
+            }
+
+            // Try matching with variations
+            for (const student of students) {
+                const firstName = (student.firstName || '').toLowerCase();
+                const lastName = (student.lastName || '').toLowerCase();
+
+                if (parts.some(p => p === firstName) || parts.some(p => p === lastName)) {
+                    const otherParts = parts.filter(p => p !== firstName && p !== lastName);
+                    if (otherParts.length === 0 || otherParts.some(p =>
+                        firstName.includes(p) || lastName.includes(p) || p.includes(firstName) || p.includes(lastName)
+                    )) {
+                        return { matched: true, student, confidence: 60 };
+                    }
+                }
+            }
+
+            return { matched: false, student: null, confidence: 0 };
+        }
+
+        // Auto-analyze if window.supabaseClient exists
+        if (typeof window !== 'undefined' && window.supabaseClient) {
+            document.addEventListener('DOMContentLoaded', () => {
+                const btn = document.createElement('button');
+                btn.textContent = 'Run Analysis';
+                btn.style.cssText = 'padding: 10px 20px; font-size: 16px; background: #10b981; color: white; border: none; border-radius: 6px; cursor: pointer; margin-bottom: 20px;';
+                btn.onclick = analyze;
+                document.body.insertBefore(btn, document.getElementById('stats'));
+            });
+        }
+    </script>
+</body>
+</html>

@@ -3027,17 +3027,71 @@ function fuzzyMatchStudent(excelName, students) {
         }
     }
 
-    // Try partial match (all parts present in student name)
+    // Try partial match with improved validation (80% confidence)
+    // Configuration constants
+    const MIN_SUBSTRING_LENGTH = 4;        // Prevent "ali" (3 chars) matches
+    const MIN_TOKEN_SIMILARITY = 0.75;     // 75% for spelling variations
+    const MIN_WHOLE_NAME_SIMILARITY = 0.80; // 80% overall similarity
+
     for (const student of students) {
         const firstName = (student.firstName || '').toLowerCase();
         const lastName = (student.lastName || '').toLowerCase();
         const studentParts = [firstName, lastName];
 
-        const allPartsMatch = parts.every(part =>
-            studentParts.some(sp => sp.includes(part) || part.includes(sp))
-        );
-        if (allPartsMatch && parts.length >= 2) {
-            return { matched: true, student, confidence: 80 };
+        let matchedTokens = 0;
+
+        // Check each CSV name part against student name parts
+        for (const part of parts) {
+            let tokenMatched = false;
+
+            for (const sp of studentParts) {
+                if (!sp || sp.length === 0) continue;
+
+                // Case 1: Exact token match
+                if (part === sp) {
+                    tokenMatched = true;
+                    break;
+                }
+
+                // Case 2: Substring match WITH length threshold
+                if (part.length >= MIN_SUBSTRING_LENGTH && sp.includes(part)) {
+                    tokenMatched = true;
+                    break;
+                } else if (sp.length >= MIN_SUBSTRING_LENGTH && part.includes(sp)) {
+                    tokenMatched = true;
+                    break;
+                }
+
+                // Case 3: Levenshtein similarity for spelling variations
+                const distance = levenshteinDistance(part, sp);
+                const maxLen = Math.max(part.length, sp.length);
+                const similarity = (maxLen - distance) / maxLen;
+
+                if (similarity >= MIN_TOKEN_SIMILARITY && maxLen >= MIN_SUBSTRING_LENGTH) {
+                    tokenMatched = true;
+                    break;
+                }
+            }
+
+            if (tokenMatched) matchedTokens++;
+        }
+
+        // Require ALL tokens matched + whole-name validation
+        if (matchedTokens === parts.length && parts.length >= 2) {
+            // Final validation: Check whole-name similarity
+            const fullName1 = `${firstName} ${lastName}`;
+            const fullName2 = `${lastName} ${firstName}`;
+
+            const dist1 = levenshteinDistance(normalizedExcel, fullName1);
+            const dist2 = levenshteinDistance(normalizedExcel, fullName2);
+            const minDist = Math.min(dist1, dist2);
+            const maxLen = Math.max(normalizedExcel.length, fullName1.length);
+            const wholeSimilarity = (maxLen - minDist) / maxLen;
+
+            // Accept only if overall similarity is high
+            if (wholeSimilarity >= MIN_WHOLE_NAME_SIMILARITY) {
+                return { matched: true, student, confidence: 80 };
+            }
         }
     }
 
