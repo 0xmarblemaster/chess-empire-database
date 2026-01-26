@@ -3964,7 +3964,7 @@ async function importCSVRatings() {
                 console.log(`[${i+1}/${csvParsedData.length}] Importing: ${item.studentName}, ID: ${item.studentId}, Rating: ${item.rating}`);
 
                 if (window.supabaseData && typeof window.supabaseData.addStudentRating === 'function') {
-                    const result = await window.supabaseData.addStudentRating(item.studentId, item.rating, 'xlsx_import');
+                    const result = await window.supabaseData.addStudentRating(item.studentId, item.rating, 'csv_import');
                     console.log(`[${i+1}] SUCCESS:`, result);
                     successCount++;
                 } else {
