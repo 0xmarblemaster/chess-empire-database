@@ -65,7 +65,7 @@ SELECT
 
 SELECT
     ur.user_id,
-    ur.email,
+    c.email as coach_email,
     ur.role,
     ur.coach_id,
     c.first_name || ' ' || c.last_name as coach_name,
