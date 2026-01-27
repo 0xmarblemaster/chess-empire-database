@@ -31,3 +31,9 @@ build/
 
 # Supabase credentials (use supabase-config.example.js as template)
 supabase-config.js
+
+# Backups (contain sensitive student data - never commit)
+backups/
+*.backup
+*.sql.gz
+*.csv.gz
