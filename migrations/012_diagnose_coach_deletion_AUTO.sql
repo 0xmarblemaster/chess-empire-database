@@ -191,6 +191,8 @@ WITH coach_karimov AS (
     LIMIT 1
 )
 SELECT
+    ck.coach_name,
+    ck.coach_branch_id,
     COUNT(*) as total_attendance_records,
     COUNT(*) FILTER (WHERE ck.coach_branch_id = a.branch_id) as can_delete_count,
     COUNT(*) FILTER (WHERE ck.coach_branch_id != a.branch_id OR ck.coach_branch_id IS NULL) as cannot_delete_count,
@@ -205,7 +207,8 @@ SELECT
             '⚠ Coach can only delete SOME records (branch mismatch for others)'
     END as summary
 FROM attendance a
-CROSS JOIN coach_karimov ck;
+CROSS JOIN coach_karimov ck
+GROUP BY ck.coach_name, ck.coach_branch_id;
 
 -- ============================================
 -- FINAL RESULT: What's the problem?
