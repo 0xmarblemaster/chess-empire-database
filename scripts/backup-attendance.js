@@ -89,13 +89,15 @@ function saveToCSV(records, timestamp) {
         'parent_phone',
         'parent_email',
         'attendance_date',
-        'is_present',
+        'status',
         'schedule_type',
         'time_slot',
+        'notes',
         'branch_id',
         'branch_name',
         'created_at',
-        'updated_at'
+        'updated_at',
+        'created_by'
     ];
 
     // Convert records to CSV rows
@@ -111,13 +113,15 @@ function saveToCSV(records, timestamp) {
             student.parent_phone || '',
             student.parent_email || '',
             record.attendance_date,
-            record.is_present,
+            record.status,
             record.schedule_type,
             record.time_slot || '',
+            record.notes || '',
             record.branch_id,
             branch.name || '',
             record.created_at,
-            record.updated_at
+            record.updated_at,
+            record.created_by || ''
         ].map(field => {
             // Escape quotes and wrap in quotes if contains comma
             const str = String(field === null ? '' : field);
@@ -171,7 +175,9 @@ function generateSummary(records) {
         by_branch: {},
         by_schedule: {},
         present_count: 0,
-        absent_count: 0
+        absent_count: 0,
+        late_count: 0,
+        excused_count: 0
     };
 
     records.forEach(record => {
@@ -182,11 +188,15 @@ function generateSummary(records) {
         // Count by schedule
         summary.by_schedule[record.schedule_type] = (summary.by_schedule[record.schedule_type] || 0) + 1;
 
-        // Count present/absent
-        if (record.is_present) {
+        // Count by status
+        if (record.status === 'present') {
             summary.present_count++;
-        } else {
+        } else if (record.status === 'absent') {
             summary.absent_count++;
+        } else if (record.status === 'late') {
+            summary.late_count++;
+        } else if (record.status === 'excused') {
+            summary.excused_count++;
         }
     });
 

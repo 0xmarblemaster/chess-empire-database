@@ -25,20 +25,17 @@ SELECT
     s.parent_phone,
     s.parent_email,
     a.attendance_date,
-    a.is_present,
+    a.status,
     a.schedule_type,
     a.time_slot,
+    a.notes,
     a.branch_id,
     b.name as branch_name,
     c.first_name || ' ' || c.last_name as coach_name,
     c.email as coach_email,
     a.created_at,
     a.updated_at,
-    -- Additional context
-    CASE
-        WHEN a.is_present THEN 'Present'
-        ELSE 'Absent'
-    END as status,
+    a.created_by,
     CASE a.schedule_type
         WHEN 'mon_wed' THEN 'Monday-Wednesday'
         WHEN 'tue_thu' THEN 'Tuesday-Thursday'
@@ -78,9 +75,11 @@ SELECT
 SELECT
     b.name as branch_name,
     COUNT(*) as total_records,
-    COUNT(*) FILTER (WHERE a.is_present = true) as present_count,
-    COUNT(*) FILTER (WHERE a.is_present = false) as absent_count,
-    ROUND(100.0 * COUNT(*) FILTER (WHERE a.is_present = true) / COUNT(*), 2) as attendance_percentage,
+    COUNT(*) FILTER (WHERE a.status = 'present') as present_count,
+    COUNT(*) FILTER (WHERE a.status = 'absent') as absent_count,
+    COUNT(*) FILTER (WHERE a.status = 'late') as late_count,
+    COUNT(*) FILTER (WHERE a.status = 'excused') as excused_count,
+    ROUND(100.0 * COUNT(*) FILTER (WHERE a.status = 'present') / COUNT(*), 2) as attendance_percentage,
     MIN(a.attendance_date) as earliest_record,
     MAX(a.attendance_date) as latest_record
 FROM attendance a
@@ -97,8 +96,8 @@ SELECT
     schedule_type,
     COUNT(*) as total_records,
     COUNT(DISTINCT student_id) as unique_students,
-    COUNT(*) FILTER (WHERE is_present = true) as present_count,
-    ROUND(100.0 * COUNT(*) FILTER (WHERE is_present = true) / COUNT(*), 2) as attendance_percentage
+    COUNT(*) FILTER (WHERE status = 'present') as present_count,
+    ROUND(100.0 * COUNT(*) FILTER (WHERE status = 'present') / COUNT(*), 2) as attendance_percentage
 FROM attendance
 GROUP BY schedule_type
 ORDER BY total_records DESC;
@@ -112,8 +111,8 @@ SELECT
     TO_CHAR(attendance_date, 'YYYY-MM') as year_month,
     COUNT(*) as total_records,
     COUNT(DISTINCT student_id) as unique_students,
-    COUNT(*) FILTER (WHERE is_present = true) as present_count,
-    ROUND(100.0 * COUNT(*) FILTER (WHERE is_present = true) / COUNT(*), 2) as attendance_percentage
+    COUNT(*) FILTER (WHERE status = 'present') as present_count,
+    ROUND(100.0 * COUNT(*) FILTER (WHERE status = 'present') / COUNT(*), 2) as attendance_percentage
 FROM attendance
 WHERE attendance_date >= NOW() - INTERVAL '12 months'
 GROUP BY TO_CHAR(attendance_date, 'YYYY-MM')
@@ -128,9 +127,11 @@ SELECT
     s.first_name || ' ' || s.last_name as student_name,
     b.name as branch_name,
     COUNT(*) as total_records,
-    COUNT(*) FILTER (WHERE a.is_present = true) as present_count,
-    COUNT(*) FILTER (WHERE a.is_present = false) as absent_count,
-    ROUND(100.0 * COUNT(*) FILTER (WHERE a.is_present = true) / COUNT(*), 2) as attendance_percentage
+    COUNT(*) FILTER (WHERE a.status = 'present') as present_count,
+    COUNT(*) FILTER (WHERE a.status = 'absent') as absent_count,
+    COUNT(*) FILTER (WHERE a.status = 'late') as late_count,
+    COUNT(*) FILTER (WHERE a.status = 'excused') as excused_count,
+    ROUND(100.0 * COUNT(*) FILTER (WHERE a.status = 'present') / COUNT(*), 2) as attendance_percentage
 FROM attendance a
 LEFT JOIN students s ON s.id = a.student_id
 LEFT JOIN branches b ON b.id = s.branch_id
@@ -193,9 +194,10 @@ SELECT
     s.first_name || ' ' || s.last_name as student_name,
     b.name as branch_name,
     a.attendance_date,
-    a.is_present,
+    a.status,
     a.schedule_type,
     a.time_slot,
+    a.notes,
     a.created_at,
     a.updated_at,
     CASE
@@ -237,17 +239,19 @@ If you need to restore data from this backup:
 2. Save the query results to a CSV file for external backup
 3. To restore specific records, use INSERT statements like:
 
-INSERT INTO attendance (id, student_id, attendance_date, is_present, schedule_type, time_slot, branch_id, created_at, updated_at)
+INSERT INTO attendance (id, student_id, attendance_date, status, schedule_type, time_slot, branch_id, notes, created_at, updated_at, created_by)
 VALUES (
     'attendance-id-here',
     'student-id-here',
     '2026-01-15',
-    true,
+    'present',
     'mon_wed',
     '15:00-16:00',
     'branch-id-here',
+    'Optional notes here',
     '2026-01-15 10:00:00',
-    '2026-01-15 10:00:00'
+    '2026-01-15 10:00:00',
+    'user-id-here'
 );
 
 4. For bulk restoration, use CSV import:
