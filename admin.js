@@ -4345,21 +4345,17 @@ const ATTENDANCE_TIME_SLOTS_HALYK = [
     '18:00-19:00'
 ];
 
-// Debut branch - Mon-Wed schedule slots for coach Asyklhan Agbaevich
-const ATTENDANCE_TIME_SLOTS_DEBUT_MON_WED = [
-    '11:00-12:30'
-];
-
-// Debut branch - Tue-Thu schedule slots for coach Asyklhan Agbaevich
-const ATTENDANCE_TIME_SLOTS_DEBUT_TUE_THU = [
-    '15:00-16:30',
+// Debut branch has extended slots including 18:00-19:30 for coach Asyklhan Agbaevich
+const ATTENDANCE_TIME_SLOTS_DEBUT = [
+    '9:00-10:00',
+    '10:00-11:00',
+    '11:00-12:00',
+    '12:00-13:00',
+    '14:00-15:00',
+    '15:00-16:00',
+    '16:00-17:00',
+    '17:00-18:00',
     '18:00-19:30'
-];
-
-// Debut branch - Sat-Sun schedule slots for coach Asyklhan Agbaevich
-const ATTENDANCE_TIME_SLOTS_DEBUT_SAT_SUN = [
-    '9:00-10:30',
-    '10:30-12:00'
 ];
 
 // Saturday-Sunday slots (9:00 - 14:00, shorter day - last slot ends at 14:00)
@@ -4421,34 +4417,19 @@ function getStudentsForTimeSlot(slotIndex, filteredData) {
 // Get time slots for a specific branch and schedule type
 // Saturday-Sunday has shorter hours (last slot 13:00-14:00) for ALL branches
 function getTimeSlotsForBranch(branchName, scheduleType = null) {
-    if (!branchName) return ATTENDANCE_TIME_SLOTS_DEFAULT;
-    const normalizedName = branchName.toLowerCase().trim();
-
-    // Debut branch has schedule-specific time slots for coach Asyklhan Agbaevich
-    if (normalizedName.includes('debut') || normalizedName.includes('дебют')) {
-        if (scheduleType === 'mon_wed') {
-            return ATTENDANCE_TIME_SLOTS_DEBUT_MON_WED;
-        }
-        if (scheduleType === 'tue_thu') {
-            return ATTENDANCE_TIME_SLOTS_DEBUT_TUE_THU;
-        }
-        if (scheduleType === 'sat_sun') {
-            return ATTENDANCE_TIME_SLOTS_DEBUT_SAT_SUN;
-        }
-        // Default to mon_wed if no schedule type specified for Debut
-        return ATTENDANCE_TIME_SLOTS_DEBUT_MON_WED;
-    }
-
-    // Saturday-Sunday schedule: use shorter time slots (9:00-14:00) for all other branches
+    // Saturday-Sunday schedule: use shorter time slots (9:00-14:00) for all branches
     if (scheduleType === 'sat_sun') {
         return ATTENDANCE_TIME_SLOTS_SAT_SUN;
     }
 
-    // Halyk Arena has different slots
+    if (!branchName) return ATTENDANCE_TIME_SLOTS_DEFAULT;
+    const normalizedName = branchName.toLowerCase().trim();
     if (normalizedName.includes('halyk') || normalizedName.includes('khalyk')) {
         return ATTENDANCE_TIME_SLOTS_HALYK;
     }
-
+    if (normalizedName.includes('debut') || normalizedName.includes('дебют')) {
+        return ATTENDANCE_TIME_SLOTS_DEBUT;
+    }
     return ATTENDANCE_TIME_SLOTS_DEFAULT;
 }
 
