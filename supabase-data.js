@@ -1918,16 +1918,25 @@ const supabaseData = {
      * Delete an attendance record
      */
     async deleteAttendance(attendanceId) {
-        const { error } = await window.supabaseClient
+        const { data, error } = await window.supabaseClient
             .from('attendance')
             .delete()
-            .eq('id', attendanceId);
+            .eq('id', attendanceId)
+            .select();  // Request deleted rows to verify deletion
 
         if (error) {
             console.error('Error deleting attendance:', error);
             throw error;
         }
 
+        // Check if any rows were actually deleted
+        if (!data || data.length === 0) {
+            const message = 'Failed to delete attendance record (not found or insufficient permissions)';
+            console.warn(message, { attendanceId });
+            throw new Error(message);
+        }
+
+        console.log('Successfully deleted attendance record:', attendanceId);
         return true;
     },
 
@@ -1947,13 +1956,24 @@ const supabaseData = {
             query = query.is('time_slot', null);
         }
 
-        const { error } = await query;
+        // Add .select() to verify deletion
+        query = query.select();
+
+        const { data, error } = await query;
 
         if (error) {
             console.error('Error deleting attendance by key:', error);
             throw error;
         }
 
+        // Check if any rows were actually deleted
+        if (!data || data.length === 0) {
+            const message = 'Failed to delete attendance record (not found or insufficient permissions)';
+            console.warn(message, { studentId, attendanceDate, scheduleType, timeSlot });
+            throw new Error(message);
+        }
+
+        console.log('Successfully deleted attendance record by key');
         return true;
     },
 

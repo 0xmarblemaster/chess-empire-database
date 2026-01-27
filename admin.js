@@ -6150,7 +6150,17 @@ async function toggleAttendanceCheckbox(studentId, dateStr, cell) {
                         throw new Error('No deletion method available');
                     }
                 } catch (deleteError) {
-                    console.error('Failed to delete attendance:', deleteError);
+                    console.error('Failed to delete attendance:', {
+                        error: deleteError,
+                        method: attendanceRecord?.id ? 'deleteAttendance(id)' : 'deleteAttendanceByKey',
+                        studentId: studentId,
+                        date: dateStr,
+                        attendanceId: attendanceRecord?.id,
+                        hasRecord: !!attendanceRecord,
+                        hasId: !!attendanceRecord?.id,
+                        scheduleType: attendanceCurrentSchedule || 'mon_wed',
+                        timeSlot: attendanceCurrentTimeSlot !== 'all' ? attendanceCurrentTimeSlot : null
+                    });
                     throw deleteError; // Re-throw to trigger catch block below
                 }
             }
@@ -6213,7 +6223,16 @@ async function toggleAttendanceCheckbox(studentId, dateStr, cell) {
 
     } catch (error) {
         console.error('Error saving attendance:', error);
-        showToast(t('admin.attendance.saveError'), 'error');
+
+        // Provide specific error messages based on error type
+        let errorMsg = t('admin.attendance.saveError');
+        if (error.message && error.message.includes('insufficient permissions')) {
+            errorMsg = t('admin.attendance.permissionDenied');
+        } else if (error.message && error.message.includes('not found')) {
+            errorMsg = t('admin.attendance.recordNotFound');
+        }
+
+        showToast(errorMsg, 'error');
         // Revert checkbox on error
         updateCheckboxUI(checkbox, currentStatus);
     }
