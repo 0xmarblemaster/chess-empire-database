@@ -3,7 +3,7 @@
 -- Run this in Supabase SQL Editor
 -- ============================================
 
--- Purpose: Allow coaches with can_edit_students permission to delete attendance records
+-- Purpose: Allow ALL coaches to delete attendance records in their branches by default
 -- Previously, only admins could delete attendance records, causing coaches' deletions
 -- to fail silently (RLS policy blocked but returned no error).
 
@@ -11,8 +11,8 @@
 -- but Supabase returned success (error = null, rowsAffected = 0). The UI updated
 -- locally but the database record remained, causing the checkbox to reappear on refresh.
 
--- Solution: Update the DELETE policy to match the UPDATE policy permissions, allowing
--- coaches with can_edit_students = true to delete attendance records in their branches.
+-- Solution: Update the DELETE policy to allow ALL coaches (role='coach') to delete
+-- attendance records in their assigned branches by default.
 
 -- ============================================
 -- STEP 1: Drop old restrictive policy
@@ -29,19 +29,15 @@ CREATE POLICY "Users can delete attendance in their branches"
     USING (
         EXISTS (
             SELECT 1 FROM user_roles ur
-            LEFT JOIN branch_coaches bc ON bc.coach_id = ur.coach_id
+            LEFT JOIN coaches c ON c.id = ur.coach_id
             WHERE ur.user_id = auth.uid()
             AND (
                 -- Admins can delete all attendance records
                 ur.role = 'admin'
                 OR (
-                    -- Coaches with permission can delete in their branches
-                    ur.can_edit_students = true
-                    AND attendance.branch_id IN (
-                        SELECT bc2.branch_id
-                        FROM branch_coaches bc2
-                        WHERE bc2.coach_id = ur.coach_id
-                    )
+                    -- ALL coaches can delete attendance in their assigned branch
+                    ur.role = 'coach'
+                    AND attendance.branch_id = c.branch_id
                 )
             )
         )
@@ -52,7 +48,7 @@ CREATE POLICY "Users can delete attendance in their branches"
 -- ============================================
 
 COMMENT ON POLICY "Users can delete attendance in their branches" ON attendance IS
-    'Allows admins to delete all attendance records, and coaches with can_edit_students permission to delete attendance in their assigned branches. This matches the UPDATE policy permissions.';
+    'Allows admins to delete all attendance records, and ALL coaches to delete attendance in their assigned branch by default.';
 
 -- ============================================
 -- VERIFICATION: Check policy was created
@@ -77,14 +73,14 @@ ORDER BY policyname;
 -- SUCCESS MESSAGE
 -- ============================================
 
-SELECT 'Attendance DELETE policy updated successfully! Coaches can now delete attendance records in their branches.' as result;
+SELECT 'Attendance DELETE policy updated successfully! Coaches can now delete attendance records in their branch.' as result;
 
 -- ============================================
 -- TESTING NOTES
 -- ============================================
 
 -- To test this policy:
--- 1. Log in as a coach user with can_edit_students = true
+-- 1. Log in as ANY coach user (role='coach')
 -- 2. Navigate to attendance page for a branch where the coach is assigned
 -- 3. Check an attendance checkbox
 -- 4. Uncheck the checkbox
