@@ -17,7 +17,6 @@ SELECT
 SELECT
     id as branch_id,
     name as branch_name,
-    address,
     created_at
 FROM branches
 ORDER BY name;
