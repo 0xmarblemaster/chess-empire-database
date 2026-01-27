@@ -4352,10 +4352,23 @@ const ATTENDANCE_TIME_SLOTS_DEBUT = [
     '11:00-12:00',
     '12:00-13:00',
     '14:00-15:00',
-    '15:00-16:00',
-    '16:00-17:00',
-    '17:00-18:00',
-    '18:00-19:30'
+    '15:00-16:30',
+    '16:30-17:30',
+    '17:30-18:30',
+    '18:30-19:30'
+];
+
+// Debut branch Mon-Wed schedule: extended midday slot (11:00-12:30) for coach Asylkhan Agbaevich
+const ATTENDANCE_TIME_SLOTS_DEBUT_MON_WED = [
+    '9:00-10:00',
+    '10:00-11:00',
+    '11:00-12:30',  // Extended from 11:00-12:00 to 11:00-12:30 for Mon-Wed
+    '12:00-13:00',
+    '14:00-15:00',
+    '15:00-16:30',
+    '16:30-17:30',
+    '17:30-18:30',
+    '18:30-19:30'
 ];
 
 // Saturday-Sunday slots (9:00 - 14:00, shorter day - last slot ends at 14:00)
@@ -4428,6 +4441,10 @@ function getTimeSlotsForBranch(branchName, scheduleType = null) {
         return ATTENDANCE_TIME_SLOTS_HALYK;
     }
     if (normalizedName.includes('debut') || normalizedName.includes('дебют')) {
+        // Debut Mon-Wed schedule has extended midday slot (11:00-12:30)
+        if (scheduleType === 'mon_wed') {
+            return ATTENDANCE_TIME_SLOTS_DEBUT_MON_WED;
+        }
         return ATTENDANCE_TIME_SLOTS_DEBUT;
     }
     return ATTENDANCE_TIME_SLOTS_DEFAULT;
