@@ -4289,6 +4289,37 @@ let attendanceHideEmptyRows = true; // Hide empty placeholder rows by default
 let attendanceCurrentMode = 'present'; // Current attendance marking mode: 'present', 'excused', or 'absent'
 let mobileCalendarOffset = 0; // Mobile: tracks which 4-day chunk (0, 4, 8, 12...)
 
+// Save attendance filter state to localStorage
+function saveAttendanceFilterState() {
+    try {
+        const state = {
+            branch: attendanceCurrentBranch,
+            schedule: attendanceCurrentSchedule,
+            timeSlot: attendanceCurrentTimeSlot,
+            coach: attendanceCurrentCoach,
+            year: attendanceCurrentYear,
+            month: attendanceCurrentMonth
+        };
+        localStorage.setItem('attendanceFilterState', JSON.stringify(state));
+    } catch (error) {
+        console.error('Error saving attendance filter state:', error);
+    }
+}
+
+// Load attendance filter state from localStorage
+function loadAttendanceFilterState() {
+    try {
+        const savedState = localStorage.getItem('attendanceFilterState');
+        if (savedState) {
+            const state = JSON.parse(savedState);
+            return state;
+        }
+    } catch (error) {
+        console.error('Error loading attendance filter state:', error);
+    }
+    return null;
+}
+
 // Time slot configuration: 8 slots, 10 students per slot
 // Default slots for all branches (9:00 - 18:00)
 const ATTENDANCE_TIME_SLOTS_DEFAULT = [
@@ -4414,6 +4445,18 @@ function showAttendanceManagement(updateHash = true) {
         attendanceMenuItem.classList.add('active');
     }
 
+    // Load saved filter state from localStorage
+    const savedState = loadAttendanceFilterState();
+    if (savedState) {
+        // Restore saved state
+        if (savedState.branch) attendanceCurrentBranch = savedState.branch;
+        if (savedState.schedule) attendanceCurrentSchedule = savedState.schedule;
+        if (savedState.timeSlot) attendanceCurrentTimeSlot = savedState.timeSlot;
+        if (savedState.coach) attendanceCurrentCoach = savedState.coach;
+        if (savedState.year !== undefined) attendanceCurrentYear = savedState.year;
+        if (savedState.month !== undefined) attendanceCurrentMonth = savedState.month;
+    }
+
     // Populate branch dropdown (both desktop and mobile)
     populateAttendanceBranchDropdown();
     populateMobileBranchFilter();
@@ -4421,17 +4464,40 @@ function showAttendanceManagement(updateHash = true) {
     // Populate schedule dropdown based on branch
     populateAttendanceScheduleDropdown();
 
-    // Initialize schedule filter from dropdown
+    // Apply saved schedule selection to dropdown
     const scheduleSelect = document.getElementById('attendanceScheduleFilter');
     if (scheduleSelect) {
-        attendanceCurrentSchedule = scheduleSelect.value || '';
+        if (attendanceCurrentSchedule) {
+            scheduleSelect.value = attendanceCurrentSchedule;
+        } else {
+            attendanceCurrentSchedule = scheduleSelect.value || '';
+        }
     }
 
-    // Initialize time slot filter
+    // Populate coach dropdown based on branch
+    populateAttendanceCoachDropdown();
+
+    // Apply saved coach selection to dropdown
+    const coachSelect = document.getElementById('attendanceCoachFilter');
+    if (coachSelect && attendanceCurrentCoach) {
+        coachSelect.value = attendanceCurrentCoach;
+    }
+
+    // Populate time slots based on schedule
+    populateAttendanceTimeSlots();
+
+    // Apply saved time slot selection to dropdown
     const timeSlotSelect = document.getElementById('attendanceTimeSlotFilter');
     if (timeSlotSelect) {
-        attendanceCurrentTimeSlot = timeSlotSelect.value || '';
+        if (attendanceCurrentTimeSlot) {
+            timeSlotSelect.value = attendanceCurrentTimeSlot;
+        } else {
+            attendanceCurrentTimeSlot = timeSlotSelect.value || '';
+        }
     }
+
+    // Update month display with saved year/month
+    updateAttendanceMonthDisplay();
 
     // Load student aliases for name matching
     loadStudentAliases();
@@ -4624,6 +4690,9 @@ function onAttendanceBranchChange() {
     // Reset mobile calendar offset to first chunk
     mobileCalendarOffset = 0;
 
+    // Save filter state
+    saveAttendanceFilterState();
+
     // Populate schedule dropdown based on branch
     populateAttendanceScheduleDropdown();
 
@@ -4642,6 +4711,9 @@ function onAttendanceScheduleChange() {
     // Reset mobile calendar offset to first chunk
     mobileCalendarOffset = 0;
 
+    // Save filter state
+    saveAttendanceFilterState();
+
     populateAttendanceTimeSlots();
     loadAttendanceData();
 }
@@ -4650,6 +4722,10 @@ function onAttendanceScheduleChange() {
 function onAttendanceTimeSlotChange() {
     const select = document.getElementById('attendanceTimeSlotFilter');
     attendanceCurrentTimeSlot = select.value;
+
+    // Save filter state
+    saveAttendanceFilterState();
+
     loadAttendanceData();
 }
 
@@ -4671,6 +4747,9 @@ function onAttendanceCoachChange() {
         mobileSelect.value = attendanceCurrentCoach;
     }
 
+    // Save filter state
+    saveAttendanceFilterState();
+
     // Reload data
     loadAttendanceData();
 }
@@ -4688,6 +4767,9 @@ function onMobileAttendanceBranchChange() {
 
     // Reset mobile calendar offset to first chunk
     mobileCalendarOffset = 0;
+
+    // Save filter state
+    saveAttendanceFilterState();
 
     // Populate schedule dropdown based on branch
     populateAttendanceScheduleDropdown();
@@ -4711,6 +4793,9 @@ function onMobileAttendanceScheduleChange() {
     // Reset mobile calendar offset to first chunk
     mobileCalendarOffset = 0;
 
+    // Save filter state
+    saveAttendanceFilterState();
+
     populateAttendanceTimeSlots();
     loadAttendanceData();
 }
@@ -4728,6 +4813,9 @@ function onMobileAttendanceCoachChange() {
     if (timeSlotSelect) {
         timeSlotSelect.value = 'all';
     }
+
+    // Save filter state
+    saveAttendanceFilterState();
 
     loadAttendanceData();
 }
@@ -4812,6 +4900,10 @@ function attendancePrevMonth() {
         attendanceCurrentMonth = 11;
         attendanceCurrentYear--;
     }
+
+    // Save filter state
+    saveAttendanceFilterState();
+
     updateAttendanceMonthDisplay();
     loadAttendanceData();
 }
@@ -4823,6 +4915,10 @@ function attendanceNextMonth() {
         attendanceCurrentMonth = 0;
         attendanceCurrentYear++;
     }
+
+    // Save filter state
+    saveAttendanceFilterState();
+
     updateAttendanceMonthDisplay();
     loadAttendanceData();
 }
@@ -4865,6 +4961,10 @@ function navigateMobileCalendar(direction) {
                 attendanceCurrentYear++;
             }
             mobileCalendarOffset = 0;
+
+            // Save filter state
+            saveAttendanceFilterState();
+
             updateAttendanceMonthDisplay();
             loadAttendanceData();
         } else {
@@ -4891,6 +4991,9 @@ function navigateMobileCalendar(direction) {
             );
             const chunks = Math.ceil(prevMonthDates.length / 4);
             mobileCalendarOffset = (chunks - 1) * 4;
+
+            // Save filter state
+            saveAttendanceFilterState();
 
             updateAttendanceMonthDisplay();
             loadAttendanceData();
