@@ -845,6 +845,81 @@ const supabaseData = {
         };
     },
 
+    // Get rating change history with deltas for a student
+    async getStudentRatingChanges(studentId) {
+        const { data, error } = await window.supabaseClient
+            .from('student_rating_changes')
+            .select('*')
+            .eq('student_id', studentId)
+            .order('change_date', { ascending: false });
+
+        if (error) {
+            console.error('Error fetching student rating changes:', error);
+            return [];
+        }
+
+        return data.map(r => ({
+            id: r.id,
+            studentId: r.student_id,
+            currentRating: r.current_rating,
+            previousRating: r.previous_rating,
+            ratingChange: r.rating_change,
+            changeType: r.change_type,
+            changeDate: r.change_date,
+            previousDate: r.previous_rating_date,
+            source: r.source,
+            notes: r.notes,
+            createdAt: r.created_at
+        }));
+    },
+
+    // Get rating trend summary for a student (30-day default)
+    async getRatingTrendSummary(studentId, days = 30) {
+        const cutoffDate = new Date();
+        cutoffDate.setDate(cutoffDate.getDate() - days);
+        const cutoffDateStr = cutoffDate.toISOString().split('T')[0];
+
+        const { data, error } = await window.supabaseClient
+            .from('student_rating_changes')
+            .select('*')
+            .eq('student_id', studentId)
+            .gte('change_date', cutoffDateStr)
+            .order('change_date', { ascending: true });
+
+        if (error || !data || data.length === 0) {
+            return {
+                totalChanges: 0,
+                netChange: 0,
+                averageChange: 0,
+                biggestGain: 0,
+                biggestLoss: 0,
+                increases: 0,
+                decreases: 0,
+                period: days
+            };
+        }
+
+        const changes = data.filter(r => r.rating_change !== 0);
+        const increases = changes.filter(r => r.rating_change > 0);
+        const decreases = changes.filter(r => r.rating_change < 0);
+
+        const netChange = data[data.length - 1].current_rating - (data[0].previous_rating || data[0].current_rating);
+        const averageChange = changes.length > 0
+            ? changes.reduce((sum, r) => sum + Math.abs(r.rating_change), 0) / changes.length
+            : 0;
+
+        return {
+            totalChanges: changes.length,
+            netChange,
+            averageChange: Math.round(averageChange),
+            biggestGain: increases.length > 0 ? Math.max(...increases.map(r => r.rating_change)) : 0,
+            biggestLoss: decreases.length > 0 ? Math.min(...decreases.map(r => r.rating_change)) : 0,
+            increases: increases.length,
+            decreases: decreases.length,
+            period: days
+        };
+    },
+
     // Get all current ratings (latest rating for each student) - much more efficient than individual queries
     async getAllCurrentRatings() {
         try {
@@ -1850,6 +1925,32 @@ const supabaseData = {
 
         if (error) {
             console.error('Error deleting attendance:', error);
+            throw error;
+        }
+
+        return true;
+    },
+
+    // Delete attendance by composite key (fallback when ID is not available)
+    async deleteAttendanceByKey(studentId, attendanceDate, scheduleType, timeSlot) {
+        let query = window.supabaseClient
+            .from('attendance')
+            .delete()
+            .eq('student_id', studentId)
+            .eq('attendance_date', attendanceDate)
+            .eq('schedule_type', scheduleType);
+
+        // Handle time_slot: can be null or a specific value
+        if (timeSlot) {
+            query = query.eq('time_slot', timeSlot);
+        } else {
+            query = query.is('time_slot', null);
+        }
+
+        const { error } = await query;
+
+        if (error) {
+            console.error('Error deleting attendance by key:', error);
             throw error;
         }
 

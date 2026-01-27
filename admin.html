@@ -873,6 +873,32 @@
                     </button>
                 </div>
 
+                <!-- Attendance Mode Selector -->
+                <div class="attendance-mode-selector" style="display: flex; align-items: center; justify-content: center; gap: 1rem; margin-bottom: 1.5rem; padding: 1rem; background: #f8fafc; border-radius: 0.75rem;">
+                    <label style="font-size: 0.9375rem; font-weight: 600; color: #475569;" data-i18n="admin.attendance.mode">Attendance Mode:</label>
+                    <div class="attendance-mode-buttons" style="display: flex; gap: 0.5rem; background: white; padding: 0.25rem; border-radius: 0.5rem; border: 1px solid #e2e8f0;">
+                        <button id="attendanceModePresent" class="attendance-mode-btn active" onclick="setAttendanceMode('present')" aria-label="Mark attendance as Present" aria-pressed="true">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                                <polyline points="20 6 9 17 4 12"></polyline>
+                            </svg>
+                            <span data-i18n="admin.attendance.present">Present</span>
+                        </button>
+                        <button id="attendanceModeExcused" class="attendance-mode-btn" onclick="setAttendanceMode('excused')" aria-label="Mark attendance as Excused" aria-pressed="false">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                                <polyline points="20 6 9 17 4 12"></polyline>
+                            </svg>
+                            <span data-i18n="admin.attendance.excused">Excused</span>
+                        </button>
+                        <button id="attendanceModeAbsent" class="attendance-mode-btn" onclick="setAttendanceMode('absent')" aria-label="Mark attendance as Absent" aria-pressed="false">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                                <line x1="18" y1="6" x2="6" y2="18"></line>
+                                <line x1="6" y1="6" x2="18" y2="18"></line>
+                            </svg>
+                            <span data-i18n="admin.attendance.absent">Absent</span>
+                        </button>
+                    </div>
+                </div>
+
                 <!-- Attendance Calendar Grid -->
                 <div class="branch-card" style="margin-bottom: 1.5rem;">
                     <div id="attendanceCalendarContainer" style="overflow-x: auto;">
@@ -900,10 +926,6 @@
                     <div style="display: flex; align-items: center; gap: 0.5rem;">
                         <span class="attendance-cell absent" style="width: 24px; height: 24px; display: inline-flex; align-items: center; justify-content: center; border-radius: 4px; font-size: 0.75rem; font-weight: 600;">X</span>
                         <span style="font-size: 0.875rem; color: #475569;" data-i18n="admin.attendance.absent">Absent</span>
-                    </div>
-                    <div style="display: flex; align-items: center; gap: 0.5rem;">
-                        <span class="attendance-cell late" style="width: 24px; height: 24px; display: inline-flex; align-items: center; justify-content: center; border-radius: 4px; font-size: 0.75rem; font-weight: 600;">L</span>
-                        <span style="font-size: 0.875rem; color: #475569;" data-i18n="admin.attendance.late">Late</span>
                     </div>
                     <div style="display: flex; align-items: center; gap: 0.5rem;">
                         <span class="attendance-cell excused" style="width: 24px; height: 24px; display: inline-flex; align-items: center; justify-content: center; border-radius: 4px; font-size: 0.75rem; font-weight: 600;">E</span>

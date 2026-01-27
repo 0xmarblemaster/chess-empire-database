@@ -3235,6 +3235,148 @@ td {
     height: 16px;
 }
 
+/* ====================================
+   ATTENDANCE MODE SELECTOR
+   ==================================== */
+
+.attendance-mode-selector {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 1rem;
+    margin-bottom: 1.5rem;
+    padding: 1rem;
+    background: #f8fafc;
+    border-radius: 0.75rem;
+}
+
+.attendance-mode-selector label {
+    font-size: 0.9375rem;
+    font-weight: 600;
+    color: #475569;
+}
+
+.attendance-mode-buttons {
+    display: flex;
+    gap: 0.5rem;
+    background: white;
+    padding: 0.25rem;
+    border-radius: 0.5rem;
+    border: 1px solid #e2e8f0;
+}
+
+.attendance-mode-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.5rem 1rem;
+    border: 2px solid transparent;
+    border-radius: 0.375rem;
+    background: transparent;
+    color: #64748b;
+    font-size: 0.875rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    user-select: none;
+}
+
+.attendance-mode-btn:hover {
+    background: #f8fafc;
+    color: #475569;
+}
+
+.attendance-mode-btn svg {
+    width: 16px;
+    height: 16px;
+}
+
+/* Active state for Present mode */
+.attendance-mode-btn#attendanceModePresent.active {
+    background: #22c55e;
+    color: white;
+    border-color: #22c55e;
+    box-shadow: 0 0 0 3px rgba(34, 197, 94, 0.1);
+}
+
+/* Active state for Excused mode */
+.attendance-mode-btn#attendanceModeExcused.active {
+    background: #3b82f6;
+    color: white;
+    border-color: #3b82f6;
+    box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+}
+
+/* Active state for Absent mode */
+.attendance-mode-btn#attendanceModeAbsent.active {
+    background: #ef4444;
+    color: white;
+    border-color: #ef4444;
+    box-shadow: 0 0 0 3px rgba(239, 68, 68, 0.1);
+}
+
+/* ====================================
+   ATTENDANCE CHECKBOX STATUS STATES
+   ==================================== */
+
+/* Excused status - Blue checkmark */
+.attendance-checkbox.excused {
+    background: #3b82f6;
+    border-color: #3b82f6;
+}
+
+.attendance-checkbox.excused:hover {
+    border-color: #3b82f6;
+    box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+}
+
+/* Absent status - Red X */
+.attendance-checkbox.absent {
+    background: #ef4444;
+    border-color: #ef4444;
+}
+
+.attendance-checkbox.absent:hover {
+    border-color: #ef4444;
+    box-shadow: 0 0 0 3px rgba(239, 68, 68, 0.1);
+}
+
+.attendance-checkbox.excused svg,
+.attendance-checkbox.absent svg {
+    width: 16px;
+    height: 16px;
+    color: white;
+}
+
+/* ====================================
+   MOBILE RESPONSIVE
+   ==================================== */
+
+@media (max-width: 768px) {
+    .attendance-mode-selector {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 0.75rem;
+    }
+
+    .attendance-mode-buttons {
+        width: 100%;
+        justify-content: space-between;
+    }
+
+    .attendance-mode-btn {
+        flex: 1;
+        justify-content: center;
+        padding: 0.625rem 0.75rem;
+        font-size: 0.8125rem;
+    }
+
+    /* Hide text labels on mobile, show only icons */
+    .attendance-mode-btn span {
+        display: none;
+    }
+}
+
 /* Student header cell styling */
 .attendance-student-header {
     text-align: left !important;

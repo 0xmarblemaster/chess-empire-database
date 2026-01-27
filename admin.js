@@ -3485,48 +3485,164 @@ async function viewRatingHistory(studentId) {
     lucide.createIcons();
 
     try {
-        if (window.supabaseData && typeof window.supabaseData.getStudentRatings === 'function') {
-            const ratings = await window.supabaseData.getStudentRatings(studentId);
+        const changes = await window.supabaseData.getStudentRatingChanges(studentId);
+        const trendSummary = await window.supabaseData.getRatingTrendSummary(studentId, 30);
 
-            if (ratings && ratings.length > 0) {
-                content.innerHTML = `
-                    <div style="max-height: 400px; overflow-y: auto;">
-                        <table style="width: 100%; border-collapse: collapse;">
-                            <thead>
-                                <tr style="background: #f8fafc;">
-                                    <th style="padding: 0.75rem; text-align: left; border-bottom: 1px solid #e2e8f0;">${t('admin.ratings.rating')}</th>
-                                    <th style="padding: 0.75rem; text-align: left; border-bottom: 1px solid #e2e8f0;">${t('admin.ratings.league')}</th>
-                                    <th style="padding: 0.75rem; text-align: left; border-bottom: 1px solid #e2e8f0;">${t('admin.ratings.date')}</th>
-                                    <th style="padding: 0.75rem; text-align: left; border-bottom: 1px solid #e2e8f0;">${t('admin.ratings.source')}</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                ${ratings.map(r => {
-                                    const leagueInfo = getLeagueFromRating(r.rating);
-                                    return `
-                                        <tr>
-                                            <td style="padding: 0.75rem; border-bottom: 1px solid #f1f5f9; font-weight: 600;">${r.rating}</td>
-                                            <td style="padding: 0.75rem; border-bottom: 1px solid #f1f5f9;">
-                                                <span style="padding: 0.125rem 0.5rem; border-radius: 0.25rem; font-size: 0.75rem; background: ${leagueInfo.color}20; color: ${leagueInfo.color};">${leagueInfo.name}</span>
-                                            </td>
-                                            <td style="padding: 0.75rem; border-bottom: 1px solid #f1f5f9; color: #64748b;">${formatDate(r.rating_date)}</td>
-                                            <td style="padding: 0.75rem; border-bottom: 1px solid #f1f5f9; color: #94a3b8; font-size: 0.875rem;">${r.source || 'manual'}</td>
-                                        </tr>
-                                    `;
-                                }).join('')}
-                            </tbody>
-                        </table>
+        if (changes && changes.length > 0) {
+            content.innerHTML = `
+                <!-- Trend Summary Card -->
+                <div style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+                            padding: 1.5rem; border-radius: 12px; margin-bottom: 1.5rem; color: white;">
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
+                        <h3 style="margin: 0; font-size: 1.25rem;">30-Day Trend</h3>
+                        <button onclick="exportRatingHistory('${studentId}')"
+                                style="background: rgba(255,255,255,0.2); border: 1px solid rgba(255,255,255,0.3);
+                                       padding: 0.5rem 1rem; border-radius: 6px;
+                                       color: white; cursor: pointer; font-weight: 600; font-size: 0.875rem;
+                                       display: flex; align-items: center; gap: 0.5rem;">
+                            <i data-lucide="download" style="width: 16px; height: 16px;"></i> Export
+                        </button>
                     </div>
-                `;
-            } else {
-                content.innerHTML = `<p style="text-align: center; color: #94a3b8; padding: 2rem;">${t('admin.ratings.noHistory')}</p>`;
-            }
+                    <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 1rem;">
+                        <div>
+                            <div style="font-size: 0.85rem; opacity: 0.9;">Net Change</div>
+                            <div style="font-size: 1.8rem; font-weight: 700;">
+                                ${trendSummary.netChange > 0 ? '+' : ''}${trendSummary.netChange}
+                            </div>
+                        </div>
+                        <div>
+                            <div style="font-size: 0.85rem; opacity: 0.9;">Increases</div>
+                            <div style="font-size: 1.8rem; font-weight: 700; color: #4ade80;">
+                                ${trendSummary.increases}
+                            </div>
+                        </div>
+                        <div>
+                            <div style="font-size: 0.85rem; opacity: 0.9;">Decreases</div>
+                            <div style="font-size: 1.8rem; font-weight: 700; color: #f87171;">
+                                ${trendSummary.decreases}
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Rating History Table -->
+                <div style="max-height: 400px; overflow-y: auto;">
+                    <table style="width: 100%; border-collapse: collapse;">
+                        <thead style="position: sticky; top: 0; background: white; z-index: 1;">
+                            <tr style="background: #f8fafc;">
+                                <th style="padding: 0.75rem; text-align: left; border-bottom: 2px solid #e2e8f0;">${t('admin.ratings.date')}</th>
+                                <th style="padding: 0.75rem; text-align: left; border-bottom: 2px solid #e2e8f0;">${t('admin.ratings.rating')}</th>
+                                <th style="padding: 0.75rem; text-align: left; border-bottom: 2px solid #e2e8f0;">Change</th>
+                                <th style="padding: 0.75rem; text-align: left; border-bottom: 2px solid #e2e8f0;">${t('admin.ratings.league')}</th>
+                                <th style="padding: 0.75rem; text-align: left; border-bottom: 2px solid #e2e8f0;">${t('admin.ratings.source')}</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            ${changes.map(r => {
+                                const leagueInfo = getLeagueFromRating(r.currentRating);
+                                const changeDisplay = r.changeType === 'initial'
+                                    ? '<span style="color: #94a3b8; font-style: italic;">Initial</span>'
+                                    : r.ratingChange > 0
+                                        ? `<span style="color: #22c55e; font-weight: 700;">+${r.ratingChange}</span>`
+                                        : r.ratingChange < 0
+                                            ? `<span style="color: #ef4444; font-weight: 700;">${r.ratingChange}</span>`
+                                            : '<span style="color: #94a3b8;">0</span>';
+
+                                return `
+                                    <tr>
+                                        <td style="padding: 0.75rem; border-bottom: 1px solid #f1f5f9; color: #64748b;">
+                                            ${formatDate(r.changeDate)}
+                                        </td>
+                                        <td style="padding: 0.75rem; border-bottom: 1px solid #f1f5f9; font-weight: 600;">
+                                            ${r.currentRating}
+                                        </td>
+                                        <td style="padding: 0.75rem; border-bottom: 1px solid #f1f5f9;">
+                                            ${changeDisplay}
+                                        </td>
+                                        <td style="padding: 0.75rem; border-bottom: 1px solid #f1f5f9;">
+                                            <span style="padding: 0.125rem 0.5rem; border-radius: 0.25rem;
+                                                         font-size: 0.75rem; background: ${leagueInfo.color}20;
+                                                         color: ${leagueInfo.color};">
+                                                ${leagueInfo.name}
+                                            </span>
+                                        </td>
+                                        <td style="padding: 0.75rem; border-bottom: 1px solid #f1f5f9; color: #94a3b8; font-size: 0.875rem;">
+                                            ${r.source || 'manual'}
+                                        </td>
+                                    </tr>
+                                `;
+                            }).join('')}
+                        </tbody>
+                    </table>
+                </div>
+            `;
+            lucide.createIcons();
         } else {
-            content.innerHTML = `<p style="text-align: center; color: #94a3b8; padding: 2rem;">${t('admin.ratings.functionNotAvailable')}</p>`;
+            content.innerHTML = `<p style="text-align: center; color: #94a3b8; padding: 2rem;">${t('admin.ratings.noHistory')}</p>`;
         }
     } catch (error) {
         console.error('Error loading rating history:', error);
         content.innerHTML = `<p style="text-align: center; color: #ef4444; padding: 2rem;">${t('admin.ratings.loadError')}</p>`;
+    }
+}
+
+// Export rating history to CSV
+async function exportRatingHistory(studentId) {
+    const student = window.students.find(s => String(s.id) === String(studentId));
+    if (!student) {
+        showToast('Student not found', 'error');
+        return;
+    }
+
+    try {
+        const changes = await window.supabaseData.getStudentRatingChanges(studentId);
+
+        if (!changes || changes.length === 0) {
+            showToast('No rating history to export', 'warning');
+            return;
+        }
+
+        // CSV Headers
+        const headers = ['Date', 'Rating', 'Previous Rating', 'Change', 'League', 'Source'];
+
+        // CSV Rows
+        const rows = changes.map(r => {
+            const leagueInfo = getLeagueFromRating(r.currentRating);
+            return [
+                r.changeDate,
+                r.currentRating,
+                r.previousRating || '-',
+                r.changeType === 'initial' ? 'Initial' : r.ratingChange,
+                leagueInfo.name,
+                r.source || 'manual'
+            ];
+        });
+
+        // Build CSV
+        const csvContent = [
+            `Rating History - ${student.firstName} ${student.lastName}`,
+            `Exported: ${new Date().toISOString().split('T')[0]}`,
+            '',
+            headers.join(','),
+            ...rows.map(row => row.map(cell => `"${cell}"`).join(','))
+        ].join('\n');
+
+        // Download
+        const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+        const link = document.createElement('a');
+        const url = URL.createObjectURL(blob);
+        link.setAttribute('href', url);
+        link.setAttribute('download',
+            `rating_history_${student.firstName}_${student.lastName}_${new Date().toISOString().split('T')[0]}.csv`);
+        link.style.visibility = 'hidden';
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+
+        showToast('Rating history exported successfully', 'success');
+    } catch (error) {
+        console.error('Error exporting rating history:', error);
+        showToast('Export failed: ' + error.message, 'error');
     }
 }
 
@@ -4170,6 +4286,7 @@ let attendanceSearchQuery = ''; // Search filter for student names
 let attendanceStudentScheduleAssignments = {}; // { studentId: 'mon_wed' | 'tue_thu' | 'sat_sun' | null }
 let attendanceCurrentScheduleStudents = new Set(); // Students with time slot assignments in CURRENT schedule
 let attendanceHideEmptyRows = true; // Hide empty placeholder rows by default
+let attendanceCurrentMode = 'present'; // Current attendance marking mode: 'present', 'excused', or 'absent'
 let mobileCalendarOffset = 0; // Mobile: tracks which 4-day chunk (0, 4, 8, 12...)
 
 // Time slot configuration: 8 slots, 10 students per slot
@@ -5385,20 +5502,36 @@ function renderAttendanceCalendar(preFilteredData = null) {
                     const dateStr = `${attendanceCurrentYear}-${String(attendanceCurrentMonth + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
                     const attendance = student.attendance.find(a => a.attendance_date === dateStr);
 
-                    const isPresent = attendance && attendance.status === 'present';
-                    if (isPresent) {
+                    const status = attendance?.status || '';
+
+                    // Count present for attendance rate
+                    if (status === 'present') {
                         presentCount++;
                     }
 
-                    // White checkbox with green checkmark when present
+                    // Determine checkbox state class and icon
+                    let checkboxClass = '';
+                    let checkboxIcon = '';
+
+                    if (status === 'present') {
+                        checkboxClass = 'checked';
+                        checkboxIcon = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>';
+                    } else if (status === 'excused') {
+                        checkboxClass = 'excused';
+                        checkboxIcon = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>';
+                    } else if (status === 'absent') {
+                        checkboxClass = 'absent';
+                        checkboxIcon = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>';
+                    }
+
                     bodyHtml += `
                         <td class="attendance-checkbox-cell"
                             data-student-id="${student.id}"
                             data-date="${dateStr}"
                             data-time-slot="${timeSlot}"
                             onclick="toggleAttendanceCheckbox('${student.id}', '${dateStr}', this)">
-                            <div class="attendance-checkbox ${isPresent ? 'checked' : ''}">
-                                ${isPresent ? '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>' : ''}
+                            <div class="attendance-checkbox ${checkboxClass}">
+                                ${checkboxIcon}
                             </div>
                         </td>
                     `;
@@ -5803,6 +5936,63 @@ async function toggleAttendanceStatus(studentId, dateStr, cell) {
     }
 }
 
+/**
+ * Set the current attendance marking mode
+ * @param {string} mode - The mode to set: 'present', 'excused', or 'absent'
+ */
+function setAttendanceMode(mode) {
+    // Validate mode
+    const validModes = ['present', 'excused', 'absent'];
+    if (!validModes.includes(mode)) {
+        console.error('Invalid attendance mode:', mode);
+        return;
+    }
+
+    // Update mode
+    attendanceCurrentMode = mode;
+
+    // Update button states
+    document.querySelectorAll('.attendance-mode-btn').forEach(btn => {
+        btn.classList.remove('active');
+        btn.setAttribute('aria-pressed', 'false');
+    });
+
+    const activeBtn = document.getElementById(`attendanceMode${mode.charAt(0).toUpperCase() + mode.slice(1)}`);
+    if (activeBtn) {
+        activeBtn.classList.add('active');
+        activeBtn.setAttribute('aria-pressed', 'true');
+    }
+
+    console.log('Attendance mode set to:', mode);
+}
+
+/**
+ * Helper function to update checkbox UI based on status
+ * @param {HTMLElement} checkbox - The checkbox div element
+ * @param {string} status - The status: '', 'present', 'excused', or 'absent'
+ */
+function updateCheckboxUI(checkbox, status) {
+    // Remove all status classes
+    checkbox.classList.remove('checked', 'excused', 'absent');
+
+    if (status === '') {
+        // Unchecked state
+        checkbox.innerHTML = '';
+    } else if (status === 'present') {
+        // Green checkmark
+        checkbox.classList.add('checked');
+        checkbox.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>';
+    } else if (status === 'excused') {
+        // Blue checkmark
+        checkbox.classList.add('excused');
+        checkbox.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>';
+    } else if (status === 'absent') {
+        // Red X
+        checkbox.classList.add('absent');
+        checkbox.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>';
+    }
+}
+
 // Toggle attendance checkbox (simplified present/absent toggle)
 async function toggleAttendanceCheckbox(studentId, dateStr, cell) {
     if (!attendanceCurrentBranch) return;
@@ -5815,33 +6005,65 @@ async function toggleAttendanceCheckbox(studentId, dateStr, cell) {
     const checkbox = cell.querySelector('.attendance-checkbox');
     if (!checkbox) return;
 
-    // Check current state
-    const isCurrentlyChecked = checkbox.classList.contains('checked');
-    const newStatus = isCurrentlyChecked ? '' : 'present';
+    // Check current state from data (not CSS class)
+    const studentData = attendanceCalendarData.find(s => s.id === studentId);
+    const attendanceRecord = studentData?.attendance.find(a => a.attendance_date === dateStr);
+    const currentStatus = attendanceRecord?.status || '';
+
+    // Determine new status based on current mode and current status
+    let newStatus;
+    if (currentStatus === attendanceCurrentMode) {
+        // If clicking the same status, clear it (uncheck)
+        newStatus = '';
+    } else {
+        // Otherwise, set to current mode
+        newStatus = attendanceCurrentMode;
+    }
 
     // Update UI immediately for responsiveness
-    if (newStatus === 'present') {
-        checkbox.classList.add('checked');
-        checkbox.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>';
-    } else {
-        checkbox.classList.remove('checked');
-        checkbox.innerHTML = '';
-    }
+    updateCheckboxUI(checkbox, newStatus);
 
     // Save to database
     try {
         if (newStatus === '') {
-            // Delete attendance record - need to find and delete the record
-            const studentData = attendanceCalendarData.find(s => s.id === studentId);
-            const attendanceRecord = studentData?.attendance.find(a => a.attendance_date === dateStr);
+            // Delete attendance record
+            if (window.supabaseData) {
+                try {
+                    // Primary method: Delete by ID if available
+                    if (attendanceRecord && attendanceRecord.id && typeof window.supabaseData.deleteAttendance === 'function') {
+                        console.log(`Deleting attendance by ID: ${attendanceRecord.id}`);
+                        await window.supabaseData.deleteAttendance(attendanceRecord.id);
+                    }
+                    // Fallback method: Delete by composite key
+                    else if (typeof window.supabaseData.deleteAttendanceByKey === 'function') {
+                        console.warn('Attendance record ID not found in local data, using composite key deletion');
+                        await window.supabaseData.deleteAttendanceByKey(
+                            studentId,
+                            dateStr,
+                            attendanceCurrentSchedule || 'mon_wed',
+                            attendanceCurrentTimeSlot !== 'all' ? attendanceCurrentTimeSlot : null
+                        );
+                    } else {
+                        throw new Error('No deletion method available');
+                    }
+                } catch (deleteError) {
+                    console.error('Failed to delete attendance:', deleteError);
+                    throw deleteError; // Re-throw to trigger catch block below
+                }
+            }
 
-            if (attendanceRecord && attendanceRecord.id && window.supabaseData && typeof window.supabaseData.deleteAttendance === 'function') {
-                await window.supabaseData.deleteAttendance(attendanceRecord.id);
+            // Update local data (only after successful deletion)
+            if (studentData) {
+                const existingIndex = studentData.attendance.findIndex(a => a.attendance_date === dateStr);
+                if (existingIndex !== -1) {
+                    studentData.attendance.splice(existingIndex, 1);
+                }
             }
         } else {
             // Upsert attendance record
             if (window.supabaseData && typeof window.supabaseData.upsertAttendance === 'function') {
-                await window.supabaseData.upsertAttendance({
+                // Capture the result with ID
+                const result = await window.supabaseData.upsertAttendance({
                     studentId: studentId,
                     branchId: branchObj.id,
                     attendanceDate: dateStr,
@@ -5849,26 +6071,27 @@ async function toggleAttendanceCheckbox(studentId, dateStr, cell) {
                     timeSlot: attendanceCurrentTimeSlot !== 'all' ? attendanceCurrentTimeSlot : null,
                     status: newStatus
                 });
-            }
-        }
 
-        // Update local data
-        const studentData = attendanceCalendarData.find(s => s.id === studentId);
-        if (studentData) {
-            const existingIndex = studentData.attendance.findIndex(a => a.attendance_date === dateStr);
-            if (newStatus === '') {
-                if (existingIndex !== -1) {
-                    studentData.attendance.splice(existingIndex, 1);
-                }
-            } else {
-                if (existingIndex !== -1) {
-                    studentData.attendance[existingIndex].status = newStatus;
-                } else {
-                    studentData.attendance.push({
-                        attendance_date: dateStr,
-                        status: newStatus,
-                        time_slot: attendanceCurrentTimeSlot !== 'all' ? attendanceCurrentTimeSlot : null
-                    });
+                // Store the returned ID
+                const returnedId = result?.id;
+
+                // Update local data
+                const studentData = attendanceCalendarData.find(s => s.id === studentId);
+                if (studentData) {
+                    const existingIndex = studentData.attendance.findIndex(a => a.attendance_date === dateStr);
+                    if (existingIndex !== -1) {
+                        // Update existing record
+                        studentData.attendance[existingIndex].status = newStatus;
+                        studentData.attendance[existingIndex].id = returnedId; // Update ID
+                    } else {
+                        // Include ID in new record
+                        studentData.attendance.push({
+                            id: returnedId,  // ID now included
+                            attendance_date: dateStr,
+                            status: newStatus,
+                            time_slot: attendanceCurrentTimeSlot !== 'all' ? attendanceCurrentTimeSlot : null
+                        });
+                    }
                 }
             }
         }
@@ -5889,13 +6112,7 @@ async function toggleAttendanceCheckbox(studentId, dateStr, cell) {
         console.error('Error saving attendance:', error);
         showToast(t('admin.attendance.saveError'), 'error');
         // Revert checkbox on error
-        if (isCurrentlyChecked) {
-            checkbox.classList.add('checked');
-            checkbox.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>';
-        } else {
-            checkbox.classList.remove('checked');
-            checkbox.innerHTML = '';
-        }
+        updateCheckboxUI(checkbox, currentStatus);
     }
 }
 
