@@ -38,7 +38,7 @@ async function fetchAttendanceRecords() {
 
     console.log('📡 Connecting to Supabase...');
 
-    const response = await fetch(`${SUPABASE_URL}/rest/v1/attendance?select=*,students(first_name,last_name,email),branches(name),coaches(first_name,last_name,email)`, {
+    const response = await fetch(`${SUPABASE_URL}/rest/v1/attendance?select=*,students(first_name,last_name,phone),branches(name),coaches(first_name,last_name,email)`, {
         headers: {
             'apikey': SUPABASE_ANON_KEY,
             'Authorization': `Bearer ${SUPABASE_ANON_KEY}`,
@@ -85,7 +85,7 @@ function saveToCSV(records, timestamp) {
         'attendance_id',
         'student_id',
         'student_name',
-        'student_email',
+        'student_phone',
         'attendance_date',
         'is_present',
         'schedule_type',
@@ -105,7 +105,7 @@ function saveToCSV(records, timestamp) {
             record.id,
             record.student_id,
             `${student.first_name || ''} ${student.last_name || ''}`.trim(),
-            student.email || '',
+            student.phone || '',
             record.attendance_date,
             record.is_present,
             record.schedule_type,

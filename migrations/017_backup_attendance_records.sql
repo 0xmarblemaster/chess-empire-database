@@ -21,7 +21,7 @@ SELECT
     a.id as attendance_id,
     a.student_id,
     s.first_name || ' ' || s.last_name as student_name,
-    s.email as student_email,
+    s.phone as student_phone,
     a.attendance_date,
     a.is_present,
     a.schedule_type,
