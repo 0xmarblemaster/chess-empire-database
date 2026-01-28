@@ -4394,6 +4394,14 @@ const ATTENDANCE_TIME_SLOTS_SAT_SUN = [
     '13:00-14:00'
 ];
 
+// Debut branch Saturday-Sunday schedule: extended slots for coach Asylkhan Agbaevich
+const ATTENDANCE_TIME_SLOTS_DEBUT_SAT_SUN_ASYLKHAN = [
+    '9:00-10:30',   // Extended from 9:00-10:00
+    '10:30-12:00',  // Replaces 10:00-11:00 and 11:00-12:00
+    '12:00-13:00',
+    '13:00-14:00'
+];
+
 const DEFAULT_TIME_SLOT_ROWS = 10;      // Default visible rows
 const MAX_TIME_SLOT_CAPACITY = 15;      // Maximum students per slot
 
@@ -4444,24 +4452,27 @@ function getStudentsForTimeSlot(slotIndex, filteredData) {
 // Get time slots for a specific branch, schedule type, and coach
 // Saturday-Sunday has shorter hours (last slot 13:00-14:00) for ALL branches
 function getTimeSlotsForBranch(branchName, scheduleType = null, coachName = null) {
-    // Saturday-Sunday schedule: use shorter time slots (9:00-14:00) for all branches
-    if (scheduleType === 'sat_sun') {
-        return ATTENDANCE_TIME_SLOTS_SAT_SUN;
-    }
-
     if (!branchName) return ATTENDANCE_TIME_SLOTS_DEFAULT;
     const normalizedName = branchName.toLowerCase().trim();
+
     if (normalizedName.includes('halyk') || normalizedName.includes('khalyk')) {
         return ATTENDANCE_TIME_SLOTS_HALYK;
     }
+
     if (normalizedName.includes('debut') || normalizedName.includes('дебют')) {
         // Coach-specific handling for Debut branch
         const normalizedCoach = coachName ? coachName.toLowerCase().trim() : '';
 
-        // Coach Asylkhan Agbaevich uses Mon-Wed (2-day) with extended 11:00-12:30 slot
-        if (scheduleType === 'mon_wed' &&
-            (normalizedCoach.includes('asylkhan') || normalizedCoach.includes('асылхан'))) {
-            return ATTENDANCE_TIME_SLOTS_DEBUT_MON_WED;
+        // Coach Asylkhan Agbaevich has custom time slots for multiple schedules
+        if (normalizedCoach.includes('asylkhan') || normalizedCoach.includes('асылхан')) {
+            // Sat-Sun: Extended slots (9:00-10:30, 10:30-12:00)
+            if (scheduleType === 'sat_sun') {
+                return ATTENDANCE_TIME_SLOTS_DEBUT_SAT_SUN_ASYLKHAN;
+            }
+            // Mon-Wed: Extended midday slot (11:00-12:30)
+            if (scheduleType === 'mon_wed') {
+                return ATTENDANCE_TIME_SLOTS_DEBUT_MON_WED;
+            }
         }
 
         // Coach Nail Ildusovich and others use Mon-Wed-Fri (3-day) with regular 11:00-12:00
@@ -4469,9 +4480,18 @@ function getTimeSlotsForBranch(branchName, scheduleType = null, coachName = null
             return ATTENDANCE_TIME_SLOTS_DEBUT_MON_WED_FRI;
         }
 
-        // Default Debut slots (for other schedules like tue_thu)
+        // Default Debut slots (for other schedules like tue_thu, or sat_sun for other coaches)
+        if (scheduleType === 'sat_sun') {
+            return ATTENDANCE_TIME_SLOTS_SAT_SUN;
+        }
         return ATTENDANCE_TIME_SLOTS_DEBUT;
     }
+
+    // Saturday-Sunday schedule: use shorter time slots (9:00-14:00) for all other branches
+    if (scheduleType === 'sat_sun') {
+        return ATTENDANCE_TIME_SLOTS_SAT_SUN;
+    }
+
     return ATTENDANCE_TIME_SLOTS_DEFAULT;
 }
 
