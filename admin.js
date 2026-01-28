@@ -4277,6 +4277,7 @@ let attendanceCurrentYear = new Date().getFullYear();
 let attendanceCurrentMonth = new Date().getMonth(); // 0-indexed
 let attendanceCurrentTimeSlot = 'all';
 let attendanceCurrentCoach = 'all'; // 'all', coachId UUID, or 'unassigned'
+let attendanceCurrentCoachName = null; // Full coach name for coach-specific time slot logic
 let attendanceCalendarData = [];
 let attendanceStudentAliases = [];
 let attendanceExcelParsedData = null;
@@ -4371,6 +4372,19 @@ const ATTENDANCE_TIME_SLOTS_DEBUT_MON_WED = [
     '18:30-19:30'
 ];
 
+// Debut branch Mon-Wed-Fri schedule: regular slots for coach Nail Ildusovich and others
+const ATTENDANCE_TIME_SLOTS_DEBUT_MON_WED_FRI = [
+    '9:00-10:00',
+    '10:00-11:00',
+    '11:00-12:00',  // Regular 1-hour slot (not extended like Mon-Wed)
+    '12:00-13:00',
+    '14:00-15:00',
+    '15:00-16:30',
+    '16:30-17:30',
+    '17:30-18:30',
+    '18:30-19:30'
+];
+
 // Saturday-Sunday slots (9:00 - 14:00, shorter day - last slot ends at 14:00)
 const ATTENDANCE_TIME_SLOTS_SAT_SUN = [
     '9:00-10:00',
@@ -4395,7 +4409,7 @@ function initializeStudentTimeSlots(skipStudentIds = new Set()) {
         return;
     }
 
-    const timeSlots = getTimeSlotsForBranch(attendanceCurrentBranch, attendanceCurrentSchedule);
+    const timeSlots = getTimeSlotsForBranch(attendanceCurrentBranch, attendanceCurrentSchedule, attendanceCurrentCoachName);
     const numSlots = timeSlots.length;
 
     // For students without a slot, assign them sequentially (Halyk Arena only)
@@ -4427,9 +4441,9 @@ function getStudentsForTimeSlot(slotIndex, filteredData) {
     return filteredData.filter(student => student.time_slot_index === slotIndex);
 }
 
-// Get time slots for a specific branch and schedule type
+// Get time slots for a specific branch, schedule type, and coach
 // Saturday-Sunday has shorter hours (last slot 13:00-14:00) for ALL branches
-function getTimeSlotsForBranch(branchName, scheduleType = null) {
+function getTimeSlotsForBranch(branchName, scheduleType = null, coachName = null) {
     // Saturday-Sunday schedule: use shorter time slots (9:00-14:00) for all branches
     if (scheduleType === 'sat_sun') {
         return ATTENDANCE_TIME_SLOTS_SAT_SUN;
@@ -4441,10 +4455,21 @@ function getTimeSlotsForBranch(branchName, scheduleType = null) {
         return ATTENDANCE_TIME_SLOTS_HALYK;
     }
     if (normalizedName.includes('debut') || normalizedName.includes('дебют')) {
-        // Debut Mon-Wed schedule has extended midday slot (11:00-12:30)
-        if (scheduleType === 'mon_wed') {
+        // Coach-specific handling for Debut branch
+        const normalizedCoach = coachName ? coachName.toLowerCase().trim() : '';
+
+        // Coach Asylkhan Agbaevich uses Mon-Wed (2-day) with extended 11:00-12:30 slot
+        if (scheduleType === 'mon_wed' &&
+            (normalizedCoach.includes('asylkhan') || normalizedCoach.includes('асылхан'))) {
             return ATTENDANCE_TIME_SLOTS_DEBUT_MON_WED;
         }
+
+        // Coach Nail Ildusovich and others use Mon-Wed-Fri (3-day) with regular 11:00-12:00
+        if (scheduleType === 'mon_wed_fri') {
+            return ATTENDANCE_TIME_SLOTS_DEBUT_MON_WED_FRI;
+        }
+
+        // Default Debut slots (for other schedules like tue_thu)
         return ATTENDANCE_TIME_SLOTS_DEBUT;
     }
     return ATTENDANCE_TIME_SLOTS_DEFAULT;
@@ -4655,25 +4680,34 @@ function populateAttendanceScheduleDropdown() {
     const mobileSelect = document.getElementById('mobileScheduleFilter');
     const addStudentSelect = document.getElementById('addStudentScheduleSelect');
 
-    // Determine which schedule type to use based on branch
+    // Determine which schedule types to show based on branch
     const isDebutBranch = attendanceCurrentBranch && attendanceCurrentBranch.toLowerCase().includes('debut');
-    const monWedValue = isDebutBranch ? 'mon_wed_fri' : 'mon_wed';
-    const monWedLabel = isDebutBranch ? 'admin.attendance.monWedFri' : 'admin.attendance.monWed';
 
     // Update desktop dropdown
     if (desktopSelect) {
         const currentValue = desktopSelect.value;
-        desktopSelect.innerHTML = `
-            <option value="" data-i18n="admin.attendance.allSchedules">All Schedules</option>
-            <option value="${monWedValue}" data-i18n="${monWedLabel}">${t(monWedLabel)}</option>
-            <option value="tue_thu" data-i18n="admin.attendance.tueThu">${t('admin.attendance.tueThu')}</option>
-            <option value="sat_sun" data-i18n="admin.attendance.satSun">${t('admin.attendance.satSun')}</option>
-        `;
+
+        if (isDebutBranch) {
+            // Debut branch offers BOTH mon_wed (Asylkhan) and mon_wed_fri (Nail)
+            desktopSelect.innerHTML = `
+                <option value="" data-i18n="admin.attendance.allSchedules">All Schedules</option>
+                <option value="mon_wed" data-i18n="admin.attendance.monWed">${t('admin.attendance.monWed')}</option>
+                <option value="mon_wed_fri" data-i18n="admin.attendance.monWedFri">${t('admin.attendance.monWedFri')}</option>
+                <option value="tue_thu" data-i18n="admin.attendance.tueThu">${t('admin.attendance.tueThu')}</option>
+                <option value="sat_sun" data-i18n="admin.attendance.satSun">${t('admin.attendance.satSun')}</option>
+            `;
+        } else {
+            // Other branches use mon_wed as the 2-day schedule
+            desktopSelect.innerHTML = `
+                <option value="" data-i18n="admin.attendance.allSchedules">All Schedules</option>
+                <option value="mon_wed" data-i18n="admin.attendance.monWed">${t('admin.attendance.monWed')}</option>
+                <option value="tue_thu" data-i18n="admin.attendance.tueThu">${t('admin.attendance.tueThu')}</option>
+                <option value="sat_sun" data-i18n="admin.attendance.satSun">${t('admin.attendance.satSun')}</option>
+            `;
+        }
+
         // Restore previous selection if valid
-        if (currentValue === 'mon_wed' || currentValue === 'mon_wed_fri') {
-            desktopSelect.value = monWedValue;
-            attendanceCurrentSchedule = monWedValue;
-        } else if (currentValue) {
+        if (currentValue) {
             desktopSelect.value = currentValue;
         }
     }
@@ -4681,16 +4715,28 @@ function populateAttendanceScheduleDropdown() {
     // Update mobile dropdown
     if (mobileSelect) {
         const currentValue = mobileSelect.value;
-        mobileSelect.innerHTML = `
-            <option value="" data-i18n="admin.attendance.allSchedules">All Schedules</option>
-            <option value="${monWedValue}" data-i18n="${monWedLabel}">${t(monWedLabel)}</option>
-            <option value="tue_thu" data-i18n="admin.attendance.tueThu">${t('admin.attendance.tueThu')}</option>
-            <option value="sat_sun" data-i18n="admin.attendance.satSun">${t('admin.attendance.satSun')}</option>
-        `;
+
+        if (isDebutBranch) {
+            // Debut branch offers BOTH mon_wed (Asylkhan) and mon_wed_fri (Nail)
+            mobileSelect.innerHTML = `
+                <option value="" data-i18n="admin.attendance.allSchedules">All Schedules</option>
+                <option value="mon_wed" data-i18n="admin.attendance.monWed">${t('admin.attendance.monWed')}</option>
+                <option value="mon_wed_fri" data-i18n="admin.attendance.monWedFri">${t('admin.attendance.monWedFri')}</option>
+                <option value="tue_thu" data-i18n="admin.attendance.tueThu">${t('admin.attendance.tueThu')}</option>
+                <option value="sat_sun" data-i18n="admin.attendance.satSun">${t('admin.attendance.satSun')}</option>
+            `;
+        } else {
+            // Other branches use mon_wed as the 2-day schedule
+            mobileSelect.innerHTML = `
+                <option value="" data-i18n="admin.attendance.allSchedules">All Schedules</option>
+                <option value="mon_wed" data-i18n="admin.attendance.monWed">${t('admin.attendance.monWed')}</option>
+                <option value="tue_thu" data-i18n="admin.attendance.tueThu">${t('admin.attendance.tueThu')}</option>
+                <option value="sat_sun" data-i18n="admin.attendance.satSun">${t('admin.attendance.satSun')}</option>
+            `;
+        }
+
         // Restore previous selection if valid
-        if (currentValue === 'mon_wed' || currentValue === 'mon_wed_fri') {
-            mobileSelect.value = monWedValue;
-        } else if (currentValue) {
+        if (currentValue) {
             mobileSelect.value = currentValue;
         }
     }
@@ -4698,15 +4744,26 @@ function populateAttendanceScheduleDropdown() {
     // Update add student modal dropdown
     if (addStudentSelect) {
         const currentValue = addStudentSelect.value;
-        addStudentSelect.innerHTML = `
-            <option value="${monWedValue}" data-i18n="${monWedLabel}">${t(monWedLabel)}</option>
-            <option value="tue_thu" data-i18n="admin.attendance.tueThu">${t('admin.attendance.tueThu')}</option>
-            <option value="sat_sun" data-i18n="admin.attendance.satSun">${t('admin.attendance.satSun')}</option>
-        `;
+
+        if (isDebutBranch) {
+            // Debut branch offers BOTH mon_wed (Asylkhan) and mon_wed_fri (Nail)
+            addStudentSelect.innerHTML = `
+                <option value="mon_wed" data-i18n="admin.attendance.monWed">${t('admin.attendance.monWed')}</option>
+                <option value="mon_wed_fri" data-i18n="admin.attendance.monWedFri">${t('admin.attendance.monWedFri')}</option>
+                <option value="tue_thu" data-i18n="admin.attendance.tueThu">${t('admin.attendance.tueThu')}</option>
+                <option value="sat_sun" data-i18n="admin.attendance.satSun">${t('admin.attendance.satSun')}</option>
+            `;
+        } else {
+            // Other branches use mon_wed as the 2-day schedule
+            addStudentSelect.innerHTML = `
+                <option value="mon_wed" data-i18n="admin.attendance.monWed">${t('admin.attendance.monWed')}</option>
+                <option value="tue_thu" data-i18n="admin.attendance.tueThu">${t('admin.attendance.tueThu')}</option>
+                <option value="sat_sun" data-i18n="admin.attendance.satSun">${t('admin.attendance.satSun')}</option>
+            `;
+        }
+
         // Restore previous selection if valid
-        if (currentValue === 'mon_wed' || currentValue === 'mon_wed_fri') {
-            addStudentSelect.value = monWedValue;
-        } else if (currentValue) {
+        if (currentValue) {
             addStudentSelect.value = currentValue;
         }
     }
@@ -4766,6 +4823,14 @@ function onAttendanceTimeSlotChange() {
 function onAttendanceCoachChange() {
     const select = document.getElementById('attendanceCoachFilter');
     attendanceCurrentCoach = select.value;
+
+    // Get coach name for time slot logic
+    if (attendanceCurrentCoach && attendanceCurrentCoach !== 'all' && attendanceCurrentCoach !== 'unassigned') {
+        const coach = window.coaches.find(c => c.id === attendanceCurrentCoach);
+        attendanceCurrentCoachName = coach ? `${coach.firstName} ${coach.lastName}` : null;
+    } else {
+        attendanceCurrentCoachName = null;
+    }
 
     // Reset time slot filter (different coaches may have different slots)
     attendanceCurrentTimeSlot = 'all';
@@ -5518,7 +5583,7 @@ function renderAttendanceCalendar(preFilteredData = null) {
     let bodyHtml = '';
 
     // Get time slots for current branch and schedule type (Sat-Sun has different slots)
-    const timeSlots = getTimeSlotsForBranch(attendanceCurrentBranch, attendanceCurrentSchedule);
+    const timeSlots = getTimeSlotsForBranch(attendanceCurrentBranch, attendanceCurrentSchedule, attendanceCurrentCoachName);
     const totalColumns = scheduleDates.length + 1; // Student column + date columns
 
     // Group students into time slot sections by their time_slot_index property
@@ -5900,7 +5965,7 @@ async function moveStudentToTimeSlot(studentId, fromSlotId, toSlotId, toSlotInde
     }
 
     // Check if target slot has room (max 15 students per slot)
-    const timeSlots = getTimeSlotsForBranch(attendanceCurrentBranch, attendanceCurrentSchedule);
+    const timeSlots = getTimeSlotsForBranch(attendanceCurrentBranch, attendanceCurrentSchedule, attendanceCurrentCoachName);
     const filteredData = window.attendanceFilteredData || [];
     const targetSlotStudents = getStudentsForTimeSlot(toSlotIndex, filteredData);
 
@@ -6314,7 +6379,7 @@ function handleAttendanceSearchDropdown(query) {
         const displayMatches = matches.slice(0, 10);
         dropdown.innerHTML = displayMatches.map(student => {
             const timeSlotIndex = student.time_slot_index ?? 0;
-            const timeSlots = getTimeSlotsForBranch(attendanceCurrentBranch, attendanceCurrentSchedule);
+            const timeSlots = getTimeSlotsForBranch(attendanceCurrentBranch, attendanceCurrentSchedule, attendanceCurrentCoachName);
             const timeSlotLabel = timeSlots[timeSlotIndex] || `Slot ${timeSlotIndex + 1}`;
 
             return `
@@ -6491,8 +6556,19 @@ function onAddStudentScheduleChange() {
 
     if (!timeSlotSelect) return;
 
+    // Get coach name from selected student if available
+    let coachName = null;
+    const studentId = document.getElementById('addStudentSelectedId')?.value;
+    if (studentId) {
+        const student = window.students?.find(s => s.id === studentId);
+        if (student && student.coachId) {
+            const coach = window.coaches?.find(c => c.id === student.coachId);
+            coachName = coach ? `${coach.firstName} ${coach.lastName}` : null;
+        }
+    }
+
     // Get time slots for the selected branch and schedule
-    const timeSlots = getTimeSlotsForBranch(selectedBranch, selectedSchedule);
+    const timeSlots = getTimeSlotsForBranch(selectedBranch, selectedSchedule, coachName);
 
     timeSlotSelect.innerHTML = `
         <option value="">${t('admin.attendance.selectTimeSlot') || 'Select Time Slot'}</option>
@@ -6659,7 +6735,15 @@ async function submitAddStudentToCalendar() {
         });
 
         if (studentsInSlot.length >= MAX_TIME_SLOT_CAPACITY) {
-            const timeSlots = getTimeSlotsForBranch(selectedBranch, selectedSchedule);
+            // Get coach name for the selected student
+            const student = window.students?.find(s => s.id === studentId);
+            let coachName = null;
+            if (student && student.coachId) {
+                const coach = window.coaches?.find(c => c.id === student.coachId);
+                coachName = coach ? `${coach.firstName} ${coach.lastName}` : null;
+            }
+
+            const timeSlots = getTimeSlotsForBranch(selectedBranch, selectedSchedule, coachName);
             const slotName = timeSlots[timeSlotIndex] || `Slot ${timeSlotIndex + 1}`;
             showToast(
                 `Time slot ${slotName} is full (${MAX_TIME_SLOT_CAPACITY} students max). Please select a different time slot.`,
@@ -7240,7 +7324,8 @@ function normalizeTimeSlot(slot) {
 function findTimeSlotIndexForBranch(extractedSlot, branchName, scheduleType = null) {
     if (!extractedSlot) return -1;
 
-    const timeSlots = getTimeSlotsForBranch(branchName, scheduleType);
+    // Excel import context: no coach filter, use null to get default time slots
+    const timeSlots = getTimeSlotsForBranch(branchName, scheduleType, null);
     const normalizedExtracted = normalizeTimeSlot(extractedSlot);
 
     return timeSlots.findIndex(slot =>
@@ -7647,7 +7732,8 @@ function renderNameMatchingTable() {
     const branchName = document.getElementById('importBranchSelect').value;
     const branchStudents = window.students.filter(s => s.branch === branchName);
     const scheduleType = attendanceExcelParsedData?.scheduleType || null;
-    const timeSlots = getTimeSlotsForBranch(branchName, scheduleType);
+    // Excel import context: no coach filter, use null to get default time slots
+    const timeSlots = getTimeSlotsForBranch(branchName, scheduleType, null);
 
     tbody.innerHTML = attendanceMatchedNames.map((item, index) => {
         const statusClass = item.matchType === 'unmatched' ? 'unmatched' :
