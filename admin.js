@@ -4865,6 +4865,9 @@ function onAttendanceCoachChange() {
         mobileSelect.value = attendanceCurrentCoach;
     }
 
+    // Repopulate time slots with coach-specific slots
+    populateAttendanceTimeSlots();
+
     // Save filter state
     saveAttendanceFilterState();
 
@@ -4994,21 +4997,13 @@ async function populateAttendanceTimeSlots() {
 
     select.innerHTML = `<option value="all">${t('admin.attendance.allTimeSlots')}</option>`;
 
-    if (window.supabaseData && typeof window.supabaseData.getAttendanceTimeSlots === 'function') {
-        try {
-            const branchObj = window.branches.find(b => b.name === attendanceCurrentBranch);
-            if (branchObj) {
-                const timeSlots = await window.supabaseData.getAttendanceTimeSlots(branchObj.id, attendanceCurrentSchedule);
-                timeSlots.forEach(slot => {
-                    if (slot) {
-                        select.innerHTML += `<option value="${slot}">${slot}</option>`;
-                    }
-                });
-            }
-        } catch (e) {
-            console.warn('Could not load time slots:', e);
+    // Use client-side time slot logic with coach-specific handling
+    const timeSlots = getTimeSlotsForBranch(attendanceCurrentBranch, attendanceCurrentSchedule, attendanceCurrentCoachName);
+    timeSlots.forEach(slot => {
+        if (slot) {
+            select.innerHTML += `<option value="${slot}">${slot}</option>`;
         }
-    }
+    });
 }
 
 // Navigate month backward
