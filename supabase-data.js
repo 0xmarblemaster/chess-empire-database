@@ -1759,7 +1759,9 @@ const supabaseData = {
     async getAttendanceCalendarData(branchId, scheduleType, year, month, coachId = null) {
         // Calculate date range
         const startDate = `${year}-${String(month).padStart(2, '0')}-01`;
-        const endDate = new Date(year, month, 0).toISOString().split('T')[0];
+        // Calculate last day of month without timezone conversion
+        const lastDay = new Date(year, month, 0).getDate();
+        const endDate = `${year}-${String(month).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`;
 
         // Build attendance query
         let attendanceQuery = window.supabaseClient
