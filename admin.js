@@ -4402,6 +4402,26 @@ const ATTENDANCE_TIME_SLOTS_DEBUT_SAT_SUN_ASYLKHAN = [
     '13:00-14:00'
 ];
 
+// Gagarin Park Saturday-Sunday schedule (сб-вс)
+const ATTENDANCE_TIME_SLOTS_GAGARIN_SAT_SUN = [
+    '9:00-10:30',
+    '10:30-12:00',
+    '12:00-13:00',
+    '13:00-14:00'
+];
+
+// Gagarin Park Tuesday-Thursday schedule (вт-чт)
+const ATTENDANCE_TIME_SLOTS_GAGARIN_TUE_THU = [
+    '9:00-10:00',
+    '10:00-11:30',
+    '11:30-12:30',
+    '12:30-13:30',
+    '14:00-15:00',
+    '15:00-16:00',
+    '16:00-17:30',
+    '17:30-19:00'
+];
+
 const DEFAULT_TIME_SLOT_ROWS = 10;      // Default visible rows
 const MAX_TIME_SLOT_CAPACITY = 15;      // Maximum students per slot
 
@@ -4457,6 +4477,18 @@ function getTimeSlotsForBranch(branchName, scheduleType = null, coachName = null
 
     if (normalizedName.includes('halyk') || normalizedName.includes('khalyk')) {
         return ATTENDANCE_TIME_SLOTS_HALYK;
+    }
+
+    if (normalizedName.includes('gagarin') || normalizedName.includes('гагарин')) {
+        // Gagarin Park has different schedules for Tue-Thu and Sat-Sun
+        if (scheduleType === 'sat_sun') {
+            return ATTENDANCE_TIME_SLOTS_GAGARIN_SAT_SUN;
+        }
+        if (scheduleType === 'tue_thu') {
+            return ATTENDANCE_TIME_SLOTS_GAGARIN_TUE_THU;
+        }
+        // Fallback to default if schedule type not specified
+        return ATTENDANCE_TIME_SLOTS_DEFAULT;
     }
 
     if (normalizedName.includes('debut') || normalizedName.includes('дебют')) {
