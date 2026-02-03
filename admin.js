@@ -1750,6 +1750,7 @@ function viewCoach(coachFullName) {
 
     switchToSection('coach');
     loadCoachView(coach);
+    populateCoachDropdown();  // Refresh sidebar counts to match current data
 
     currentlySelectedCoach = coachFullName;
     updateCoachDropdownSelection();
