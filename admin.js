@@ -280,10 +280,10 @@ function loadStatistics() {
     if (totalBranchesElement) totalBranchesElement.textContent = totalBranches;
     if (activeStudentsElement) activeStudentsElement.textContent = activeStudents;
 
-    // Update nav badge
+    // Update nav badge (show only active students)
     const studentCountBadge = document.getElementById('studentCount');
     if (studentCountBadge) {
-        studentCountBadge.textContent = totalStudents;
+        studentCountBadge.textContent = activeStudents;
     }
 }
 
@@ -897,7 +897,7 @@ function refreshCoachesListView() {
 
     mobileCoachCards.innerHTML = `<div class="coach-cards-grid">${coachesArray.map(coach => {
         const coachFullName = `${coach.firstName} ${coach.lastName}`;
-        const studentCount = studentsArray.filter(s => s.coach === coachFullName).length;
+        const studentCount = studentsArray.filter(s => s.coach === coachFullName && s.status === 'active').length;
 
         // Avatar: photo or initials fallback
         const avatarContent = coach.photoUrl
@@ -1025,7 +1025,7 @@ function populateBranchDropdown() {
     const dropdown = document.getElementById('branchDropdown');
 
     const dropdownHTML = branches.map(branch => {
-        const studentCount = students.filter(s => s.branch === branch.name).length;
+        const studentCount = students.filter(s => s.branch === branch.name && s.status === 'active').length;
         const displayName = i18n.translateBranchName(branch.name);
         return `
             <div class="dropdown-item" data-branch-name="${branch.name}" onclick="event.stopPropagation(); viewBranch('${branch.name}')">
@@ -1670,7 +1670,7 @@ function populateCoachDropdown() {
 
     const dropdownHTML = coaches.map(coach => {
         const coachFullName = `${coach.firstName} ${coach.lastName}`;
-        const studentCount = students.filter(s => s.coach === coachFullName).length;
+        const studentCount = students.filter(s => s.coach === coachFullName && s.status === 'active').length;
         return `
             <div class="dropdown-item" data-coach-name="${coachFullName}" onclick="event.stopPropagation(); viewCoach('${coachFullName}')">
                 <i data-lucide="user" class="dropdown-item-icon"></i>
