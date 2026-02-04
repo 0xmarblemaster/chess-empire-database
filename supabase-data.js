@@ -2512,6 +2512,215 @@ const supabaseData = {
         }
 
         return true;
+    },
+
+    /**
+     * ===================================
+     * AUDIT LOG METHODS
+     * ===================================
+     */
+
+    /**
+     * Get audit log entries with filtering and pagination
+     * @param {Object} filters - Filter options
+     * @param {string} filters.entityType - Filter by entity type ('students', 'coaches', 'branches')
+     * @param {string} filters.entityId - Filter by specific entity UUID
+     * @param {string} filters.action - Filter by action type ('CREATE', 'UPDATE', 'DELETE')
+     * @param {string} filters.fieldName - Filter by specific field name
+     * @param {string} filters.changedByEmail - Filter by user email
+     * @param {string} filters.fromDate - Filter from date (ISO string)
+     * @param {string} filters.toDate - Filter to date (ISO string)
+     * @param {number} filters.limit - Number of results (default 50, max 500)
+     * @param {number} filters.offset - Pagination offset (default 0)
+     * @returns {Promise<Array>} Array of audit log entries
+     */
+    async getAuditLog(filters = {}) {
+        try {
+            let query = window.supabaseClient
+                .from('audit_log')
+                .select('*', { count: 'exact' });
+
+            // Apply filters
+            if (filters.entityType) {
+                query = query.eq('entity_type', filters.entityType);
+            }
+            if (filters.entityId) {
+                query = query.eq('entity_id', filters.entityId);
+            }
+            if (filters.action) {
+                query = query.eq('action', filters.action);
+            }
+            if (filters.fieldName) {
+                query = query.eq('field_name', filters.fieldName);
+            }
+            if (filters.changedByEmail) {
+                query = query.ilike('changed_by_email', `%${filters.changedByEmail}%`);
+            }
+            if (filters.fromDate) {
+                query = query.gte('changed_at', filters.fromDate);
+            }
+            if (filters.toDate) {
+                query = query.lte('changed_at', filters.toDate);
+            }
+
+            // Apply pagination
+            const limit = Math.min(filters.limit || 50, 500);
+            const offset = filters.offset || 0;
+            query = query.order('changed_at', { ascending: false })
+                        .range(offset, offset + limit - 1);
+
+            const { data, error, count } = await query;
+
+            if (error) {
+                console.error('Error fetching audit log:', error);
+                return { entries: [], total: 0 };
+            }
+
+            // Transform to camelCase
+            const entries = (data || []).map(entry => ({
+                id: entry.id,
+                entityType: entry.entity_type,
+                entityId: entry.entity_id,
+                action: entry.action,
+                fieldName: entry.field_name,
+                oldValue: entry.old_value,
+                newValue: entry.new_value,
+                changedBy: entry.changed_by,
+                changedByEmail: entry.changed_by_email,
+                changedAt: entry.changed_at,
+                ipAddress: entry.ip_address,
+                userAgent: entry.user_agent
+            }));
+
+            return {
+                entries,
+                total: count || 0,
+                limit,
+                offset
+            };
+        } catch (error) {
+            console.error('Error in getAuditLog:', error);
+            return { entries: [], total: 0 };
+        }
+    },
+
+    /**
+     * Get complete audit history for a specific entity
+     * @param {string} entityType - Entity type ('students', 'coaches', 'branches')
+     * @param {string} entityId - Entity UUID
+     * @returns {Promise<Array>} Array of audit log entries for this entity
+     */
+    async getEntityAuditLog(entityType, entityId) {
+        try {
+            const { data, error } = await window.supabaseClient
+                .rpc('get_entity_audit_history', {
+                    p_entity_type: entityType,
+                    p_entity_id: entityId
+                });
+
+            if (error) {
+                console.error('Error fetching entity audit history:', error);
+                return [];
+            }
+
+            // Transform to camelCase
+            return (data || []).map(entry => ({
+                id: entry.id,
+                action: entry.action,
+                fieldName: entry.field_name,
+                oldValue: entry.old_value,
+                newValue: entry.new_value,
+                changedByEmail: entry.changed_by_email,
+                changedAt: entry.changed_at
+            }));
+        } catch (error) {
+            console.error('Error in getEntityAuditLog:', error);
+            return [];
+        }
+    },
+
+    /**
+     * Get recent audit activity (last 24 hours by default)
+     * @param {number} limit - Maximum number of entries (default 50)
+     * @returns {Promise<Array>} Array of recent audit log entries
+     */
+    async getRecentAuditActivity(limit = 50) {
+        try {
+            const { data, error } = await window.supabaseClient
+                .rpc('get_recent_audit_activity', {
+                    p_limit: limit
+                });
+
+            if (error) {
+                console.error('Error fetching recent audit activity:', error);
+                return [];
+            }
+
+            // Transform to camelCase
+            return (data || []).map(entry => ({
+                id: entry.id,
+                entityType: entry.entity_type,
+                entityId: entry.entity_id,
+                action: entry.action,
+                fieldName: entry.field_name,
+                oldValue: entry.old_value,
+                newValue: entry.new_value,
+                changedByEmail: entry.changed_by_email,
+                changedAt: entry.changed_at
+            }));
+        } catch (error) {
+            console.error('Error in getRecentAuditActivity:', error);
+            return [];
+        }
+    },
+
+    /**
+     * Export audit log to CSV format
+     * @param {Object} filters - Same filters as getAuditLog
+     * @returns {Promise<string>} CSV string
+     */
+    async exportAuditLogCSV(filters = {}) {
+        try {
+            // Get all matching entries (up to 5000 for export)
+            const result = await this.getAuditLog({
+                ...filters,
+                limit: 5000,
+                offset: 0
+            });
+
+            const entries = result.entries || [];
+
+            // CSV header
+            let csv = 'Timestamp,Entity Type,Entity ID,Action,Field,Old Value,New Value,Changed By\n';
+
+            // CSV rows
+            entries.forEach(entry => {
+                const row = [
+                    entry.changedAt,
+                    entry.entityType,
+                    entry.entityId,
+                    entry.action,
+                    entry.fieldName || '',
+                    entry.oldValue || '',
+                    entry.newValue || '',
+                    entry.changedByEmail
+                ].map(val => {
+                    // Escape quotes and wrap in quotes if contains comma/newline
+                    const str = String(val || '');
+                    if (str.includes(',') || str.includes('\n') || str.includes('"')) {
+                        return '"' + str.replace(/"/g, '""') + '"';
+                    }
+                    return str;
+                }).join(',');
+
+                csv += row + '\n';
+            });
+
+            return csv;
+        } catch (error) {
+            console.error('Error exporting audit log to CSV:', error);
+            return '';
+        }
     }
 };
 

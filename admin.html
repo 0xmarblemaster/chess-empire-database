@@ -124,6 +124,13 @@
                     <i data-lucide="calendar-check" style="width: 20px; height: 20px;"></i>
                     <span data-i18n="admin.sidebar.attendance">Attendance</span>
                 </div>
+
+                <!-- Analytics Section (oxmarblemaster only) -->
+                <div class="nav-section-title" id="analyticsSectionTitle" style="margin-top: 1.5rem; display: none;" data-i18n="admin.sidebar.analytics">Analytics</div>
+                <div class="nav-item" id="menuActivityLog" onclick="showActivityLog()" style="display: none;">
+                    <i data-lucide="file-text" style="width: 20px; height: 20px;"></i>
+                    <span data-i18n="admin.activityLog.title">Activity Log</span>
+                </div>
             </nav>
 
             <!-- User Info -->
@@ -951,6 +958,100 @@
                 </div>
             </div>
             <!-- End Attendance Section -->
+
+            <!-- Activity Log Section (oxmarblemaster only) -->
+            <div id="activityLogSection" class="content-section">
+                <!-- Header -->
+                <div class="header">
+                    <h1 class="header-title" data-i18n="admin.activityLog.title">Activity Log</h1>
+                    <div class="header-actions">
+                        <button class="btn btn-secondary" onclick="refreshActivityLog()">
+                            <i data-lucide="refresh-cw" style="width: 18px; height: 18px; margin-right: 0.5rem;"></i>
+                            <span data-i18n="common.refresh">Refresh</span>
+                        </button>
+                        <button class="btn btn-primary" onclick="exportActivityLogCSV()">
+                            <i data-lucide="download" style="width: 18px; height: 18px; margin-right: 0.5rem;"></i>
+                            <span data-i18n="admin.activityLog.export">Export CSV</span>
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Filters -->
+                <div class="stats-grid" style="margin-bottom: 1.5rem;">
+                    <div class="stat-card">
+                        <label class="form-label" style="margin-bottom: 0.5rem;" data-i18n="admin.activityLog.entityType">Entity Type</label>
+                        <select id="activityLogEntityFilter" class="form-input" onchange="filterActivityLog()">
+                            <option value="" data-i18n="common.all">All</option>
+                            <option value="students" data-i18n="admin.activityLog.students">Students</option>
+                            <option value="coaches" data-i18n="admin.activityLog.coaches">Coaches</option>
+                            <option value="branches" data-i18n="admin.activityLog.branches">Branches</option>
+                        </select>
+                    </div>
+
+                    <div class="stat-card">
+                        <label class="form-label" style="margin-bottom: 0.5rem;" data-i18n="admin.activityLog.action">Action</label>
+                        <select id="activityLogActionFilter" class="form-input" onchange="filterActivityLog()">
+                            <option value="" data-i18n="common.all">All</option>
+                            <option value="CREATE" data-i18n="admin.activityLog.create">Create</option>
+                            <option value="UPDATE" data-i18n="admin.activityLog.update">Update</option>
+                            <option value="DELETE" data-i18n="admin.activityLog.delete">Delete</option>
+                        </select>
+                    </div>
+
+                    <div class="stat-card">
+                        <label class="form-label" style="margin-bottom: 0.5rem;" data-i18n="admin.activityLog.user">User</label>
+                        <input type="text" id="activityLogUserFilter" class="form-input" placeholder="Email..." onchange="filterActivityLog()">
+                    </div>
+
+                    <div class="stat-card">
+                        <label class="form-label" style="margin-bottom: 0.5rem;" data-i18n="admin.activityLog.dateRange">Date Range</label>
+                        <select id="activityLogDateFilter" class="form-input" onchange="filterActivityLog()">
+                            <option value="24h" selected data-i18n="admin.activityLog.last24h">Last 24 Hours</option>
+                            <option value="7d" data-i18n="admin.activityLog.last7days">Last 7 Days</option>
+                            <option value="30d" data-i18n="admin.activityLog.last30days">Last 30 Days</option>
+                            <option value="all" data-i18n="common.all">All Time</option>
+                        </select>
+                    </div>
+                </div>
+
+                <!-- Activity Log Table -->
+                <div class="table-container">
+                    <table class="data-table">
+                        <thead>
+                            <tr>
+                                <th data-i18n="admin.activityLog.timestamp">Timestamp</th>
+                                <th data-i18n="admin.activityLog.user">User</th>
+                                <th data-i18n="admin.activityLog.entityType">Entity Type</th>
+                                <th data-i18n="admin.activityLog.action">Action</th>
+                                <th data-i18n="admin.activityLog.field">Field</th>
+                                <th data-i18n="admin.activityLog.changes">Changes</th>
+                            </tr>
+                        </thead>
+                        <tbody id="activityLogTableBody">
+                            <tr>
+                                <td colspan="6" style="text-align: center; padding: 2rem; color: #94a3b8;">
+                                    <i data-lucide="loader" style="width: 24px; height: 24px; margin: 0 auto; animation: spin 1s linear infinite;"></i>
+                                    <p style="margin-top: 0.5rem;" data-i18n="common.loading">Loading...</p>
+                                </td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+
+                <!-- Pagination -->
+                <div class="pagination" id="activityLogPagination" style="margin-top: 1.5rem; display: flex; justify-content: center; align-items: center; gap: 1rem;">
+                    <button class="btn btn-secondary btn-sm" onclick="previousActivityLogPage()" id="activityLogPrevBtn" disabled>
+                        <i data-lucide="chevron-left" style="width: 16px; height: 16px;"></i>
+                        <span data-i18n="common.previous">Previous</span>
+                    </button>
+                    <span id="activityLogPageInfo" style="color: #64748b; font-size: 0.875rem;">Page 1 of 1</span>
+                    <button class="btn btn-secondary btn-sm" onclick="nextActivityLogPage()" id="activityLogNextBtn" disabled>
+                        <span data-i18n="common.next">Next</span>
+                        <i data-lucide="chevron-right" style="width: 16px; height: 16px;"></i>
+                    </button>
+                </div>
+            </div>
+            <!-- End Activity Log Section -->
 
         </main>
 
