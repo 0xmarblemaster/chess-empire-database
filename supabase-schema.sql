@@ -528,18 +528,14 @@ SELECT DISTINCT ON (student_id)
     rating,
     rating_date,
     CASE
-        WHEN rating >= 1500 THEN 'League A+'
-        WHEN rating >= 1200 THEN 'League A'
-        WHEN rating >= 900 THEN 'League B'
-        WHEN rating >= 400 THEN 'League C'
-        ELSE 'Beginner'
+        WHEN rating > 800 THEN 'League A'
+        WHEN rating > 450 THEN 'League B'
+        ELSE 'League C'
     END AS league,
     CASE
-        WHEN rating >= 1500 THEN 'diamond'
-        WHEN rating >= 1200 THEN 'gold'
-        WHEN rating >= 900 THEN 'silver'
-        WHEN rating >= 400 THEN 'bronze'
-        ELSE 'none'
+        WHEN rating > 800 THEN 'gold'
+        WHEN rating > 450 THEN 'silver'
+        ELSE 'bronze'
     END AS league_tier
 FROM student_ratings
 ORDER BY student_id, rating_date DESC;

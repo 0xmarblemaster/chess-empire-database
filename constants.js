@@ -60,73 +60,52 @@ function getNextTargetBot(defeatedBotNames) {
 // LEAGUE CLASSIFICATIONS
 // ============================================
 const LEAGUES = {
-    'Beginner': {
-        min: 0,
-        max: 399,
-        color: '#94a3b8',
-        bgGradient: 'linear-gradient(135deg, #f8fafc 0%, #e8eef5 100%)',
-        tier: 'none',
-        icon: 'circle-dot'
-    },
     'League C': {
-        min: 400,
-        max: 899,
+        min: 0,
+        max: 450,
         color: '#cd7f32',
         bgGradient: 'linear-gradient(135deg, #fef3c7 0%, #fed7aa 100%)',
         tier: 'bronze',
         icon: 'shield'
     },
     'League B': {
-        min: 900,
-        max: 1199,
+        min: 451,
+        max: 800,
         color: '#c0c0c0',
         bgGradient: 'linear-gradient(135deg, #f1f5f9 0%, #e2e8f0 100%)',
         tier: 'silver',
         icon: 'shield-check'
     },
     'League A': {
-        min: 1200,
-        max: 1499,
+        min: 801,
+        max: 9999,
         color: '#ffd700',
         bgGradient: 'linear-gradient(135deg, #fef9c3 0%, #fde68a 100%)',
         tier: 'gold',
         icon: 'award'
-    },
-    'League A+': {
-        min: 1500,
-        max: 9999,
-        color: '#0ea5e9',
-        bgGradient: 'linear-gradient(135deg, #e0f2fe 0%, #bae6fd 100%)',
-        tier: 'diamond',
-        icon: 'crown'
     }
 };
 
-// Get league from rating - thresholds: 1200+ A+, 900+ A, 500+ B, 0+ C
+// Get league from rating - thresholds: 800+ A, 451-800 B, 0-450 C
 function getLeagueFromRating(rating) {
-    if (rating >= 1200) return LEAGUES['League A+'];
-    if (rating >= 900) return LEAGUES['League A'];
-    if (rating >= 500) return LEAGUES['League B'];
-    if (rating >= 0) return LEAGUES['League C'];
-    return LEAGUES['Beginner'];
+    if (rating > 800) return LEAGUES['League A'];
+    if (rating > 450) return LEAGUES['League B'];
+    return LEAGUES['League C'];
 }
 
 // Get league name from rating
 function getLeagueName(rating) {
-    if (rating >= 1200) return 'League A+';
-    if (rating >= 900) return 'League A';
-    if (rating >= 500) return 'League B';
-    if (rating >= 0) return 'League C';
-    return 'Beginner';
+    if (rating > 800) return 'League A';
+    if (rating > 450) return 'League B';
+    return 'League C';
 }
 
 // Get points needed for next league
+// Thresholds: 800+ A, 451-800 B, 0-450 C
 function getPointsToNextLeague(rating) {
-    if (rating >= 1200) return { next: null, needed: 0 };
-    if (rating >= 900) return { next: 'League A+', needed: 1200 - rating };
-    if (rating >= 500) return { next: 'League A', needed: 900 - rating };
-    if (rating >= 0) return { next: 'League B', needed: 500 - rating };
-    return { next: 'League C', needed: 0 };
+    if (rating > 800) return { next: null, needed: 0 }; // Already in top league
+    if (rating > 450) return { next: 'League A', needed: 801 - rating };
+    return { next: 'League B', needed: 451 - rating };
 }
 
 // ============================================

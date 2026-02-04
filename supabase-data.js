@@ -937,12 +937,11 @@ const supabaseData = {
     },
 
     // Helper function to calculate league from rating
+    // Thresholds: 800+ A, 451-800 B, 0-450 C
     _calculateLeague(rating) {
-        if (rating >= 1200) return { league: 'League A+', leagueTier: 'diamond' };
-        if (rating >= 900) return { league: 'League A', leagueTier: 'gold' };
-        if (rating >= 500) return { league: 'League B', leagueTier: 'silver' };
-        if (rating >= 0) return { league: 'League C', leagueTier: 'bronze' };
-        return { league: 'Beginner', leagueTier: 'none' };
+        if (rating > 800) return { league: 'League A', leagueTier: 'gold' };
+        if (rating > 450) return { league: 'League B', leagueTier: 'silver' };
+        return { league: 'League C', leagueTier: 'bronze' };
     },
 
     // Get current (latest) rating for a student

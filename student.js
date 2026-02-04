@@ -176,22 +176,18 @@ async function loadStudentProfileData(studentId) {
 
 // Get league info from rating
 function getLeagueInfo(rating) {
-    if (!rating) return { name: t('rankings.beginner') || 'Beginner', tier: 'none', color: '#94a3b8' };
-
     if (typeof window.getLeagueFromRating === 'function') {
-        const league = window.getLeagueFromRating(rating);
+        const league = window.getLeagueFromRating(rating || 0);
         const leagueName = typeof window.getLeagueName === 'function'
-            ? window.getLeagueName(rating)
+            ? window.getLeagueName(rating || 0)
             : league.tier;
         return { name: leagueName, ...league };
     }
 
-    // Fallback - thresholds: 1200+ A+, 900+ A, 500+ B, 0+ C
-    if (rating >= 1200) return { name: 'League A+', tier: 'diamond', color: '#0ea5e9' };
-    if (rating >= 900) return { name: 'League A', tier: 'gold', color: '#ffd700' };
-    if (rating >= 500) return { name: 'League B', tier: 'silver', color: '#c0c0c0' };
-    if (rating >= 0) return { name: 'League C', tier: 'bronze', color: '#cd7f32' };
-    return { name: t('rankings.beginner') || 'Beginner', tier: 'none', color: '#94a3b8' };
+    // Fallback - thresholds: 800+ A, 451-800 B, 0-450 C
+    if (rating > 800) return { name: 'League A', tier: 'gold', color: '#ffd700' };
+    if (rating > 450) return { name: 'League B', tier: 'silver', color: '#c0c0c0' };
+    return { name: 'League C', tier: 'bronze', color: '#cd7f32' };
 }
 
 // Get survival tier info with translated label
