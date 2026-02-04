@@ -105,8 +105,12 @@ function updateMenuVisibility() {
         const userEmail = sessionStorage.getItem('userEmail');
         if (userEmail === 'oxmarblemaster') {
             const menuActivityLog = document.getElementById('menuActivityLog');
+            const menuStatusHistory = document.getElementById('menuStatusHistory');
+            const menuSessions = document.getElementById('menuSessions');
             const analyticsSectionTitle = document.getElementById('analyticsSectionTitle');
             if (menuActivityLog) menuActivityLog.style.display = 'flex';
+            if (menuStatusHistory) menuStatusHistory.style.display = 'flex';
+            if (menuSessions) menuSessions.style.display = 'flex';
             if (analyticsSectionTitle) analyticsSectionTitle.style.display = 'block';
         }
 

@@ -2721,6 +2721,365 @@ const supabaseData = {
             console.error('Error exporting audit log to CSV:', error);
             return '';
         }
+    },
+
+    /**
+     * ===================================
+     * STATUS HISTORY METHODS
+     * ===================================
+     */
+
+    /**
+     * Get status history for a specific student
+     * @param {string} studentId - Student UUID
+     * @returns {Promise<Array>} Array of status changes
+     */
+    async getStudentStatusHistory(studentId) {
+        try {
+            const { data, error } = await window.supabaseClient
+                .rpc('get_student_status_history', {
+                    p_student_id: studentId
+                });
+
+            if (error) {
+                console.error('Error fetching student status history:', error);
+                return [];
+            }
+
+            return (data || []).map(entry => ({
+                id: entry.id,
+                oldStatus: entry.old_status,
+                newStatus: entry.new_status,
+                changedAt: entry.changed_at,
+                changedByEmail: entry.changed_by_email,
+                reason: entry.reason,
+                notes: entry.notes
+            }));
+        } catch (error) {
+            console.error('Error in getStudentStatusHistory:', error);
+            return [];
+        }
+    },
+
+    /**
+     * Get all status history with filtering
+     * @param {Object} filters - Filter options
+     * @param {string} filters.studentId - Filter by student UUID
+     * @param {string} filters.oldStatus - Filter by old status
+     * @param {string} filters.newStatus - Filter by new status
+     * @param {string} filters.fromDate - Filter from date (ISO string)
+     * @param {string} filters.toDate - Filter to date (ISO string)
+     * @param {number} filters.limit - Number of results (default 100)
+     * @returns {Promise<Array>} Array of status change entries
+     */
+    async getStatusHistory(filters = {}) {
+        try {
+            let query = window.supabaseClient
+                .from('student_status_history')
+                .select(`
+                    *,
+                    student:students(id, first_name, last_name, branch:branches(name))
+                `);
+
+            // Apply filters
+            if (filters.studentId) {
+                query = query.eq('student_id', filters.studentId);
+            }
+            if (filters.oldStatus) {
+                query = query.eq('old_status', filters.oldStatus);
+            }
+            if (filters.newStatus) {
+                query = query.eq('new_status', filters.newStatus);
+            }
+            if (filters.fromDate) {
+                query = query.gte('changed_at', filters.fromDate);
+            }
+            if (filters.toDate) {
+                query = query.lte('changed_at', filters.toDate);
+            }
+
+            const limit = filters.limit || 100;
+            query = query.order('changed_at', { ascending: false }).limit(limit);
+
+            const { data, error } = await query;
+
+            if (error) {
+                console.error('Error fetching status history:', error);
+                return [];
+            }
+
+            return (data || []).map(entry => ({
+                id: entry.id,
+                studentId: entry.student_id,
+                studentName: entry.student ? `${entry.student.first_name} ${entry.student.last_name}` : '',
+                studentBranch: entry.student?.branch?.name || '',
+                oldStatus: entry.old_status,
+                newStatus: entry.new_status,
+                changedAt: entry.changed_at,
+                changedByEmail: entry.changed_by_email,
+                reason: entry.reason,
+                notes: entry.notes
+            }));
+        } catch (error) {
+            console.error('Error in getStatusHistory:', error);
+            return [];
+        }
+    },
+
+    /**
+     * Get freeze periods for a student
+     * @param {string} studentId - Student UUID
+     * @returns {Promise<Array>} Array of freeze periods
+     */
+    async getStudentFreezePeriods(studentId) {
+        try {
+            const { data, error } = await window.supabaseClient
+                .rpc('get_student_freeze_periods', {
+                    p_student_id: studentId
+                });
+
+            if (error) {
+                console.error('Error fetching freeze periods:', error);
+                return [];
+            }
+
+            return (data || []).map(period => ({
+                freezeStart: period.freeze_start,
+                freezeEnd: period.freeze_end,
+                durationDays: period.duration_days,
+                isCurrentlyFrozen: period.is_currently_frozen
+            }));
+        } catch (error) {
+            console.error('Error in getStudentFreezePeriods:', error);
+            return [];
+        }
+    },
+
+    /**
+     * Get status transition statistics
+     * @param {string} fromDate - Start date (ISO string, default 30 days ago)
+     * @returns {Promise<Array>} Array of transition statistics
+     */
+    async getStatusTransitionStats(fromDate = null) {
+        try {
+            const params = {};
+            if (fromDate) {
+                params.p_from_date = fromDate;
+            }
+
+            const { data, error } = await window.supabaseClient
+                .rpc('get_status_transition_stats', params);
+
+            if (error) {
+                console.error('Error fetching status transition stats:', error);
+                return [];
+            }
+
+            return (data || []).map(stat => ({
+                oldStatus: stat.old_status,
+                newStatus: stat.new_status,
+                transitionCount: stat.transition_count,
+                avgDaysInOldStatus: stat.avg_days_in_old_status
+            }));
+        } catch (error) {
+            console.error('Error in getStatusTransitionStats:', error);
+            return [];
+        }
+    },
+
+    /**
+     * ===================================
+     * USER SESSION METHODS
+     * ===================================
+     */
+
+    /**
+     * Log user login
+     * @param {string} sessionToken - Optional session token from Supabase auth
+     * @param {string} ipAddress - IP address (optional, requires Edge Function)
+     * @param {string} userAgent - Browser user agent string
+     * @returns {Promise<string>} Session UUID
+     */
+    async logLogin(sessionToken = null, ipAddress = null, userAgent = null) {
+        try {
+            // Get user agent from browser if not provided
+            const ua = userAgent || navigator.userAgent;
+
+            const { data, error } = await window.supabaseClient
+                .rpc('log_user_login', {
+                    p_session_token: sessionToken,
+                    p_ip_address: ipAddress,
+                    p_user_agent: ua
+                });
+
+            if (error) {
+                console.error('Error logging user login:', error);
+                return null;
+            }
+
+            return data; // Returns session UUID
+        } catch (error) {
+            console.error('Error in logLogin:', error);
+            return null;
+        }
+    },
+
+    /**
+     * Log user logout
+     * @param {string} sessionId - Optional specific session UUID to logout
+     * @returns {Promise<boolean>} Success status
+     */
+    async logLogout(sessionId = null) {
+        try {
+            const { error } = await window.supabaseClient
+                .rpc('log_user_logout', {
+                    p_session_id: sessionId
+                });
+
+            if (error) {
+                console.error('Error logging user logout:', error);
+                return false;
+            }
+
+            return true;
+        } catch (error) {
+            console.error('Error in logLogout:', error);
+            return false;
+        }
+    },
+
+    /**
+     * Get user sessions with filtering
+     * @param {Object} filters - Filter options
+     * @param {string} filters.userId - Filter by user UUID
+     * @param {string} filters.status - Filter by status ('active', 'expired', 'logged_out')
+     * @param {string} filters.deviceType - Filter by device type
+     * @param {string} filters.fromDate - Filter from date (ISO string)
+     * @param {string} filters.toDate - Filter to date (ISO string)
+     * @param {number} filters.limit - Number of results (default 50)
+     * @returns {Promise<Array>} Array of session entries
+     */
+    async getUserSessions(filters = {}) {
+        try {
+            let query = window.supabaseClient
+                .from('user_sessions')
+                .select('*');
+
+            // Apply filters
+            if (filters.userId) {
+                query = query.eq('user_id', filters.userId);
+            }
+            if (filters.status) {
+                query = query.eq('status', filters.status);
+            }
+            if (filters.deviceType) {
+                query = query.eq('device_type', filters.deviceType);
+            }
+            if (filters.fromDate) {
+                query = query.gte('login_at', filters.fromDate);
+            }
+            if (filters.toDate) {
+                query = query.lte('login_at', filters.toDate);
+            }
+
+            const limit = filters.limit || 50;
+            query = query.order('login_at', { ascending: false }).limit(limit);
+
+            const { data, error } = await query;
+
+            if (error) {
+                console.error('Error fetching user sessions:', error);
+                return [];
+            }
+
+            return (data || []).map(session => ({
+                id: session.id,
+                userId: session.user_id,
+                userEmail: session.user_email,
+                sessionToken: session.session_token,
+                loginAt: session.login_at,
+                logoutAt: session.logout_at,
+                ipAddress: session.ip_address,
+                userAgent: session.user_agent,
+                deviceType: session.device_type,
+                browser: session.browser,
+                browserVersion: session.browser_version,
+                os: session.os,
+                osVersion: session.os_version,
+                status: session.status,
+                sessionDurationMinutes: session.session_duration_minutes
+            }));
+        } catch (error) {
+            console.error('Error in getUserSessions:', error);
+            return [];
+        }
+    },
+
+    /**
+     * Get current user's active sessions
+     * @returns {Promise<Array>} Array of active session entries
+     */
+    async getMyActiveSessions() {
+        try {
+            const { data, error } = await window.supabaseClient
+                .rpc('get_user_active_sessions');
+
+            if (error) {
+                console.error('Error fetching active sessions:', error);
+                return [];
+            }
+
+            return (data || []).map(session => ({
+                id: session.id,
+                loginAt: session.login_at,
+                deviceType: session.device_type,
+                browser: session.browser,
+                os: session.os,
+                ipAddress: session.ip_address
+            }));
+        } catch (error) {
+            console.error('Error in getMyActiveSessions:', error);
+            return [];
+        }
+    },
+
+    /**
+     * Get session statistics
+     * @param {string} fromDate - Start date (ISO string)
+     * @param {string} toDate - End date (ISO string)
+     * @returns {Promise<Object>} Session statistics
+     */
+    async getSessionStats(fromDate = null, toDate = null) {
+        try {
+            const params = {};
+            if (fromDate) params.p_from_date = fromDate;
+            if (toDate) params.p_to_date = toDate;
+
+            const { data, error } = await window.supabaseClient
+                .rpc('get_session_stats', params);
+
+            if (error) {
+                console.error('Error fetching session stats:', error);
+                return null;
+            }
+
+            if (!data || data.length === 0) return null;
+
+            const stats = data[0];
+            return {
+                totalSessions: stats.total_sessions,
+                uniqueUsers: stats.unique_users,
+                avgSessionDurationMinutes: stats.avg_session_duration_minutes,
+                desktopSessions: stats.desktop_sessions,
+                mobileSessions: stats.mobile_sessions,
+                tabletSessions: stats.tablet_sessions,
+                topBrowser: stats.top_browser,
+                topOs: stats.top_os
+            };
+        } catch (error) {
+            console.error('Error in getSessionStats:', error);
+            return null;
+        }
     }
 };
 
