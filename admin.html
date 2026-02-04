@@ -1061,6 +1061,177 @@
             </div>
             <!-- End Activity Log Section -->
 
+            <!-- Status History Section (oxmarblemaster only) -->
+            <div id="statusHistorySection" class="content-section">
+                <!-- Header -->
+                <div class="header">
+                    <h1 class="header-title" data-i18n="admin.statusHistory.title">Status History</h1>
+                    <div class="header-actions">
+                        <button class="btn btn-secondary" onclick="refreshStatusHistory()">
+                            <i data-lucide="refresh-cw" style="width: 18px; height: 18px; margin-right: 0.5rem;"></i>
+                            <span data-i18n="common.refresh">Refresh</span>
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Filters -->
+                <div class="stats-grid" style="margin-bottom: 1.5rem;">
+                    <div class="stat-card">
+                        <label class="form-label" style="margin-bottom: 0.5rem;" data-i18n="admin.statusHistory.oldStatus">Old Status</label>
+                        <select id="statusHistoryOldStatusFilter" class="form-input" onchange="filterStatusHistory()">
+                            <option value="" data-i18n="common.all">All</option>
+                            <option value="active">Active</option>
+                            <option value="frozen">Frozen</option>
+                            <option value="trial">Trial</option>
+                            <option value="left">Left</option>
+                            <option value="graduated">Graduated</option>
+                            <option value="inactive">Inactive</option>
+                        </select>
+                    </div>
+
+                    <div class="stat-card">
+                        <label class="form-label" style="margin-bottom: 0.5rem;" data-i18n="admin.statusHistory.newStatus">New Status</label>
+                        <select id="statusHistoryNewStatusFilter" class="form-input" onchange="filterStatusHistory()">
+                            <option value="" data-i18n="common.all">All</option>
+                            <option value="active">Active</option>
+                            <option value="frozen">Frozen</option>
+                            <option value="trial">Trial</option>
+                            <option value="left">Left</option>
+                            <option value="graduated">Graduated</option>
+                            <option value="inactive">Inactive</option>
+                        </select>
+                    </div>
+
+                    <div class="stat-card">
+                        <label class="form-label" style="margin-bottom: 0.5rem;" data-i18n="admin.statusHistory.dateRange">Date Range</label>
+                        <select id="statusHistoryDateFilter" class="form-input" onchange="filterStatusHistory()">
+                            <option value="7d" data-i18n="admin.statusHistory.last7days">Last 7 Days</option>
+                            <option value="30d" selected data-i18n="admin.statusHistory.last30days">Last 30 Days</option>
+                            <option value="90d" data-i18n="admin.statusHistory.last90days">Last 90 Days</option>
+                            <option value="all" data-i18n="common.all">All Time</option>
+                        </select>
+                    </div>
+                </div>
+
+                <!-- Status History Table -->
+                <div class="table-container">
+                    <table class="data-table">
+                        <thead>
+                            <tr>
+                                <th data-i18n="admin.statusHistory.timestamp">Timestamp</th>
+                                <th data-i18n="admin.statusHistory.student">Student</th>
+                                <th data-i18n="admin.statusHistory.branch">Branch</th>
+                                <th data-i18n="admin.statusHistory.oldStatus">Old Status</th>
+                                <th data-i18n="admin.statusHistory.newStatus">New Status</th>
+                                <th data-i18n="admin.statusHistory.changedBy">Changed By</th>
+                            </tr>
+                        </thead>
+                        <tbody id="statusHistoryTableBody">
+                            <tr>
+                                <td colspan="6" style="text-align: center; padding: 2rem; color: #94a3b8;">
+                                    <i data-lucide="loader" style="width: 24px; height: 24px; margin: 0 auto; animation: spin 1s linear infinite;"></i>
+                                    <p style="margin-top: 0.5rem;" data-i18n="common.loading">Loading...</p>
+                                </td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+            <!-- End Status History Section -->
+
+            <!-- User Sessions Section (oxmarblemaster only) -->
+            <div id="sessionsSection" class="content-section">
+                <!-- Header -->
+                <div class="header">
+                    <h1 class="header-title" data-i18n="admin.sessions.title">User Sessions</h1>
+                    <div class="header-actions">
+                        <button class="btn btn-secondary" onclick="refreshSessions()">
+                            <i data-lucide="refresh-cw" style="width: 18px; height: 18px; margin-right: 0.5rem;"></i>
+                            <span data-i18n="common.refresh">Refresh</span>
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Stats Cards -->
+                <div class="stats-grid" style="margin-bottom: 1.5rem;">
+                    <div class="stat-card">
+                        <div class="stat-label" data-i18n="admin.sessions.totalSessions">Total Sessions</div>
+                        <div class="stat-value" id="sessionsTotalCount">-</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-label" data-i18n="admin.sessions.uniqueUsers">Unique Users</div>
+                        <div class="stat-value" id="sessionsUniqueUsers">-</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-label" data-i18n="admin.sessions.avgDuration">Avg Duration</div>
+                        <div class="stat-value" id="sessionsAvgDuration">-</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-label" data-i18n="admin.sessions.activeSessions">Active Sessions</div>
+                        <div class="stat-value" id="sessionsActiveCount">-</div>
+                    </div>
+                </div>
+
+                <!-- Filters -->
+                <div class="stats-grid" style="margin-bottom: 1.5rem;">
+                    <div class="stat-card">
+                        <label class="form-label" style="margin-bottom: 0.5rem;" data-i18n="admin.sessions.status">Status</label>
+                        <select id="sessionsStatusFilter" class="form-input" onchange="filterSessions()">
+                            <option value="" data-i18n="common.all">All</option>
+                            <option value="active" data-i18n="admin.sessions.active">Active</option>
+                            <option value="logged_out" data-i18n="admin.sessions.loggedOut">Logged Out</option>
+                            <option value="expired" data-i18n="admin.sessions.expired">Expired</option>
+                        </select>
+                    </div>
+
+                    <div class="stat-card">
+                        <label class="form-label" style="margin-bottom: 0.5rem;" data-i18n="admin.sessions.deviceType">Device Type</label>
+                        <select id="sessionsDeviceFilter" class="form-input" onchange="filterSessions()">
+                            <option value="" data-i18n="common.all">All</option>
+                            <option value="desktop" data-i18n="admin.sessions.desktop">Desktop</option>
+                            <option value="mobile" data-i18n="admin.sessions.mobile">Mobile</option>
+                            <option value="tablet" data-i18n="admin.sessions.tablet">Tablet</option>
+                        </select>
+                    </div>
+
+                    <div class="stat-card">
+                        <label class="form-label" style="margin-bottom: 0.5rem;" data-i18n="admin.sessions.dateRange">Date Range</label>
+                        <select id="sessionsDateFilter" class="form-input" onchange="filterSessions()">
+                            <option value="24h" data-i18n="admin.sessions.last24h">Last 24 Hours</option>
+                            <option value="7d" selected data-i18n="admin.sessions.last7days">Last 7 Days</option>
+                            <option value="30d" data-i18n="admin.sessions.last30days">Last 30 Days</option>
+                            <option value="all" data-i18n="common.all">All Time</option>
+                        </select>
+                    </div>
+                </div>
+
+                <!-- Sessions Table -->
+                <div class="table-container">
+                    <table class="data-table">
+                        <thead>
+                            <tr>
+                                <th data-i18n="admin.sessions.user">User</th>
+                                <th data-i18n="admin.sessions.loginAt">Login Time</th>
+                                <th data-i18n="admin.sessions.duration">Duration</th>
+                                <th data-i18n="admin.sessions.device">Device</th>
+                                <th data-i18n="admin.sessions.browser">Browser</th>
+                                <th data-i18n="admin.sessions.os">OS</th>
+                                <th data-i18n="admin.sessions.status">Status</th>
+                            </tr>
+                        </thead>
+                        <tbody id="sessionsTableBody">
+                            <tr>
+                                <td colspan="7" style="text-align: center; padding: 2rem; color: #94a3b8;">
+                                    <i data-lucide="loader" style="width: 24px; height: 24px; margin: 0 auto; animation: spin 1s linear infinite;"></i>
+                                    <p style="margin-top: 0.5rem;" data-i18n="common.loading">Loading...</p>
+                                </td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+            <!-- End User Sessions Section -->
+
         </main>
 
     </div>

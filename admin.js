@@ -8497,3 +8497,272 @@ async function exportActivityLogCSV() {
     }
 }
 
+// ===================================
+// STATUS HISTORY FUNCTIONS
+// ===================================
+
+/**
+ * Show Status History section
+ */
+function showStatusHistory() {
+    showSection('statusHistory');
+    loadStatusHistory();
+}
+
+/**
+ * Load status history with filters
+ */
+async function loadStatusHistory() {
+    try {
+        const tbody = document.getElementById('statusHistoryTableBody');
+        if (!tbody) return;
+
+        // Show loading state
+        tbody.innerHTML = `
+            <tr>
+                <td colspan="6" style="text-align: center; padding: 2rem; color: #94a3b8;">
+                    <i data-lucide="loader" style="width: 24px; height: 24px; margin: 0 auto; animation: spin 1s linear infinite;"></i>
+                    <p style="margin-top: 0.5rem;">${i18n.t('common.loading')}</p>
+                </td>
+            </tr>
+        `;
+
+        // Build filters
+        const oldStatus = document.getElementById('statusHistoryOldStatusFilter')?.value || '';
+        const newStatus = document.getElementById('statusHistoryNewStatusFilter')?.value || '';
+        const dateFilter = document.getElementById('statusHistoryDateFilter')?.value || '30d';
+
+        const filters = { limit: 100 };
+        if (oldStatus) filters.oldStatus = oldStatus;
+        if (newStatus) filters.newStatus = newStatus;
+
+        // Calculate date range
+        const now = new Date();
+        if (dateFilter === '7d') {
+            filters.fromDate = new Date(now - 7 * 24 * 60 * 60 * 1000).toISOString();
+        } else if (dateFilter === '30d') {
+            filters.fromDate = new Date(now - 30 * 24 * 60 * 60 * 1000).toISOString();
+        } else if (dateFilter === '90d') {
+            filters.fromDate = new Date(now - 90 * 24 * 60 * 60 * 1000).toISOString();
+        }
+
+        // Fetch status history
+        const entries = await window.supabaseData.getStatusHistory(filters);
+
+        // Render table
+        if (entries.length === 0) {
+            tbody.innerHTML = `
+                <tr>
+                    <td colspan="6" style="text-align: center; padding: 2rem; color: #94a3b8;">
+                        <i data-lucide="inbox" style="width: 48px; height: 48px; margin: 0 auto 1rem;"></i>
+                        <p>${i18n.t('admin.statusHistory.noEntries')}</p>
+                    </td>
+                </tr>
+            `;
+            lucide.createIcons();
+        } else {
+            tbody.innerHTML = entries.map(entry => {
+                const timestamp = new Date(entry.changedAt).toLocaleString();
+                const oldStatusBadge = entry.oldStatus ? getStatusBadge(entry.oldStatus) : '—';
+                const newStatusBadge = getStatusBadge(entry.newStatus);
+
+                return `
+                    <tr>
+                        <td style="white-space: nowrap;">${timestamp}</td>
+                        <td>${entry.studentName}</td>
+                        <td>${entry.studentBranch || '—'}</td>
+                        <td>${oldStatusBadge}</td>
+                        <td>${newStatusBadge}</td>
+                        <td>${entry.changedByEmail}</td>
+                    </tr>
+                `;
+            }).join('');
+            lucide.createIcons();
+        }
+    } catch (error) {
+        console.error('Error loading status history:', error);
+        const tbody = document.getElementById('statusHistoryTableBody');
+        if (tbody) {
+            tbody.innerHTML = `
+                <tr>
+                    <td colspan="6" style="text-align: center; padding: 2rem; color: #dc2626;">
+                        <i data-lucide="alert-circle" style="width: 48px; height: 48px; margin: 0 auto 1rem;"></i>
+                        <p>${i18n.t('common.error')}: ${error.message}</p>
+                    </td>
+                </tr>
+            `;
+            lucide.createIcons();
+        }
+    }
+}
+
+/**
+ * Get badge HTML for status
+ */
+function getStatusBadge(status) {
+    const badges = {
+        'active': '<span style="display: inline-flex; align-items: center; padding: 0.25rem 0.75rem; border-radius: 9999px; font-size: 0.75rem; font-weight: 500; background: #dcfce7; color: #15803d;">Active</span>',
+        'frozen': '<span style="display: inline-flex; align-items: center; padding: 0.25rem 0.75rem; border-radius: 9999px; font-size: 0.75rem; font-weight: 500; background: #dbeafe; color: #1e40af;">Frozen</span>',
+        'trial': '<span style="display: inline-flex; align-items: center; padding: 0.25rem 0.75rem; border-radius: 9999px; font-size: 0.75rem; font-weight: 500; background: #fef3c7; color: #92400e;">Trial</span>',
+        'left': '<span style="display: inline-flex; align-items: center; padding: 0.25rem 0.75rem; border-radius: 9999px; font-size: 0.75rem; font-weight: 500; background: #fee2e2; color: #991b1b;">Left</span>',
+        'graduated': '<span style="display: inline-flex; align-items: center; padding: 0.25rem 0.75rem; border-radius: 9999px; font-size: 0.75rem; font-weight: 500; background: #f3e8ff; color: #6b21a8;">Graduated</span>',
+        'inactive': '<span style="display: inline-flex; align-items: center; padding: 0.25rem 0.75rem; border-radius: 9999px; font-size: 0.75rem; font-weight: 500; background: #f1f5f9; color: #475569;">Inactive</span>'
+    };
+    return badges[status] || status;
+}
+
+/**
+ * Refresh status history
+ */
+function refreshStatusHistory() {
+    loadStatusHistory();
+}
+
+/**
+ * Filter status history
+ */
+function filterStatusHistory() {
+    loadStatusHistory();
+}
+
+// ===================================
+// USER SESSIONS FUNCTIONS
+// ===================================
+
+/**
+ * Show User Sessions section
+ */
+function showSessions() {
+    showSection('sessions');
+    loadSessions();
+}
+
+/**
+ * Load user sessions with filters and stats
+ */
+async function loadSessions() {
+    try {
+        const tbody = document.getElementById('sessionsTableBody');
+        if (!tbody) return;
+
+        // Show loading state
+        tbody.innerHTML = `
+            <tr>
+                <td colspan="7" style="text-align: center; padding: 2rem; color: #94a3b8;">
+                    <i data-lucide="loader" style="width: 24px; height: 24px; margin: 0 auto; animation: spin 1s linear infinite;"></i>
+                    <p style="margin-top: 0.5rem;">${i18n.t('common.loading')}</p>
+                </td>
+            </tr>
+        `;
+
+        // Build filters
+        const status = document.getElementById('sessionsStatusFilter')?.value || '';
+        const deviceType = document.getElementById('sessionsDeviceFilter')?.value || '';
+        const dateFilter = document.getElementById('sessionsDateFilter')?.value || '7d';
+
+        const filters = { limit: 50 };
+        if (status) filters.status = status;
+        if (deviceType) filters.deviceType = deviceType;
+
+        // Calculate date range
+        const now = new Date();
+        if (dateFilter === '24h') {
+            filters.fromDate = new Date(now - 24 * 60 * 60 * 1000).toISOString();
+        } else if (dateFilter === '7d') {
+            filters.fromDate = new Date(now - 7 * 24 * 60 * 60 * 1000).toISOString();
+        } else if (dateFilter === '30d') {
+            filters.fromDate = new Date(now - 30 * 24 * 60 * 60 * 1000).toISOString();
+        }
+
+        // Fetch sessions and stats in parallel
+        const [sessions, stats] = await Promise.all([
+            window.supabaseData.getUserSessions(filters),
+            window.supabaseData.getSessionStats(filters.fromDate, filters.toDate)
+        ]);
+
+        // Update stats cards
+        if (stats) {
+            document.getElementById('sessionsTotalCount').textContent = stats.totalSessions || 0;
+            document.getElementById('sessionsUniqueUsers').textContent = stats.uniqueUsers || 0;
+            document.getElementById('sessionsAvgDuration').textContent = stats.avgSessionDurationMinutes ? `${stats.avgSessionDurationMinutes} min` : '—';
+            const activeCount = sessions.filter(s => s.status === 'active').length;
+            document.getElementById('sessionsActiveCount').textContent = activeCount;
+        }
+
+        // Render table
+        if (sessions.length === 0) {
+            tbody.innerHTML = `
+                <tr>
+                    <td colspan="7" style="text-align: center; padding: 2rem; color: #94a3b8;">
+                        <i data-lucide="inbox" style="width: 48px; height: 48px; margin: 0 auto 1rem;"></i>
+                        <p>${i18n.t('admin.sessions.noSessions')}</p>
+                    </td>
+                </tr>
+            `;
+            lucide.createIcons();
+        } else {
+            tbody.innerHTML = sessions.map(session => {
+                const loginTime = new Date(session.loginAt).toLocaleString();
+                const duration = session.sessionDurationMinutes ? `${session.sessionDurationMinutes} min` : '—';
+                const statusBadge = getSessionStatusBadge(session.status);
+                const deviceInfo = `${session.deviceType || '—'}`;
+                const browserInfo = session.browser ? `${session.browser} ${session.browserVersion || ''}` : '—';
+                const osInfo = session.os ? `${session.os} ${session.osVersion || ''}` : '—';
+
+                return `
+                    <tr>
+                        <td>${session.userEmail}</td>
+                        <td style="white-space: nowrap;">${loginTime}</td>
+                        <td>${duration}</td>
+                        <td>${deviceInfo}</td>
+                        <td>${browserInfo}</td>
+                        <td>${osInfo}</td>
+                        <td>${statusBadge}</td>
+                    </tr>
+                `;
+            }).join('');
+            lucide.createIcons();
+        }
+    } catch (error) {
+        console.error('Error loading sessions:', error);
+        const tbody = document.getElementById('sessionsTableBody');
+        if (tbody) {
+            tbody.innerHTML = `
+                <tr>
+                    <td colspan="7" style="text-align: center; padding: 2rem; color: #dc2626;">
+                        <i data-lucide="alert-circle" style="width: 48px; height: 48px; margin: 0 auto 1rem;"></i>
+                        <p>${i18n.t('common.error')}: ${error.message}</p>
+                    </td>
+                </tr>
+            `;
+            lucide.createIcons();
+        }
+    }
+}
+
+/**
+ * Get badge HTML for session status
+ */
+function getSessionStatusBadge(status) {
+    const badges = {
+        'active': '<span style="display: inline-flex; align-items: center; padding: 0.25rem 0.75rem; border-radius: 9999px; font-size: 0.75rem; font-weight: 500; background: #dcfce7; color: #15803d;">Active</span>',
+        'logged_out': '<span style="display: inline-flex; align-items: center; padding: 0.25rem 0.75rem; border-radius: 9999px; font-size: 0.75rem; font-weight: 500; background: #f1f5f9; color: #475569;">Logged Out</span>',
+        'expired': '<span style="display: inline-flex; align-items: center; padding: 0.25rem 0.75rem; border-radius: 9999px; font-size: 0.75rem; font-weight: 500; background: #fee2e2; color: #991b1b;">Expired</span>'
+    };
+    return badges[status] || status;
+}
+
+/**
+ * Refresh sessions
+ */
+function refreshSessions() {
+    loadSessions();
+}
+
+/**
+ * Filter sessions
+ */
+function filterSessions() {
+    loadSessions();
+}
+
