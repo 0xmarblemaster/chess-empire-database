@@ -113,7 +113,10 @@ function updateCoachOptions() {
     coachSelect.innerHTML = '<option value="">Select coach...</option>';
 
     if (selectedBranch) {
-        const branchCoaches = coaches.filter(c => c.branch === selectedBranch);
+        // NEW: Filter coaches who have this branch in their branchNames array
+        const branchCoaches = coaches.filter(coach => {
+            return coach.branchNames && coach.branchNames.includes(selectedBranch);
+        });
         branchCoaches.forEach(coach => {
             const option = document.createElement('option');
             const coachName = `${coach.firstName} ${coach.lastName}`;

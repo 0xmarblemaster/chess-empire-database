@@ -2033,8 +2033,10 @@ function updateCoachOptions() {
         return;
     }
     
-    // Filter coaches by selected branch
-    const branchCoaches = coaches.filter(coach => coach.branch === selectedBranch);
+    // Filter coaches by selected branch (NEW: check branchNames array)
+    const branchCoaches = coaches.filter(coach => {
+        return coach.branchNames && coach.branchNames.includes(selectedBranch);
+    });
     
     coachSelect.innerHTML = `<option value="">${t('admin.modals.add.coachSelect')}</option>`;
     branchCoaches.forEach(coach => {
@@ -2634,8 +2636,10 @@ function updateEditCoachOptions() {
         return;
     }
     
-    // Filter coaches by selected branch
-    const branchCoaches = coaches.filter(coach => coach.branch === selectedBranch);
+    // Filter coaches by selected branch (NEW: check branchNames array)
+    const branchCoaches = coaches.filter(coach => {
+        return coach.branchNames && coach.branchNames.includes(selectedBranch);
+    });
     
     coachSelect.innerHTML = `<option value="">${t('admin.modals.add.coachSelect')}</option>`;
     branchCoaches.forEach(coach => {

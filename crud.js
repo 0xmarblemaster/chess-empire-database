@@ -642,9 +642,11 @@ function getAllStudents() {
     return window.students;
 }
 
-// Get coaches by branch
+// Get coaches by branch (NEW: check branchNames array for multi-branch support)
 function getCoachesByBranch(branchName) {
-    return window.coaches.filter(c => c.branch === branchName);
+    return window.coaches.filter(c =>
+        c.branchNames && c.branchNames.includes(branchName)
+    );
 }
 
 // Get students by branch

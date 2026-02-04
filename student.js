@@ -1167,7 +1167,10 @@ function updateEditCoachOptions() {
         return;
     }
 
-    const branchCoaches = window.coaches?.filter(coach => coach.branchId === selectedBranchId) || [];
+    // NEW: Filter coaches who have this branch in their branchIds array
+    const branchCoaches = window.coaches?.filter(coach => {
+        return coach.branchIds && coach.branchIds.includes(selectedBranchId);
+    }) || [];
 
     coachSelect.innerHTML = `<option value="">${t('admin.modals.add.coachSelect') || 'Select Coach'}</option>`;
     branchCoaches.forEach(coach => {

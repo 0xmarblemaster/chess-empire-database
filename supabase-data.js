@@ -330,7 +330,10 @@ const supabaseData = {
             .from('coaches')
             .select(`
                 *,
-                branch:branches(id, name)
+                coach_branches(
+                    branch_id,
+                    branch:branches(id, name, location)
+                )
             `)
             .order('last_name');
 
@@ -339,21 +342,61 @@ const supabaseData = {
             return [];
         }
 
-        return data.map(coach => ({
-            id: coach.id,
-            firstName: coach.first_name,
-            lastName: coach.last_name,
-            fullName: `${coach.first_name} ${coach.last_name}`,
-            phone: coach.phone,
-            email: coach.email,
-            photoUrl: coach.photo_url,
-            bio: coach.bio,
-            instagramUrl: coach.instagram_url,
-            whatsappUrl: coach.whatsapp_url,
-            branch: coach.branch?.name || '',
-            branchName: coach.branch?.name || '',
-            branchId: coach.branch_id
-        }));
+        // Group by coach and aggregate branches
+        const coachesMap = new Map();
+
+        data.forEach(row => {
+            const coachId = row.id;
+
+            if (!coachesMap.has(coachId)) {
+                coachesMap.set(coachId, {
+                    id: row.id,
+                    firstName: row.first_name,
+                    lastName: row.last_name,
+                    fullName: `${row.first_name} ${row.last_name}`,
+                    phone: row.phone,
+                    email: row.email,
+                    photoUrl: row.photo_url,
+                    bio: row.bio,
+                    instagramUrl: row.instagram_url,
+                    whatsappUrl: row.whatsapp_url,
+                    branches: [], // NEW: Array of branch objects
+                    branchIds: [], // NEW: Array of branch IDs
+                    branchNames: [], // NEW: Array of branch names
+                    // Backwards compatibility
+                    branch: '',
+                    branchName: '',
+                    branchId: null
+                });
+            }
+
+            const coach = coachesMap.get(coachId);
+
+            // Add branches from junction table
+            if (row.coach_branches && row.coach_branches.length > 0) {
+                row.coach_branches.forEach(cb => {
+                    if (cb.branch) {
+                        coach.branches.push({
+                            id: cb.branch.id,
+                            name: cb.branch.name,
+                            location: cb.branch.location
+                        });
+                        coach.branchIds.push(cb.branch.id);
+                        coach.branchNames.push(cb.branch.name);
+                    }
+                });
+            }
+        });
+
+        // Convert map to array and set first branch for backwards compat
+        return Array.from(coachesMap.values()).map(coach => {
+            if (coach.branches.length > 0) {
+                coach.branch = coach.branches[0].name;
+                coach.branchName = coach.branches[0].name;
+                coach.branchId = coach.branches[0].id;
+            }
+            return coach;
+        });
     },
 
     async getCoachById(coachId) {
@@ -519,6 +562,126 @@ const supabaseData = {
         if (error) {
             console.error('Error deleting coach:', error);
             throw error;
+        }
+
+        return true;
+    },
+
+    /**
+     * COACH-BRANCH ASSIGNMENTS (Many-to-Many)
+     */
+
+    // Get coaches assigned to a specific branch
+    async getCoachesByBranchId(branchId) {
+        const { data, error } = await window.supabaseClient
+            .from('coach_branches')
+            .select(`
+                coach:coaches(
+                    id,
+                    first_name,
+                    last_name,
+                    phone,
+                    email,
+                    photo_url,
+                    bio,
+                    instagram_url,
+                    whatsapp_url
+                )
+            `)
+            .eq('branch_id', branchId)
+            .order('coach.last_name');
+
+        if (error) {
+            console.error('Error fetching coaches for branch:', error);
+            return [];
+        }
+
+        return data.map(row => ({
+            id: row.coach.id,
+            firstName: row.coach.first_name,
+            lastName: row.coach.last_name,
+            fullName: `${row.coach.first_name} ${row.coach.last_name}`,
+            phone: row.coach.phone,
+            email: row.coach.email,
+            photoUrl: row.coach.photo_url,
+            bio: row.coach.bio,
+            instagramUrl: row.coach.instagram_url,
+            whatsappUrl: row.coach.whatsapp_url
+        }));
+    },
+
+    // Add coach to branch
+    async addCoachToBranch(coachId, branchId) {
+        const { data, error } = await window.supabaseClient
+            .from('coach_branches')
+            .insert([{ coach_id: coachId, branch_id: branchId }])
+            .select()
+            .single();
+
+        if (error) {
+            console.error('Error adding coach to branch:', error);
+            throw error;
+        }
+
+        return data;
+    },
+
+    // Remove coach from branch
+    async removeCoachFromBranch(coachId, branchId) {
+        const { error } = await window.supabaseClient
+            .from('coach_branches')
+            .delete()
+            .eq('coach_id', coachId)
+            .eq('branch_id', branchId);
+
+        if (error) {
+            console.error('Error removing coach from branch:', error);
+            throw error;
+        }
+
+        return true;
+    },
+
+    // Get all branches for a coach
+    async getCoachBranches(coachId) {
+        const { data, error } = await window.supabaseClient
+            .from('coach_branches')
+            .select(`
+                branch:branches(id, name, location, phone, email)
+            `)
+            .eq('coach_id', coachId);
+
+        if (error) {
+            console.error('Error fetching coach branches:', error);
+            return [];
+        }
+
+        return data.map(row => row.branch);
+    },
+
+    // Update all branch assignments for a coach (replaces existing)
+    async updateCoachBranches(coachId, branchIds) {
+        // Delete existing assignments
+        await window.supabaseClient
+            .from('coach_branches')
+            .delete()
+            .eq('coach_id', coachId);
+
+        // Insert new assignments
+        if (branchIds && branchIds.length > 0) {
+            const assignments = branchIds.map(branchId => ({
+                coach_id: coachId,
+                branch_id: branchId
+            }));
+
+            const { error } = await window.supabaseClient
+                .from('coach_branches')
+                .insert(assignments);
+
+            if (error) {
+                console.error('Error updating coach branches:', error);
+                throw error;
+            }
         }
 
         return true;
