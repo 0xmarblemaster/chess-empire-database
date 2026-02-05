@@ -2974,6 +2974,9 @@ const supabaseData = {
             if (filters.deviceType) {
                 query = query.eq('device_type', filters.deviceType);
             }
+            if (filters.userEmail) {
+                query = query.eq('user_email', filters.userEmail);
+            }
             if (filters.fromDate) {
                 query = query.gte('login_at', filters.fromDate);
             }

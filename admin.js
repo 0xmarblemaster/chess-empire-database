@@ -8643,7 +8643,8 @@ function filterStatusHistory() {
  */
 function showSessions() {
     showSection('sessions');
-    loadSessions();
+    loadSessionUsers(); // Populate user dropdown first
+    loadSessions();      // Then load session data
 }
 
 /**
@@ -8667,11 +8668,13 @@ async function loadSessions() {
         // Build filters
         const status = document.getElementById('sessionsStatusFilter')?.value || '';
         const deviceType = document.getElementById('sessionsDeviceFilter')?.value || '';
+        const userFilter = document.getElementById('sessionsUserFilter')?.value || '';
         const dateFilter = document.getElementById('sessionsDateFilter')?.value || '7d';
 
         const filters = { limit: 50 };
         if (status) filters.status = status;
         if (deviceType) filters.deviceType = deviceType;
+        if (userFilter) filters.userEmail = userFilter;
 
         // Calculate date range
         const now = new Date();
@@ -8746,6 +8749,40 @@ async function loadSessions() {
             `;
             lucide.createIcons();
         }
+    }
+}
+
+/**
+ * Populate the user filter dropdown with unique users from sessions
+ */
+async function loadSessionUsers() {
+    try {
+        const userSelect = document.getElementById('sessionsUserFilter');
+        if (!userSelect) return;
+
+        // Get all sessions (with reasonable date limit to avoid huge queries)
+        const sessions = await window.supabaseData.getUserSessions({
+            fromDate: new Date(Date.now() - 90 * 24 * 60 * 60 * 1000).toISOString(), // Last 90 days
+            limit: 1000
+        });
+
+        if (!sessions || sessions.length === 0) return;
+
+        // Extract unique user emails
+        const uniqueUsers = [...new Set(sessions.map(s => s.userEmail))].sort();
+
+        // Clear existing options except "All Users"
+        userSelect.innerHTML = '<option value="">All Users</option>';
+
+        // Add user options
+        uniqueUsers.forEach(email => {
+            const option = document.createElement('option');
+            option.value = email;
+            option.textContent = email;
+            userSelect.appendChild(option);
+        });
+    } catch (error) {
+        console.error('Error loading session users:', error);
     }
 }
 

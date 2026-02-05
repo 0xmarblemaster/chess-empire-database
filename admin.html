@@ -1195,6 +1195,14 @@
                     </div>
 
                     <div class="stat-card">
+                        <label class="form-label" style="margin-bottom: 0.5rem;" data-i18n="admin.sessions.user">User</label>
+                        <select id="sessionsUserFilter" class="form-input" onchange="filterSessions()">
+                            <option value="" data-i18n="admin.sessions.allUsers">All Users</option>
+                            <!-- Populated dynamically by loadSessionUsers() -->
+                        </select>
+                    </div>
+
+                    <div class="stat-card">
                         <label class="form-label" style="margin-bottom: 0.5rem;" data-i18n="admin.sessions.dateRange">Date Range</label>
                         <select id="sessionsDateFilter" class="form-input" onchange="filterSessions()">
                             <option value="24h" data-i18n="admin.sessions.last24h">Last 24 Hours</option>
