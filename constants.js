@@ -93,19 +93,31 @@ function getLeagueFromRating(rating) {
     return LEAGUES['League C'];
 }
 
-// Get league name from rating
+// Get league name from rating (localized)
 function getLeagueName(rating) {
-    if (rating > 800) return 'League A';
-    if (rating > 450) return 'League B';
-    return 'League C';
+    const t = typeof window.t === 'function' ? window.t : (key) => {
+        const fallbacks = {
+            'leagues.leagueA': 'League A',
+            'leagues.leagueB': 'League B', 
+            'leagues.leagueC': 'League C'
+        };
+        return fallbacks[key] || key;
+    };
+    if (rating > 800) return t('leagues.leagueA');
+    if (rating > 450) return t('leagues.leagueB');
+    return t('leagues.leagueC');
 }
 
 // Get points needed for next league
 // Thresholds: 800+ A, 451-800 B, 0-450 C
 function getPointsToNextLeague(rating) {
+    const t = typeof window.t === 'function' ? window.t : (key) => {
+        const fallbacks = { 'leagues.leagueA': 'League A', 'leagues.leagueB': 'League B' };
+        return fallbacks[key] || key;
+    };
     if (rating > 800) return { next: null, needed: 0 }; // Already in top league
-    if (rating > 450) return { next: 'League A', needed: 801 - rating };
-    return { next: 'League B', needed: 451 - rating };
+    if (rating > 450) return { next: t('leagues.leagueA'), needed: 801 - rating };
+    return { next: t('leagues.leagueB'), needed: 451 - rating };
 }
 
 // ============================================

@@ -185,9 +185,11 @@ function getLeagueInfo(rating) {
     }
 
     // Fallback - thresholds: 800+ A, 451-800 B, 0-450 C
-    if (rating > 800) return { name: 'League A', tier: 'gold', color: '#ffd700' };
-    if (rating > 450) return { name: 'League B', tier: 'silver', color: '#c0c0c0' };
-    return { name: 'League C', tier: 'bronze', color: '#cd7f32' };
+    // Use localized league names
+    const t = typeof window.t === 'function' ? window.t : (key) => key.split('.').pop();
+    if (rating > 800) return { name: t('leagues.leagueA'), tier: 'gold', color: '#ffd700' };
+    if (rating > 450) return { name: t('leagues.leagueB'), tier: 'silver', color: '#c0c0c0' };
+    return { name: t('leagues.leagueC'), tier: 'bronze', color: '#cd7f32' };
 }
 
 // Get survival tier info with translated label
