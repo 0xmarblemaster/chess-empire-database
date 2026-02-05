@@ -736,6 +736,15 @@ function showSection(section) {
     } else if (section === 'attendance') {
         // Show attendance management
         showAttendanceManagement();
+    } else if (section === 'activityLog') {
+        // Show activity log
+        switchToSection('activityLog');
+    } else if (section === 'statusHistory') {
+        // Show status history
+        switchToSection('statusHistory');
+    } else if (section === 'sessions') {
+        // Show user sessions
+        switchToSection('sessions');
     }
 
     // Update mobile bottom nav active state
