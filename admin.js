@@ -4780,6 +4780,10 @@ function populateAttendanceScheduleDropdown() {
 
     // Determine which schedule types to show based on branch
     const isDebutBranch = attendanceCurrentBranch && attendanceCurrentBranch.toLowerCase().includes('debut');
+    const isNishBranch = attendanceCurrentBranch && (
+        attendanceCurrentBranch.toLowerCase().includes('ниш') ||
+        attendanceCurrentBranch.toLowerCase().includes('nish')
+    );
 
     // Update desktop dropdown
     if (desktopSelect) {
@@ -4791,6 +4795,14 @@ function populateAttendanceScheduleDropdown() {
                 <option value="" data-i18n="admin.attendance.allSchedules">All Schedules</option>
                 <option value="mon_wed" data-i18n="admin.attendance.monWed">${t('admin.attendance.monWed')}</option>
                 <option value="mon_wed_fri" data-i18n="admin.attendance.monWedFri">${t('admin.attendance.monWedFri')}</option>
+                <option value="tue_thu" data-i18n="admin.attendance.tueThu">${t('admin.attendance.tueThu')}</option>
+                <option value="sat_sun" data-i18n="admin.attendance.satSun">${t('admin.attendance.satSun')}</option>
+            `;
+        } else if (isNishBranch) {
+            // НИШ branch uses wed_fri instead of mon_wed
+            desktopSelect.innerHTML = `
+                <option value="" data-i18n="admin.attendance.allSchedules">All Schedules</option>
+                <option value="wed_fri" data-i18n="admin.attendance.wedFri">${t('admin.attendance.wedFri')}</option>
                 <option value="tue_thu" data-i18n="admin.attendance.tueThu">${t('admin.attendance.tueThu')}</option>
                 <option value="sat_sun" data-i18n="admin.attendance.satSun">${t('admin.attendance.satSun')}</option>
             `;
@@ -4823,6 +4835,14 @@ function populateAttendanceScheduleDropdown() {
                 <option value="tue_thu" data-i18n="admin.attendance.tueThu">${t('admin.attendance.tueThu')}</option>
                 <option value="sat_sun" data-i18n="admin.attendance.satSun">${t('admin.attendance.satSun')}</option>
             `;
+        } else if (isNishBranch) {
+            // НИШ branch uses wed_fri instead of mon_wed
+            mobileSelect.innerHTML = `
+                <option value="" data-i18n="admin.attendance.allSchedules">All Schedules</option>
+                <option value="wed_fri" data-i18n="admin.attendance.wedFri">${t('admin.attendance.wedFri')}</option>
+                <option value="tue_thu" data-i18n="admin.attendance.tueThu">${t('admin.attendance.tueThu')}</option>
+                <option value="sat_sun" data-i18n="admin.attendance.satSun">${t('admin.attendance.satSun')}</option>
+            `;
         } else {
             // Other branches use mon_wed as the 2-day schedule
             mobileSelect.innerHTML = `
@@ -4848,6 +4868,13 @@ function populateAttendanceScheduleDropdown() {
             addStudentSelect.innerHTML = `
                 <option value="mon_wed" data-i18n="admin.attendance.monWed">${t('admin.attendance.monWed')}</option>
                 <option value="mon_wed_fri" data-i18n="admin.attendance.monWedFri">${t('admin.attendance.monWedFri')}</option>
+                <option value="tue_thu" data-i18n="admin.attendance.tueThu">${t('admin.attendance.tueThu')}</option>
+                <option value="sat_sun" data-i18n="admin.attendance.satSun">${t('admin.attendance.satSun')}</option>
+            `;
+        } else if (isNishBranch) {
+            // НИШ branch uses wed_fri instead of mon_wed
+            addStudentSelect.innerHTML = `
+                <option value="wed_fri" data-i18n="admin.attendance.wedFri">${t('admin.attendance.wedFri')}</option>
                 <option value="tue_thu" data-i18n="admin.attendance.tueThu">${t('admin.attendance.tueThu')}</option>
                 <option value="sat_sun" data-i18n="admin.attendance.satSun">${t('admin.attendance.satSun')}</option>
             `;
