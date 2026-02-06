@@ -4719,7 +4719,9 @@ function populateAttendanceCoachDropdown() {
     }
 
     // Get coaches for selected branch
-    const branchCoaches = window.coaches.filter(c => c.branchId === branchObj.id);
+    const branchCoaches = window.coaches.filter(c =>
+        c.branchIds && c.branchIds.includes(branchObj.id)
+    );
 
     // Hide filter if only 0-1 coaches
     if (branchCoaches.length <= 1) {
