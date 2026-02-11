@@ -411,6 +411,7 @@
     </div>
 
     <script src="supabase-client.js?v=8"></script>
+    <script src="supabase-data.js?v=9"></script>
     <script>
         // Prevent infinite redirect loops
         let isRedirecting = false;
@@ -625,6 +626,32 @@
                 }
 
                 showSuccess('Login successful! Redirecting...');
+
+                // Log user session (non-blocking)
+                try {
+                    if (window.supabaseData && window.supabaseData.logLogin) {
+                        // Try to get IP address (non-blocking)
+                        let ipAddress = null;
+                        try {
+                            const ipResponse = await fetch('https://api.ipify.org?format=json', { signal: AbortSignal.timeout(3000) });
+                            const ipData = await ipResponse.json();
+                            ipAddress = ipData.ip || null;
+                        } catch (ipErr) {
+                            console.log('ℹ️ Could not fetch IP address:', ipErr.message);
+                        }
+                        const sessionToken = data.session?.access_token || null;
+                        window.supabaseData.logLogin(sessionToken, ipAddress, navigator.userAgent)
+                            .then(sessionId => {
+                                if (sessionId) {
+                                    console.log('✅ Session logged:', sessionId);
+                                    sessionStorage.setItem('currentSessionId', sessionId);
+                                }
+                            })
+                            .catch(err => console.error('Session logging failed:', err));
+                    }
+                } catch (sessionErr) {
+                    console.error('Session tracking error (non-blocking):', sessionErr);
+                }
 
                 // Redirect based on role
                 setTimeout(() => {

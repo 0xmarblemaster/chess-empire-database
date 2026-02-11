@@ -2382,6 +2382,18 @@
         async function handleLogout() {
             if (confirm(window.t ? window.t('admin.logout.confirm') : 'Are you sure you want to logout?')) {
                 if (window.supabaseAuth) {
+                    // Log the logout session (non-blocking but await briefly)
+                    try {
+                        if (window.supabaseData && window.supabaseData.logLogout) {
+                            const storedSessionId = sessionStorage.getItem('currentSessionId');
+                            await window.supabaseData.logLogout(storedSessionId || null);
+                            console.log('✅ Logout session recorded');
+                            sessionStorage.removeItem('currentSessionId');
+                        }
+                    } catch (logoutErr) {
+                        console.error('Session logout tracking error (non-blocking):', logoutErr);
+                    }
+
                     const { error } = await window.supabaseAuth.signOut();
                     if (error) {
                         console.error('Logout error:', error);
