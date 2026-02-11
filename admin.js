@@ -101,9 +101,14 @@ function updateMenuVisibility() {
         if (menuAttendance) menuAttendance.style.display = 'flex';
         if (managementSectionTitle) managementSectionTitle.style.display = 'block';
 
-        // Analytics (0xmarblemaster@gmail.com only)
+        // Analytics - Grant access to specific admin emails
         const userEmail = sessionStorage.getItem('userEmail');
-        if (userEmail === '0xmarblemaster@gmail.com') {
+        const analyticsAllowedEmails = [
+            '0xmarblemaster@gmail.com',
+            'dysonsphere01@proton.me'
+        ];
+
+        if (analyticsAllowedEmails.includes(userEmail)) {
             const menuActivityLog = document.getElementById('menuActivityLog');
             const menuStatusHistory = document.getElementById('menuStatusHistory');
             const menuSessions = document.getElementById('menuSessions');
