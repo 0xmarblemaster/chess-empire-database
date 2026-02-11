@@ -744,12 +744,16 @@ function showSection(section) {
     } else if (section === 'activityLog') {
         // Show activity log
         switchToSection('activityLog');
+        loadActivityLog();
     } else if (section === 'statusHistory') {
         // Show status history
         switchToSection('statusHistory');
+        loadStatusHistory();
     } else if (section === 'sessions') {
         // Show user sessions
         switchToSection('sessions');
+        loadSessionUsers();
+        loadSessions();
     }
 
     // Update mobile bottom nav active state
