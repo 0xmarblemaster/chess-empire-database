@@ -9150,11 +9150,16 @@ async function loadUserSessionHistory() {
                 historyTableBody.appendChild(row);
             });
         } else {
+            // No sessions — show fallback with "View All Actions" button
             historyTableBody.innerHTML = `
                 <tr>
                     <td colspan="5" style="text-align: center; padding: 2rem; color: #94a3b8;">
                         <i data-lucide="calendar-x" style="width: 24px; height: 24px; margin: 0 auto;"></i>
-                        <p style="margin-top: 0.5rem;">No session history found</p>
+                        <p style="margin-top: 0.5rem;">No session history found (session tracking starts from first login after Feb 13, 2026)</p>
+                        <button class="btn btn-sm btn-secondary" style="margin-top: 0.75rem;" onclick="showAllUserActions()">
+                            <i data-lucide="list" style="width: 16px; height: 16px;"></i>
+                            View All Actions (from audit log)
+                        </button>
                     </td>
                 </tr>
             `;
@@ -9299,6 +9304,82 @@ function getActionBadgeClass(action) {
         'DELETE': 'bg-red-100 text-red-800'
     };
     return classes[action] || 'bg-gray-100 text-gray-800';
+}
+
+/**
+ * Show all actions for a user (fallback when no sessions exist)
+ * Uses the current activity period to determine date range
+ */
+async function showAllUserActions() {
+    if (!currentActivityUser) return;
+    
+    try {
+        const modal = document.getElementById('sessionActionsModal');
+        const tableBody = document.getElementById('sessionActionsTableBody');
+        const modalTitle = document.querySelector('#sessionActionsModal .modal-header h2, #sessionActionsModal h2');
+        
+        if (!modal || !tableBody) return;
+
+        // Update title to show it's all actions
+        if (modalTitle) {
+            modalTitle.textContent = `All Actions — ${currentActivityUser}`;
+        }
+
+        modal.classList.add('active');
+        
+        tableBody.innerHTML = `
+            <tr>
+                <td colspan="5" style="text-align: center; padding: 2rem; color: #94a3b8;">
+                    <i data-lucide="loader" style="width: 24px; height: 24px; margin: 0 auto; animation: spin 1s linear infinite;"></i>
+                    <p style="margin-top: 0.5rem;">Loading...</p>
+                </td>
+            </tr>
+        `;
+
+        // Use current period for date range
+        const { fromDate, toDate } = getActivityDateRange(currentActivityPeriod || '2months');
+
+        const { data: actions, error } = await window.supabaseClient
+            .rpc('get_user_actions_by_date', {
+                p_user_email: currentActivityUser,
+                p_from_date: fromDate.toISOString(),
+                p_to_date: toDate.toISOString()
+            });
+
+        if (error) {
+            console.error('Error loading user actions:', error);
+            tableBody.innerHTML = `<tr><td colspan="5" style="text-align:center;color:#ef4444;">Error loading actions</td></tr>`;
+            return;
+        }
+
+        if (actions && actions.length > 0) {
+            tableBody.innerHTML = '';
+            actions.forEach(action => {
+                const row = document.createElement('tr');
+                const timestamp = new Date(action.changed_at);
+                const change = action.field_name 
+                    ? `${action.old_value || ''} → ${action.new_value || ''}`
+                    : action.action === 'CREATE' ? 'Created' : action.action === 'DELETE' ? 'Deleted' : '';
+
+                row.innerHTML = `
+                    <td>${timestamp.toLocaleString()}</td>
+                    <td><span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">${action.entity_type}</span></td>
+                    <td><span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${getActionBadgeClass(action.action)}">${action.action}</span></td>
+                    <td>${action.field_name || '-'}</td>
+                    <td style="max-width: 200px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${change}</td>
+                `;
+                tableBody.appendChild(row);
+            });
+        } else {
+            tableBody.innerHTML = `<tr><td colspan="5" style="text-align:center;padding:2rem;color:#94a3b8;">No actions found in this period</td></tr>`;
+        }
+
+        if (typeof lucide !== 'undefined' && lucide.createIcons) {
+            lucide.createIcons();
+        }
+    } catch (error) {
+        console.error('Error in showAllUserActions:', error);
+    }
 }
 
 /**
