@@ -766,6 +766,14 @@ function showSection(section) {
         // Show user activity analytics
         switchToSection('userActivity');
         loadUserActivityUsers();
+    } else if (section === 'settings' || section === 'moreMenu') {
+        switchToSection('moreMenu');
+        // Re-initialize lucide icons for the more menu
+        if (typeof lucide !== 'undefined') {
+            lucide.createIcons();
+        }
+    } else if (section === 'ratings') {
+        switchToSection('ratings');
     }
 
     // Update mobile bottom nav active state
@@ -2854,7 +2862,12 @@ const mobileSectionTitles = {
     students: 'admin.header.students',
     coaches: 'admin.header.coaches',
     attendance: 'admin.header.attendance',
-    settings: 'admin.header.settings'
+    settings: 'admin.header.settings',
+    userActivity: 'admin.userActivity.title',
+    activityLog: 'admin.sidebar.activityLog',
+    statusHistory: 'admin.sidebar.statusHistory',
+    sessions: 'admin.sidebar.userSessions',
+    ratings: 'admin.sidebar.ratingsManagement'
 };
 
 // Show mobile section (called from bottom nav)
@@ -2893,6 +2906,16 @@ function showMobileSection(section, event) {
 
     // Call the existing showSection function
     showSection(section);
+
+    // For sub-sections of More, keep More tab highlighted
+    const moreSubSections = ['userActivity', 'activityLog', 'statusHistory', 'sessions', 'ratings', 'moreMenu', 'settings'];
+    if (moreSubSections.includes(section)) {
+        const moreBtn = document.querySelector('.mobile-nav-item[data-section="settings"]');
+        if (moreBtn) {
+            document.querySelectorAll('.mobile-nav-item').forEach(i => i.classList.remove('active'));
+            moreBtn.classList.add('active');
+        }
+    }
 }
 
 // Update mobile header title

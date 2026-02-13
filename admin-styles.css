@@ -4693,3 +4693,217 @@ tr[data-student-id] {
         padding: 1rem;
     }
 }
+
+/* ========================================
+   MORE MENU - Mobile Settings Page
+   ======================================== */
+.more-menu-list {
+    padding: 8px 16px;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.more-menu-item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 14px 16px;
+    background: #ffffff;
+    border: 1px solid #f3f4f6;
+    border-radius: 12px;
+    cursor: pointer;
+    transition: background 0.15s ease;
+    width: 100%;
+    text-align: left;
+    font-size: 15px;
+    font-weight: 500;
+    color: #1f2937;
+}
+
+.more-menu-item:active {
+    background: #f9fafb;
+    transform: scale(0.99);
+}
+
+.more-menu-item-left {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+}
+
+.more-menu-icon {
+    width: 40px;
+    height: 40px;
+    border-radius: 10px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.more-menu-icon i {
+    width: 20px;
+    height: 20px;
+}
+
+.more-menu-chevron {
+    width: 18px;
+    height: 18px;
+    color: #9ca3af;
+}
+
+.more-menu-divider {
+    height: 1px;
+    background: #e5e7eb;
+    margin: 8px 0;
+}
+
+.more-menu-logout {
+    color: #dc2626;
+}
+
+/* ========================================
+   MOBILE USER ACTIVITY RESPONSIVE
+   ======================================== */
+@media (max-width: 768px) {
+    /* Summary cards: 2x2 grid */
+    #userActivitySummaryCards {
+        display: grid !important;
+        grid-template-columns: 1fr 1fr !important;
+        gap: 12px !important;
+        padding: 0 4px;
+    }
+    
+    #userActivitySummaryCards .stat-card {
+        padding: 14px !important;
+        margin: 0 !important;
+    }
+    
+    #userActivitySummaryCards .stat-card-value {
+        font-size: 1.5rem !important;
+    }
+    
+    #userActivitySummaryCards .stat-card-title {
+        font-size: 0.7rem !important;
+    }
+    
+    /* Period filter: scrollable pills */
+    #userActivitySection .flex.flex-wrap.gap-4.mb-6 {
+        flex-direction: column;
+        gap: 8px !important;
+    }
+    
+    #userActivitySection .flex.flex-wrap.gap-2 {
+        display: flex;
+        overflow-x: auto;
+        -webkit-overflow-scrolling: touch;
+        gap: 8px !important;
+        padding-bottom: 4px;
+        flex-wrap: nowrap !important;
+    }
+    
+    #userActivitySection .period-btn {
+        white-space: nowrap;
+        padding: 8px 16px;
+        font-size: 13px;
+        border-radius: 20px;
+        flex-shrink: 0;
+    }
+    
+    /* Activity stats table: card view on mobile */
+    #userActivitySection .table-container {
+        padding: 0 !important;
+        overflow-x: visible !important;
+    }
+    
+    /* Make tables horizontally scrollable */
+    #userActivitySection .data-table {
+        font-size: 13px;
+    }
+    
+    #userActivitySection .data-table th,
+    #userActivitySection .data-table td {
+        padding: 10px 8px !important;
+        white-space: nowrap;
+    }
+    
+    /* Session history as cards */
+    #sessionHistoryTableBody tr {
+        display: block;
+        border: 1px solid #e5e7eb;
+        border-radius: 12px;
+        margin-bottom: 8px;
+        padding: 12px;
+        background: #fff;
+    }
+    
+    #sessionHistoryTableBody td {
+        display: block;
+        padding: 2px 0 !important;
+        border: none !important;
+        text-align: left !important;
+    }
+    
+    #sessionHistoryTableBody td:first-child {
+        font-weight: 600;
+        color: #1f2937;
+        font-size: 14px;
+    }
+    
+    #sessionHistoryTableBody td:nth-child(2),
+    #sessionHistoryTableBody td:nth-child(3) {
+        font-size: 13px;
+        color: #6b7280;
+    }
+    
+    #sessionHistoryTableBody td:last-child {
+        margin-top: 8px;
+    }
+    
+    /* Hide session history table header on mobile */
+    #userActivitySection .table-container:last-of-type thead {
+        display: none;
+    }
+    
+    /* User selector full width */
+    #userActivityUserSelect {
+        font-size: 16px !important; /* Prevents iOS zoom */
+        padding: 14px 12px !important;
+        border-radius: 12px !important;
+    }
+    
+    /* Session actions modal: full screen on mobile */
+    #sessionActionsModal .modal-content {
+        width: 100% !important;
+        max-width: 100% !important;
+        height: 100% !important;
+        max-height: 100% !important;
+        border-radius: 0 !important;
+        margin: 0 !important;
+    }
+    
+    #sessionActionsModal .data-table {
+        font-size: 12px;
+    }
+    
+    #sessionActionsModal .data-table th,
+    #sessionActionsModal .data-table td {
+        padding: 8px 6px !important;
+    }
+    
+    /* User Activity header actions */
+    #userActivitySection .header {
+        flex-direction: column;
+        align-items: flex-start !important;
+        gap: 8px;
+    }
+    
+    #userActivitySection .header-actions {
+        width: 100%;
+    }
+    
+    #userActivitySection .header-actions .btn {
+        width: 100%;
+        justify-content: center;
+    }
+}
