@@ -28,11 +28,26 @@ try {
                 autoRefreshToken: true,
                 persistSession: true,
                 detectSessionInUrl: true
+            },
+            global: {
+                headers: {
+                    'x-session-id': sessionStorage.getItem('currentSessionId') || ''
+                }
             }
         });
 
         // Make client globally available
         window.supabaseClient = supabaseClient;
+
+        // Helper to update session header (call after login sets currentSessionId)
+        window.updateSupabaseSessionHeader = function() {
+            const sid = sessionStorage.getItem('currentSessionId') || '';
+            if (supabaseClient && sid) {
+                // Re-create headers for subsequent requests
+                supabaseClient.headers = { ...supabaseClient.headers, 'x-session-id': sid };
+                console.log('✅ Session header updated:', sid.substring(0, 8) + '...');
+            }
+        };
 
         console.log('✅ Supabase client initialized successfully');
 
