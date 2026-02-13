@@ -4907,3 +4907,99 @@ tr[data-student-id] {
         justify-content: center;
     }
 }
+
+/* ========================================
+   CUSTOM DATE RANGE PICKER
+   ======================================== */
+.custom-date-range {
+    margin-top: 12px;
+    padding: 16px;
+    background: #f8fafc;
+    border: 1px solid #e2e8f0;
+    border-radius: 12px;
+    animation: slideDown 0.2s ease;
+}
+
+@keyframes slideDown {
+    from { opacity: 0; transform: translateY(-8px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+
+.date-range-row {
+    display: flex;
+    align-items: flex-end;
+    gap: 12px;
+    flex-wrap: wrap;
+}
+
+.date-range-field {
+    flex: 1;
+    min-width: 120px;
+}
+
+.date-range-field label {
+    display: block;
+    font-size: 12px;
+    font-weight: 600;
+    color: #64748b;
+    margin-bottom: 4px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.date-input {
+    width: 100%;
+    padding: 10px 12px;
+    border: 1px solid #cbd5e1;
+    border-radius: 8px;
+    font-size: 14px;
+    color: #1e293b;
+    background: #ffffff;
+    transition: border-color 0.2s;
+}
+
+.date-input:focus {
+    outline: none;
+    border-color: #059669;
+    box-shadow: 0 0 0 3px rgba(5, 150, 105, 0.1);
+}
+
+.date-apply-btn {
+    padding: 10px 20px !important;
+    border-radius: 8px !important;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    white-space: nowrap;
+    background: #059669 !important;
+    color: white !important;
+    border: none !important;
+    font-weight: 600;
+    cursor: pointer;
+}
+
+.date-apply-btn:hover {
+    background: #047857 !important;
+}
+
+@media (max-width: 768px) {
+    .date-range-row {
+        flex-direction: column;
+        gap: 10px;
+    }
+    
+    .date-range-field {
+        width: 100%;
+    }
+    
+    .date-input {
+        font-size: 16px !important; /* Prevents iOS zoom */
+        padding: 14px 12px;
+    }
+    
+    .date-apply-btn {
+        width: 100%;
+        justify-content: center;
+        padding: 14px 20px !important;
+    }
+}

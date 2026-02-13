@@ -1017,12 +1017,29 @@
 
                     <div class="stat-card">
                         <label class="form-label" style="margin-bottom: 0.5rem;" data-i18n="admin.activityLog.dateRange">Date Range</label>
-                        <select id="activityLogDateFilter" class="form-input" onchange="filterActivityLog()">
+                        <select id="activityLogDateFilter" class="form-input" onchange="toggleActivityLogCustomDates()">
                             <option value="24h" selected data-i18n="admin.activityLog.last24h">Last 24 Hours</option>
                             <option value="7d" data-i18n="admin.activityLog.last7days">Last 7 Days</option>
                             <option value="30d" data-i18n="admin.activityLog.last30days">Last 30 Days</option>
                             <option value="all" data-i18n="common.all">All Time</option>
+                            <option value="custom" data-i18n="common.customRange">Custom Range</option>
                         </select>
+                        <div id="activityLogCustomDates" class="custom-date-range" style="display: none;">
+                            <div class="date-range-row">
+                                <div class="date-range-field">
+                                    <label data-i18n="admin.userActivity.from">From</label>
+                                    <input type="date" id="activityLogFromDate" class="date-input">
+                                </div>
+                                <div class="date-range-field">
+                                    <label data-i18n="admin.userActivity.to">To</label>
+                                    <input type="date" id="activityLogToDate" class="date-input">
+                                </div>
+                                <button class="btn btn-sm btn-primary date-apply-btn" onclick="applyActivityLogCustomDates()">
+                                    <i data-lucide="check" style="width:16px;height:16px;"></i>
+                                    <span data-i18n="admin.userActivity.apply">Apply</span>
+                                </button>
+                            </div>
+                        </div>
                     </div>
                 </div>
 
@@ -1108,12 +1125,29 @@
 
                     <div class="stat-card">
                         <label class="form-label" style="margin-bottom: 0.5rem;" data-i18n="admin.statusHistory.dateRange">Date Range</label>
-                        <select id="statusHistoryDateFilter" class="form-input" onchange="filterStatusHistory()">
+                        <select id="statusHistoryDateFilter" class="form-input" onchange="toggleStatusHistoryCustomDates()">
                             <option value="7d" data-i18n="admin.statusHistory.last7days">Last 7 Days</option>
                             <option value="30d" selected data-i18n="admin.statusHistory.last30days">Last 30 Days</option>
                             <option value="90d" data-i18n="admin.statusHistory.last90days">Last 90 Days</option>
                             <option value="all" data-i18n="common.all">All Time</option>
+                            <option value="custom" data-i18n="common.customRange">Custom Range</option>
                         </select>
+                        <div id="statusHistoryCustomDates" class="custom-date-range" style="display: none;">
+                            <div class="date-range-row">
+                                <div class="date-range-field">
+                                    <label data-i18n="admin.userActivity.from">From</label>
+                                    <input type="date" id="statusHistoryFromDate" class="date-input">
+                                </div>
+                                <div class="date-range-field">
+                                    <label data-i18n="admin.userActivity.to">To</label>
+                                    <input type="date" id="statusHistoryToDate" class="date-input">
+                                </div>
+                                <button class="btn btn-sm btn-primary date-apply-btn" onclick="applyStatusHistoryCustomDates()">
+                                    <i data-lucide="check" style="width:16px;height:16px;"></i>
+                                    <span data-i18n="admin.userActivity.apply">Apply</span>
+                                </button>
+                            </div>
+                        </div>
                     </div>
                 </div>
 
@@ -1208,12 +1242,29 @@
 
                     <div class="stat-card">
                         <label class="form-label" style="margin-bottom: 0.5rem;" data-i18n="admin.sessions.dateRange">Date Range</label>
-                        <select id="sessionsDateFilter" class="form-input" onchange="filterSessions()">
+                        <select id="sessionsDateFilter" class="form-input" onchange="toggleSessionsCustomDates()">
                             <option value="24h" data-i18n="admin.sessions.last24h">Last 24 Hours</option>
                             <option value="7d" selected data-i18n="admin.sessions.last7days">Last 7 Days</option>
                             <option value="30d" data-i18n="admin.sessions.last30days">Last 30 Days</option>
                             <option value="all" data-i18n="common.all">All Time</option>
+                            <option value="custom" data-i18n="common.customRange">Custom Range</option>
                         </select>
+                        <div id="sessionsCustomDates" class="custom-date-range" style="display: none;">
+                            <div class="date-range-row">
+                                <div class="date-range-field">
+                                    <label data-i18n="admin.userActivity.from">From</label>
+                                    <input type="date" id="sessionsFromDate" class="date-input">
+                                </div>
+                                <div class="date-range-field">
+                                    <label data-i18n="admin.userActivity.to">To</label>
+                                    <input type="date" id="sessionsToDate" class="date-input">
+                                </div>
+                                <button class="btn btn-sm btn-primary date-apply-btn" onclick="applySessionsCustomDates()">
+                                    <i data-lucide="check" style="width:16px;height:16px;"></i>
+                                    <span data-i18n="admin.userActivity.apply">Apply</span>
+                                </button>
+                            </div>
+                        </div>
                     </div>
                 </div>
 
@@ -1333,9 +1384,25 @@
                         <button class="period-btn" data-period="month" onclick="setActivityPeriod('month')" data-i18n="admin.userActivity.month">
                             Month
                         </button>
-                        <button class="period-btn" data-period="2months" onclick="setActivityPeriod('2months')" data-i18n="admin.userActivity.twoMonths">
-                            2 Months
+                        <button class="period-btn" data-period="custom" onclick="setActivityPeriod('custom')" data-i18n="admin.userActivity.custom">
+                            📅 Custom
                         </button>
+                    </div>
+                    <div id="customDateRange" class="custom-date-range" style="display: none;">
+                        <div class="date-range-row">
+                            <div class="date-range-field">
+                                <label data-i18n="admin.userActivity.from">From</label>
+                                <input type="date" id="activityFromDate" class="date-input">
+                            </div>
+                            <div class="date-range-field">
+                                <label data-i18n="admin.userActivity.to">To</label>
+                                <input type="date" id="activityToDate" class="date-input">
+                            </div>
+                            <button class="btn btn-sm btn-primary date-apply-btn" onclick="applyCustomDateRange()">
+                                <i data-lucide="check" style="width:16px;height:16px;"></i>
+                                <span data-i18n="admin.userActivity.apply">Apply</span>
+                            </button>
+                        </div>
                     </div>
                 </div>
 

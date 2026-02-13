@@ -8400,6 +8400,15 @@ async function loadActivityLog() {
             filters.fromDate = new Date(now - 7 * 24 * 60 * 60 * 1000).toISOString();
         } else if (dateFilter === '30d') {
             filters.fromDate = new Date(now - 30 * 24 * 60 * 60 * 1000).toISOString();
+        } else if (dateFilter === 'custom') {
+            const fromInput = document.getElementById('activityLogFromDate');
+            const toInput = document.getElementById('activityLogToDate');
+            if (fromInput?.value && toInput?.value) {
+                filters.fromDate = new Date(fromInput.value).toISOString();
+                filters.toDate = new Date(toInput.value + 'T23:59:59').toISOString();
+            } else {
+                filters.fromDate = new Date(now - 30 * 24 * 60 * 60 * 1000).toISOString();
+            }
         }
 
         activityLogFilters = filters;
@@ -8556,6 +8565,33 @@ function filterActivityLog() {
 }
 
 /**
+ * Toggle custom date picker for Activity Log
+ */
+function toggleActivityLogCustomDates() {
+    const select = document.getElementById('activityLogDateFilter');
+    const picker = document.getElementById('activityLogCustomDates');
+    if (!select || !picker) return;
+    if (select.value === 'custom') {
+        picker.style.display = 'block';
+        const today = new Date().toISOString().split('T')[0];
+        const monthAgo = new Date(); monthAgo.setMonth(monthAgo.getMonth() - 1);
+        document.getElementById('activityLogFromDate').value = document.getElementById('activityLogFromDate').value || monthAgo.toISOString().split('T')[0];
+        document.getElementById('activityLogToDate').value = document.getElementById('activityLogToDate').value || today;
+        if (lucide && lucide.createIcons) lucide.createIcons();
+    } else {
+        picker.style.display = 'none';
+        filterActivityLog();
+    }
+}
+
+/**
+ * Apply custom dates for Activity Log
+ */
+function applyActivityLogCustomDates() {
+    filterActivityLog();
+}
+
+/**
  * Export activity log to CSV
  */
 async function exportActivityLogCSV() {
@@ -8632,6 +8668,15 @@ async function loadStatusHistory() {
             filters.fromDate = new Date(now - 30 * 24 * 60 * 60 * 1000).toISOString();
         } else if (dateFilter === '90d') {
             filters.fromDate = new Date(now - 90 * 24 * 60 * 60 * 1000).toISOString();
+        } else if (dateFilter === 'custom') {
+            const fromInput = document.getElementById('statusHistoryFromDate');
+            const toInput = document.getElementById('statusHistoryToDate');
+            if (fromInput?.value && toInput?.value) {
+                filters.fromDate = new Date(fromInput.value).toISOString();
+                filters.toDate = new Date(toInput.value + 'T23:59:59').toISOString();
+            } else {
+                filters.fromDate = new Date(now - 30 * 24 * 60 * 60 * 1000).toISOString();
+            }
         }
 
         // Fetch status history
@@ -8713,6 +8758,33 @@ function filterStatusHistory() {
     loadStatusHistory();
 }
 
+/**
+ * Toggle custom date picker for Status History
+ */
+function toggleStatusHistoryCustomDates() {
+    const select = document.getElementById('statusHistoryDateFilter');
+    const picker = document.getElementById('statusHistoryCustomDates');
+    if (!select || !picker) return;
+    if (select.value === 'custom') {
+        picker.style.display = 'block';
+        const today = new Date().toISOString().split('T')[0];
+        const monthAgo = new Date(); monthAgo.setMonth(monthAgo.getMonth() - 1);
+        document.getElementById('statusHistoryFromDate').value = document.getElementById('statusHistoryFromDate').value || monthAgo.toISOString().split('T')[0];
+        document.getElementById('statusHistoryToDate').value = document.getElementById('statusHistoryToDate').value || today;
+        if (lucide && lucide.createIcons) lucide.createIcons();
+    } else {
+        picker.style.display = 'none';
+        filterStatusHistory();
+    }
+}
+
+/**
+ * Apply custom dates for Status History
+ */
+function applyStatusHistoryCustomDates() {
+    filterStatusHistory();
+}
+
 // ===================================
 // USER SESSIONS FUNCTIONS
 // ===================================
@@ -8763,6 +8835,15 @@ async function loadSessions() {
             filters.fromDate = new Date(now - 7 * 24 * 60 * 60 * 1000).toISOString();
         } else if (dateFilter === '30d') {
             filters.fromDate = new Date(now - 30 * 24 * 60 * 60 * 1000).toISOString();
+        } else if (dateFilter === 'custom') {
+            const fromInput = document.getElementById('sessionsFromDate');
+            const toInput = document.getElementById('sessionsToDate');
+            if (fromInput?.value && toInput?.value) {
+                filters.fromDate = new Date(fromInput.value).toISOString();
+                filters.toDate = new Date(toInput.value + 'T23:59:59').toISOString();
+            } else {
+                filters.fromDate = new Date(now - 30 * 24 * 60 * 60 * 1000).toISOString();
+            }
         }
 
         // Fetch sessions and stats in parallel
@@ -8891,14 +8972,43 @@ function filterSessions() {
     loadSessions();
 }
 
+/**
+ * Toggle custom date picker for Sessions
+ */
+function toggleSessionsCustomDates() {
+    const select = document.getElementById('sessionsDateFilter');
+    const picker = document.getElementById('sessionsCustomDates');
+    if (!select || !picker) return;
+    if (select.value === 'custom') {
+        picker.style.display = 'block';
+        const today = new Date().toISOString().split('T')[0];
+        const monthAgo = new Date(); monthAgo.setMonth(monthAgo.getMonth() - 1);
+        document.getElementById('sessionsFromDate').value = document.getElementById('sessionsFromDate').value || monthAgo.toISOString().split('T')[0];
+        document.getElementById('sessionsToDate').value = document.getElementById('sessionsToDate').value || today;
+        if (lucide && lucide.createIcons) lucide.createIcons();
+    } else {
+        picker.style.display = 'none';
+        filterSessions();
+    }
+}
+
+/**
+ * Apply custom dates for Sessions
+ */
+function applySessionsCustomDates() {
+    filterSessions();
+}
+
 // ============================================
 // USER ACTIVITY ANALYTICS FUNCTIONS
 // ============================================
 
 /**
- * Current activity period (day, week, month, 2months)
+ * Current activity period (day, week, month, 2months, custom)
  */
 let currentActivityPeriod = 'day';
+let customActivityFromDate = null;
+let customActivityToDate = null;
 
 /**
  * Current selected user email
@@ -9210,7 +9320,40 @@ function setActivityPeriod(period) {
     
     currentActivityPeriod = period;
 
+    // Toggle custom date range picker
+    const customPicker = document.getElementById('customDateRange');
+    if (customPicker) {
+        if (period === 'custom') {
+            customPicker.style.display = 'block';
+            // Set defaults: 2 months ago to today
+            const today = new Date().toISOString().split('T')[0];
+            const twoMonthsAgo = new Date();
+            twoMonthsAgo.setMonth(twoMonthsAgo.getMonth() - 2);
+            document.getElementById('activityFromDate').value = document.getElementById('activityFromDate').value || twoMonthsAgo.toISOString().split('T')[0];
+            document.getElementById('activityToDate').value = document.getElementById('activityToDate').value || today;
+            if (lucide && lucide.createIcons) lucide.createIcons();
+            return; // Don't reload until Apply is clicked
+        } else {
+            customPicker.style.display = 'none';
+        }
+    }
+
     // Reload activity stats with new period
+    if (currentActivityUser) {
+        loadUserActivityStats();
+    }
+}
+
+/**
+ * Apply custom date range for user activity
+ */
+function applyCustomDateRange() {
+    const from = document.getElementById('activityFromDate').value;
+    const to = document.getElementById('activityToDate').value;
+    if (!from || !to) return;
+    customActivityFromDate = new Date(from);
+    customActivityToDate = new Date(to + 'T23:59:59');
+    currentActivityPeriod = 'custom';
     if (currentActivityUser) {
         loadUserActivityStats();
     }
@@ -9234,6 +9377,13 @@ function getActivityDateRange(period) {
             fromDate.setMonth(now.getMonth() - 1);
             break;
         case '2months':
+            fromDate.setMonth(now.getMonth() - 2);
+            break;
+        case 'custom':
+            if (customActivityFromDate && customActivityToDate) {
+                return { fromDate: customActivityFromDate, toDate: customActivityToDate };
+            }
+            // Fallback to 2 months
             fromDate.setMonth(now.getMonth() - 2);
             break;
         default:
