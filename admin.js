@@ -1036,10 +1036,13 @@ function refreshCoachesListView() {
 
 // Update mobile bottom navigation active state
 function updateMobileBottomNav(activeSection) {
+    const moreSubSections = ['userActivity', 'activityLog', 'statusHistory', 'sessions', 'ratings', 'moreMenu'];
+    const effectiveSection = moreSubSections.includes(activeSection) ? 'settings' : activeSection;
+    
     const mobileNavItems = document.querySelectorAll('.mobile-nav-item');
     mobileNavItems.forEach(item => {
         const itemSection = item.getAttribute('data-section');
-        if (itemSection === activeSection) {
+        if (itemSection === effectiveSection) {
             item.classList.add('active');
         } else {
             item.classList.remove('active');
@@ -2864,10 +2867,10 @@ const mobileSectionTitles = {
     attendance: 'admin.header.attendance',
     settings: 'admin.header.settings',
     userActivity: 'admin.userActivity.title',
-    activityLog: 'admin.sidebar.activityLog',
-    statusHistory: 'admin.sidebar.statusHistory',
-    sessions: 'admin.sidebar.userSessions',
-    ratings: 'admin.sidebar.ratingsManagement'
+    activityLog: 'admin.activityLog.title',
+    statusHistory: 'admin.statusHistory.title',
+    sessions: 'admin.sessions.title',
+    ratings: 'admin.ratings.title'
 };
 
 // Show mobile section (called from bottom nav)
