@@ -756,6 +756,10 @@ function showSection(section) {
         switchToSection('sessions');
         loadSessionUsers();
         loadSessions();
+    } else if (section === 'userActivity') {
+        // Show user activity analytics
+        switchToSection('userActivity');
+        loadUserActivityUsers();
     }
 
     // Update mobile bottom nav active state
