@@ -124,6 +124,12 @@ function updateMenuVisibility() {
         return;
     }
 
+    // For non-admins (coaches), show User Activity (self-only)
+    const menuUserActivityCoach = document.getElementById('menuUserActivity');
+    const analyticsSectionTitleCoach = document.getElementById('analyticsSectionTitle');
+    if (menuUserActivityCoach) menuUserActivityCoach.style.display = 'flex';
+    if (analyticsSectionTitleCoach) analyticsSectionTitleCoach.style.display = 'block';
+
     // For non-admins, show based on specific permissions
     let hasAnyManagementAccess = false;
 
@@ -8925,23 +8931,31 @@ function clearActivityData() {
  */
 async function loadUserActivityUsers() {
     try {
-        const users = await supabaseData.getAdminAndCoachUsers();
         const select = document.getElementById('userActivityUserSelect');
         if (!select) return;
 
-        // Clear and populate dropdown
-        select.innerHTML = `<option value="" data-i18n="admin.userActivity.selectUserPlaceholder">Select a user...</option>`;
-        
-        users.forEach(user => {
-            const displayName = user.role === 'coach' 
-                ? `${user.first_name} ${user.last_name} (${user.email})`
-                : `Admin (${user.email})`;
-            
-            select.innerHTML += `<option value="${user.email}">${displayName}</option>`;
-        });
+        const currentUserEmail = sessionStorage.getItem('userEmail');
+        const userRole = window.supabaseAuth ? window.supabaseAuth.getCurrentUserRole() : null;
+        const isAdmin = userRole && userRole.role === 'admin';
 
-        // Add event listener for user selection
-        select.addEventListener('change', onUserActivityUserChange);
+        if (isAdmin) {
+            // Admins see all users in dropdown
+            const users = await supabaseData.getAdminAndCoachUsers();
+            select.innerHTML = `<option value="" data-i18n="admin.userActivity.selectUserPlaceholder">Select a user...</option>`;
+            users.forEach(user => {
+                const displayName = user.role === 'coach'
+                    ? `${user.first_name || ''} ${user.last_name || ''} (${user.email})`
+                    : `Admin (${user.email})`;
+                select.innerHTML += `<option value="${user.email}">${displayName}</option>`;
+            });
+            select.addEventListener('change', onUserActivityUserChange);
+        } else {
+            // Coaches only see their own activity - hide dropdown, auto-load
+            select.innerHTML = `<option value="${currentUserEmail}">My Activity (${currentUserEmail})</option>`;
+            select.disabled = true;
+            currentActivityUser = currentUserEmail;
+            loadUserActivityData(currentUserEmail);
+        }
     } catch (error) {
         console.error('Error loading users for activity:', error);
     }

@@ -3177,6 +3177,30 @@ const supabaseData = {
     },
 
     /**
+     * Get own activity summary (self-scoped, no email needed)
+     */
+    async getMyActivitySummary() {
+        try {
+            const { data, error } = await window.supabaseClient
+                .rpc('get_my_activity_summary');
+            if (error) { console.error('Error fetching my activity summary:', error); return []; }
+            return data || [];
+        } catch (error) { console.error('Error in getMyActivitySummary:', error); return []; }
+    },
+
+    /**
+     * Get own activity stats (self-scoped, no email needed)
+     */
+    async getMyActivityStats(fromDate, toDate) {
+        try {
+            const { data, error } = await window.supabaseClient
+                .rpc('get_my_activity_stats', { p_from_date: fromDate, p_to_date: toDate });
+            if (error) { console.error('Error fetching my activity stats:', error); return []; }
+            return data || [];
+        } catch (error) { console.error('Error in getMyActivityStats:', error); return []; }
+    },
+
+    /**
      * Get user sessions with action counts (enhanced version of existing sessions query)
      */
     async getUserSessions(userEmail, limit = 10) {
