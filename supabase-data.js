@@ -3082,6 +3082,138 @@ const supabaseData = {
             console.error('Error in getSessionStats:', error);
             return null;
         }
+    },
+
+    // ============================================
+    // USER ACTIVITY ANALYTICS METHODS
+    // ============================================
+
+    /**
+     * Get admin and coach users for dropdown
+     */
+    async getAdminAndCoachUsers() {
+        try {
+            const { data, error } = await window.supabaseClient
+                .rpc('get_admin_and_coach_users');
+
+            if (error) {
+                console.error('Error fetching admin and coach users:', error);
+                return [];
+            }
+
+            return data || [];
+        } catch (error) {
+            console.error('Error in getAdminAndCoachUsers:', error);
+            return [];
+        }
+    },
+
+    /**
+     * Get user activity statistics for a date range
+     */
+    async getUserActivityStats(userEmail, fromDate, toDate) {
+        try {
+            const { data, error } = await window.supabaseClient
+                .rpc('get_user_activity_stats', {
+                    p_user_email: userEmail,
+                    p_from_date: fromDate,
+                    p_to_date: toDate
+                });
+
+            if (error) {
+                console.error('Error fetching user activity stats:', error);
+                return [];
+            }
+
+            return data || [];
+        } catch (error) {
+            console.error('Error in getUserActivityStats:', error);
+            return [];
+        }
+    },
+
+    /**
+     * Get all actions for a specific session
+     */
+    async getUserSessionWithActions(sessionId) {
+        try {
+            const { data, error } = await window.supabaseClient
+                .rpc('get_user_session_with_actions', {
+                    p_session_id: sessionId
+                });
+
+            if (error) {
+                console.error('Error fetching session actions:', error);
+                return [];
+            }
+
+            return data || [];
+        } catch (error) {
+            console.error('Error in getUserSessionWithActions:', error);
+            return [];
+        }
+    },
+
+    /**
+     * Get user summary statistics
+     */
+    async getUserSummary(userEmail) {
+        try {
+            const { data, error } = await window.supabaseClient
+                .rpc('get_user_summary', {
+                    p_user_email: userEmail
+                });
+
+            if (error) {
+                console.error('Error fetching user summary:', error);
+                return [];
+            }
+
+            return data || [];
+        } catch (error) {
+            console.error('Error in getUserSummary:', error);
+            return [];
+        }
+    },
+
+    /**
+     * Get user sessions with action counts (enhanced version of existing sessions query)
+     */
+    async getUserSessions(userEmail, limit = 10) {
+        try {
+            // First get the sessions
+            const { data: sessions, error: sessionsError } = await window.supabaseClient
+                .from('user_sessions')
+                .select('*')
+                .eq('user_email', userEmail)
+                .order('login_at', { ascending: false })
+                .limit(limit);
+
+            if (sessionsError) {
+                console.error('Error fetching user sessions:', sessionsError);
+                return [];
+            }
+
+            // For each session, get the action count
+            const sessionsWithActions = await Promise.all(
+                sessions.map(async (session) => {
+                    const { data: actionCount } = await window.supabaseClient
+                        .from('audit_log')
+                        .select('id', { count: 'exact', head: true })
+                        .eq('session_id', session.id);
+
+                    return {
+                        ...session,
+                        actions_count: actionCount || 0
+                    };
+                })
+            );
+
+            return sessionsWithActions;
+        } catch (error) {
+            console.error('Error in getUserSessions:', error);
+            return [];
+        }
     }
 };
 

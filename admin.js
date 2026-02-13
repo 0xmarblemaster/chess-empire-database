@@ -112,10 +112,12 @@ function updateMenuVisibility() {
             const menuActivityLog = document.getElementById('menuActivityLog');
             const menuStatusHistory = document.getElementById('menuStatusHistory');
             const menuSessions = document.getElementById('menuSessions');
+            const menuUserActivity = document.getElementById('menuUserActivity');
             const analyticsSectionTitle = document.getElementById('analyticsSectionTitle');
             if (menuActivityLog) menuActivityLog.style.display = 'flex';
             if (menuStatusHistory) menuStatusHistory.style.display = 'flex';
             if (menuSessions) menuSessions.style.display = 'flex';
+            if (menuUserActivity) menuUserActivity.style.display = 'flex';
             if (analyticsSectionTitle) analyticsSectionTitle.style.display = 'block';
         }
 
@@ -8851,5 +8853,442 @@ function refreshSessions() {
  */
 function filterSessions() {
     loadSessions();
+}
+
+// ============================================
+// USER ACTIVITY ANALYTICS FUNCTIONS
+// ============================================
+
+/**
+ * Current activity period (day, week, month, 2months)
+ */
+let currentActivityPeriod = 'day';
+
+/**
+ * Current selected user email
+ */
+let currentActivityUser = null;
+
+/**
+ * Show User Activity section
+ */
+function showUserActivity() {
+    showSection('userActivity');
+    loadUserActivityUsers(); // Load users for dropdown
+    clearActivityData(); // Clear any previous data
+}
+
+/**
+ * Clear activity data when no user selected
+ */
+function clearActivityData() {
+    // Clear summary cards
+    document.getElementById('lastSessionDate').textContent = '-';
+    document.getElementById('lastSessionDuration').textContent = '-';
+    document.getElementById('sessions30d').textContent = '0';
+    document.getElementById('actions30d').textContent = '0';
+    document.getElementById('avgDuration').textContent = '0min';
+
+    // Clear activity stats table
+    const statsTableBody = document.getElementById('activityStatsTableBody');
+    if (statsTableBody) {
+        statsTableBody.innerHTML = `
+            <tr>
+                <td colspan="6" style="text-align: center; padding: 2rem; color: #94a3b8;">
+                    <i data-lucide="user-x" style="width: 24px; height: 24px; margin: 0 auto;"></i>
+                    <p style="margin-top: 0.5rem;">${i18n.t('admin.userActivity.selectUserFirst')}</p>
+                </td>
+            </tr>
+        `;
+    }
+
+    // Clear session history table
+    const historyTableBody = document.getElementById('sessionHistoryTableBody');
+    if (historyTableBody) {
+        historyTableBody.innerHTML = `
+            <tr>
+                <td colspan="5" style="text-align: center; padding: 2rem; color: #94a3b8;">
+                    <i data-lucide="user-x" style="width: 24px; height: 24px; margin: 0 auto;"></i>
+                    <p style="margin-top: 0.5rem;">${i18n.t('admin.userActivity.selectUserFirst')}</p>
+                </td>
+            </tr>
+        `;
+    }
+}
+
+/**
+ * Load admin and coach users for the dropdown
+ */
+async function loadUserActivityUsers() {
+    try {
+        const users = await supabaseData.getAdminAndCoachUsers();
+        const select = document.getElementById('userActivityUserSelect');
+        if (!select) return;
+
+        // Clear and populate dropdown
+        select.innerHTML = `<option value="" data-i18n="admin.userActivity.selectUserPlaceholder">Select a user...</option>`;
+        
+        users.forEach(user => {
+            const displayName = user.role === 'coach' 
+                ? `${user.first_name} ${user.last_name} (${user.email})`
+                : `Admin (${user.email})`;
+            
+            select.innerHTML += `<option value="${user.email}">${displayName}</option>`;
+        });
+
+        // Add event listener for user selection
+        select.addEventListener('change', onUserActivityUserChange);
+    } catch (error) {
+        console.error('Error loading users for activity:', error);
+    }
+}
+
+/**
+ * Handle user selection change
+ */
+async function onUserActivityUserChange() {
+    const select = document.getElementById('userActivityUserSelect');
+    if (!select) return;
+
+    currentActivityUser = select.value;
+
+    if (!currentActivityUser) {
+        clearActivityData();
+        return;
+    }
+
+    // Load all activity data for the selected user
+    await Promise.all([
+        loadUserSummary(),
+        loadUserActivityStats(),
+        loadUserSessionHistory()
+    ]);
+}
+
+/**
+ * Load user summary statistics
+ */
+async function loadUserSummary() {
+    if (!currentActivityUser) return;
+
+    try {
+        const summary = await supabaseData.getUserSummary(currentActivityUser);
+        
+        // Update summary cards
+        const lastSessionDate = document.getElementById('lastSessionDate');
+        const lastSessionDuration = document.getElementById('lastSessionDuration');
+        const sessions30d = document.getElementById('sessions30d');
+        const actions30d = document.getElementById('actions30d');
+        const avgDuration = document.getElementById('avgDuration');
+
+        if (summary && summary.length > 0) {
+            const data = summary[0];
+
+            // Last session
+            if (data.last_session_date) {
+                const date = new Date(data.last_session_date);
+                lastSessionDate.textContent = date.toLocaleDateString();
+                lastSessionDuration.textContent = data.last_session_duration_minutes 
+                    ? `${data.last_session_duration_minutes}min` 
+                    : 'Active';
+            } else {
+                lastSessionDate.textContent = 'Never';
+                lastSessionDuration.textContent = '-';
+            }
+
+            // 30-day stats
+            sessions30d.textContent = data.total_sessions_30d || '0';
+            actions30d.textContent = data.total_actions_30d || '0';
+            avgDuration.textContent = data.avg_session_duration_30d 
+                ? `${data.avg_session_duration_30d}min` 
+                : '0min';
+        } else {
+            // No data
+            lastSessionDate.textContent = 'Never';
+            lastSessionDuration.textContent = '-';
+            sessions30d.textContent = '0';
+            actions30d.textContent = '0';
+            avgDuration.textContent = '0min';
+        }
+    } catch (error) {
+        console.error('Error loading user summary:', error);
+    }
+}
+
+/**
+ * Load user activity statistics for the current period
+ */
+async function loadUserActivityStats() {
+    if (!currentActivityUser) return;
+
+    try {
+        const statsTableBody = document.getElementById('activityStatsTableBody');
+        if (!statsTableBody) return;
+
+        // Show loading
+        statsTableBody.innerHTML = `
+            <tr>
+                <td colspan="6" style="text-align: center; padding: 2rem; color: #94a3b8;">
+                    <i data-lucide="loader" style="width: 24px; height: 24px; margin: 0 auto; animation: spin 1s linear infinite;"></i>
+                    <p style="margin-top: 0.5rem;">${i18n.t('common.loading')}</p>
+                </td>
+            </tr>
+        `;
+
+        // Calculate date range based on current period
+        const { fromDate, toDate } = getActivityDateRange(currentActivityPeriod);
+
+        // Get activity stats
+        const stats = await supabaseData.getUserActivityStats(currentActivityUser, fromDate.toISOString(), toDate.toISOString());
+
+        if (stats && stats.length > 0) {
+            statsTableBody.innerHTML = '';
+            stats.forEach(stat => {
+                const row = document.createElement('tr');
+                row.innerHTML = `
+                    <td>${new Date(stat.date).toLocaleDateString()}</td>
+                    <td><span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">${stat.session_count}</span></td>
+                    <td><span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">${stat.crud_create_count}</span></td>
+                    <td><span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-yellow-100 text-yellow-800">${stat.crud_update_count}</span></td>
+                    <td><span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-800">${stat.crud_delete_count}</span></td>
+                    <td><span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-800">${stat.total_actions}</span></td>
+                `;
+                statsTableBody.appendChild(row);
+            });
+        } else {
+            statsTableBody.innerHTML = `
+                <tr>
+                    <td colspan="6" style="text-align: center; padding: 2rem; color: #94a3b8;">
+                        <i data-lucide="calendar-x" style="width: 24px; height: 24px; margin: 0 auto;"></i>
+                        <p style="margin-top: 0.5rem;">${i18n.t('admin.userActivity.noActivityData')}</p>
+                    </td>
+                </tr>
+            `;
+        }
+
+        // Re-render icons
+        if (typeof lucide !== 'undefined' && lucide.createIcons) {
+            lucide.createIcons();
+        }
+    } catch (error) {
+        console.error('Error loading activity stats:', error);
+        const statsTableBody = document.getElementById('activityStatsTableBody');
+        if (statsTableBody) {
+            statsTableBody.innerHTML = `
+                <tr>
+                    <td colspan="6" style="text-align: center; padding: 2rem; color: #ef4444;">
+                        <i data-lucide="alert-circle" style="width: 24px; height: 24px; margin: 0 auto;"></i>
+                        <p style="margin-top: 0.5rem;">Error loading activity data</p>
+                    </td>
+                </tr>
+            `;
+        }
+    }
+}
+
+/**
+ * Load user session history
+ */
+async function loadUserSessionHistory() {
+    if (!currentActivityUser) return;
+
+    try {
+        const historyTableBody = document.getElementById('sessionHistoryTableBody');
+        if (!historyTableBody) return;
+
+        // Show loading
+        historyTableBody.innerHTML = `
+            <tr>
+                <td colspan="5" style="text-align: center; padding: 2rem; color: #94a3b8;">
+                    <i data-lucide="loader" style="width: 24px; height: 24px; margin: 0 auto; animation: spin 1s linear infinite;"></i>
+                    <p style="margin-top: 0.5rem;">${i18n.t('common.loading')}</p>
+                </td>
+            </tr>
+        `;
+
+        // Get recent sessions for this user
+        const sessions = await supabaseData.getUserSessions(currentActivityUser);
+
+        if (sessions && sessions.length > 0) {
+            historyTableBody.innerHTML = '';
+            sessions.forEach(session => {
+                const row = document.createElement('tr');
+                const loginTime = new Date(session.login_at);
+                const duration = session.session_duration_minutes ? `${session.session_duration_minutes}min` : 'Active';
+                const device = session.device_type ? `${session.device_type} (${session.browser || 'Unknown'})` : 'Unknown';
+                
+                row.innerHTML = `
+                    <td>${loginTime.toLocaleString()}</td>
+                    <td>${duration}</td>
+                    <td>${device}</td>
+                    <td><span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">${session.actions_count || 0}</span></td>
+                    <td>
+                        <button class="btn btn-sm btn-secondary" onclick="showSessionActions('${session.id}')">
+                            <i data-lucide="eye" style="width: 16px; height: 16px;"></i>
+                            View Actions
+                        </button>
+                    </td>
+                `;
+                historyTableBody.appendChild(row);
+            });
+        } else {
+            historyTableBody.innerHTML = `
+                <tr>
+                    <td colspan="5" style="text-align: center; padding: 2rem; color: #94a3b8;">
+                        <i data-lucide="calendar-x" style="width: 24px; height: 24px; margin: 0 auto;"></i>
+                        <p style="margin-top: 0.5rem;">No session history found</p>
+                    </td>
+                </tr>
+            `;
+        }
+
+        // Re-render icons
+        if (typeof lucide !== 'undefined' && lucide.createIcons) {
+            lucide.createIcons();
+        }
+    } catch (error) {
+        console.error('Error loading session history:', error);
+    }
+}
+
+/**
+ * Set activity period filter
+ */
+function setActivityPeriod(period) {
+    // Update active button
+    document.querySelectorAll('.period-btn').forEach(btn => btn.classList.remove('active'));
+    document.querySelector(`.period-btn[data-period="${period}"]`).classList.add('active');
+    
+    currentActivityPeriod = period;
+
+    // Reload activity stats with new period
+    if (currentActivityUser) {
+        loadUserActivityStats();
+    }
+}
+
+/**
+ * Get date range for activity period
+ */
+function getActivityDateRange(period) {
+    const now = new Date();
+    let fromDate = new Date();
+
+    switch (period) {
+        case 'day':
+            fromDate.setHours(0, 0, 0, 0);
+            break;
+        case 'week':
+            fromDate.setDate(now.getDate() - 7);
+            break;
+        case 'month':
+            fromDate.setMonth(now.getMonth() - 1);
+            break;
+        case '2months':
+            fromDate.setMonth(now.getMonth() - 2);
+            break;
+        default:
+            fromDate.setDate(now.getDate() - 1);
+    }
+
+    return { fromDate, toDate: now };
+}
+
+/**
+ * Show session actions in modal
+ */
+async function showSessionActions(sessionId) {
+    try {
+        const modal = document.getElementById('sessionActionsModal');
+        const tableBody = document.getElementById('sessionActionsTableBody');
+        
+        if (!modal || !tableBody) return;
+
+        // Show modal
+        modal.classList.add('active');
+        
+        // Show loading
+        tableBody.innerHTML = `
+            <tr>
+                <td colspan="5" style="text-align: center; padding: 2rem; color: #94a3b8;">
+                    <i data-lucide="loader" style="width: 24px; height: 24px; margin: 0 auto; animation: spin 1s linear infinite;"></i>
+                    <p style="margin-top: 0.5rem;">${i18n.t('common.loading')}</p>
+                </td>
+            </tr>
+        `;
+
+        // Load session actions
+        const actions = await supabaseData.getUserSessionWithActions(sessionId);
+
+        if (actions && actions.length > 0) {
+            tableBody.innerHTML = '';
+            actions.forEach(action => {
+                const row = document.createElement('tr');
+                const timestamp = new Date(action.changed_at);
+                const change = action.field_name 
+                    ? `${action.old_value || ''} → ${action.new_value || ''}`
+                    : action.action === 'CREATE' ? 'Created' : action.action === 'DELETE' ? 'Deleted' : '';
+
+                row.innerHTML = `
+                    <td>${timestamp.toLocaleString()}</td>
+                    <td><span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">${action.entity_type}</span></td>
+                    <td><span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${getActionBadgeClass(action.action)}">${action.action}</span></td>
+                    <td>${action.field_name || '-'}</td>
+                    <td style="max-width: 200px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${change}</td>
+                `;
+                tableBody.appendChild(row);
+            });
+        } else {
+            tableBody.innerHTML = `
+                <tr>
+                    <td colspan="5" style="text-align: center; padding: 2rem; color: #94a3b8;">
+                        <i data-lucide="activity" style="width: 24px; height: 24px; margin: 0 auto;"></i>
+                        <p style="margin-top: 0.5rem;">No actions recorded for this session</p>
+                    </td>
+                </tr>
+            `;
+        }
+
+        // Re-render icons
+        if (typeof lucide !== 'undefined' && lucide.createIcons) {
+            lucide.createIcons();
+        }
+    } catch (error) {
+        console.error('Error loading session actions:', error);
+    }
+}
+
+/**
+ * Close session actions modal
+ */
+function closeSessionActionsModal(event) {
+    const modal = document.getElementById('sessionActionsModal');
+    if (!modal) return;
+
+    // Only close if clicked outside modal content or on close button
+    if (!event || event.target === modal || event.target.closest('.modal-close')) {
+        modal.classList.remove('active');
+    }
+}
+
+/**
+ * Get CSS class for action badge
+ */
+function getActionBadgeClass(action) {
+    const classes = {
+        'CREATE': 'bg-green-100 text-green-800',
+        'UPDATE': 'bg-yellow-100 text-yellow-800',
+        'DELETE': 'bg-red-100 text-red-800'
+    };
+    return classes[action] || 'bg-gray-100 text-gray-800';
+}
+
+/**
+ * Refresh user activity data
+ */
+function refreshUserActivity() {
+    if (currentActivityUser) {
+        onUserActivityUserChange();
+    }
 }
 
