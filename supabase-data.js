@@ -3201,6 +3201,50 @@ const supabaseData = {
     },
 
     /**
+     * Set session context for Postgres triggers (links audit_log entries to current session)
+     * Must be called periodically since Supabase uses connection pooling
+     */
+    async setSessionContext(sessionId) {
+        if (!sessionId) return false;
+        try {
+            const { error } = await window.supabaseClient
+                .rpc('set_session_context', { p_session_id: sessionId });
+            if (error) {
+                console.error('Error setting session context:', error);
+                return false;
+            }
+            return true;
+        } catch (error) {
+            console.error('Error in setSessionContext:', error);
+            return false;
+        }
+    },
+
+    /**
+     * Send session heartbeat - updates updated_at and refreshes session context
+     */
+    async sessionHeartbeat(sessionId) {
+        if (!sessionId) return false;
+        try {
+            // Update session's updated_at
+            const { error } = await window.supabaseClient
+                .from('user_sessions')
+                .update({ updated_at: new Date().toISOString() })
+                .eq('id', sessionId);
+            if (error) {
+                console.error('Error in session heartbeat:', error);
+                return false;
+            }
+            // Also refresh session context for audit triggers
+            await this.setSessionContext(sessionId);
+            return true;
+        } catch (error) {
+            console.error('Error in sessionHeartbeat:', error);
+            return false;
+        }
+    },
+
+    /**
      * Get user sessions with action counts (enhanced version of existing sessions query)
      */
     async getUserSessions(userEmail, limit = 10) {

@@ -2587,6 +2587,84 @@
             }
         }
 
+        // ============================================
+        // SESSION HEARTBEAT & CONTEXT
+        // ============================================
+        (function initSessionTracking() {
+            const sessionId = sessionStorage.getItem('currentSessionId');
+            if (!sessionId) return;
+
+            let heartbeatInterval = null;
+            const HEARTBEAT_MS = 5 * 60 * 1000; // 5 minutes
+
+            // Set session context immediately for audit trail linking
+            async function refreshSessionContext() {
+                if (window.supabaseData && window.supabaseData.setSessionContext) {
+                    await window.supabaseData.setSessionContext(sessionId);
+                }
+            }
+
+            async function sendHeartbeat() {
+                if (window.supabaseData && window.supabaseData.sessionHeartbeat) {
+                    await window.supabaseData.sessionHeartbeat(sessionId);
+                }
+            }
+
+            function startHeartbeat() {
+                if (heartbeatInterval) return;
+                heartbeatInterval = setInterval(sendHeartbeat, HEARTBEAT_MS);
+            }
+
+            function stopHeartbeat() {
+                if (heartbeatInterval) {
+                    clearInterval(heartbeatInterval);
+                    heartbeatInterval = null;
+                }
+            }
+
+            // Set context on load
+            refreshSessionContext();
+
+            // Start heartbeat
+            startHeartbeat();
+
+            // Pause/resume on visibility change
+            document.addEventListener('visibilitychange', () => {
+                if (document.hidden) {
+                    stopHeartbeat();
+                } else {
+                    refreshSessionContext();
+                    sendHeartbeat();
+                    startHeartbeat();
+                }
+            });
+
+            // Try to log logout on tab close
+            window.addEventListener('beforeunload', () => {
+                const sid = sessionStorage.getItem('currentSessionId');
+                if (sid && window.supabaseData && window.supabaseData.logLogout) {
+                    // Use sendBeacon with fetch keepalive as fallback
+                    try {
+                        const supabaseUrl = window.supabaseClient?.supabaseUrl || 'https://papgcizhfkngubwofjuo.supabase.co';
+                        const supabaseKey = window.supabaseClient?.supabaseKey || '';
+                        // Fire-and-forget RPC call via fetch keepalive
+                        fetch(`${supabaseUrl}/rest/v1/rpc/log_user_logout`, {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/json',
+                                'apikey': supabaseKey,
+                                'Authorization': `Bearer ${supabaseKey}`
+                            },
+                            body: JSON.stringify({ p_session_id: sid }),
+                            keepalive: true
+                        }).catch(() => {});
+                    } catch (e) {
+                        // Best effort - stale session cleanup will catch it
+                    }
+                }
+            });
+        })();
+
         // Load CRUD modals
         fetch('crud-modals.html')
             .then(response => response.text())
