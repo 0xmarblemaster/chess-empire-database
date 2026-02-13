@@ -9046,7 +9046,7 @@ async function loadUserActivityStats() {
             stats.forEach(stat => {
                 const row = document.createElement('tr');
                 row.innerHTML = `
-                    <td>${new Date(stat.date).toLocaleDateString()}</td>
+                    <td>${new Date(stat.activity_date).toLocaleDateString()}</td>
                     <td><span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">${stat.session_count}</span></td>
                     <td><span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">${stat.crud_create_count}</span></td>
                     <td><span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-yellow-100 text-yellow-800">${stat.crud_update_count}</span></td>
