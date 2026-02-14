@@ -9636,7 +9636,11 @@ function onCaDateFilterChange() {
 function getCaDateRange() {
     const val = document.getElementById('caDateFilter').value;
     const now = new Date();
-    if (val === '7d') {
+    if (val === '1d') {
+        const from = new Date(now);
+        from.setDate(from.getDate() - 1);
+        return { from: from.toISOString(), to: now.toISOString() };
+    } else if (val === '7d') {
         const from = new Date(now);
         from.setDate(from.getDate() - 7);
         return { from: from.toISOString(), to: now.toISOString() };
