@@ -105,7 +105,8 @@ function updateMenuVisibility() {
         const userEmail = sessionStorage.getItem('userEmail');
         const analyticsAllowedEmails = [
             '0xmarblemaster@gmail.com',
-            'dysonsphere01@proton.me'
+            'dysonsphere01@proton.me',
+            'nurgalimov.chingis@gmail.com'
         ];
 
         if (analyticsAllowedEmails.includes(userEmail)) {
