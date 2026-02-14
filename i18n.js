@@ -847,6 +847,15 @@ const translations = {
         "admin.survival.addScore": "Add Score",
         "admin.survival.bestScore": "Best Score",
 
+        // Status Labels
+        "admin.statuses.new": "New Student",
+        "admin.statuses.active": "Active",
+        "admin.statuses.frozen": "Frozen",
+        "admin.statuses.trial": "Trial",
+        "admin.statuses.left": "Left",
+        "admin.statuses.graduated": "Graduated",
+        "admin.statuses.inactive": "Inactive",
+
         // Coach Edit Controls
         "coach.clickToToggle": "Click on a bot to toggle defeated status",
         "coach.addScore": "Add New Score",
@@ -1645,6 +1654,15 @@ const translations = {
         "admin.survival.title": "Survival ұпайлары",
         "admin.survival.addScore": "Ұпай қосу",
         "admin.survival.bestScore": "Ең жақсы ұпай",
+
+        // Status Labels
+        "admin.statuses.new": "Жаңа оқушы",
+        "admin.statuses.active": "Белсенді",
+        "admin.statuses.frozen": "Тоқтатылған",
+        "admin.statuses.trial": "Сынақ",
+        "admin.statuses.left": "Кеткен",
+        "admin.statuses.graduated": "Бітірген",
+        "admin.statuses.inactive": "Белсенді емес",
 
         // Coach Edit Controls
         "coach.clickToToggle": "Жеңілген күйін ауыстыру үшін ботқа басыңыз",
@@ -2488,6 +2506,15 @@ const translations = {
         "admin.survival.title": "Survival результаты",
         "admin.survival.addScore": "Добавить результат",
         "admin.survival.bestScore": "Лучший результат",
+
+        // Status Labels
+        "admin.statuses.new": "Новый ученик",
+        "admin.statuses.active": "Активный",
+        "admin.statuses.frozen": "Заморожен",
+        "admin.statuses.trial": "Пробный",
+        "admin.statuses.left": "Ушёл",
+        "admin.statuses.graduated": "Выпустился",
+        "admin.statuses.inactive": "Неактивный",
 
         // Coach Edit Controls
         "coach.clickToToggle": "Нажмите на бота, чтобы изменить статус победы",

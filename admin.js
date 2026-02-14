@@ -8424,7 +8424,7 @@ async function loadStatusHistory() {
         } else {
             tbody.innerHTML = entries.map(entry => {
                 const timestamp = new Date(entry.changedAt).toLocaleString();
-                const oldStatusBadge = entry.oldStatus ? getStatusBadge(entry.oldStatus) : '<span style="display: inline-flex; align-items: center; padding: 0.25rem 0.75rem; border-radius: 9999px; font-size: 0.75rem; font-weight: 500; background: #d1fae5; color: #065f46;">✨ New</span>';
+                const oldStatusBadge = entry.oldStatus ? getStatusBadge(entry.oldStatus) : getStatusBadge('new');
                 const newStatusBadge = getStatusBadge(entry.newStatus);
 
                 return `
@@ -8461,15 +8461,18 @@ async function loadStatusHistory() {
  * Get badge HTML for status
  */
 function getStatusBadge(status) {
-    const badges = {
-        'active': '<span style="display: inline-flex; align-items: center; padding: 0.25rem 0.75rem; border-radius: 9999px; font-size: 0.75rem; font-weight: 500; background: #dcfce7; color: #15803d;">Active</span>',
-        'frozen': '<span style="display: inline-flex; align-items: center; padding: 0.25rem 0.75rem; border-radius: 9999px; font-size: 0.75rem; font-weight: 500; background: #dbeafe; color: #1e40af;">Frozen</span>',
-        'trial': '<span style="display: inline-flex; align-items: center; padding: 0.25rem 0.75rem; border-radius: 9999px; font-size: 0.75rem; font-weight: 500; background: #fef3c7; color: #92400e;">Trial</span>',
-        'left': '<span style="display: inline-flex; align-items: center; padding: 0.25rem 0.75rem; border-radius: 9999px; font-size: 0.75rem; font-weight: 500; background: #fee2e2; color: #991b1b;">Left</span>',
-        'graduated': '<span style="display: inline-flex; align-items: center; padding: 0.25rem 0.75rem; border-radius: 9999px; font-size: 0.75rem; font-weight: 500; background: #f3e8ff; color: #6b21a8;">Graduated</span>',
-        'inactive': '<span style="display: inline-flex; align-items: center; padding: 0.25rem 0.75rem; border-radius: 9999px; font-size: 0.75rem; font-weight: 500; background: #f1f5f9; color: #475569;">Inactive</span>'
+    const styles = {
+        'active': 'background: #dcfce7; color: #15803d;',
+        'frozen': 'background: #dbeafe; color: #1e40af;',
+        'trial': 'background: #fef3c7; color: #92400e;',
+        'left': 'background: #fee2e2; color: #991b1b;',
+        'graduated': 'background: #f3e8ff; color: #6b21a8;',
+        'inactive': 'background: #f1f5f9; color: #475569;',
+        'new': 'background: #e0f2fe; color: #0369a1;'
     };
-    return badges[status] || status;
+    const style = styles[status] || '';
+    const label = i18n.t(`admin.statuses.${status}`) || status;
+    return `<span style="display: inline-flex; align-items: center; padding: 0.25rem 0.75rem; border-radius: 9999px; font-size: 0.75rem; font-weight: 500; ${style}">${label}</span>`;
 }
 
 /**
