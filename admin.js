@@ -2959,11 +2959,17 @@ function toggleMobileLanguageMenu(event) {
         menu.classList.toggle('open');
 
         // Update active state based on current language
-        const currentLang = localStorage.getItem('language') || 'en';
+        const currentLang = localStorage.getItem('ce_language') || localStorage.getItem('chess-empire-language') || localStorage.getItem('language') || 'en';
         menu.querySelectorAll('.language-option').forEach(btn => {
             btn.classList.remove('active');
-            if ((currentLang === 'en' && btn.textContent.includes('English')) ||
-                (currentLang === 'ru' && btn.textContent.includes('Русский'))) {
+            const lang = btn.getAttribute('data-lang') || btn.getAttribute('onclick')?.match(/'(\w+)'/)?.[1] || '';
+            if (lang === currentLang) {
+                btn.classList.add('active');
+            } else if ((!lang) && (
+                (currentLang === 'en' && btn.textContent.includes('English')) ||
+                (currentLang === 'ru' && btn.textContent.includes('Русский')) ||
+                (currentLang === 'kk' && btn.textContent.includes('Қазақ'))
+            )) {
                 btn.classList.add('active');
             }
         });
