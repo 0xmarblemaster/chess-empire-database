@@ -109,13 +109,11 @@ function updateMenuVisibility() {
         ];
 
         if (analyticsAllowedEmails.includes(userEmail)) {
-            const menuActivityLog = document.getElementById('menuActivityLog');
             const menuStatusHistory = document.getElementById('menuStatusHistory');
             const menuSessions = document.getElementById('menuSessions');
             const menuUserActivity = document.getElementById('menuUserActivity');
             const menuCoachActivity = document.getElementById('menuCoachActivity');
             const analyticsSectionTitle = document.getElementById('analyticsSectionTitle');
-            if (menuActivityLog) menuActivityLog.style.display = 'flex';
             if (menuStatusHistory) menuStatusHistory.style.display = 'flex';
             if (menuSessions) menuSessions.style.display = 'flex';
             if (menuUserActivity) menuUserActivity.style.display = 'flex';
@@ -751,10 +749,6 @@ function showSection(section) {
     } else if (section === 'attendance') {
         // Show attendance management
         showAttendanceManagement();
-    } else if (section === 'activityLog') {
-        // Show activity log
-        switchToSection('activityLog');
-        loadActivityLog();
     } else if (section === 'statusHistory') {
         // Show status history
         switchToSection('statusHistory');
@@ -1041,7 +1035,7 @@ function refreshCoachesListView() {
 
 // Update mobile bottom navigation active state
 function updateMobileBottomNav(activeSection) {
-    const moreSubSections = ['userActivity', 'activityLog', 'statusHistory', 'sessions', 'ratings', 'coachActivity', 'moreMenu'];
+    const moreSubSections = ['userActivity', 'statusHistory', 'sessions', 'ratings', 'coachActivity', 'moreMenu'];
     const effectiveSection = moreSubSections.includes(activeSection) ? 'settings' : activeSection;
     
     const mobileNavItems = document.querySelectorAll('.mobile-nav-item');
@@ -2872,7 +2866,6 @@ const mobileSectionTitles = {
     attendance: 'admin.header.attendance',
     settings: 'admin.header.settings',
     userActivity: 'admin.userActivity.title',
-    activityLog: 'admin.activityLog.title',
     statusHistory: 'admin.statusHistory.title',
     sessions: 'admin.sessions.title',
     ratings: 'admin.ratings.title',
@@ -2917,7 +2910,7 @@ function showMobileSection(section, event) {
     showSection(section);
 
     // For sub-sections of More, keep More tab highlighted
-    const moreSubSections = ['userActivity', 'activityLog', 'statusHistory', 'sessions', 'ratings', 'coachActivity', 'moreMenu', 'settings'];
+    const moreSubSections = ['userActivity', 'statusHistory', 'sessions', 'ratings', 'coachActivity', 'moreMenu', 'settings'];
     if (moreSubSections.includes(section)) {
         const moreBtn = document.querySelector('.mobile-nav-item[data-section="settings"]');
         if (moreBtn) {
@@ -8352,283 +8345,6 @@ document.addEventListener('DOMContentLoaded', () => {
 // ===================================
 
 // Activity log state
-let activityLogCurrentPage = 0;
-let activityLogPageSize = 50;
-let activityLogTotalEntries = 0;
-let activityLogFilters = {};
-
-/**
- * Show Activity Log section
- */
-function showActivityLog() {
-    showSection('activityLog');
-    loadActivityLog();
-}
-
-/**
- * Load activity log entries with current filters and pagination
- */
-async function loadActivityLog() {
-    try {
-        const tbody = document.getElementById('activityLogTableBody');
-        if (!tbody) return;
-
-        // Show loading state
-        tbody.innerHTML = `
-            <tr>
-                <td colspan="6" style="text-align: center; padding: 2rem; color: #94a3b8;">
-                    <i data-lucide="loader" style="width: 24px; height: 24px; margin: 0 auto; animation: spin 1s linear infinite;"></i>
-                    <p style="margin-top: 0.5rem;">${i18n.t('common.loading')}</p>
-                </td>
-            </tr>
-        `;
-
-        // Build filters from UI
-        const entityFilter = document.getElementById('activityLogEntityFilter')?.value || '';
-        const actionFilter = document.getElementById('activityLogActionFilter')?.value || '';
-        const userFilter = document.getElementById('activityLogUserFilter')?.value || '';
-        const dateFilter = document.getElementById('activityLogDateFilter')?.value || '24h';
-
-        const filters = {
-            limit: activityLogPageSize,
-            offset: activityLogCurrentPage * activityLogPageSize
-        };
-
-        if (entityFilter) filters.entityType = entityFilter;
-        if (actionFilter) filters.action = actionFilter;
-        if (userFilter) filters.changedByEmail = userFilter;
-
-        // Calculate date range
-        const now = new Date();
-        if (dateFilter === '24h') {
-            filters.fromDate = new Date(now - 24 * 60 * 60 * 1000).toISOString();
-        } else if (dateFilter === '7d') {
-            filters.fromDate = new Date(now - 7 * 24 * 60 * 60 * 1000).toISOString();
-        } else if (dateFilter === '30d') {
-            filters.fromDate = new Date(now - 30 * 24 * 60 * 60 * 1000).toISOString();
-        } else if (dateFilter === 'custom') {
-            const fromInput = document.getElementById('activityLogFromDate');
-            const toInput = document.getElementById('activityLogToDate');
-            if (fromInput?.value && toInput?.value) {
-                filters.fromDate = new Date(fromInput.value).toISOString();
-                filters.toDate = new Date(toInput.value + 'T23:59:59').toISOString();
-            } else {
-                filters.fromDate = new Date(now - 30 * 24 * 60 * 60 * 1000).toISOString();
-            }
-        }
-
-        activityLogFilters = filters;
-
-        // Fetch audit log
-        const result = await window.supabaseData.getAuditLog(filters);
-        const entries = result.entries || [];
-        activityLogTotalEntries = result.total || 0;
-
-        // Render table
-        if (entries.length === 0) {
-            tbody.innerHTML = `
-                <tr>
-                    <td colspan="6" style="text-align: center; padding: 2rem; color: #94a3b8;">
-                        <i data-lucide="inbox" style="width: 48px; height: 48px; margin: 0 auto 1rem;"></i>
-                        <p>${i18n.t('admin.activityLog.noEntries')}</p>
-                    </td>
-                </tr>
-            `;
-            lucide.createIcons();
-        } else {
-            tbody.innerHTML = entries.map(entry => {
-                const timestamp = new Date(entry.changedAt).toLocaleString();
-                const actionBadge = getActionBadge(entry.action);
-                const entityBadge = getEntityTypeBadge(entry.entityType);
-                const changes = formatChanges(entry);
-
-                return `
-                    <tr>
-                        <td style="white-space: nowrap;">${timestamp}</td>
-                        <td>${entry.changedByEmail || 'system@chessempire.kz'}</td>
-                        <td>${entityBadge}</td>
-                        <td>${actionBadge}</td>
-                        <td>${entry.fieldName || '—'}</td>
-                        <td style="max-width: 300px; overflow: hidden; text-overflow: ellipsis;">${changes}</td>
-                    </tr>
-                `;
-            }).join('');
-        }
-
-        // Update pagination
-        updateActivityLogPagination();
-
-        // Reinitialize icons
-        lucide.createIcons();
-    } catch (error) {
-        console.error('Error loading activity log:', error);
-        const tbody = document.getElementById('activityLogTableBody');
-        if (tbody) {
-            tbody.innerHTML = `
-                <tr>
-                    <td colspan="6" style="text-align: center; padding: 2rem; color: #dc2626;">
-                        <i data-lucide="alert-circle" style="width: 48px; height: 48px; margin: 0 auto 1rem;"></i>
-                        <p>${i18n.t('common.error')}: ${error.message}</p>
-                    </td>
-                </tr>
-            `;
-            lucide.createIcons();
-        }
-    }
-}
-
-/**
- * Get badge HTML for action type
- */
-function getActionBadge(action) {
-    const badges = {
-        'CREATE': '<span style="display: inline-flex; align-items: center; padding: 0.25rem 0.75rem; border-radius: 9999px; font-size: 0.75rem; font-weight: 500; background: #dcfce7; color: #15803d;">CREATE</span>',
-        'UPDATE': '<span style="display: inline-flex; align-items: center; padding: 0.25rem 0.75rem; border-radius: 9999px; font-size: 0.75rem; font-weight: 500; background: #dbeafe; color: #1e40af;">UPDATE</span>',
-        'DELETE': '<span style="display: inline-flex; align-items: center; padding: 0.25rem 0.75rem; border-radius: 9999px; font-size: 0.75rem; font-weight: 500; background: #fee2e2; color: #991b1b;">DELETE</span>'
-    };
-    return badges[action] || action;
-}
-
-/**
- * Get badge HTML for entity type
- */
-function getEntityTypeBadge(entityType) {
-    const badges = {
-        'students': '<span style="display: inline-flex; align-items: center; padding: 0.25rem 0.75rem; border-radius: 9999px; font-size: 0.75rem; font-weight: 500; background: #f3e8ff; color: #6b21a8;">Students</span>',
-        'coaches': '<span style="display: inline-flex; align-items: center; padding: 0.25rem 0.75rem; border-radius: 9999px; font-size: 0.75rem; font-weight: 500; background: #fef3c7; color: #92400e;">Coaches</span>',
-        'branches': '<span style="display: inline-flex; align-items: center; padding: 0.25rem 0.75rem; border-radius: 9999px; font-size: 0.75rem; font-weight: 500; background: #e0e7ff; color: #3730a3;">Branches</span>'
-    };
-    return badges[entityType] || entityType;
-}
-
-/**
- * Format changes for display
- */
-function formatChanges(entry) {
-    if (entry.action === 'CREATE') {
-        return '<span style="color: #15803d;">Record created</span>';
-    } else if (entry.action === 'DELETE') {
-        return '<span style="color: #991b1b;">Record deleted</span>';
-    } else if (entry.action === 'UPDATE' && entry.fieldName) {
-        const oldVal = entry.oldValue || '(empty)';
-        const newVal = entry.newValue || '(empty)';
-        return `<span style="color: #64748b;">${oldVal}</span> → <span style="color: #0f172a; font-weight: 500;">${newVal}</span>`;
-    }
-    return '—';
-}
-
-/**
- * Update pagination controls
- */
-function updateActivityLogPagination() {
-    const totalPages = Math.ceil(activityLogTotalEntries / activityLogPageSize);
-    const currentPageNum = activityLogCurrentPage + 1;
-
-    const prevBtn = document.getElementById('activityLogPrevBtn');
-    const nextBtn = document.getElementById('activityLogNextBtn');
-    const pageInfo = document.getElementById('activityLogPageInfo');
-
-    if (prevBtn) prevBtn.disabled = activityLogCurrentPage === 0;
-    if (nextBtn) nextBtn.disabled = currentPageNum >= totalPages;
-    if (pageInfo) pageInfo.textContent = `Page ${currentPageNum} of ${totalPages || 1} (${activityLogTotalEntries} total)`;
-}
-
-/**
- * Go to previous page
- */
-function previousActivityLogPage() {
-    if (activityLogCurrentPage > 0) {
-        activityLogCurrentPage--;
-        loadActivityLog();
-    }
-}
-
-/**
- * Go to next page
- */
-function nextActivityLogPage() {
-    const totalPages = Math.ceil(activityLogTotalEntries / activityLogPageSize);
-    if (activityLogCurrentPage < totalPages - 1) {
-        activityLogCurrentPage++;
-        loadActivityLog();
-    }
-}
-
-/**
- * Refresh activity log
- */
-function refreshActivityLog() {
-    activityLogCurrentPage = 0;
-    loadActivityLog();
-}
-
-/**
- * Filter activity log
- */
-function filterActivityLog() {
-    activityLogCurrentPage = 0;
-    loadActivityLog();
-}
-
-/**
- * Toggle custom date picker for Activity Log
- */
-function toggleActivityLogCustomDates() {
-    const select = document.getElementById('activityLogDateFilter');
-    const picker = document.getElementById('activityLogCustomDates');
-    if (!select || !picker) return;
-    if (select.value === 'custom') {
-        picker.style.display = 'block';
-        const today = new Date().toISOString().split('T')[0];
-        const monthAgo = new Date(); monthAgo.setMonth(monthAgo.getMonth() - 1);
-        document.getElementById('activityLogFromDate').value = document.getElementById('activityLogFromDate').value || monthAgo.toISOString().split('T')[0];
-        document.getElementById('activityLogToDate').value = document.getElementById('activityLogToDate').value || today;
-        if (lucide && lucide.createIcons) lucide.createIcons();
-    } else {
-        picker.style.display = 'none';
-        filterActivityLog();
-    }
-}
-
-/**
- * Apply custom dates for Activity Log
- */
-function applyActivityLogCustomDates() {
-    filterActivityLog();
-}
-
-/**
- * Export activity log to CSV
- */
-async function exportActivityLogCSV() {
-    try {
-        showToast(i18n.t('admin.activityLog.exporting'), 'info');
-
-        const csv = await window.supabaseData.exportAuditLogCSV(activityLogFilters);
-
-        if (!csv) {
-            showToast(i18n.t('admin.activityLog.exportError'), 'error');
-            return;
-        }
-
-        // Create download link
-        const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
-        const url = URL.createObjectURL(blob);
-        const link = document.createElement('a');
-        link.href = url;
-        link.download = `activity_log_${new Date().toISOString().split('T')[0]}.csv`;
-        link.click();
-        URL.revokeObjectURL(url);
-
-        showToast(i18n.t('admin.activityLog.exported'), 'success');
-    } catch (error) {
-        console.error('Error exporting activity log:', error);
-        showToast(i18n.t('common.error') + ': ' + error.message, 'error');
-    }
-}
-
-// ===================================
-// STATUS HISTORY FUNCTIONS
 // ===================================
 
 /**
@@ -9589,34 +9305,40 @@ function showCoachActivity() {
 
 async function initCoachActivity() {
     if (!caInitialized) {
-        await loadCaCoaches();
+        await loadCaUsers();
         caInitialized = true;
     }
     loadCoachActivity();
 }
 
-async function loadCaCoaches() {
+async function loadCaUsers() {
     try {
+        // Fetch all unique changed_by_email values from audit_log
         const { data, error } = await window.supabaseClient
-            .from('coaches')
-            .select('id, first_name, last_name, email')
-            .order('first_name');
+            .from('audit_log')
+            .select('changed_by_email');
         if (!error && data) {
-            caCoaches = data;
+            const uniqueEmails = [...new Set(data.map(r => r.changed_by_email).filter(Boolean))].sort();
+            // Also load coaches for name resolution
+            const { data: coachData } = await window.supabaseClient
+                .from('coaches')
+                .select('id, first_name, last_name, email');
+            caCoaches = coachData || [];
+
             const sel = document.getElementById('caCoachFilter');
             if (sel) {
-                // Keep "All" option
                 sel.innerHTML = '<option value="all">' + (window.t ? window.t('common.all') : 'All') + '</option>';
-                data.forEach(c => {
+                uniqueEmails.forEach(email => {
                     const opt = document.createElement('option');
-                    opt.value = c.email || c.id;
-                    opt.textContent = `${c.first_name} ${c.last_name}`;
+                    opt.value = email;
+                    const coach = caCoaches.find(c => c.email === email);
+                    opt.textContent = coach ? `${coach.first_name} ${coach.last_name}` : email;
                     sel.appendChild(opt);
                 });
             }
         }
     } catch (e) {
-        console.error('Error loading coaches for activity:', e);
+        console.error('Error loading users for activity:', e);
     }
 }
 
@@ -9680,18 +9402,26 @@ async function fetchCoachActivityPage() {
         const dateRange = getCaDateRange();
         const coachFilter = document.getElementById('caCoachFilter').value;
 
-        // Build query - filter to only coach emails (non-admin)
+        // Build query - show all users (unified activity log)
         let query = window.supabaseClient
             .from('audit_log')
             .select('*', { count: 'exact' });
 
-        // Filter by coach emails only (exclude admin)
-        const coachEmails = caCoaches.map(c => c.email).filter(Boolean);
-        
+        // User filter
         if (coachFilter !== 'all') {
             query = query.eq('changed_by_email', coachFilter);
-        } else if (coachEmails.length > 0) {
-            query = query.in('changed_by_email', coachEmails);
+        }
+
+        // Entity type filter
+        const entityFilter = document.getElementById('caEntityFilter')?.value || 'all';
+        if (entityFilter !== 'all') {
+            query = query.eq('entity_type', entityFilter);
+        }
+
+        // Action type filter
+        const actionFilter = document.getElementById('caActionFilter')?.value || 'all';
+        if (actionFilter !== 'all') {
+            query = query.eq('action', actionFilter);
         }
 
         if (dateRange.from) query = query.gte('changed_at', dateRange.from);
