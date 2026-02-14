@@ -728,7 +728,7 @@ const translations = {
         "admin.activityLog.exportError": "Error exporting activity log",
 
         // Admin Status History
-        "admin.statusHistory.title": "Status History",
+        "admin.statusHistory.title": "Student Status History",
         "admin.statusHistory.oldStatus": "Old Status",
         "admin.statusHistory.newStatus": "New Status",
         "admin.statusHistory.dateRange": "Date Range",
@@ -767,7 +767,7 @@ const translations = {
         "admin.sessions.browser": "Browser",
         "admin.sessions.os": "OS",
         "admin.sessions.noSessions": "No sessions found",
-        "admin.coachActivity.title": "Activity Log",
+        "admin.coachActivity.title": "Coach Activity Log",
         "admin.coachActivity.user": "User",
         "admin.coachActivity.entityType": "Entity Type",
         "admin.coachActivity.actionType": "Action Type",
@@ -1525,7 +1525,7 @@ const translations = {
         "admin.activityLog.exportError": "Белсенділік журналын экспорттау қатесі",
 
         // Admin Status History
-        "admin.statusHistory.title": "Күй тарихы",
+        "admin.statusHistory.title": "Оқушылар күйінің тарихы",
         "admin.statusHistory.oldStatus": "Ескі күй",
         "admin.statusHistory.newStatus": "Жаңа күй",
         "admin.statusHistory.dateRange": "Кезең",
@@ -1564,7 +1564,7 @@ const translations = {
         "admin.sessions.browser": "Браузер",
         "admin.sessions.os": "ОЖ",
         "admin.sessions.noSessions": "Сеанстар табылмады",
-        "admin.coachActivity.title": "Белсенділік журналы",
+        "admin.coachActivity.title": "Жаттықтырушылар белсенділігі",
         "admin.coachActivity.user": "Пайдаланушы",
         "admin.coachActivity.entityType": "Нысан түрі",
         "admin.coachActivity.actionType": "Әрекет түрі",
@@ -2366,7 +2366,7 @@ const translations = {
         "admin.activityLog.exportError": "Ошибка экспорта журнала активности",
 
         // Admin Status History
-        "admin.statusHistory.title": "История статусов",
+        "admin.statusHistory.title": "История статусов учеников",
         "admin.statusHistory.oldStatus": "Старый статус",
         "admin.statusHistory.newStatus": "Новый статус",
         "admin.statusHistory.dateRange": "Период",
@@ -2405,7 +2405,7 @@ const translations = {
         "admin.sessions.browser": "Браузер",
         "admin.sessions.os": "ОС",
         "admin.sessions.noSessions": "Сеансы не найдены",
-        "admin.coachActivity.title": "Журнал активности",
+        "admin.coachActivity.title": "Журнал активности тренеров",
         "admin.coachActivity.user": "Пользователь",
         "admin.coachActivity.entityType": "Тип объекта",
         "admin.coachActivity.actionType": "Тип действия",
