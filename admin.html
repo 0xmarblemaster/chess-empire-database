@@ -987,8 +987,8 @@
                 </div>
 
                 <!-- Filters -->
-                <div class="stats-grid" style="margin-bottom: 1.5rem;">
-                    <div class="stat-card">
+                <div class="stats-grid" style="margin-bottom: 1.5rem; grid-template-columns: 1fr 1fr 1fr;">
+                    <div class="stat-card" style="min-width: 0;">
                         <label class="form-label" style="margin-bottom: 0.5rem;" data-i18n="admin.statusHistory.oldStatus">Old Status</label>
                         <select id="statusHistoryOldStatusFilter" class="form-input" onchange="filterStatusHistory()">
                             <option value="" data-i18n="common.all">All</option>
@@ -1002,7 +1002,7 @@
                         </select>
                     </div>
 
-                    <div class="stat-card">
+                    <div class="stat-card" style="min-width: 0;">
                         <label class="form-label" style="margin-bottom: 0.5rem;" data-i18n="admin.statusHistory.newStatus">New Status</label>
                         <select id="statusHistoryNewStatusFilter" class="form-input" onchange="filterStatusHistory()">
                             <option value="" data-i18n="common.all">All</option>
@@ -1015,7 +1015,7 @@
                         </select>
                     </div>
 
-                    <div class="stat-card">
+                    <div class="stat-card" style="min-width: 0;">
                         <label class="form-label" style="margin-bottom: 0.5rem;" data-i18n="admin.statusHistory.dateRange">Date Range</label>
                         <select id="statusHistoryDateFilter" class="form-input" onchange="toggleStatusHistoryCustomDates()">
                             <option value="7d" data-i18n="admin.statusHistory.last7days">Last 7 Days</option>

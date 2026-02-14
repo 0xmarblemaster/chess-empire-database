@@ -5040,3 +5040,22 @@ tr[data-student-id] {
         text-overflow: ellipsis;
     }
 }
+
+/* Status History filters - responsive */
+#statusHistorySection .stats-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr;
+    gap: 1rem;
+}
+#statusHistorySection .stats-grid .form-input {
+    width: 100%;
+    text-overflow: ellipsis;
+}
+@media (max-width: 640px) {
+    #statusHistorySection .stats-grid {
+        grid-template-columns: 1fr 1fr;
+    }
+    #statusHistorySection .stats-grid .stat-card:last-child {
+        grid-column: 1 / -1;
+    }
+}
