@@ -141,7 +141,9 @@
                 </div>
                 <div class="nav-item" id="menuUserActivity" onclick="showUserActivity()" style="display: none;">
                     <i data-lucide="activity" style="width: 20px; height: 20px;"></i>
-                    <span data-i18n="admin.userActivity.title">User Activity</span>                <div class="nav-item" id="menuCoachActivity" onclick="showCoachActivity()" style="display: none;">
+                    <span data-i18n="admin.userActivity.title">User Activity</span>
+                </div>
+                <div class="nav-item" id="menuCoachActivity" onclick="showCoachActivity()" style="display: none;">
                     <i data-lucide="activity" style="width: 20px; height: 20px;"></i>
                     <span data-i18n="admin.coachActivity.title">Coach Activity</span>
                 </div>
@@ -1303,7 +1305,14 @@
                 <div class="header">
                     <h1 class="header-title" data-i18n="admin.userActivity.title">User Activity</h1>
                     <div class="header-actions">
-                        <button class="btn btn-secondary" onclick="refreshUserActivity()">            <!-- Coach Activity Section (admin only) -->
+                        <button class="btn btn-secondary" onclick="refreshUserActivity()">
+                            <i data-lucide="refresh-cw" style="width: 18px; height: 18px; margin-right: 0.5rem;"></i>
+                            <span data-i18n="common.refresh">Refresh</span>
+                        </button>
+                    </div>
+                </div>
+
+            <!-- Coach Activity Section (admin only) -->
             <div id="coachActivitySection" class="content-section">
                 <!-- Header -->
                 <div class="header">
@@ -1409,7 +1418,11 @@
                             <button class="btn btn-sm btn-primary date-apply-btn" onclick="applyCustomDateRange()">
                                 <i data-lucide="check" style="width:16px;height:16px;"></i>
                                 <span data-i18n="admin.userActivity.apply">Apply</span>
-                            </button>                <!-- Summary Cards -->
+                            </button>
+                        </div>
+                    </div>
+
+                <!-- Summary Cards -->
                 <div class="stats-grid" style="margin-bottom: 1.5rem;">
                     <div class="stat-card">
                         <div class="stat-header">
@@ -1526,6 +1539,9 @@
                 </div>
             </div>
             <!-- End User Activity Section -->
+
+            </div>
+            <!-- End Coach Activity Section -->
 
             <!-- More Menu Section -->
             <div id="moreMenuSection" class="content-section">
@@ -1656,8 +1672,6 @@
                         <span id="caResultInfo" style="color:#64748b;font-size:0.875rem;margin-left:1rem;"></span>
                     </div>
                 </div>
-            </div>
-            <!-- End Coach Activity Section -->
 
         </main>
 
