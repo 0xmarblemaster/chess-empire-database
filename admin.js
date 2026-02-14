@@ -8471,8 +8471,9 @@ function getStatusBadge(status) {
         'new': 'background: #e0f2fe; color: #0369a1;'
     };
     const style = styles[status] || '';
-    const label = i18n.t(`admin.statuses.${status}`) || status;
-    return `<span style="display: inline-flex; align-items: center; padding: 0.25rem 0.75rem; border-radius: 9999px; font-size: 0.75rem; font-weight: 500; ${style}">${label}</span>`;
+    const label = (i18n && i18n.translateStatus) ? i18n.translateStatus(status, 'badge') : status;
+    const icon = status === 'new' ? '✨ ' : '';
+    return `<span style="display: inline-flex; align-items: center; padding: 0.25rem 0.75rem; border-radius: 9999px; font-size: 0.75rem; font-weight: 500; ${style}">${icon}${label}</span>`;
 }
 
 /**

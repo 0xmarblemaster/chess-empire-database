@@ -3205,24 +3205,40 @@ window.translateStatus = translateStatus;
     };
 
     const statusTranslations = {
+        'new': {
+            filter: { en: 'New Student', ru: 'Новые', kk: 'Жаңа оқушылар' },
+            badge: { en: 'New Student', ru: 'Новый', kk: 'Жаңа' },
+            option: { en: 'New Student', ru: 'Новый ученик', kk: 'Жаңа оқушы' }
+        },
         active: {
-            filter: { en: 'Active', ru: 'Активные' },
-            badge: { en: 'Active', ru: 'Активен' },
-            option: { en: 'Active', ru: 'Активен' }
+            filter: { en: 'Active', ru: 'Активные', kk: 'Белсенді' },
+            badge: { en: 'Active', ru: 'Активен', kk: 'Белсенді' },
+            option: { en: 'Active', ru: 'Активен', kk: 'Белсенді' }
         },
         frozen: {
-            filter: { en: 'Frozen', ru: 'Замороженные' },
-            badge: { en: 'Frozen', ru: 'Заморожен' },
-            option: { en: 'Frozen', ru: 'Заморожен' }
+            filter: { en: 'Frozen', ru: 'Замороженные', kk: 'Тоқтатылған' },
+            badge: { en: 'Frozen', ru: 'Заморожен', kk: 'Тоқтатылған' },
+            option: { en: 'Frozen', ru: 'Заморожен', kk: 'Тоқтатылған' }
+        },
+        trial: {
+            filter: { en: 'Trial', ru: 'Пробные', kk: 'Сынақ' },
+            badge: { en: 'Trial', ru: 'Пробный', kk: 'Сынақ' },
+            option: { en: 'Trial', ru: 'Пробный', kk: 'Сынақ' }
         },
         left: {
-            filter: { en: 'Left', ru: 'Покинувшие' },
-            badge: { en: 'Left', ru: 'Ушел' },
-            option: { en: 'Left', ru: 'Ушел' }
+            filter: { en: 'Left', ru: 'Покинувшие', kk: 'Кеткен' },
+            badge: { en: 'Left', ru: 'Ушел', kk: 'Кеткен' },
+            option: { en: 'Left', ru: 'Ушел', kk: 'Кеткен' }
+        },
+        graduated: {
+            filter: { en: 'Graduated', ru: 'Выпустившиеся', kk: 'Бітірген' },
+            badge: { en: 'Graduated', ru: 'Выпустился', kk: 'Бітірген' },
+            option: { en: 'Graduated', ru: 'Выпустился', kk: 'Бітірген' }
         },
         inactive: {
-            option: { en: 'Inactive', ru: 'Неактивен' },
-            badge: { en: 'Inactive', ru: 'Неактивен' }
+            filter: { en: 'Inactive', ru: 'Неактивные', kk: 'Белсенді емес' },
+            badge: { en: 'Inactive', ru: 'Неактивен', kk: 'Белсенді емес' },
+            option: { en: 'Inactive', ru: 'Неактивен', kk: 'Белсенді емес' }
         }
     };
 
