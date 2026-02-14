@@ -1320,228 +1320,87 @@
                 <div class="header">
                     <h1 class="header-title" data-i18n="admin.coachActivity.title">Coach Activity</h1>
                     <div class="header-actions">
-                        <button class="btn btn-secondary" onclick="refreshCoachActivity()">
+                        <button class="btn btn-secondary" onclick="loadCoachActivity()">
                             <i data-lucide="refresh-cw" style="width: 18px; height: 18px; margin-right: 0.5rem;"></i>
                             <span data-i18n="common.refresh">Refresh</span>
                         </button>
                     </div>
                 </div>
 
-                <!-- User Selector -->
-                <div class="mb-6">
-                    <label class="block text-sm font-medium text-gray-700 mb-2" data-i18n="admin.userActivity.selectUser">
-                        Select User
-                    </label>
-                    <select id="userActivityUserSelect" class="w-full p-3 border border-gray-300 rounded-lg bg-white focus:ring-2 focus:ring-red-500 focus:border-red-500">
-                        <option value="" data-i18n="admin.userActivity.selectUserPlaceholder">Select a user...</option>
-                    </select>
-                </div>
-
-                <!-- Summary Cards -->
-                <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8" id="userActivitySummaryCards">
-                    <!-- Last Session Card -->
+                <!-- Filters -->
+                <div class="stats-grid" style="margin-bottom: 1.5rem;">
                     <div class="stat-card">
-                        <div class="stat-card-icon">
-                            <i data-lucide="clock" style="width: 24px; height: 24px; color: #059669;"></i>
-                        </div>
-                        <div class="stat-card-content">
-                            <h3 class="stat-card-title" data-i18n="admin.userActivity.lastSession">Last Session</h3>
-                            <p class="stat-card-value" id="lastSessionDate">-</p>
-                            <p class="stat-card-subtitle" id="lastSessionDuration">-</p>
-                        </div>
+                        <label class="form-label" style="margin-bottom: 0.5rem;" data-i18n="admin.coachActivity.coach">Coach</label>
+                        <select id="caCoachFilter" class="form-input" onchange="loadCoachActivity()">
+                            <option value="all" data-i18n="common.all">All</option>
+                        </select>
                     </div>
 
-                    <!-- Sessions (30d) Card -->
                     <div class="stat-card">
-                        <div class="stat-card-icon">
-                            <i data-lucide="monitor" style="width: 24px; height: 24px; color: #dc2626;"></i>
+                        <label class="form-label" style="margin-bottom: 0.5rem;" data-i18n="admin.coachActivity.period">Period</label>
+                        <select id="caDateFilter" class="form-input" onchange="onCaDateFilterChange()">
+                            <option value="7d" selected data-i18n="admin.activityLog.last7days">Last 7 Days</option>
+                            <option value="30d" data-i18n="admin.activityLog.last30days">Last 30 Days</option>
+                            <option value="custom" data-i18n="common.customRange">Custom Range</option>
+                        </select>
+                        <div id="caCustomDateGroup" style="display: none; margin-top: 0.5rem;">
+                            <label data-i18n="admin.userActivity.from">From</label>
+                            <input type="date" id="caDateFrom" class="date-input">
                         </div>
-                        <div class="stat-card-content">
-                            <h3 class="stat-card-title" data-i18n="admin.userActivity.sessions30d">Sessions (30d)</h3>
-                            <p class="stat-card-value" id="sessions30d">0</p>
-                            <p class="stat-card-subtitle" data-i18n="admin.userActivity.totalSessions">total sessions</p>
-                        </div>
-                    </div>
-
-                    <!-- Actions (30d) Card -->
-                    <div class="stat-card">
-                        <div class="stat-card-icon">
-                            <i data-lucide="activity" style="width: 24px; height: 24px; color: #7c3aed;"></i>
-                        </div>
-                        <div class="stat-card-content">
-                            <h3 class="stat-card-title" data-i18n="admin.userActivity.actions30d">Actions (30d)</h3>
-                            <p class="stat-card-value" id="actions30d">0</p>
-                            <p class="stat-card-subtitle" data-i18n="admin.userActivity.totalActions">total actions</p>
-                        </div>
-                    </div>
-
-                    <!-- Average Duration Card -->
-                    <div class="stat-card">
-                        <div class="stat-card-icon">
-                            <i data-lucide="timer" style="width: 24px; height: 24px; color: #ea580c;"></i>
-                        </div>
-                        <div class="stat-card-content">
-                            <h3 class="stat-card-title" data-i18n="admin.userActivity.avgDuration">Avg Duration</h3>
-                            <p class="stat-card-value" id="avgDuration">0min</p>
-                            <p class="stat-card-subtitle" data-i18n="admin.userActivity.perSession">per session</p>
-                        </div>
-                    </div>
-                </div>
-
-                <!-- Period Filter -->
-                <div class="flex flex-wrap gap-4 mb-6">
-                    <label class="block text-sm font-medium text-gray-700 mb-2" data-i18n="admin.userActivity.timePeriod">
-                        Time Period
-                    </label>
-                    <div class="flex flex-wrap gap-2">
-                        <button class="period-btn active" data-period="day" onclick="setActivityPeriod('day')" data-i18n="admin.userActivity.today">
-                            Today
-                        </button>
-                        <button class="period-btn" data-period="week" onclick="setActivityPeriod('week')" data-i18n="admin.userActivity.week">
-                            Week
-                        </button>
-                        <button class="period-btn" data-period="month" onclick="setActivityPeriod('month')" data-i18n="admin.userActivity.month">
-                            Month
-                        </button>
-                        <button class="period-btn" data-period="custom" onclick="setActivityPeriod('custom')" data-i18n="admin.userActivity.custom">
-                            📅 Custom
-                        </button>
-                    </div>
-                    <div id="customDateRange" class="custom-date-range" style="display: none;">
-                        <div class="date-range-row">
-                            <div class="date-range-field">
-                                <label data-i18n="admin.userActivity.from">From</label>
-                                <input type="date" id="activityFromDate" class="date-input">
-                            </div>
-                            <div class="date-range-field">
-                                <label data-i18n="admin.userActivity.to">To</label>
-                                <input type="date" id="activityToDate" class="date-input">
-                            </div>
-                            <button class="btn btn-sm btn-primary date-apply-btn" onclick="applyCustomDateRange()">
+                        <div id="caCustomDateToGroup" style="display: none; margin-top: 0.5rem;">
+                            <label data-i18n="admin.userActivity.to">To</label>
+                            <input type="date" id="caDateTo" class="date-input">
+                            <button class="btn btn-sm btn-primary" style="margin-top: 0.5rem;" onclick="loadCoachActivity()">
                                 <i data-lucide="check" style="width:16px;height:16px;"></i>
                                 <span data-i18n="admin.userActivity.apply">Apply</span>
                             </button>
                         </div>
                     </div>
+                </div>
 
                 <!-- Summary Cards -->
                 <div class="stats-grid" style="margin-bottom: 1.5rem;">
                     <div class="stat-card">
-                        <div class="stat-header">
-                            <div>
-                                <div class="stat-value" id="caTotal">0</div>
-                                <div class="stat-label" data-i18n="admin.coachActivity.totalActions">Total Actions</div>
-                            </div>
-                            <div class="stat-icon blue">
-                                <i data-lucide="activity" style="width: 24px; height: 24px;"></i>
-                            </div>
-                        </div>
+                        <div class="stat-label" data-i18n="admin.coachActivity.totalActions">Total Actions</div>
+                        <div class="stat-value" id="caTotal">0</div>
                     </div>
                     <div class="stat-card">
-                        <div class="stat-header">
-                            <div>
-                                <div class="stat-value" id="caDaysActive">0</div>
-                                <div class="stat-label" data-i18n="admin.coachActivity.daysActive">Days Active</div>
-                            </div>
-                            <div class="stat-icon green">
-                                <i data-lucide="calendar" style="width: 24px; height: 24px;"></i>
-                            </div>
-                        </div>
+                        <div class="stat-label" data-i18n="admin.coachActivity.daysActive">Days Active</div>
+                        <div class="stat-value" id="caDaysActive">0</div>
                     </div>
                     <div class="stat-card">
-                        <div class="stat-header">
-                            <div>
-                                <div class="stat-value" id="caMostActive" style="font-size: 1.25rem;">-</div>
-                                <div class="stat-label" data-i18n="admin.coachActivity.mostActiveCoach">Most Active Coach</div>
-                            </div>
-                            <div class="stat-icon amber">
-                                <i data-lucide="award" style="width: 24px; height: 24px;"></i>
-                            </div>
-                        </div>
+                        <div class="stat-label" data-i18n="admin.coachActivity.mostActive">Most Active Coach</div>
+                        <div class="stat-value" id="caMostActive">-</div>
                     </div>
                 </div>
 
-                <!-- Activity Stats Table -->
-                <div class="table-container mb-8">
-                    <h3 class="text-lg font-semibold text-gray-800 mb-4" data-i18n="admin.userActivity.activityStats">Activity Statistics</h3>
-                    <table class="data-table">
-                        <thead>
-                            <tr>
-                                <th data-i18n="admin.userActivity.table.date">Date</th>
-                                <th data-i18n="admin.userActivity.table.sessions">Sessions</th>
-                                <th data-i18n="admin.userActivity.table.creates">Creates</th>
-                                <th data-i18n="admin.userActivity.table.updates">Updates</th>
-                                <th data-i18n="admin.userActivity.table.deletes">Deletes</th>
-                                <th data-i18n="admin.userActivity.table.total">Total</th>
-                            </tr>
-                        </thead>
-                        <tbody id="activityStatsTableBody">
-                            <tr>
-                                <td colspan="6" style="text-align: center; padding: 2rem; color: #94a3b8;">
-                                    <i data-lucide="user-x" style="width: 24px; height: 24px; margin: 0 auto;"></i>
-                                    <p style="margin-top: 0.5rem;" data-i18n="admin.userActivity.selectUserFirst">Please select a user to view activity</p>
-                                </td>
-                            </tr>
-                        </tbody>
-                    </table>
-                </div>
-
-                <!-- Session History -->
+                <!-- Activity Table -->
                 <div class="table-container">
-                    <h3 class="text-lg font-semibold text-gray-800 mb-4" data-i18n="admin.userActivity.sessionHistory">Session History</h3>
                     <table class="data-table">
                         <thead>
                             <tr>
-                                <th data-i18n="admin.userActivity.table.loginTime">Login Time</th>
-                                <th data-i18n="admin.userActivity.table.duration">Duration</th>
-                                <th data-i18n="admin.userActivity.table.device">Device</th>
-                                <th data-i18n="admin.userActivity.table.actionsCount">Actions</th>
-                                <th data-i18n="admin.userActivity.table.details">Details</th>
+                                <th data-i18n="admin.coachActivity.dateTime">Date/Time</th>
+                                <th data-i18n="admin.coachActivity.coach">Coach</th>
+                                <th data-i18n="admin.coachActivity.action">Action</th>
+                                <th data-i18n="admin.coachActivity.entity">Entity</th>
+                                <th data-i18n="admin.coachActivity.details">Details</th>
+                                <th data-i18n="admin.coachActivity.student">Student</th>
                             </tr>
                         </thead>
-                        <tbody id="sessionHistoryTableBody">
-                            <tr>
-                                <td colspan="5" style="text-align: center; padding: 2rem; color: #94a3b8;">
-                                    <i data-lucide="user-x" style="width: 24px; height: 24px; margin: 0 auto;"></i>
-                                    <p style="margin-top: 0.5rem;" data-i18n="admin.userActivity.selectUserFirst">Please select a user to view session history</p>
-                                </td>
-                            </tr>
+                        <tbody id="caTableBody">
+                            <tr><td colspan="6" style="text-align:center;padding:2rem;color:#94a3b8;" data-i18n="admin.coachActivity.noData">No activity found</td></tr>
                         </tbody>
                     </table>
                 </div>
 
-                <!-- Session Actions Modal -->
-                <div id="sessionActionsModal" class="modal-overlay" onclick="closeSessionActionsModal(event)">
-                    <div class="modal-content">
-                        <div class="modal-header">
-                            <h2 data-i18n="admin.userActivity.sessionActions">Session Actions</h2>
-                            <button class="modal-close" onclick="closeSessionActionsModal()">
-                                <i data-lucide="x"></i>
-                            </button>
-                        </div>
-                        <div class="modal-body">
-                            <div class="table-container">
-                                <table class="data-table">
-                                    <thead>
-                                        <tr>
-                                            <th data-i18n="admin.userActivity.table.timestamp">Timestamp</th>
-                                            <th data-i18n="admin.userActivity.table.entity">Entity</th>
-                                            <th data-i18n="admin.userActivity.table.action">Action</th>
-                                            <th data-i18n="admin.userActivity.table.field">Field</th>
-                                            <th data-i18n="admin.userActivity.table.change">Change</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody id="sessionActionsTableBody">
-                                        <!-- Session actions will be loaded here -->
-                                    </tbody>
-                                </table>
-                            </div>
-                        </div>
-                    </div>
+                <!-- Result Info & Load More -->
+                <div style="display:flex;align-items:center;justify-content:space-between;margin-top:1rem;">
+                    <span id="caResultInfo" style="color:#94a3b8;font-size:0.875rem;"></span>
+                    <button id="caLoadMoreBtn" class="btn btn-secondary" style="display:none;" onclick="loadMoreCoachActivity()">
+                        <i data-lucide="chevrons-down" style="width:18px;height:18px;margin-right:0.5rem;"></i>
+                        <span data-i18n="common.loadMore">Load More</span>
+                    </button>
                 </div>
-            </div>
-            <!-- End User Activity Section -->
-
             </div>
             <!-- End Coach Activity Section -->
 
