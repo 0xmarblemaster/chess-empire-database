@@ -8468,7 +8468,7 @@ function getStatusBadge(status) {
         'left': 'background: #fee2e2; color: #991b1b;',
         'graduated': 'background: #f3e8ff; color: #6b21a8;',
         'inactive': 'background: #f1f5f9; color: #475569;',
-        'new': 'background: #e0f2fe; color: #0369a1;'
+        'new': 'background: #fef3c7; color: #92400e;'
     };
     const style = styles[status] || '';
     const label = (i18n && i18n.translateStatus) ? i18n.translateStatus(status, 'badge') : status;
