@@ -116,7 +116,8 @@ function updateMenuVisibility() {
             const analyticsSectionTitle = document.getElementById('analyticsSectionTitle');
             if (menuStatusHistory) menuStatusHistory.style.display = 'flex';
             if (menuSessions) menuSessions.style.display = 'flex';
-            if (menuUserActivity) menuUserActivity.style.display = 'flex';
+            // User Activity hidden — functionality merged into Coach Activity
+            // if (menuUserActivity) menuUserActivity.style.display = 'flex';
             if (menuCoachActivity) menuCoachActivity.style.display = 'flex';
             if (analyticsSectionTitle) analyticsSectionTitle.style.display = 'block';
         }
@@ -124,10 +125,10 @@ function updateMenuVisibility() {
         return;
     }
 
-    // For non-admins (coaches), show User Activity (self-only)
-    const menuUserActivityCoach = document.getElementById('menuUserActivity');
+    // User Activity hidden — functionality merged into Coach Activity
+    // const menuUserActivityCoach = document.getElementById('menuUserActivity');
     const analyticsSectionTitleCoach = document.getElementById('analyticsSectionTitle');
-    if (menuUserActivityCoach) menuUserActivityCoach.style.display = 'flex';
+    // if (menuUserActivityCoach) menuUserActivityCoach.style.display = 'flex';
     if (analyticsSectionTitleCoach) analyticsSectionTitleCoach.style.display = 'block';
 
     // For non-admins, show based on specific permissions
