@@ -9570,6 +9570,7 @@ function refreshUserActivity() {
     if (currentActivityUser) {
         onUserActivityUserChange();
     }
+}
 // ==========================================
 // COACH ACTIVITY TRACKER
 // ==========================================
