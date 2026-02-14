@@ -1357,64 +1357,7 @@
                     </button>
                 </div>
             </div>
-            <!-- End More Menu Section -->                <!-- Filters -->
-                <div class="filters" style="margin-bottom: 1.5rem;">
-                    <div class="filters-grid">
-                        <div class="filter-group">
-                            <label class="filter-label" data-i18n="admin.coachActivity.coach">Coach</label>
-                            <select class="filter-select" id="caCoachFilter" onchange="loadCoachActivity()">
-                                <option value="all" data-i18n="common.all">All</option>
-                            </select>
-                        </div>
-                        <div class="filter-group">
-                            <label class="filter-label" data-i18n="admin.coachActivity.dateRange">Date Range</label>
-                            <select class="filter-select" id="caDateFilter" onchange="onCaDateFilterChange()">
-                                <option value="7d" selected data-i18n="admin.coachActivity.last7days">Last 7 Days</option>
-                                <option value="30d" data-i18n="admin.coachActivity.last30days">Last 30 Days</option>
-                                <option value="custom" data-i18n="admin.coachActivity.custom">Custom</option>
-                            </select>
-                        </div>
-                        <div class="filter-group" id="caCustomDateGroup" style="display: none;">
-                            <label class="filter-label" data-i18n="admin.coachActivity.from">From</label>
-                            <input type="date" class="filter-select" id="caDateFrom" onchange="loadCoachActivity()">
-                        </div>
-                        <div class="filter-group" id="caCustomDateToGroup" style="display: none;">
-                            <label class="filter-label" data-i18n="admin.coachActivity.to">To</label>
-                            <input type="date" class="filter-select" id="caDateTo" onchange="loadCoachActivity()">
-                        </div>
-                    </div>
-                </div>
-
-                <!-- Activity Table -->
-                <div class="table-container">
-                    <div class="table-header">
-                        <h2 class="table-title" data-i18n="admin.coachActivity.activityLog">Activity Log</h2>
-                    </div>
-                    <div class="table-wrapper">
-                        <table>
-                            <thead>
-                                <tr>
-                                    <th data-i18n="admin.coachActivity.dateTime">Date/Time</th>
-                                    <th data-i18n="admin.coachActivity.coach">Coach</th>
-                                    <th data-i18n="admin.coachActivity.action">Action</th>
-                                    <th data-i18n="admin.coachActivity.entity">Entity</th>
-                                    <th data-i18n="admin.coachActivity.details">Details</th>
-                                    <th data-i18n="admin.coachActivity.student">Student</th>
-                                </tr>
-                            </thead>
-                            <tbody id="caTableBody">
-                                <tr><td colspan="6" style="text-align:center;padding:2rem;color:#94a3b8;" data-i18n="admin.coachActivity.selectToLoad">Load coach activity data</td></tr>
-                            </tbody>
-                        </table>
-                    </div>
-                    <div style="text-align:center;margin-top:1rem;">
-                        <button class="btn btn-secondary" id="caLoadMoreBtn" onclick="loadMoreCoachActivity()" style="display:none;">
-                            <i data-lucide="chevron-down" style="width:16px;height:16px;margin-right:0.5rem;"></i>
-                            <span data-i18n="admin.coachActivity.loadMore">Load More</span>
-                        </button>
-                        <span id="caResultInfo" style="color:#64748b;font-size:0.875rem;margin-left:1rem;"></span>
-                    </div>
-                </div>
+            <!-- End More Menu Section -->
 
         </main>
 
