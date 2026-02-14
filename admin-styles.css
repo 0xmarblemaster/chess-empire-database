@@ -5003,3 +5003,40 @@ tr[data-student-id] {
         padding: 14px 20px !important;
     }
 }
+
+/* Coach Activity mobile fixes */
+@media (max-width: 768px) {
+    #coachActivitySection .stats-grid {
+        grid-template-columns: 1fr 1fr;
+        gap: 0.75rem;
+    }
+    
+    #coachActivitySection .stats-grid .stat-card:last-child:nth-child(odd) {
+        grid-column: 1 / -1;
+    }
+    
+    #coachActivitySection .table-container {
+        overflow-x: auto;
+        -webkit-overflow-scrolling: touch;
+        margin: 0 -1rem;
+        padding: 0 1rem;
+    }
+    
+    #coachActivitySection .data-table {
+        min-width: 600px;
+        font-size: 0.8rem;
+    }
+    
+    #coachActivitySection .data-table th,
+    #coachActivitySection .data-table td {
+        padding: 0.5rem 0.4rem;
+        white-space: nowrap;
+    }
+    
+    #coachActivitySection .data-table td:nth-child(5) {
+        white-space: normal;
+        max-width: 120px;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+}

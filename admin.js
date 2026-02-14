@@ -2875,7 +2875,8 @@ const mobileSectionTitles = {
     activityLog: 'admin.activityLog.title',
     statusHistory: 'admin.statusHistory.title',
     sessions: 'admin.sessions.title',
-    ratings: 'admin.ratings.title'
+    ratings: 'admin.ratings.title',
+    coachActivity: 'admin.coachActivity.title'
 };
 
 // Show mobile section (called from bottom nav)
