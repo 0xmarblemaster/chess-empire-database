@@ -729,6 +729,7 @@ const translations = {
 
         // Admin Status History
         "admin.statusHistory.title": "Student Status History",
+        "admin.statusHistory.newStudent": "New Student",
         "admin.statusHistory.oldStatus": "Old Status",
         "admin.statusHistory.newStatus": "New Status",
         "admin.statusHistory.dateRange": "Date Range",
@@ -1526,6 +1527,8 @@ const translations = {
 
         // Admin Status History
         "admin.statusHistory.title": "Оқушылар күйінің тарихы",
+        "admin.statusHistory.newStudent": "Жаңа оқушы",
+        "admin.statusHistory.newStudent": "New Student",
         "admin.statusHistory.oldStatus": "Ескі күй",
         "admin.statusHistory.newStatus": "Жаңа күй",
         "admin.statusHistory.dateRange": "Кезең",
@@ -2367,6 +2370,8 @@ const translations = {
 
         // Admin Status History
         "admin.statusHistory.title": "История статусов учеников",
+        "admin.statusHistory.newStudent": "Новый ученик",
+        "admin.statusHistory.newStudent": "New Student",
         "admin.statusHistory.oldStatus": "Старый статус",
         "admin.statusHistory.newStatus": "Новый статус",
         "admin.statusHistory.dateRange": "Период",

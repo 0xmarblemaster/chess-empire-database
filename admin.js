@@ -8424,7 +8424,7 @@ async function loadStatusHistory() {
         } else {
             tbody.innerHTML = entries.map(entry => {
                 const timestamp = new Date(entry.changedAt).toLocaleString();
-                const oldStatusBadge = entry.oldStatus ? getStatusBadge(entry.oldStatus) : '—';
+                const oldStatusBadge = entry.oldStatus ? getStatusBadge(entry.oldStatus) : '<span style="display: inline-flex; align-items: center; padding: 0.25rem 0.75rem; border-radius: 9999px; font-size: 0.75rem; font-weight: 500; background: #d1fae5; color: #065f46;">✨ New</span>';
                 const newStatusBadge = getStatusBadge(entry.newStatus);
 
                 return `

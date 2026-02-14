@@ -2785,7 +2785,11 @@ const supabaseData = {
                 query = query.eq('student_id', filters.studentId);
             }
             if (filters.oldStatus) {
-                query = query.eq('old_status', filters.oldStatus);
+                if (filters.oldStatus === 'new') {
+                    query = query.is('old_status', null);
+                } else {
+                    query = query.eq('old_status', filters.oldStatus);
+                }
             }
             if (filters.newStatus) {
                 query = query.eq('new_status', filters.newStatus);
