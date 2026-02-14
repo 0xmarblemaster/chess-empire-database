@@ -113,11 +113,13 @@ function updateMenuVisibility() {
             const menuStatusHistory = document.getElementById('menuStatusHistory');
             const menuSessions = document.getElementById('menuSessions');
             const menuUserActivity = document.getElementById('menuUserActivity');
+            const menuCoachActivity = document.getElementById('menuCoachActivity');
             const analyticsSectionTitle = document.getElementById('analyticsSectionTitle');
             if (menuActivityLog) menuActivityLog.style.display = 'flex';
             if (menuStatusHistory) menuStatusHistory.style.display = 'flex';
             if (menuSessions) menuSessions.style.display = 'flex';
             if (menuUserActivity) menuUserActivity.style.display = 'flex';
+            if (menuCoachActivity) menuCoachActivity.style.display = 'flex';
             if (analyticsSectionTitle) analyticsSectionTitle.style.display = 'block';
         }
 
@@ -774,6 +776,9 @@ function showSection(section) {
         }
     } else if (section === 'ratings') {
         switchToSection('ratings');
+    } else if (section === 'coachActivity') {
+        switchToSection('coachActivity');
+        initCoachActivity();
     }
 
     // Update mobile bottom nav active state
@@ -1036,7 +1041,7 @@ function refreshCoachesListView() {
 
 // Update mobile bottom navigation active state
 function updateMobileBottomNav(activeSection) {
-    const moreSubSections = ['userActivity', 'activityLog', 'statusHistory', 'sessions', 'ratings', 'moreMenu'];
+    const moreSubSections = ['userActivity', 'activityLog', 'statusHistory', 'sessions', 'ratings', 'coachActivity', 'moreMenu'];
     const effectiveSection = moreSubSections.includes(activeSection) ? 'settings' : activeSection;
     
     const mobileNavItems = document.querySelectorAll('.mobile-nav-item');
@@ -2911,7 +2916,7 @@ function showMobileSection(section, event) {
     showSection(section);
 
     // For sub-sections of More, keep More tab highlighted
-    const moreSubSections = ['userActivity', 'activityLog', 'statusHistory', 'sessions', 'ratings', 'moreMenu', 'settings'];
+    const moreSubSections = ['userActivity', 'activityLog', 'statusHistory', 'sessions', 'ratings', 'coachActivity', 'moreMenu', 'settings'];
     if (moreSubSections.includes(section)) {
         const moreBtn = document.querySelector('.mobile-nav-item[data-section="settings"]');
         if (moreBtn) {
@@ -9565,5 +9570,282 @@ function refreshUserActivity() {
     if (currentActivityUser) {
         onUserActivityUserChange();
     }
+// ==========================================
+// COACH ACTIVITY TRACKER
+// ==========================================
+
+let caOffset = 0;
+const caLimit = 100;
+let caAllEntries = [];
+let caCoaches = [];
+let caStudentsCache = {};
+let caInitialized = false;
+
+function showCoachActivity() {
+    showSection('coachActivity');
+}
+
+async function initCoachActivity() {
+    if (!caInitialized) {
+        await loadCaCoaches();
+        caInitialized = true;
+    }
+    loadCoachActivity();
+}
+
+async function loadCaCoaches() {
+    try {
+        const { data, error } = await window.supabaseClient
+            .from('coaches')
+            .select('id, first_name, last_name, email')
+            .order('first_name');
+        if (!error && data) {
+            caCoaches = data;
+            const sel = document.getElementById('caCoachFilter');
+            if (sel) {
+                // Keep "All" option
+                sel.innerHTML = '<option value="all">' + (window.t ? window.t('common.all') : 'All') + '</option>';
+                data.forEach(c => {
+                    const opt = document.createElement('option');
+                    opt.value = c.email || c.id;
+                    opt.textContent = `${c.first_name} ${c.last_name}`;
+                    sel.appendChild(opt);
+                });
+            }
+        }
+    } catch (e) {
+        console.error('Error loading coaches for activity:', e);
+    }
+}
+
+function onCaDateFilterChange() {
+    const val = document.getElementById('caDateFilter').value;
+    const customGroup = document.getElementById('caCustomDateGroup');
+    const customToGroup = document.getElementById('caCustomDateToGroup');
+    if (val === 'custom') {
+        customGroup.style.display = '';
+        customToGroup.style.display = '';
+    } else {
+        customGroup.style.display = 'none';
+        customToGroup.style.display = 'none';
+    }
+    loadCoachActivity();
+}
+
+function getCaDateRange() {
+    const val = document.getElementById('caDateFilter').value;
+    const now = new Date();
+    if (val === '7d') {
+        const from = new Date(now);
+        from.setDate(from.getDate() - 7);
+        return { from: from.toISOString(), to: now.toISOString() };
+    } else if (val === '30d') {
+        const from = new Date(now);
+        from.setDate(from.getDate() - 30);
+        return { from: from.toISOString(), to: now.toISOString() };
+    } else {
+        const fromVal = document.getElementById('caDateFrom').value;
+        const toVal = document.getElementById('caDateTo').value;
+        return {
+            from: fromVal ? new Date(fromVal).toISOString() : null,
+            to: toVal ? new Date(toVal + 'T23:59:59').toISOString() : null
+        };
+    }
+}
+
+async function loadCoachActivity() {
+    caOffset = 0;
+    caAllEntries = [];
+    await fetchCoachActivityPage();
+}
+
+function refreshCoachActivity() {
+    loadCoachActivity();
+}
+
+async function fetchCoachActivityPage() {
+    const tbody = document.getElementById('caTableBody');
+    if (caOffset === 0) {
+        tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;padding:2rem;color:#94a3b8;"><i data-lucide="loader" style="width:24px;height:24px;animation:spin 1s linear infinite;"></i></td></tr>';
+        lucide.createIcons();
+    }
+
+    try {
+        const dateRange = getCaDateRange();
+        const coachFilter = document.getElementById('caCoachFilter').value;
+
+        // Build query - filter to only coach emails (non-admin)
+        let query = window.supabaseClient
+            .from('audit_log')
+            .select('*', { count: 'exact' });
+
+        // Filter by coach emails only (exclude admin)
+        const coachEmails = caCoaches.map(c => c.email).filter(Boolean);
+        
+        if (coachFilter !== 'all') {
+            query = query.eq('changed_by_email', coachFilter);
+        } else if (coachEmails.length > 0) {
+            query = query.in('changed_by_email', coachEmails);
+        }
+
+        if (dateRange.from) query = query.gte('changed_at', dateRange.from);
+        if (dateRange.to) query = query.lte('changed_at', dateRange.to);
+
+        query = query.order('changed_at', { ascending: false })
+                     .range(caOffset, caOffset + caLimit - 1);
+
+        const { data, error, count } = await query;
+
+        if (error) {
+            console.error('Coach activity query error:', error);
+            tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;padding:2rem;color:#ef4444;">Error loading data</td></tr>';
+            return;
+        }
+
+        const entries = data || [];
+        caAllEntries = caOffset === 0 ? entries : caAllEntries.concat(entries);
+
+        // Resolve student names
+        await resolveStudentNames(entries);
+
+        // Update summary cards
+        updateCaSummary(count || 0);
+
+        // Render table
+        renderCaTable();
+
+        // Show/hide load more
+        const loadMoreBtn = document.getElementById('caLoadMoreBtn');
+        const resultInfo = document.getElementById('caResultInfo');
+        if (loadMoreBtn) loadMoreBtn.style.display = caAllEntries.length < (count || 0) ? '' : 'none';
+        if (resultInfo) resultInfo.textContent = `${caAllEntries.length} / ${count || 0}`;
+
+    } catch (e) {
+        console.error('Error loading coach activity:', e);
+    }
+}
+
+async function resolveStudentNames(entries) {
+    // For attendance entries, extract student name from new_value (format: "name | status | date")
+    entries.forEach(e => {
+        if (e.entity_type === 'attendance' && e.entity_id && !caStudentsCache[e.entity_id]) {
+            const val = e.new_value || e.old_value || '';
+            if (val.includes('|')) {
+                const name = val.split('|')[0].trim();
+                if (name) caStudentsCache[e.entity_id] = name;
+            }
+        }
+    });
+
+    // For students entries, look up entity_id in students table
+    const studentIds = new Set();
+    entries.forEach(e => {
+        if (e.entity_type === 'students' && e.entity_id && !caStudentsCache[e.entity_id]) {
+            studentIds.add(e.entity_id);
+        }
+    });
+    if (studentIds.size === 0) return;
+
+    try {
+        const { data } = await window.supabaseClient
+            .from('students')
+            .select('id, first_name, last_name')
+            .in('id', Array.from(studentIds));
+        if (data) {
+            data.forEach(s => {
+                caStudentsCache[s.id] = `${s.first_name} ${s.last_name}`;
+            });
+        }
+    } catch (e) {
+        console.error('Error resolving student names:', e);
+    }
+}
+
+function updateCaSummary(total) {
+    document.getElementById('caTotal').textContent = total;
+
+    // Days active
+    const uniqueDays = new Set(caAllEntries.map(e => e.changed_at?.substring(0, 10)));
+    document.getElementById('caDaysActive').textContent = uniqueDays.size;
+
+    // Most active coach
+    const coachCounts = {};
+    caAllEntries.forEach(e => {
+        const email = e.changed_by_email;
+        if (email) coachCounts[email] = (coachCounts[email] || 0) + 1;
+    });
+    let mostActive = '-';
+    let maxCount = 0;
+    for (const [email, count] of Object.entries(coachCounts)) {
+        if (count > maxCount) {
+            maxCount = count;
+            const coach = caCoaches.find(c => c.email === email);
+            mostActive = coach ? `${coach.first_name} ${coach.last_name}` : email;
+        }
+    }
+    document.getElementById('caMostActive').textContent = mostActive;
+}
+
+function renderCaTable() {
+    const tbody = document.getElementById('caTableBody');
+    if (caAllEntries.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;padding:2rem;color:#94a3b8;">' + (window.t ? window.t('admin.coachActivity.noData') : 'No activity found') + '</td></tr>';
+        return;
+    }
+
+    tbody.innerHTML = caAllEntries.map(e => {
+        const dt = e.changed_at ? new Date(e.changed_at).toLocaleString() : '-';
+        const coach = caCoaches.find(c => c.email === e.changed_by_email);
+        const coachName = coach ? `${coach.first_name} ${coach.last_name}` : (e.changed_by_email || '-');
+
+        // Action badge
+        const actionColors = { CREATE: '#16a34a', UPDATE: '#2563eb', DELETE: '#dc2626' };
+        const actionBg = { CREATE: '#dcfce7', UPDATE: '#dbeafe', DELETE: '#fee2e2' };
+        const action = e.action || '';
+        const badge = `<span style="display:inline-block;padding:2px 8px;border-radius:9999px;font-size:0.75rem;font-weight:600;color:${actionColors[action] || '#475569'};background:${actionBg[action] || '#f1f5f9'};">${action}</span>`;
+
+        // Entity
+        const entity = `${e.entity_type || ''}`;
+
+        // Details
+        let details = '';
+        if (action === 'UPDATE' && e.field_name) {
+            const oldVal = e.old_value || '-';
+            const newVal = e.new_value || '-';
+            details = `<span style="color:#64748b;font-size:0.8125rem;">${e.field_name}: ${truncate(oldVal, 20)} → ${truncate(newVal, 20)}</span>`;
+        } else if (action === 'CREATE') {
+            details = `<span style="color:#16a34a;font-size:0.8125rem;">Created ${e.entity_type}</span>`;
+        } else if (action === 'DELETE') {
+            details = `<span style="color:#dc2626;font-size:0.8125rem;">Deleted ${e.entity_type}</span>`;
+        }
+
+        // Student name
+        let studentName = '';
+        if (e.entity_type === 'students' || e.entity_type === 'attendance') {
+            studentName = caStudentsCache[e.entity_id] || e.entity_id || '-';
+        }
+
+        return `<tr>
+            <td style="white-space:nowrap;font-size:0.8125rem;">${dt}</td>
+            <td style="font-weight:500;">${coachName}</td>
+            <td>${badge}</td>
+            <td style="font-size:0.875rem;">${entity}</td>
+            <td>${details}</td>
+            <td style="font-size:0.875rem;">${studentName}</td>
+        </tr>`;
+    }).join('');
+
+    lucide.createIcons();
+}
+
+function truncate(str, len) {
+    if (!str) return '';
+    str = String(str);
+    return str.length > len ? str.substring(0, len) + '…' : str;
+}
+
+async function loadMoreCoachActivity() {
+    caOffset += caLimit;
+    await fetchCoachActivityPage();
 }
 
