@@ -9341,10 +9341,11 @@ async function loadCaUsers() {
             if (sel) {
                 sel.innerHTML = '<option value="all">' + (window.t ? window.t('common.all') : 'All') + '</option>';
                 uniqueEmails.forEach(email => {
+                    const coach = caCoaches.find(c => c.email === email);
+                    if (!coach) return; // Skip non-coach emails (admin accounts etc.)
                     const opt = document.createElement('option');
                     opt.value = email;
-                    const coach = caCoaches.find(c => c.email === email);
-                    opt.textContent = coach ? `${coach.first_name} ${coach.last_name}` : email;
+                    opt.textContent = `${coach.first_name} ${coach.last_name}`;
                     sel.appendChild(opt);
                 });
             }
