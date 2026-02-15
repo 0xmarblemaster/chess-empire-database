@@ -9550,21 +9550,29 @@ function renderCaTable() {
         const actionColors = { CREATE: '#16a34a', UPDATE: '#2563eb', DELETE: '#dc2626' };
         const actionBg = { CREATE: '#dcfce7', UPDATE: '#dbeafe', DELETE: '#fee2e2' };
         const action = e.action || '';
-        const badge = `<span style="display:inline-block;padding:2px 8px;border-radius:9999px;font-size:0.75rem;font-weight:600;color:${actionColors[action] || '#475569'};background:${actionBg[action] || '#f1f5f9'};">${action}</span>`;
+        const actionKey = {CREATE:'admin.coachActivity.actionCreate', UPDATE:'admin.coachActivity.actionUpdate', DELETE:'admin.coachActivity.actionDelete'}[action] || '';
+        const actionLabel = (window.t && actionKey) ? window.t(actionKey) : action;
+        const badge = `<span style="display:inline-block;padding:2px 8px;border-radius:9999px;font-size:0.75rem;font-weight:600;color:${actionColors[action] || '#475569'};background:${actionBg[action] || '#f1f5f9'};">${actionLabel}</span>`;
 
         // Entity
-        const entity = `${e.entity_type || ''}`;
+        const entityMap = {students:'admin.coachActivity.entityStudents', attendance:'admin.coachActivity.entityAttendance', coaches:'admin.coachActivity.entityCoaches', branches:'admin.coachActivity.entityBranches'};
+        const entityLabel = (window.t && entityMap[e.entity_type]) ? window.t(entityMap[e.entity_type]) : (e.entity_type || '');
+        const entity = entityLabel;
 
         // Details
         let details = '';
         if (action === 'UPDATE' && e.field_name) {
+            const fieldMap = {current_level:'admin.coachActivity.fieldCurrentLevel', status:'admin.coachActivity.fieldStatus', branch:'admin.coachActivity.fieldBranch', coach:'admin.coachActivity.fieldCoach', phone:'admin.coachActivity.fieldPhone', notes:'admin.coachActivity.fieldNotes', first_name:'admin.coachActivity.fieldFirstName', last_name:'admin.coachActivity.fieldLastName'};
+            const fieldLabel = (window.t && fieldMap[e.field_name]) ? window.t(fieldMap[e.field_name]) : (e.field_name || '');
             const oldVal = e.old_value || '-';
             const newVal = e.new_value || '-';
-            details = `<span style="color:#64748b;font-size:0.8125rem;">${e.field_name}: ${truncate(oldVal, 20)} → ${truncate(newVal, 20)}</span>`;
+            details = `<span style="color:#64748b;font-size:0.8125rem;">${fieldLabel}: ${truncate(oldVal, 20)} → ${truncate(newVal, 20)}</span>`;
         } else if (action === 'CREATE') {
-            details = `<span style="color:#16a34a;font-size:0.8125rem;">Created ${e.entity_type}</span>`;
+            const createdLabel = window.t ? window.t('admin.coachActivity.detailCreated') : 'Created';
+            details = `<span style="color:#16a34a;font-size:0.8125rem;">${createdLabel} ${entityLabel}</span>`;
         } else if (action === 'DELETE') {
-            details = `<span style="color:#dc2626;font-size:0.8125rem;">Deleted ${e.entity_type}</span>`;
+            const deletedLabel = window.t ? window.t('admin.coachActivity.detailDeleted') : 'Deleted';
+            details = `<span style="color:#dc2626;font-size:0.8125rem;">${deletedLabel} ${entityLabel}</span>`;
         }
 
         // Student name
