@@ -9512,9 +9512,28 @@ async function resolveStudentNames(entries) {
 function updateCaSummary(total) {
     document.getElementById('caTotal').textContent = total;
 
-    // Days active
-    const uniqueDays = new Set(caAllEntries.map(e => e.changed_at?.substring(0, 10)));
-    document.getElementById('caDaysActive').textContent = uniqueDays.size;
+    // Last action date
+    const lastEntry = caAllEntries.length > 0 ? caAllEntries[0] : null;
+    const el = document.getElementById('caDaysActive');
+    if (lastEntry && lastEntry.changed_at) {
+        const lastDate = new Date(lastEntry.changed_at);
+        const now = new Date();
+        const diffDays = Math.floor((now - lastDate) / 86400000);
+        const dateStr = lastDate.toLocaleDateString();
+        let ago;
+        if (diffDays === 0) {
+            ago = window.t ? window.t('admin.coachActivity.today') : 'Today';
+        } else if (diffDays === 1) {
+            ago = window.t ? window.t('admin.coachActivity.yesterday') : 'Yesterday';
+        } else {
+            const tmpl = window.t ? window.t('admin.coachActivity.daysAgo') : '{n} days ago';
+            ago = tmpl.replace('{n}', diffDays);
+        }
+        el.textContent = ago;
+        el.title = dateStr;
+    } else {
+        el.textContent = '-';
+    }
 
     // Most active coach
     const coachCounts = {};
