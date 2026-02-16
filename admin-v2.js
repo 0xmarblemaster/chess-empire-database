@@ -4721,10 +4721,15 @@ function showAttendanceManagement(updateHash = true) {
     // Populate coach dropdown based on branch
     populateAttendanceCoachDropdown();
 
-    // Apply saved coach selection to dropdown
+    // Apply saved coach selection to dropdown and resolve coach name
     const coachSelect = document.getElementById('attendanceCoachFilter');
     if (coachSelect && attendanceCurrentCoach) {
         coachSelect.value = attendanceCurrentCoach;
+        // Resolve coach name for time slot logic (not set by localStorage restore)
+        if (attendanceCurrentCoach !== 'all' && attendanceCurrentCoach !== 'unassigned') {
+            const coach = window.coaches.find(c => c.id === attendanceCurrentCoach);
+            attendanceCurrentCoachName = coach ? `${coach.firstName} ${coach.lastName}` : null;
+        }
     }
 
     // Populate time slots based on schedule
