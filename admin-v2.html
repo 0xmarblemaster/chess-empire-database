@@ -1,0 +1,2623 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+    <meta http-equiv="Pragma" content="no-cache">
+    <meta http-equiv="Expires" content="0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0, user-scalable=yes">
+    <title data-i18n="admin.title">Admin Dashboard - Chess Empire</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=Outfit:wght@600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/clear-sans-webfont@1.0.1/css/clear-sans.min.css" />
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <link rel="stylesheet" href="admin-styles.css?v=1765960066">
+    <link rel="stylesheet" href="modal-styles.css">
+    <script src="i18n.js?v=1771237740"></script>
+</head>
+<body>
+    <!-- Mobile Menu Toggle -->
+    <button class="mobile-menu-toggle" id="mobileMenuToggle" onclick="toggleMobileMenu()" aria-label="Toggle menu">
+        <i data-lucide="menu"></i>
+    </button>
+
+    <!-- Mobile Overlay -->
+    <div class="mobile-overlay" id="mobileOverlay" onclick="closeMobileMenu()"></div>
+
+    <!-- Loading Overlay -->
+    <div id="loadingOverlay" style="position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(255,255,255,0.95); z-index: 9999; display: flex; align-items: center; justify-content: center; flex-direction: column;">
+        <div style="width: 48px; height: 48px; border: 4px solid #f3f4f6; border-top-color: #5F192B; border-radius: 50%; animation: spin 1s linear infinite;"></div>
+        <p style="margin-top: 1rem; color: #5F192B; font-weight: 600;">Loading dashboard...</p>
+    </div>
+    <style>
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+    </style>
+
+    <!-- Mobile Header (Wise Style) -->
+    <header class="mobile-header" id="mobileHeader">
+        <h1 class="mobile-header-title" id="mobileHeaderTitle" data-i18n="admin.header.students">Students</h1>
+        <div class="mobile-header-actions">
+            <button class="mobile-icon-btn" onclick="toggleMobileLanguageMenu(event)" id="mobileLanguageBtn">
+                <i data-lucide="globe"></i>
+            </button>
+            <button class="mobile-icon-btn" onclick="toggleMobileFilters()" id="mobileFilterBtn">
+                <i data-lucide="sliders-horizontal"></i>
+            </button>
+        </div>
+    </header>
+
+    <!-- Mobile Language Menu -->
+    <div class="mobile-language-menu" id="mobileLanguageMenu">
+        <button class="language-option" onclick="setLanguage('en'); closeMobileLanguageMenu();">
+            <span>🇬🇧</span> English
+        </button>
+        <button class="language-option" onclick="setLanguage('ru'); closeMobileLanguageMenu();">
+            <span>🇷🇺</span> Русский
+        </button>
+    </div>
+
+    <!-- Mobile Search -->
+    <div class="mobile-search-container" id="mobileSearchContainer">
+        <div class="mobile-search-box">
+            <i data-lucide="search"></i>
+            <input type="text" id="mobileSearchInput" data-i18n-placeholder="common.searchStudentsPlaceholder" placeholder="Search students...">
+        </div>
+    </div>
+
+    <div class="dashboard-container">
+        <!-- Sidebar -->
+        <aside class="sidebar" id="sidebar">
+            <div class="sidebar-logo">
+                <a href="index.html" style="display: flex; flex-direction: row; flex-wrap: nowrap; align-items: flex-end; justify-content: center; gap: 0; text-decoration: none; cursor: pointer; transition: opacity 0.3s ease; width: 100%; margin-left: -8px;" onmouseover="this.style.opacity='0.8'" onmouseout="this.style.opacity='1'">
+                    <img src="chess-empire-logo.png" alt="Chess Empire" class="logo-image" style="width: 63px; height: 63px; flex-shrink: 0; margin-right: -8px; margin-bottom: -12px;">
+                    <span class="logo-text-gradient" style="font-family: 'Clear Sans', sans-serif; font-size: 1.25rem; letter-spacing: 0.025em; font-weight: 600; line-height: 1; white-space: nowrap; margin-bottom: 5px;">Chess Empire</span>
+                </a>
+            </div>
+
+            <nav class="nav-section">
+                <div class="nav-section-title" data-i18n="admin.sidebar.main"></div>
+                <div class="nav-item active" onclick="showSection('students')">
+                    <i data-lucide="users" style="width: 20px; height: 20px;"></i>
+                    <span data-i18n="admin.sidebar.students"></span>
+                    <span class="nav-badge" id="studentCount">10</span>
+                </div>
+                <div class="nav-item nav-item-with-dropdown" onclick="toggleBranchDropdown(event)">
+                    <i data-lucide="building" style="width: 20px; height: 20px;"></i>
+                    <span data-i18n="admin.sidebar.branches"></span>
+                    <i data-lucide="chevron-down" class="dropdown-chevron" style="width: 16px; height: 16px; margin-left: auto;"></i>
+                </div>
+                <div class="nav-dropdown" id="branchDropdown">
+                    <!-- Branches will be populated by JavaScript -->
+                </div>
+                <div class="nav-item nav-item-with-dropdown" onclick="toggleCoachDropdown(event)">
+                    <i data-lucide="user-check" style="width: 20px; height: 20px;"></i>
+                    <span data-i18n="admin.sidebar.coaches"></span>
+                    <i data-lucide="chevron-down" class="dropdown-chevron" style="width: 16px; height: 16px; margin-left: auto;"></i>
+                </div>
+                <div class="nav-dropdown" id="coachDropdown">
+                    <!-- Coaches will be populated by JavaScript -->
+                </div>
+
+                <div class="nav-section-title" id="managementSectionTitle" style="margin-top: 1.5rem;" data-i18n="admin.sidebar.management">Management</div>
+                <div class="nav-item" id="menuRatings" onclick="showRatingsManagement()" style="display: none;">
+                    <i data-lucide="trending-up" style="width: 20px; height: 20px;"></i>
+                    <span data-i18n="admin.ratings.title">Ratings</span>
+                </div>
+                <div class="nav-item" id="menuAppAccess" onclick="showAppAccessManagement()" style="display: none;">
+                    <i data-lucide="shield-check" style="width: 20px; height: 20px;"></i>
+                    <span data-i18n="access.sidebar.appAccess">App Access</span>
+                </div>
+                <div class="nav-item" id="menuManageCoaches" onclick="showCoachesManagement()" style="display: none;">
+                    <i data-lucide="user-check" style="width: 20px; height: 20px;"></i>
+                    <span data-i18n="admin.sidebar.manageCoaches">Manage Coaches</span>
+                </div>
+                <div class="nav-item" id="menuManageBranches" onclick="showBranchesManagement()" style="display: none;">
+                    <i data-lucide="building" style="width: 20px; height: 20px;"></i>
+                    <span data-i18n="admin.sidebar.manageBranches">Manage Branches</span>
+                </div>
+                <div class="nav-item" id="menuDataManagement" onclick="showDataManagement()" style="display: none;">
+                    <i data-lucide="database" style="width: 20px; height: 20px;"></i>
+                    <span data-i18n="admin.sidebar.dataManagement">Data Management</span>
+                </div>
+                <div class="nav-item" id="menuAttendance" onclick="showAttendanceManagement()" style="display: none;">
+                    <i data-lucide="calendar-check" style="width: 20px; height: 20px;"></i>
+                    <span data-i18n="admin.sidebar.attendance">Attendance</span>
+                </div>
+
+                <!-- Analytics Section (oxmarblemaster only) -->
+                <div class="nav-section-title" id="analyticsSectionTitle" style="margin-top: 1.5rem; display: none;" data-i18n="admin.sidebar.analytics">Analytics</div>
+                <div class="nav-item" id="menuCoachActivity" onclick="showCoachActivity()" style="display: none;">
+                    <i data-lucide="activity" style="width: 20px; height: 20px;"></i>
+                    <span data-i18n="admin.coachActivity.title">Activity Log</span>
+                </div>
+                <div class="nav-item" id="menuStatusHistory" onclick="showStatusHistory()" style="display: none;">
+                    <i data-lucide="git-branch" style="width: 20px; height: 20px;"></i>
+                    <span data-i18n="admin.statusHistory.title">Status History</span>
+                </div>
+                <div class="nav-item" id="menuSessions" onclick="showSessions()" style="display: none;">
+                    <i data-lucide="monitor" style="width: 20px; height: 20px;"></i>
+                    <span data-i18n="admin.sessions.title">User Sessions</span>
+                </div>
+                <div class="nav-item" id="menuUserActivity" onclick="showUserActivity()" style="display: none;">
+                    <i data-lucide="activity" style="width: 20px; height: 20px;"></i>
+                    <span data-i18n="admin.userActivity.title">User Activity</span>
+                </div>
+<!-- menuCoachActivity moved up to replace menuActivityLog -->
+            </nav>
+
+            <!-- User Info -->
+            <div style="padding: 1rem; margin-top: auto; border-top: 1px solid #e2e8f0;">
+                <div id="userEmail" style="padding: 0.5rem 0.75rem; margin-bottom: 0.75rem; font-size: 0.875rem; color: #475569; word-break: break-all;">
+                    Loading...
+                </div>
+
+                <!-- Logout Button -->
+                <button class="nav-item" onclick="handleLogout()" style="width: 100%; border: none; background: none; cursor: pointer; padding: 0.75rem; display: flex; align-items: center; gap: 0.75rem; color: #dc2626; border-radius: 8px; transition: background 0.2s;">
+                    <i data-lucide="log-out" style="width: 20px; height: 20px;"></i>
+                    <span data-i18n="common.logout">Logout</span>
+                </button>
+            </div>
+        </aside>
+
+        <!-- Main Content -->
+        <main class="main-content">
+            <!-- Students Section -->
+            <div id="studentsSection" class="content-section active">
+                <!-- Header -->
+                <div class="header">
+                    <h1 class="header-title" data-i18n="admin.header.students"></h1>
+                    <div class="header-actions">
+                        <button class="btn btn-primary" onclick="addNewStudent()">
+                            <i data-lucide="plus" style="width: 18px; height: 18px;"></i>
+                            <span data-i18n="admin.actions.addStudent"></span>
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Stats -->
+            <div class="stats-grid">
+                <div class="stat-card">
+                    <div class="stat-header">
+                        <div>
+                            <div class="stat-value" id="totalStudents">10</div>
+                            <div class="stat-label" data-i18n="common.totalStudents"></div>
+                        </div>
+                        <div class="stat-icon blue">
+                            <i data-lucide="users" style="width: 24px; height: 24px;"></i>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="stat-card">
+                    <div class="stat-header">
+                        <div>
+                            <div class="stat-value" id="activeStudents">10</div>
+                            <div class="stat-label" data-i18n="common.activeStudents"></div>
+                        </div>
+                        <div class="stat-icon green">
+                            <i data-lucide="user-check" style="width: 24px; height: 24px;"></i>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="stat-card">
+                    <div class="stat-header">
+                        <div>
+                            <div class="stat-value" id="totalCoaches">5</div>
+                            <div class="stat-label" data-i18n="common.totalCoaches"></div>
+                        </div>
+                        <div class="stat-icon amber">
+                            <i data-lucide="award" style="width: 24px; height: 24px;"></i>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="stat-card">
+                    <div class="stat-header">
+                        <div>
+                            <div class="stat-value" id="totalBranches">1</div>
+                            <div class="stat-label" data-i18n="admin.stats.branches"></div>
+                        </div>
+                        <div class="stat-icon purple">
+                            <i data-lucide="building" style="width: 24px; height: 24px;"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Filters -->
+            <div class="filters">
+                <div class="filters-grid">
+                    <div class="filter-group">
+                        <label class="filter-label" data-i18n="admin.filters.status"></label>
+                        <select class="filter-select" id="statusFilter">
+                            <option value="all" data-i18n="admin.filters.status.all"></option>
+                            <option value="active" data-i18n="admin.filters.status.active"></option>
+                            <option value="frozen" data-i18n="admin.filters.status.frozen"></option>
+                            <option value="left" data-i18n="admin.filters.status.left"></option>
+                        </select>
+                    </div>
+                    <div class="filter-group">
+                        <label class="filter-label" data-i18n="admin.filters.branch"></label>
+                        <select class="filter-select" id="branchFilter">
+                            <option value="all" data-i18n="admin.filters.branch.all"></option>
+                        </select>
+                    </div>
+                    <div class="filter-group">
+                        <label class="filter-label" data-i18n="admin.filters.coach"></label>
+                        <select class="filter-select" id="coachFilter">
+                            <option value="all" data-i18n="admin.filters.coach.all"></option>
+                        </select>
+                    </div>
+                    <div class="filter-group">
+                        <label class="filter-label" data-i18n="admin.filters.level"></label>
+                        <select class="filter-select" id="levelFilter">
+                            <option value="all" data-i18n="admin.filters.level.all"></option>
+                            <option value="1" data-i18n="admin.filters.level.option" data-level="1"></option>
+                            <option value="2" data-i18n="admin.filters.level.option" data-level="2"></option>
+                            <option value="3" data-i18n="admin.filters.level.option" data-level="3"></option>
+                            <option value="4" data-i18n="admin.filters.level.option" data-level="4"></option>
+                            <option value="5" data-i18n="admin.filters.level.option" data-level="5"></option>
+                            <option value="6" data-i18n="admin.filters.level.option" data-level="6"></option>
+                            <option value="7" data-i18n="admin.filters.level.option" data-level="7"></option>
+                            <option value="8" data-i18n="admin.filters.level.option" data-level="8"></option>
+                        </select>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Table -->
+            <div class="table-container">
+                <div class="table-header">
+                    <h2 class="table-title" data-i18n="admin.table.title"></h2>
+                    <div class="search-box">
+                        <i data-lucide="search" style="width: 18px; height: 18px; color: #94a3b8;"></i>
+                        <input type="text" data-i18n-placeholder="common.searchStudentsPlaceholder" id="searchInput">
+                        <button id="clearSearch" style="background: none; border: none; cursor: pointer; display: none;">
+                            <i data-lucide="x" style="width: 18px; height: 18px; color: #94a3b8;"></i>
+                        </button>
+                    </div>
+                </div>
+
+                <div class="table-wrapper">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th data-i18n="admin.table.number">#</th>
+                                <th data-i18n="admin.table.student"></th>
+                                <th data-i18n="admin.table.age"></th>
+                                <th data-i18n="admin.table.branch"></th>
+                                <th data-i18n="admin.table.coach"></th>
+                                <th data-i18n="admin.table.level"></th>
+                                <th data-i18n="admin.table.razryad"></th>
+                                <th data-i18n="admin.table.status"></th>
+                                <th data-i18n="admin.table.actions"></th>
+                            </tr>
+                        </thead>
+                        <tbody id="studentTableBody">
+                            <!-- Content will be loaded by JavaScript -->
+                        </tbody>
+                    </table>
+                </div>
+
+                <!-- Mobile Student Cards -->
+                <div class="mobile-student-cards" id="mobileStudentCards">
+                    <!-- Cards will be populated by JavaScript -->
+                </div>
+
+                <div class="pagination">
+                    <div class="pagination-info" id="resultCount"></div>
+                </div>
+            </div>
+            </div>
+            <!-- End Students Section -->
+
+            <!-- Branch View Section -->
+            <div id="branchSection" class="content-section">
+                <!-- Branch Header -->
+                <div class="branch-view-header">
+                    <div class="branch-view-info">
+                        <div class="branch-view-name">
+                            <div class="branch-view-icon">
+                                <i data-lucide="building" style="width: 32px; height: 32px;"></i>
+                            </div>
+                            <div>
+                                <h1 class="header-title" id="branchViewName" data-i18n="admin.branch.title"></h1>
+                                <div class="branch-view-meta" id="branchViewLocation" data-i18n="admin.branch.location"></div>
+                            </div>
+                        </div>
+                        <div class="branch-view-contact">
+                            <div class="contact-item">
+                                <i data-lucide="phone" style="width: 16px; height: 16px;"></i>
+                                <span id="branchViewPhone" data-i18n="admin.branch.phone"></span>
+                            </div>
+                            <div class="contact-item">
+                                <i data-lucide="mail" style="width: 16px; height: 16px;"></i>
+                                <span id="branchViewEmail" data-i18n="admin.branch.email"></span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Branch Stats -->
+                <div class="stats-grid">
+                    <div class="stat-card">
+                        <div class="stat-header">
+                            <div>
+                                <div class="stat-value" id="branchTotalStudents">0</div>
+                                <div class="stat-label" data-i18n="common.totalStudents"></div>
+                            </div>
+                            <div class="stat-icon blue">
+                                <i data-lucide="users" style="width: 24px; height: 24px;"></i>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="stat-card">
+                        <div class="stat-header">
+                            <div>
+                                <div class="stat-value" id="branchActiveStudents">0</div>
+                                <div class="stat-label" data-i18n="common.activeStudents"></div>
+                            </div>
+                            <div class="stat-icon green">
+                                <i data-lucide="user-check" style="width: 24px; height: 24px;"></i>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="stat-card">
+                        <div class="stat-header">
+                            <div>
+                                <div class="stat-value" id="branchTotalCoaches">0</div>
+                                <div class="stat-label" data-i18n="common.totalCoaches"></div>
+                            </div>
+                            <div class="stat-icon amber">
+                                <i data-lucide="award" style="width: 24px; height: 24px;"></i>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="stat-card">
+                        <div class="stat-header">
+                            <div>
+                                <div class="stat-value" id="branchAvgLevel">0</div>
+                                <div class="stat-label" data-i18n="common.avgLevel"></div>
+                            </div>
+                            <div class="stat-icon purple">
+                                <i data-lucide="bar-chart" style="width: 24px; height: 24px;"></i>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Branch Content Grid -->
+                <div class="branch-content-grid">
+                    <!-- Coaches List -->
+                    <div class="branch-card">
+                        <div class="card-header-inline">
+                            <h2 class="card-title-inline">
+                                <i data-lucide="users" style="width: 20px; height: 20px;"></i>
+                                <span data-i18n="branch.coaches"></span>
+                            </h2>
+                        </div>
+                        <div class="branch-coaches-list" id="branchCoachesList">
+                            <!-- Coaches will be loaded here -->
+                        </div>
+                    </div>
+
+                    <!-- Razryad Distribution -->
+                    <div class="branch-card">
+                        <div class="card-header-inline">
+                            <h2 class="card-title-inline">
+                                <i data-lucide="trophy" style="width: 20px; height: 20px;"></i>
+                                <span data-i18n="branch.razryadDistribution"></span>
+                                <span id="branchRazryadCount" style="margin-left: 8px; font-weight: 600; color: #3b82f6;"></span>
+                            </h2>
+                        </div>
+                        <div class="branch-chart-container">
+                            <canvas id="branchRazryadChart"></canvas>
+                        </div>
+                    </div>
+
+                    <!-- Level Distribution -->
+                    <div class="branch-card">
+                        <div class="card-header-inline">
+                            <h2 class="card-title-inline">
+                                <i data-lucide="bar-chart-2" style="width: 20px; height: 20px;"></i>
+                                <span data-i18n="branch.levelDistribution"></span>
+                            </h2>
+                        </div>
+                        <div class="branch-chart-container">
+                            <canvas id="branchLevelChart"></canvas>
+                        </div>
+                    </div>
+
+                    <!-- Students List -->
+                    <div class="branch-card">
+                        <div class="card-header-inline">
+                            <h2 class="card-title-inline">
+                                <i data-lucide="clock" style="width: 20px; height: 20px;"></i>
+                                <span data-i18n="branch.students"></span>
+                            </h2>
+                        </div>
+                        <div class="branch-students-list" id="branchStudentsList">
+                            <!-- Students will be loaded here -->
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Age Distribution Section -->
+                <div class="branch-content-grid" style="margin-top: 1.5rem;">
+                    <!-- Age Distribution Chart -->
+                    <div class="branch-card">
+                        <div class="card-header-inline">
+                            <h2 class="card-title-inline">
+                                <i data-lucide="calendar" style="width: 20px; height: 20px;"></i>
+                                <span data-i18n="branch.ageDistribution">Age Distribution</span>
+                            </h2>
+                        </div>
+                        <div class="branch-chart-container">
+                            <canvas id="branchAgeChart"></canvas>
+                        </div>
+                    </div>
+
+                    <!-- Age Students List -->
+                    <div class="branch-card">
+                        <div class="card-header-inline">
+                            <h2 class="card-title-inline">
+                                <i data-lucide="users" style="width: 20px; height: 20px;"></i>
+                                <span id="ageStudentsHeading" data-i18n="branch.students">All Students</span>
+                            </h2>
+                        </div>
+                        <div class="branch-students-list" id="ageStudentsList">
+                            <!-- Age-filtered students will be loaded here -->
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <!-- End Branch Section -->
+
+            <!-- Coach View Section -->
+            <div id="coachSection" class="content-section">
+                <!-- Coach Header -->
+                <div class="branch-view-header">
+                    <div class="branch-view-info">
+                        <div class="branch-view-name">
+                            <div class="branch-view-icon">
+                                <i data-lucide="user-check" style="width: 32px; height: 32px;"></i>
+                            </div>
+                            <div>
+                                <h1 class="header-title" id="coachViewName" data-i18n="admin.coach.placeholder"></h1>
+                                <div class="branch-view-meta" id="coachViewBranch" data-i18n="common.branch"></div>
+                            </div>
+                        </div>
+                        <div class="branch-view-contact">
+                            <div class="contact-item">
+                                <i data-lucide="phone" style="width: 16px; height: 16px;"></i>
+                                <span id="coachViewPhone" data-i18n="admin.branch.phone"></span>
+                            </div>
+                            <div class="contact-item">
+                                <i data-lucide="mail" style="width: 16px; height: 16px;"></i>
+                                <span id="coachViewEmail" data-i18n="admin.branch.email"></span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Coach Stats -->
+                <div class="stats-grid">
+                    <div class="stat-card">
+                        <div class="stat-header">
+                            <div>
+                                <div class="stat-value" id="coachTotalStudents">0</div>
+                                <div class="stat-label" data-i18n="common.totalStudents"></div>
+                            </div>
+                            <div class="stat-icon blue">
+                                <i data-lucide="users" style="width: 24px; height: 24px;"></i>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="stat-card">
+                        <div class="stat-header">
+                            <div>
+                                <div class="stat-value" id="coachActiveStudents">0</div>
+                                <div class="stat-label" data-i18n="common.activeStudents"></div>
+                            </div>
+                            <div class="stat-icon green">
+                                <i data-lucide="user-check" style="width: 24px; height: 24px;"></i>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="stat-card">
+                        <div class="stat-header">
+                            <div>
+                                <div class="stat-value" id="coachAvgLevel">0</div>
+                                <div class="stat-label" data-i18n="common.avgLevel"></div>
+                            </div>
+                            <div class="stat-icon amber">
+                                <i data-lucide="bar-chart" style="width: 24px; height: 24px;"></i>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="stat-card">
+                        <div class="stat-header">
+                            <div>
+                                <div class="stat-value" id="coachKMSStudents">0</div>
+                                <div class="stat-label" data-i18n="admin.coach.kms"></div>
+                            </div>
+                            <div class="stat-icon purple">
+                                <i data-lucide="trophy" style="width: 24px; height: 24px;"></i>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Coach Content Grid -->
+                <div class="branch-content-grid">
+                    <!-- Razryad Distribution -->
+                    <div class="branch-card">
+                        <div class="card-header-inline">
+                            <h2 class="card-title-inline">
+                                <i data-lucide="trophy" style="width: 20px; height: 20px;"></i>
+                                <span data-i18n="branch.razryadDistribution"></span>
+                                <span id="coachRazryadCount" style="margin-left: 8px; font-weight: 600; color: #3b82f6;"></span>
+                            </h2>
+                        </div>
+                        <div class="branch-chart-container">
+                            <canvas id="coachRazryadChart"></canvas>
+                        </div>
+                    </div>
+
+                    <!-- Level Distribution -->
+                    <div class="branch-card">
+                        <div class="card-header-inline">
+                            <h2 class="card-title-inline">
+                                <i data-lucide="bar-chart-2" style="width: 20px; height: 20px;"></i>
+                                <span data-i18n="branch.levelDistribution"></span>
+                            </h2>
+                        </div>
+                        <div class="branch-chart-container">
+                            <canvas id="coachLevelChart"></canvas>
+                        </div>
+                    </div>
+
+                    <!-- Students List -->
+                    <div class="branch-card" style="grid-column: 1 / -1;">
+                        <div class="card-header-inline">
+                            <h2 class="card-title-inline">
+                                <i data-lucide="users" style="width: 20px; height: 20px;"></i>
+                                <span data-i18n="branch.students"></span>
+                            </h2>
+                        </div>
+                        <div class="branch-students-list" id="coachStudentsList">
+                            <!-- Students will be loaded here -->
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <!-- End Coach Section -->
+
+            <!-- Ratings Management Section -->
+            <div id="ratingsSection" class="content-section">
+                <!-- Header -->
+                <div class="header">
+                    <h1 class="header-title" data-i18n="admin.ratings.title">Ratings Management</h1>
+                    <div class="header-actions">
+                        <button class="btn btn-secondary" onclick="openCSVImportModal()">
+                            <i data-lucide="upload" style="width: 18px; height: 18px;"></i>
+                            <span data-i18n="admin.ratings.importCSV">Import CSV</span>
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Ratings Stats -->
+                <div class="stats-grid">
+                    <div class="stat-card">
+                        <div class="stat-header">
+                            <div>
+                                <div class="stat-value" id="ratedStudentsCount">0</div>
+                                <div class="stat-label" data-i18n="admin.ratings.ratedStudents">Rated Students</div>
+                            </div>
+                            <div class="stat-icon blue">
+                                <i data-lucide="users" style="width: 24px; height: 24px;"></i>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="stat-card">
+                        <div class="stat-header">
+                            <div>
+                                <div class="stat-value" id="avgRating">0</div>
+                                <div class="stat-label" data-i18n="admin.ratings.avgRating">Average Rating</div>
+                            </div>
+                            <div class="stat-icon amber">
+                                <i data-lucide="trending-up" style="width: 24px; height: 24px;"></i>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="stat-card">
+                        <div class="stat-header">
+                            <div>
+                                <div class="stat-value" id="leagueACount">0</div>
+                                <div class="stat-label" data-i18n="admin.ratings.leagueA">League A+/A</div>
+                            </div>
+                            <div class="stat-icon green">
+                                <i data-lucide="crown" style="width: 24px; height: 24px;"></i>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="stat-card">
+                        <div class="stat-header">
+                            <div>
+                                <div class="stat-value" id="recentUpdates">0</div>
+                                <div class="stat-label" data-i18n="admin.ratings.recentUpdates">This Week</div>
+                            </div>
+                            <div class="stat-icon purple">
+                                <i data-lucide="calendar" style="width: 24px; height: 24px;"></i>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Manual Rating Entry -->
+                <div class="branch-card" style="margin-bottom: 1.5rem;">
+                    <div class="card-header-inline">
+                        <h2 class="card-title-inline">
+                            <i data-lucide="edit-3" style="width: 20px; height: 20px;"></i>
+                            <span data-i18n="admin.ratings.addRating">Add/Update Rating</span>
+                        </h2>
+                    </div>
+                    <div style="padding: 1.5rem;">
+                        <div class="form-row">
+                            <div class="form-group" style="flex: 2;">
+                                <label class="form-label" data-i18n="admin.ratings.selectStudent">Select Student</label>
+                                <select id="ratingStudentSelect" class="form-input" onchange="onRatingStudentChange()">
+                                    <option value="" data-i18n="admin.ratings.selectStudentPlaceholder">Search and select student...</option>
+                                </select>
+                            </div>
+                            <div class="form-group" style="flex: 1;">
+                                <label class="form-label" data-i18n="admin.ratings.rating">Rating</label>
+                                <input type="number" id="ratingValue" class="form-input" min="100" max="3000" placeholder="e.g., 850">
+                            </div>
+                            <div class="form-group" style="flex: 1;">
+                                <label class="form-label" data-i18n="admin.ratings.date">Date</label>
+                                <input type="date" id="ratingDate" class="form-input">
+                            </div>
+                            <div class="form-group" style="flex: 0; align-self: flex-end;">
+                                <button class="btn btn-primary" onclick="submitRating()">
+                                    <i data-lucide="plus" style="width: 18px; height: 18px;"></i>
+                                    <span data-i18n="admin.ratings.add">Add</span>
+                                </button>
+                            </div>
+                        </div>
+                        <!-- Current Rating Display -->
+                        <div id="currentRatingDisplay" style="display: none; margin-top: 1rem; padding: 1rem; background: #f8fafc; border-radius: 0.75rem; border: 1px solid #e2e8f0;">
+                            <div style="display: flex; align-items: center; gap: 1rem;">
+                                <div id="currentRatingBadge" class="league-badge"></div>
+                                <div>
+                                    <div style="font-weight: 600; color: #1e293b;" id="currentRatingValue">-</div>
+                                    <div style="font-size: 0.875rem; color: #64748b;" id="currentRatingDate">-</div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Ratings Table -->
+                <div class="table-container">
+                    <div class="table-header">
+                        <h2 class="table-title" data-i18n="admin.ratings.allRatings">All Student Ratings</h2>
+                        <div class="search-box">
+                            <i data-lucide="search" style="width: 18px; height: 18px; color: #94a3b8;"></i>
+                            <input type="text" id="ratingsSearchInput" data-i18n-placeholder="admin.ratings.searchPlaceholder" placeholder="Search students...">
+                        </div>
+                    </div>
+
+                    <div class="table-wrapper">
+                        <table>
+                            <thead>
+                                <tr>
+                                    <th style="width: 50px;">#</th>
+                                    <th data-i18n="admin.table.student">Student</th>
+                                    <th data-i18n="admin.ratings.currentRating">Current Rating</th>
+                                    <th data-i18n="admin.ratings.league">League</th>
+                                    <th data-i18n="admin.ratings.lastUpdated">Last Updated</th>
+                                    <th data-i18n="admin.table.branch">Branch</th>
+                                    <th data-i18n="admin.table.actions">Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody id="ratingsTableBody">
+                                <!-- Content will be loaded by JavaScript -->
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+            <!-- End Ratings Section -->
+
+            <!-- Attendance Management Section -->
+            <div id="attendanceSection" class="content-section">
+                <!-- Header -->
+                <div class="header">
+                    <h1 class="header-title" data-i18n="admin.attendance.title">Attendance Tracking</h1>
+                    <div class="header-actions">
+                        <button class="btn btn-secondary" onclick="openAttendanceImportModal()">
+                            <i data-lucide="upload" style="width: 18px; height: 18px;"></i>
+                            <span data-i18n="admin.attendance.importExcel">Import Excel</span>
+                        </button>
+                        <button class="btn btn-secondary" onclick="exportAttendanceExcel()">
+                            <i data-lucide="download" style="width: 18px; height: 18px;"></i>
+                            <span data-i18n="admin.attendance.exportExcel">Export Excel</span>
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Attendance Stats -->
+                <div class="stats-grid">
+                    <div class="stat-card">
+                        <div class="stat-header">
+                            <div>
+                                <div class="stat-value" id="attendanceTotalSessions">0</div>
+                                <div class="stat-label" data-i18n="admin.attendance.totalSessions">Total Sessions</div>
+                            </div>
+                            <div class="stat-icon blue">
+                                <i data-lucide="calendar" style="width: 24px; height: 24px;"></i>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="stat-card">
+                        <div class="stat-header">
+                            <div>
+                                <div class="stat-value" id="attendanceAvgRate">0%</div>
+                                <div class="stat-label" data-i18n="admin.attendance.avgRate">Avg Attendance</div>
+                            </div>
+                            <div class="stat-icon green">
+                                <i data-lucide="percent" style="width: 24px; height: 24px;"></i>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="stat-card">
+                        <div class="stat-header">
+                            <div>
+                                <div class="stat-value" id="attendanceLowCount">0</div>
+                                <div class="stat-label" data-i18n="admin.attendance.lowAttendance">Low Attendance</div>
+                            </div>
+                            <div class="stat-icon amber">
+                                <i data-lucide="alert-triangle" style="width: 24px; height: 24px;"></i>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="stat-card">
+                        <div class="stat-header">
+                            <div>
+                                <div class="stat-value" id="attendanceStudentsCount">0</div>
+                                <div class="stat-label" data-i18n="admin.attendance.studentsTracked">Students Tracked</div>
+                            </div>
+                            <div class="stat-icon purple">
+                                <i data-lucide="users" style="width: 24px; height: 24px;"></i>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Mobile Filters (replaces stats on mobile) -->
+                <div class="mobile-attendance-filters" style="display: none;">
+                    <div class="mobile-filter-card">
+                        <label for="mobileBranchFilter" data-i18n="admin.attendance.branch">Branch</label>
+                        <select id="mobileBranchFilter" onchange="onMobileAttendanceBranchChange()">
+                            <option value="" data-i18n="admin.attendance.selectBranch">Select Branch</option>
+                        </select>
+                    </div>
+
+                    <!-- Mobile Coach Filter (shows only for branches with 2+ coaches) -->
+                    <div class="mobile-filter-card" id="mobileCoachFilterCard" style="display: none;">
+                        <label for="mobileCoachFilter" data-i18n="admin.attendance.coach">Coach</label>
+                        <select id="mobileCoachFilter" onchange="onMobileAttendanceCoachChange()">
+                            <option value="all" data-i18n="admin.attendance.allCoaches">All Coaches</option>
+                        </select>
+                    </div>
+
+                    <div class="mobile-filter-card">
+                        <label for="mobileScheduleFilter" data-i18n="admin.attendance.schedule">Schedule</label>
+                        <select id="mobileScheduleFilter" onchange="onMobileAttendanceScheduleChange()">
+                            <option value="" data-i18n="admin.attendance.allSchedules">All Schedules</option>
+                            <option value="mon_wed" data-i18n="admin.attendance.monWed">Mon-Wed</option>
+                            <option value="tue_thu" data-i18n="admin.attendance.tueThu">Tue-Thu</option>
+                            <option value="sat_sun" data-i18n="admin.attendance.satSun">Sat-Sun</option>
+                        </select>
+                    </div>
+                </div>
+
+                <!-- Filters -->
+                <div class="filters" style="margin-bottom: 1.5rem;">
+                    <div class="filters-grid">
+                        <div class="filter-group">
+                            <label class="filter-label" data-i18n="admin.attendance.branch">Branch</label>
+                            <select class="filter-select" id="attendanceBranchFilter" onchange="onAttendanceBranchChange()">
+                                <option value="" data-i18n="admin.attendance.selectBranch">Select Branch</option>
+                            </select>
+                        </div>
+                        <!-- Coach Filter (shows only for branches with 2+ coaches) -->
+                        <div class="filter-group" id="attendanceCoachFilterGroup" style="display: none;">
+                            <label class="filter-label" data-i18n="admin.attendance.coach">Coach</label>
+                            <select class="filter-select" id="attendanceCoachFilter" onchange="onAttendanceCoachChange()" disabled>
+                                <option value="all" data-i18n="admin.attendance.allCoaches">All Coaches</option>
+                            </select>
+                        </div>
+                        <div class="filter-group">
+                            <label class="filter-label" data-i18n="admin.attendance.schedule">Schedule</label>
+                            <select class="filter-select" id="attendanceScheduleFilter" onchange="onAttendanceScheduleChange()">
+                                <option value="" data-i18n="admin.attendance.allSchedules">All Schedules</option>
+                                <option value="mon_wed" data-i18n="admin.attendance.monWed">Mon-Wed</option>
+                                <option value="tue_thu" data-i18n="admin.attendance.tueThu">Tue-Thu</option>
+                                <option value="sat_sun" data-i18n="admin.attendance.satSun">Sat-Sun</option>
+                            </select>
+                        </div>
+                        <div class="filter-group">
+                            <label class="filter-label" data-i18n="admin.attendance.timeSlot">Time Slot</label>
+                            <select class="filter-select" id="attendanceTimeSlotFilter" onchange="onAttendanceTimeSlotChange()">
+                                <option value="" data-i18n="admin.attendance.allTimeSlots">All Time Slots</option>
+                            </select>
+                        </div>
+                        <div class="filter-group">
+                            <label class="filter-label" data-i18n="admin.attendance.month">Month</label>
+                            <input type="month" class="filter-select" id="attendanceMonthFilter" onchange="loadAttendanceData()">
+                        </div>
+                        <div class="filter-group" style="display: flex; align-items: flex-end;">
+                            <label class="toggle-switch" style="display: flex; align-items: center; gap: 0.5rem; cursor: pointer;">
+                                <input type="checkbox" id="hideEmptyRowsToggle" onchange="toggleHideEmptyRows()" checked>
+                                <span class="toggle-slider"></span>
+                                <span class="filter-label" style="margin-bottom: 0;" data-i18n="admin.attendance.hideEmptyRows">Hide Empty Rows</span>
+                            </label>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Month Navigation -->
+                <div class="attendance-month-nav" style="display: flex; align-items: center; justify-content: center; gap: 1rem; margin-bottom: 1.5rem;">
+                    <button id="attendancePrevMonthBtn" class="btn btn-secondary" style="padding: 0.5rem; cursor: pointer; display: flex; align-items: center; justify-content: center;">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m15 18-6-6 6-6"/></svg>
+                    </button>
+                    <h2 id="attendanceMonthTitle" style="font-size: 1.25rem; font-weight: 600; color: #1e293b; min-width: 180px; text-align: center;">December 2025</h2>
+                    <button id="attendanceNextMonthBtn" class="btn btn-secondary" style="padding: 0.5rem; cursor: pointer; display: flex; align-items: center; justify-content: center;">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+                    </button>
+                </div>
+
+                <!-- Attendance Mode Selector -->
+                <div class="attendance-mode-selector" style="display: flex; align-items: center; justify-content: center; gap: 1rem; margin-bottom: 1.5rem; padding: 1rem; background: #f8fafc; border-radius: 0.75rem;">
+                    <label style="font-size: 0.9375rem; font-weight: 600; color: #475569;" data-i18n="admin.attendance.mode">Attendance Mode:</label>
+                    <div class="attendance-mode-buttons" style="display: flex; gap: 0.5rem; background: white; padding: 0.25rem; border-radius: 0.5rem; border: 1px solid #e2e8f0;">
+                        <button id="attendanceModePresent" class="attendance-mode-btn active" onclick="setAttendanceMode('present')" aria-label="Mark attendance as Present" aria-pressed="true">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                                <polyline points="20 6 9 17 4 12"></polyline>
+                            </svg>
+                            <span data-i18n="admin.attendance.present">Present</span>
+                        </button>
+                        <button id="attendanceModeExcused" class="attendance-mode-btn" onclick="setAttendanceMode('excused')" aria-label="Mark attendance as Excused" aria-pressed="false">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                                <polyline points="20 6 9 17 4 12"></polyline>
+                            </svg>
+                            <span data-i18n="admin.attendance.excused">Excused</span>
+                        </button>
+                        <button id="attendanceModeAbsent" class="attendance-mode-btn" onclick="setAttendanceMode('absent')" aria-label="Mark attendance as Absent" aria-pressed="false">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                                <line x1="18" y1="6" x2="6" y2="18"></line>
+                                <line x1="6" y1="6" x2="18" y2="18"></line>
+                            </svg>
+                            <span data-i18n="admin.attendance.absent">Absent</span>
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Attendance Calendar Grid -->
+                <div class="branch-card" style="margin-bottom: 1.5rem;">
+                    <div id="attendanceCalendarContainer" style="overflow-x: auto;">
+                        <div id="attendanceCalendarPlaceholder" style="padding: 3rem; text-align: center; color: #64748b;">
+                            <i data-lucide="calendar" style="width: 48px; height: 48px; margin-bottom: 1rem; opacity: 0.5;"></i>
+                            <p data-i18n="admin.attendance.selectBranchPrompt">Select a branch to view attendance calendar</p>
+                        </div>
+                        <table id="attendanceCalendarTable" class="attendance-calendar" style="display: none; width: 100%; border-collapse: collapse;">
+                            <thead id="attendanceCalendarHead">
+                                <!-- Calendar header with dates will be populated by JavaScript -->
+                            </thead>
+                            <tbody id="attendanceCalendarBody">
+                                <!-- Calendar rows with students will be populated by JavaScript -->
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <!-- Attendance Legend -->
+                <div class="attendance-legend" style="display: flex; gap: 1.5rem; flex-wrap: wrap; margin-bottom: 1.5rem; padding: 1rem; background: #f8fafc; border-radius: 0.75rem;">
+                    <div style="display: flex; align-items: center; gap: 0.5rem;">
+                        <span class="attendance-cell present" style="width: 24px; height: 24px; display: inline-flex; align-items: center; justify-content: center; border-radius: 4px; font-size: 0.75rem; font-weight: 600;">V</span>
+                        <span style="font-size: 0.875rem; color: #475569;" data-i18n="admin.attendance.present">Present</span>
+                    </div>
+                    <div style="display: flex; align-items: center; gap: 0.5rem;">
+                        <span class="attendance-cell absent" style="width: 24px; height: 24px; display: inline-flex; align-items: center; justify-content: center; border-radius: 4px; font-size: 0.75rem; font-weight: 600;">X</span>
+                        <span style="font-size: 0.875rem; color: #475569;" data-i18n="admin.attendance.absent">Absent</span>
+                    </div>
+                    <div style="display: flex; align-items: center; gap: 0.5rem;">
+                        <span class="attendance-cell excused" style="width: 24px; height: 24px; display: inline-flex; align-items: center; justify-content: center; border-radius: 4px; font-size: 0.75rem; font-weight: 600;">E</span>
+                        <span style="font-size: 0.875rem; color: #475569;" data-i18n="admin.attendance.excused">Excused</span>
+                    </div>
+                    <div style="margin-left: auto; font-size: 0.875rem; color: #64748b;">
+                        <span data-i18n="admin.attendance.clickToChange">Click cell to change status</span>
+                    </div>
+                </div>
+
+                <!-- Low Attendance Alerts -->
+                <div class="branch-card" id="lowAttendanceAlertsCard">
+                    <div class="card-header-inline">
+                        <h2 class="card-title-inline">
+                            <i data-lucide="alert-triangle" style="width: 20px; height: 20px; color: #f59e0b;"></i>
+                            <span data-i18n="admin.attendance.lowAttendanceAlerts">Low Attendance Alerts</span>
+                            <span id="lowAttendanceAlertCount" style="margin-left: 8px; font-weight: 600; color: #f59e0b;"></span>
+                        </h2>
+                    </div>
+                    <div id="lowAttendanceAlertsList" style="padding: 1rem;">
+                        <p style="color: #64748b; text-align: center;" data-i18n="admin.attendance.noAlerts">No low attendance alerts</p>
+                    </div>
+                </div>
+            </div>
+            <!-- End Attendance Section -->
+
+
+            <!-- Status History Section (oxmarblemaster only) -->
+            <div id="statusHistorySection" class="content-section">
+                <!-- Header -->
+                <div class="header">
+                    <h1 class="header-title" data-i18n="admin.statusHistory.title">Status History</h1>
+                    <div class="header-actions">
+                        <button class="btn btn-secondary" onclick="refreshStatusHistory()">
+                            <i data-lucide="refresh-cw" style="width: 18px; height: 18px; margin-right: 0.5rem;"></i>
+                            <span data-i18n="common.refresh">Refresh</span>
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Filters -->
+                <div class="stats-grid" style="margin-bottom: 1.5rem; grid-template-columns: 1fr 1fr 1fr;">
+                    <div class="stat-card" style="min-width: 0;">
+                        <label class="form-label" style="margin-bottom: 0.5rem;" data-i18n="admin.statusHistory.oldStatus">Old Status</label>
+                        <select id="statusHistoryOldStatusFilter" class="form-input" onchange="filterStatusHistory()">
+                            <option value="" data-i18n="common.all">All</option>
+                            <option value="new" data-i18n="admin.statuses.new">New Student</option>
+                            <option value="active" data-i18n="admin.statuses.active">Active</option>
+                            <option value="frozen" data-i18n="admin.statuses.frozen">Frozen</option>
+                            <option value="trial" data-i18n="admin.statuses.trial">Trial</option>
+                            <option value="left" data-i18n="admin.statuses.left">Left</option>
+                            <option value="graduated" data-i18n="admin.statuses.graduated">Graduated</option>
+                            <option value="inactive" data-i18n="admin.statuses.inactive">Inactive</option>
+                        </select>
+                    </div>
+
+                    <div class="stat-card" style="min-width: 0;">
+                        <label class="form-label" style="margin-bottom: 0.5rem;" data-i18n="admin.statusHistory.newStatus">New Status</label>
+                        <select id="statusHistoryNewStatusFilter" class="form-input" onchange="filterStatusHistory()">
+                            <option value="" data-i18n="common.all">All</option>
+                            <option value="active" data-i18n="admin.statuses.active">Active</option>
+                            <option value="frozen" data-i18n="admin.statuses.frozen">Frozen</option>
+                            <option value="trial" data-i18n="admin.statuses.trial">Trial</option>
+                            <option value="left" data-i18n="admin.statuses.left">Left</option>
+                            <option value="graduated" data-i18n="admin.statuses.graduated">Graduated</option>
+                            <option value="inactive" data-i18n="admin.statuses.inactive">Inactive</option>
+                        </select>
+                    </div>
+
+                    <div class="stat-card" style="min-width: 0;">
+                        <label class="form-label" style="margin-bottom: 0.5rem;" data-i18n="admin.statusHistory.dateRange">Date Range</label>
+                        <select id="statusHistoryDateFilter" class="form-input" onchange="toggleStatusHistoryCustomDates()">
+                            <option value="7d" data-i18n="admin.statusHistory.last7days">Last 7 Days</option>
+                            <option value="30d" selected data-i18n="admin.statusHistory.last30days">Last 30 Days</option>
+                            <option value="90d" data-i18n="admin.statusHistory.last90days">Last 90 Days</option>
+                            <option value="all" data-i18n="common.all">All Time</option>
+                            <option value="custom" data-i18n="common.customRange">Custom Range</option>
+                        </select>
+                        <div id="statusHistoryCustomDates" class="custom-date-range" style="display: none;">
+                            <div class="date-range-row">
+                                <div class="date-range-field">
+                                    <label data-i18n="admin.userActivity.from">From</label>
+                                    <input type="date" id="statusHistoryFromDate" class="date-input">
+                                </div>
+                                <div class="date-range-field">
+                                    <label data-i18n="admin.userActivity.to">To</label>
+                                    <input type="date" id="statusHistoryToDate" class="date-input">
+                                </div>
+                                <button class="btn btn-sm btn-primary date-apply-btn" onclick="applyStatusHistoryCustomDates()">
+                                    <i data-lucide="check" style="width:16px;height:16px;"></i>
+                                    <span data-i18n="admin.userActivity.apply">Apply</span>
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Status History Table -->
+                <div class="table-container">
+                    <table class="data-table">
+                        <thead>
+                            <tr>
+                                <th data-i18n="admin.statusHistory.timestamp">Timestamp</th>
+                                <th data-i18n="admin.statusHistory.student">Student</th>
+                                <th data-i18n="admin.statusHistory.branch">Branch</th>
+                                <th data-i18n="admin.statusHistory.oldStatus">Old Status</th>
+                                <th data-i18n="admin.statusHistory.newStatus">New Status</th>
+                                <th data-i18n="admin.statusHistory.changedBy">Changed By</th>
+                            </tr>
+                        </thead>
+                        <tbody id="statusHistoryTableBody">
+                            <tr>
+                                <td colspan="6" style="text-align: center; padding: 2rem; color: #94a3b8;">
+                                    <i data-lucide="loader" style="width: 24px; height: 24px; margin: 0 auto; animation: spin 1s linear infinite;"></i>
+                                    <p style="margin-top: 0.5rem;" data-i18n="common.loading">Loading...</p>
+                                </td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+            <!-- End Status History Section -->
+
+            <!-- User Sessions Section (oxmarblemaster only) -->
+            <div id="sessionsSection" class="content-section">
+                <!-- Header -->
+                <div class="header">
+                    <h1 class="header-title" data-i18n="admin.sessions.title">User Sessions</h1>
+                    <div class="header-actions">
+                        <button class="btn btn-secondary" onclick="refreshSessions()">
+                            <i data-lucide="refresh-cw" style="width: 18px; height: 18px; margin-right: 0.5rem;"></i>
+                            <span data-i18n="common.refresh">Refresh</span>
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Stats Cards -->
+                <div class="stats-grid" style="margin-bottom: 1.5rem;">
+                    <div class="stat-card">
+                        <div class="stat-label" data-i18n="admin.sessions.totalSessions">Total Sessions</div>
+                        <div class="stat-value" id="sessionsTotalCount">-</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-label" data-i18n="admin.sessions.uniqueUsers">Unique Users</div>
+                        <div class="stat-value" id="sessionsUniqueUsers">-</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-label" data-i18n="admin.sessions.avgDuration">Avg Duration</div>
+                        <div class="stat-value" id="sessionsAvgDuration">-</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-label" data-i18n="admin.sessions.activeSessions">Active Sessions</div>
+                        <div class="stat-value" id="sessionsActiveCount">-</div>
+                    </div>
+                </div>
+
+                <!-- Filters -->
+                <div class="stats-grid" style="margin-bottom: 1.5rem;">
+                    <div class="stat-card">
+                        <label class="form-label" style="margin-bottom: 0.5rem;" data-i18n="admin.sessions.status">Status</label>
+                        <select id="sessionsStatusFilter" class="form-input" onchange="filterSessions()">
+                            <option value="" data-i18n="common.all">All</option>
+                            <option value="active" data-i18n="admin.sessions.active">Active</option>
+                            <option value="logged_out" data-i18n="admin.sessions.loggedOut">Logged Out</option>
+                            <option value="expired" data-i18n="admin.sessions.expired">Expired</option>
+                        </select>
+                    </div>
+
+                    <div class="stat-card">
+                        <label class="form-label" style="margin-bottom: 0.5rem;" data-i18n="admin.sessions.deviceType">Device Type</label>
+                        <select id="sessionsDeviceFilter" class="form-input" onchange="filterSessions()">
+                            <option value="" data-i18n="common.all">All</option>
+                            <option value="desktop" data-i18n="admin.sessions.desktop">Desktop</option>
+                            <option value="mobile" data-i18n="admin.sessions.mobile">Mobile</option>
+                            <option value="tablet" data-i18n="admin.sessions.tablet">Tablet</option>
+                        </select>
+                    </div>
+
+                    <div class="stat-card">
+                        <label class="form-label" style="margin-bottom: 0.5rem;" data-i18n="admin.sessions.user">User</label>
+                        <select id="sessionsUserFilter" class="form-input" onchange="filterSessions()">
+                            <option value="" data-i18n="admin.sessions.allUsers">All Users</option>
+                            <!-- Populated dynamically by loadSessionUsers() -->
+                        </select>
+                    </div>
+
+                    <div class="stat-card">
+                        <label class="form-label" style="margin-bottom: 0.5rem;" data-i18n="admin.sessions.dateRange">Date Range</label>
+                        <select id="sessionsDateFilter" class="form-input" onchange="toggleSessionsCustomDates()">
+                            <option value="24h" data-i18n="admin.sessions.last24h">Last 24 Hours</option>
+                            <option value="7d" selected data-i18n="admin.sessions.last7days">Last 7 Days</option>
+                            <option value="30d" data-i18n="admin.sessions.last30days">Last 30 Days</option>
+                            <option value="all" data-i18n="common.all">All Time</option>
+                            <option value="custom" data-i18n="common.customRange">Custom Range</option>
+                        </select>
+                        <div id="sessionsCustomDates" class="custom-date-range" style="display: none;">
+                            <div class="date-range-row">
+                                <div class="date-range-field">
+                                    <label data-i18n="admin.userActivity.from">From</label>
+                                    <input type="date" id="sessionsFromDate" class="date-input">
+                                </div>
+                                <div class="date-range-field">
+                                    <label data-i18n="admin.userActivity.to">To</label>
+                                    <input type="date" id="sessionsToDate" class="date-input">
+                                </div>
+                                <button class="btn btn-sm btn-primary date-apply-btn" onclick="applySessionsCustomDates()">
+                                    <i data-lucide="check" style="width:16px;height:16px;"></i>
+                                    <span data-i18n="admin.userActivity.apply">Apply</span>
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Sessions Table -->
+                <div class="table-container">
+                    <table class="data-table">
+                        <thead>
+                            <tr>
+                                <th data-i18n="admin.sessions.user">User</th>
+                                <th data-i18n="admin.sessions.loginAt">Login Time</th>
+                                <th data-i18n="admin.sessions.duration">Duration</th>
+                                <th data-i18n="admin.sessions.device">Device</th>
+                                <th data-i18n="admin.sessions.browser">Browser</th>
+                                <th data-i18n="admin.sessions.os">OS</th>
+                                <th data-i18n="admin.sessions.status">Status</th>
+                            </tr>
+                        </thead>
+                        <tbody id="sessionsTableBody">
+                            <tr>
+                                <td colspan="7" style="text-align: center; padding: 2rem; color: #94a3b8;">
+                                    <i data-lucide="loader" style="width: 24px; height: 24px; margin: 0 auto; animation: spin 1s linear infinite;"></i>
+                                    <p style="margin-top: 0.5rem;" data-i18n="common.loading">Loading...</p>
+                                </td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+            <!-- End User Sessions Section -->
+
+            <!-- User Activity Analytics Section (oxmarblemaster only) -->
+            <div id="userActivitySection" class="content-section">
+                <!-- Header -->
+                <div class="header">
+                    <h1 class="header-title" data-i18n="admin.userActivity.title">User Activity</h1>
+                    <div class="header-actions">
+                        <button class="btn btn-secondary" onclick="refreshUserActivity()">
+                            <i data-lucide="refresh-cw" style="width: 18px; height: 18px; margin-right: 0.5rem;"></i>
+                            <span data-i18n="common.refresh">Refresh</span>
+                        </button>
+                    </div>
+                </div>
+            </div>
+            <!-- End User Activity Section -->
+
+            <!-- Activity Log Section (unified) -->
+            <div id="coachActivitySection" class="content-section">
+                <!-- Header -->
+                <div class="header">
+                    <h1 class="header-title" data-i18n="admin.coachActivity.title">Activity Log</h1>
+                    <div class="header-actions">
+                        <button class="btn btn-secondary" onclick="loadCoachActivity()">
+                            <i data-lucide="refresh-cw" style="width: 18px; height: 18px; margin-right: 0.5rem;"></i>
+                            <span data-i18n="common.refresh">Refresh</span>
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Filters -->
+                <div class="stats-grid" style="margin-bottom: 1.5rem; flex-wrap: wrap;">
+                    <div class="stat-card">
+                        <label class="form-label" style="margin-bottom: 0.5rem;" data-i18n="admin.coachActivity.user">User</label>
+                        <select id="caCoachFilter" class="form-input" onchange="loadCoachActivity()">
+                            <option value="all" data-i18n="common.all">All</option>
+                        </select>
+                    </div>
+
+                    <div class="stat-card">
+                        <label class="form-label" style="margin-bottom: 0.5rem;" data-i18n="admin.coachActivity.dateRange">Period</label>
+                        <select id="caDateFilter" class="form-input" onchange="onCaDateFilterChange()">
+                            <option value="1d" data-i18n="admin.coachActivity.today">Today</option>
+                            <option value="7d" selected data-i18n="admin.activityLog.last7days">Last 7 Days</option>
+                            <option value="30d" data-i18n="admin.activityLog.last30days">Last 30 Days</option>
+                            <option value="custom" data-i18n="common.customRange">Custom Range</option>
+                        </select>
+                        <div id="caCustomDateGroup" style="display: none; margin-top: 0.5rem;">
+                            <label data-i18n="admin.userActivity.from">From</label>
+                            <input type="date" id="caDateFrom" class="date-input">
+                        </div>
+                        <div id="caCustomDateToGroup" style="display: none; margin-top: 0.5rem;">
+                            <label data-i18n="admin.userActivity.to">To</label>
+                            <input type="date" id="caDateTo" class="date-input">
+                            <button class="btn btn-sm btn-primary" style="margin-top: 0.5rem;" onclick="loadCoachActivity()">
+                                <i data-lucide="check" style="width:16px;height:16px;"></i>
+                                <span data-i18n="admin.userActivity.apply">Apply</span>
+                            </button>
+                        </div>
+                    </div>
+
+                    <div class="stat-card">
+                        <label class="form-label" style="margin-bottom: 0.5rem;" data-i18n="admin.coachActivity.entityType">Entity Type</label>
+                        <select id="caEntityFilter" class="form-input" onchange="loadCoachActivity()">
+                            <option value="all" data-i18n="common.all">All</option>
+                            <option value="students" data-i18n="admin.activityLog.students">Students</option>
+                            <option value="attendance" data-i18n="admin.sidebar.attendance">Attendance</option>
+                            <option value="coaches" data-i18n="admin.activityLog.coaches">Coaches</option>
+                            <option value="branches" data-i18n="admin.activityLog.branches">Branches</option>
+                        </select>
+                    </div>
+
+                    <div class="stat-card">
+                        <label class="form-label" style="margin-bottom: 0.5rem;" data-i18n="admin.coachActivity.actionType">Action Type</label>
+                        <select id="caActionFilter" class="form-input" onchange="loadCoachActivity()">
+                            <option value="all" data-i18n="common.all">All</option>
+                            <option value="CREATE" data-i18n="admin.activityLog.create">Create</option>
+                            <option value="UPDATE" data-i18n="admin.activityLog.update">Update</option>
+                            <option value="DELETE" data-i18n="admin.activityLog.delete">Delete</option>
+                        </select>
+                    </div>
+                </div>
+
+                <!-- Summary Cards -->
+                <div class="stats-grid" style="margin-bottom: 1.5rem;">
+                    <div class="stat-card">
+                        <div class="stat-label" data-i18n="admin.coachActivity.totalActions">Total Actions</div>
+                        <div class="stat-value" id="caTotal">0</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-label" data-i18n="admin.coachActivity.lastAction">Last Action</div>
+                        <div class="stat-value" id="caDaysActive" style="font-size:1.25rem;">-</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-label" data-i18n="admin.coachActivity.mostActiveCoach">Most Active Coach</div>
+                        <div class="stat-value" id="caMostActive">-</div>
+                    </div>
+                </div>
+
+                <!-- Activity Table -->
+                <div class="table-container">
+                    <table class="data-table">
+                        <thead>
+                            <tr>
+                                <th data-i18n="admin.coachActivity.dateTime">Date/Time</th>
+                                <th data-i18n="admin.coachActivity.coach">Coach</th>
+                                <th data-i18n="admin.coachActivity.action">Action</th>
+                                <th data-i18n="admin.coachActivity.entity">Entity</th>
+                                <th data-i18n="admin.coachActivity.details">Details</th>
+                                <th data-i18n="admin.coachActivity.student">Student</th>
+                            </tr>
+                        </thead>
+                        <tbody id="caTableBody">
+                            <tr><td colspan="6" style="text-align:center;padding:2rem;color:#94a3b8;" data-i18n="admin.coachActivity.noData">No activity found</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+
+                <!-- Result Info & Load More -->
+                <div style="display:flex;align-items:center;justify-content:space-between;margin-top:1rem;">
+                    <span id="caResultInfo" style="color:#94a3b8;font-size:0.875rem;"></span>
+                    <button id="caLoadMoreBtn" class="btn btn-secondary" style="display:none;" onclick="loadMoreCoachActivity()">
+                        <i data-lucide="chevrons-down" style="width:18px;height:18px;margin-right:0.5rem;"></i>
+                        <span data-i18n="common.loadMore">Load More</span>
+                    </button>
+                </div>
+            </div>
+            <!-- End Activity Log Section -->
+
+            <!-- More Menu Section -->
+            <div id="moreMenuSection" class="content-section">
+                <div class="header">
+                    <h1 class="header-title" data-i18n="admin.header.settings">More</h1>
+                </div>
+                <div class="more-menu-list">
+                    <button class="more-menu-item" onclick="showMobileSection('userActivity', event)">
+                        <div class="more-menu-item-left">
+                            <div class="more-menu-icon" style="background: #f0fdf4; color: #059669;">
+                                <i data-lucide="bar-chart-3"></i>
+                            </div>
+                            <span data-i18n="admin.userActivity.title">User Activity</span>
+                        </div>
+                        <i data-lucide="chevron-right" class="more-menu-chevron"></i>
+                    </button>
+                    <button class="more-menu-item" onclick="showMobileSection('statusHistory', event)">
+                        <div class="more-menu-item-left">
+                            <div class="more-menu-icon" style="background: #fef3c7; color: #d97706;">
+                                <i data-lucide="history"></i>
+                            </div>
+                            <span data-i18n="admin.statusHistory.title">Status History</span>
+                        </div>
+                        <i data-lucide="chevron-right" class="more-menu-chevron"></i>
+                    </button>
+                    <button class="more-menu-item" onclick="showMobileSection('coachActivity', event)">
+                        <div class="more-menu-item-left">
+                            <div class="more-menu-icon" style="background: #eff6ff; color: #2563eb;">
+                                <i data-lucide="activity"></i>
+                            </div>
+                            <span data-i18n="admin.coachActivity.title">Activity Log</span>
+                        </div>
+                        <i data-lucide="chevron-right" class="more-menu-chevron"></i>
+                    </button>
+                    <div class="more-menu-divider"></div>
+                    <button class="more-menu-item more-menu-logout" onclick="handleLogout()">
+                        <div class="more-menu-item-left">
+                            <div class="more-menu-icon" style="background: #fef2f2; color: #dc2626;">
+                                <i data-lucide="log-out"></i>
+                            </div>
+                            <span data-i18n="common.logout">Logout</span>
+                        </div>
+                    </button>
+                </div>
+            </div>
+            <!-- End More Menu Section -->
+
+        </main>
+
+    </div>
+
+    <!-- Add Student Modal -->
+    <div id="addStudentModal" class="modal">
+        <div class="modal-overlay" onclick="closeAddStudentModal()"></div>
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2 class="modal-title" data-i18n="admin.modals.add.title"></h2>
+                <button class="modal-close" onclick="closeAddStudentModal()">
+                    <i data-lucide="x" style="width: 24px; height: 24px;"></i>
+                </button>
+            </div>
+
+            <form id="addStudentForm" class="modal-body">
+                <!-- Student Information -->
+                <div class="form-section">
+                    <h3 class="form-section-title" data-i18n="admin.modals.add.studentInfo"></h3>
+
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="firstName" class="form-label" data-i18n="admin.modals.add.firstName"></label>
+                            <input type="text" id="firstName" name="firstName" class="form-input" required data-i18n-placeholder="admin.modals.add.firstNamePlaceholder">
+                        </div>
+                        <div class="form-group">
+                            <label for="lastName" class="form-label" data-i18n="admin.modals.add.lastName"></label>
+                            <input type="text" id="lastName" name="lastName" class="form-input" required data-i18n-placeholder="admin.modals.add.lastNamePlaceholder">
+                        </div>
+                    </div>
+
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="age" class="form-label" data-i18n="admin.modals.add.age"></label>
+                            <input type="number" id="age" name="age" class="form-input" min="3" max="100" required data-i18n-placeholder="admin.modals.add.agePlaceholder">
+                        </div>
+                        <div class="form-group">
+                            <label for="dateOfBirth" class="form-label" data-i18n="admin.modals.add.dateOfBirth"></label>
+                            <input type="date" id="dateOfBirth" name="dateOfBirth" class="form-input">
+                        </div>
+                    </div>
+
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="gender" class="form-label" data-i18n="admin.modals.add.gender"></label>
+                            <select id="gender" name="gender" class="form-input">
+                                <option value="" disabled selected data-i18n="admin.modals.add.genderSelect"></option>
+                                <option value="male" data-i18n="admin.modals.add.genderMale"></option>
+                                <option value="female" data-i18n="admin.modals.add.genderFemale"></option>
+                            </select>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Photo Upload -->
+                <div class="form-section">
+                    <h3 class="form-section-title" data-i18n="admin.modals.add.photo"></h3>
+                    <div class="photo-upload-container">
+                        <div class="photo-preview" id="photoPreview">
+                            <i data-lucide="user" style="width: 64px; height: 64px; color: #94a3b8;"></i>
+                        </div>
+                        <div class="photo-upload-actions">
+                            <label for="photoUpload" class="btn-upload">
+                                <i data-lucide="upload" style="width: 18px; height: 18px;"></i>
+                                <span data-i18n="admin.modals.add.uploadPhoto"></span>
+                            </label>
+                            <input type="file" id="photoUpload" accept="image/*" style="display: none;" onchange="previewPhoto(event)">
+                            <p class="upload-hint" data-i18n="admin.modals.add.uploadHint"></p>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Branch and Coach Assignment -->
+                <div class="form-section">
+                    <h3 class="form-section-title" data-i18n="admin.modals.add.branchCoach"></h3>
+
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="branchSelect" class="form-label" data-i18n="admin.modals.add.branch"></label>
+                            <select id="branchSelect" name="branch" class="form-input" required onchange="updateCoachOptions()">
+                                <option value="" data-i18n="admin.modals.add.branchSelect"></option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label for="coachSelect" class="form-label" data-i18n="admin.modals.add.coach"></label>
+                            <select id="coachSelect" name="coach" class="form-input" required>
+                                <option value="" data-i18n="admin.modals.add.coachSelect"></option>
+                            </select>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Level Placement -->
+                <div class="form-section">
+                    <h3 class="form-section-title" data-i18n="admin.modals.add.levelPlacement"></h3>
+
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="razryadSelect" class="form-label" data-i18n="admin.modals.add.razryad"></label>
+                            <select id="razryadSelect" name="razryad" class="form-input">
+                                <option value="" data-i18n="admin.razryad.none"></option>
+                                <option value="4th" data-i18n="admin.razryad.4th"></option>
+                                <option value="3rd" data-i18n="admin.razryad.3rd"></option>
+                                <option value="2nd" data-i18n="admin.razryad.2nd"></option>
+                                <option value="1st" data-i18n="admin.razryad.1st"></option>
+                                <option value="KMS" data-i18n="admin.razryad.kms"></option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label for="statusSelect" class="form-label" data-i18n="admin.modals.add.status"></label>
+                            <select id="statusSelect" name="status" class="form-input">
+                                <option value="active" selected data-i18n="admin.modals.add.statusActive"></option>
+                                <option value="frozen" data-i18n="admin.modals.add.statusFrozen"></option>
+                                <option value="left" data-i18n="admin.modals.add.statusInactive"></option>
+                            </select>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Contact Information -->
+                <div class="form-section">
+                    <h3 class="form-section-title" data-i18n="admin.modals.add.contact"></h3>
+
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="parentName" class="form-label" data-i18n="admin.modals.add.parentName"></label>
+                            <input type="text" id="parentName" name="parentName" class="form-input" data-i18n-placeholder="admin.modals.add.parentPlaceholder">
+                        </div>
+                        <div class="form-group">
+                            <label for="phoneNumber" class="form-label" data-i18n="admin.modals.add.phone"></label>
+                            <input type="tel" id="phoneNumber" name="phoneNumber" class="form-input" data-i18n-placeholder="admin.modals.add.phonePlaceholder">
+                        </div>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="email" class="form-label" data-i18n="admin.modals.add.email"></label>
+                        <input type="email" id="email" name="email" class="form-input" data-i18n-placeholder="admin.modals.add.emailPlaceholder">
+                    </div>
+                </div>
+            </form>
+
+            <div class="modal-footer">
+                <button type="button" class="btn-secondary" onclick="closeAddStudentModal()" data-i18n="admin.modals.add.cancel"></button>
+                <button type="submit" form="addStudentForm" class="btn-primary" onclick="submitAddStudent(event)">
+                    <i data-lucide="plus" style="width: 18px; height: 18px;"></i>
+                    <span data-i18n="admin.modals.add.submit"></span>
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Edit Student Modal -->
+    <div id="editStudentModal" class="modal">
+        <div class="modal-overlay" onclick="closeEditStudentModal()"></div>
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2 class="modal-title" data-i18n="admin.modals.edit.title"></h2>
+                <button class="modal-close" onclick="closeEditStudentModal()">
+                    <i data-lucide="x" style="width: 24px; height: 24px;"></i>
+                </button>
+            </div>
+
+            <form id="editStudentForm" class="modal-body">
+                <input type="hidden" id="editStudentId" name="studentId">
+
+                <!-- Student Information -->
+                <div class="form-section">
+                    <h3 class="form-section-title" data-i18n="admin.modals.add.studentInfo"></h3>
+
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="editFirstName" class="form-label" data-i18n="admin.modals.add.firstName"></label>
+                            <input type="text" id="editFirstName" name="firstName" class="form-input" required data-i18n-placeholder="admin.modals.add.firstNamePlaceholder">
+                        </div>
+                        <div class="form-group">
+                            <label for="editLastName" class="form-label" data-i18n="admin.modals.add.lastName"></label>
+                            <input type="text" id="editLastName" name="lastName" class="form-input" required data-i18n-placeholder="admin.modals.add.lastNamePlaceholder">
+                        </div>
+                    </div>
+
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="editDateOfBirth" class="form-label" data-i18n="student.dateOfBirth"></label>
+                            <input type="date" id="editDateOfBirth" name="dateOfBirth" class="form-input">
+                            <small class="form-hint" id="editAgeDisplay"></small>
+                        </div>
+                        <div class="form-group">
+                            <label for="editGender" class="form-label" data-i18n="admin.modals.add.gender"></label>
+                            <select id="editGender" name="gender" class="form-input">
+                                <option value="" data-i18n="admin.modals.edit.genderUnknown"></option>
+                                <option value="male" data-i18n="admin.modals.add.genderMale"></option>
+                                <option value="female" data-i18n="admin.modals.add.genderFemale"></option>
+                            </select>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Photo Upload -->
+                <div class="form-section">
+                    <h3 class="form-section-title" data-i18n="admin.modals.add.photo"></h3>
+                    <div class="photo-upload-container">
+                        <div class="photo-preview" id="editPhotoPreview">
+                            <i data-lucide="user" style="width: 64px; height: 64px; color: #94a3b8;"></i>
+                        </div>
+                        <div class="photo-upload-actions">
+                            <label for="editPhotoUpload" class="btn-upload">
+                                <i data-lucide="upload" style="width: 18px; height: 18px;"></i>
+                                <span data-i18n="admin.modals.add.uploadPhoto"></span>
+                            </label>
+                            <input type="file" id="editPhotoUpload" name="photo" accept="image/*" style="display: none;" onchange="previewEditPhoto(event)">
+                            <button type="button" id="editRemovePhotoBtn" class="btn-remove-photo" style="display: none;" onclick="removeEditPhoto()">
+                                <i data-lucide="trash-2" style="width: 16px; height: 16px;"></i>
+                                <span data-i18n="admin.modals.edit.removePhoto"></span>
+                            </button>
+                            <p class="upload-hint" data-i18n="admin.modals.add.uploadHint"></p>
+                        </div>
+                    </div>
+                    <input type="hidden" id="editCurrentPhotoUrl" name="currentPhotoUrl">
+                </div>
+
+                <!-- Branch and Coach Assignment -->
+                <div class="form-section">
+                    <h3 class="form-section-title" data-i18n="admin.modals.add.branchCoach"></h3>
+
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="editBranchSelect" class="form-label" data-i18n="admin.modals.add.branch"></label>
+                            <select id="editBranchSelect" name="branch" class="form-input" required onchange="updateEditCoachOptions()">
+                                <option value="" data-i18n="admin.modals.add.branchSelect"></option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label for="editCoachSelect" class="form-label" data-i18n="admin.modals.add.coach"></label>
+                            <select id="editCoachSelect" name="coach" class="form-input" required>
+                                <option value="" data-i18n="admin.modals.add.coachSelect"></option>
+                            </select>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Level & Progress -->
+                <div class="form-section">
+                    <h3 class="form-section-title" data-i18n="admin.modals.edit.level"></h3>
+
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="editRazryadSelect" class="form-label" data-i18n="admin.modals.add.razryad"></label>
+                            <select id="editRazryadSelect" name="razryad" class="form-input">
+                                <option value="" data-i18n="admin.razryad.none"></option>
+                                <option value="4th" data-i18n="admin.razryad.4th"></option>
+                                <option value="3rd" data-i18n="admin.razryad.3rd"></option>
+                                <option value="2nd" data-i18n="admin.razryad.2nd"></option>
+                                <option value="1st" data-i18n="admin.razryad.1st"></option>
+                                <option value="KMS" data-i18n="admin.razryad.kms"></option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label for="editStatusSelect" class="form-label" data-i18n="admin.modals.add.status"></label>
+                            <select id="editStatusSelect" name="status" class="form-input" required>
+                                <option value="active" data-i18n="admin.modals.add.statusActive"></option>
+                                <option value="frozen" data-i18n="admin.modals.add.statusFrozen"></option>
+                                <option value="left" data-i18n="admin.modals.add.statusLeft"></option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="editCurrentLevel" class="form-label" data-i18n="admin.modals.edit.currentLevel"></label>
+                            <input type="number" id="editCurrentLevel" name="currentLevel" class="form-input" min="1" max="10" data-i18n-placeholder="admin.modals.edit.levelPlaceholder">
+                        </div>
+                        <div class="form-group">
+                            <label for="editCurrentLesson" class="form-label" data-i18n="admin.modals.edit.currentLesson"></label>
+                            <input type="number" id="editCurrentLesson" name="currentLesson" class="form-input" min="1" max="105" data-i18n-placeholder="admin.modals.edit.lessonPlaceholder">
+                        </div>
+                    </div>
+
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="editChessRating" class="form-label" data-i18n="admin.modals.edit.chessRating">Chess Rating</label>
+                            <input type="number" id="editChessRating" name="chessRating" class="form-input" min="0" max="3000" placeholder="e.g., 850">
+                            <small class="form-hint" data-i18n="admin.modals.edit.chessRatingHint">Leave empty to keep unchanged</small>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Bot Progress -->
+                <div class="form-section">
+                    <h3 class="form-section-title" data-i18n="admin.modals.edit.botProgress">Bot Progress</h3>
+                    <p class="form-hint" data-i18n="admin.modals.edit.botProgressHint">Check bots the student has defeated</p>
+                    <div id="editBotGrid" class="edit-bot-grid">
+                        <!-- Bot checkboxes will be populated by JavaScript -->
+                    </div>
+                </div>
+
+                <!-- Puzzle Rush Progress -->
+                <div class="form-section">
+                    <h3 class="form-section-title" data-i18n="admin.modals.edit.puzzleRush">Puzzle Rush</h3>
+                    <p class="form-hint" data-i18n="admin.modals.edit.puzzleRushHint">Enter the student's best Puzzle Rush score</p>
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="editPuzzleRushScore" class="form-label" data-i18n="admin.modals.edit.puzzleRushScore">Best Score</label>
+                            <input type="number" id="editPuzzleRushScore" name="puzzleRushScore" class="form-input" min="0" max="100" placeholder="0">
+                        </div>
+                    </div>
+                </div>
+            </form>
+
+            <div class="modal-footer">
+                <button type="button" class="btn-secondary" onclick="closeEditStudentModal()" data-i18n="admin.modals.add.cancel"></button>
+                <button type="submit" form="editStudentForm" class="btn-primary" onclick="submitEditStudent(event)">
+                    <i data-lucide="save" style="width: 18px; height: 18px;"></i>
+                    <span data-i18n="admin.modals.edit.save"></span>
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Add Coach Modal -->
+    <div id="addCoachModal" class="modal">
+        <div class="modal-overlay" onclick="closeAddCoachModal()"></div>
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2 class="modal-title" data-i18n="admin.modals.coach.addTitle">Add New Coach</h2>
+                <button class="modal-close" onclick="closeAddCoachModal()">
+                    <i data-lucide="x" style="width: 24px; height: 24px;"></i>
+                </button>
+            </div>
+
+            <form id="addCoachForm" class="modal-body">
+                <!-- Coach Information -->
+                <div class="form-section">
+                    <h3 class="form-section-title" data-i18n="admin.modals.coach.coachInfo">Coach Information</h3>
+
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="coachFirstName" class="form-label" data-i18n="admin.modals.coach.firstName">First Name</label>
+                            <input type="text" id="coachFirstName" name="firstName" class="form-input" required data-i18n-placeholder="admin.modals.coach.firstNamePlaceholder">
+                        </div>
+                        <div class="form-group">
+                            <label for="coachLastName" class="form-label" data-i18n="admin.modals.coach.lastName">Last Name</label>
+                            <input type="text" id="coachLastName" name="lastName" class="form-input" required data-i18n-placeholder="admin.modals.coach.lastNamePlaceholder">
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Contact Information -->
+                <div class="form-section">
+                    <h3 class="form-section-title" data-i18n="admin.modals.coach.contactInfo">Contact Information</h3>
+
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="coachEmail" class="form-label" data-i18n="admin.modals.coach.email">Email</label>
+                            <input type="email" id="coachEmail" name="email" class="form-input" required data-i18n-placeholder="admin.modals.coach.emailPlaceholder">
+                        </div>
+                        <div class="form-group">
+                            <label for="coachPhone" class="form-label" data-i18n="admin.modals.coach.phone">Phone</label>
+                            <input type="tel" id="coachPhone" name="phone" class="form-input" required data-i18n-placeholder="admin.modals.coach.phonePlaceholder">
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Branch Assignment -->
+                <div class="form-section">
+                    <h3 class="form-section-title" data-i18n="admin.modals.coach.branchAssignment">Branch Assignment</h3>
+
+                    <div class="form-group">
+                        <label for="coachBranchSelect" class="form-label" data-i18n="admin.modals.coach.branch">Branch</label>
+                        <select id="coachBranchSelect" name="branch" class="form-input" required>
+                            <option value="" data-i18n="admin.modals.coach.branchSelect">Select Branch</option>
+                        </select>
+                    </div>
+                </div>
+            </form>
+
+            <div class="modal-footer">
+                <button type="button" class="btn-secondary" onclick="closeAddCoachModal()" data-i18n="admin.modals.coach.cancel">Cancel</button>
+                <button type="submit" form="addCoachForm" class="btn-primary" onclick="submitAddCoach(event)">
+                    <i data-lucide="plus" style="width: 18px; height: 18px;"></i>
+                    <span data-i18n="admin.modals.coach.addSubmit">Add Coach</span>
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Edit Coach Modal -->
+    <div id="editCoachModal" class="modal">
+        <div class="modal-overlay" onclick="closeEditCoachModal()"></div>
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2 class="modal-title" data-i18n="admin.modals.coach.editTitle">Edit Coach</h2>
+                <button class="modal-close" onclick="closeEditCoachModal()">
+                    <i data-lucide="x" style="width: 24px; height: 24px;"></i>
+                </button>
+            </div>
+
+            <form id="editCoachForm" class="modal-body">
+                <input type="hidden" id="editCoachId" name="coachId">
+
+                <!-- Coach Information -->
+                <div class="form-section">
+                    <h3 class="form-section-title" data-i18n="admin.modals.coach.coachInfo">Coach Information</h3>
+
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="editCoachFirstName" class="form-label" data-i18n="admin.modals.coach.firstName">First Name</label>
+                            <input type="text" id="editCoachFirstName" name="firstName" class="form-input" required data-i18n-placeholder="admin.modals.coach.firstNamePlaceholder">
+                        </div>
+                        <div class="form-group">
+                            <label for="editCoachLastName" class="form-label" data-i18n="admin.modals.coach.lastName">Last Name</label>
+                            <input type="text" id="editCoachLastName" name="lastName" class="form-input" required data-i18n-placeholder="admin.modals.coach.lastNamePlaceholder">
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Contact Information -->
+                <div class="form-section">
+                    <h3 class="form-section-title" data-i18n="admin.modals.coach.contactInfo">Contact Information</h3>
+
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="editCoachEmail" class="form-label" data-i18n="admin.modals.coach.email">Email</label>
+                            <input type="email" id="editCoachEmail" name="email" class="form-input" required data-i18n-placeholder="admin.modals.coach.emailPlaceholder">
+                        </div>
+                        <div class="form-group">
+                            <label for="editCoachPhone" class="form-label" data-i18n="admin.modals.coach.phone">Phone</label>
+                            <input type="tel" id="editCoachPhone" name="phone" class="form-input" required data-i18n-placeholder="admin.modals.coach.phonePlaceholder">
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Branch Assignment -->
+                <div class="form-section">
+                    <h3 class="form-section-title" data-i18n="admin.modals.coach.branchAssignment">Branch Assignment</h3>
+
+                    <div class="form-group">
+                        <label for="editCoachBranchSelect" class="form-label" data-i18n="admin.modals.coach.branch">Branch</label>
+                        <select id="editCoachBranchSelect" name="branch" class="form-input" required>
+                            <option value="" data-i18n="admin.modals.coach.branchSelect">Select Branch</option>
+                        </select>
+                    </div>
+                </div>
+            </form>
+
+            <div class="modal-footer">
+                <button type="button" class="btn-secondary" onclick="closeEditCoachModal()" data-i18n="admin.modals.coach.cancel">Cancel</button>
+                <button type="submit" form="editCoachForm" class="btn-primary" onclick="submitEditCoach(event)">
+                    <i data-lucide="save" style="width: 18px; height: 18px;"></i>
+                    <span data-i18n="admin.modals.coach.editSubmit">Save Changes</span>
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Add Branch Modal -->
+    <div id="addBranchModal" class="modal">
+        <div class="modal-overlay" onclick="closeAddBranchModal()"></div>
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2 class="modal-title" data-i18n="admin.modals.branch.addTitle">Add New Branch</h2>
+                <button class="modal-close" onclick="closeAddBranchModal()">
+                    <i data-lucide="x" style="width: 24px; height: 24px;"></i>
+                </button>
+            </div>
+
+            <form id="addBranchForm" class="modal-body">
+                <!-- Branch Information -->
+                <div class="form-section">
+                    <h3 class="form-section-title" data-i18n="admin.modals.branch.branchInfo">Branch Information</h3>
+
+                    <div class="form-group">
+                        <label for="branchName" class="form-label" data-i18n="admin.modals.branch.name">Branch Name</label>
+                        <input type="text" id="branchName" name="name" class="form-input" required data-i18n-placeholder="admin.modals.branch.namePlaceholder">
+                    </div>
+
+                    <div class="form-group">
+                        <label for="branchLocation" class="form-label" data-i18n="admin.modals.branch.location">Location</label>
+                        <input type="text" id="branchLocation" name="location" class="form-input" required data-i18n-placeholder="admin.modals.branch.locationPlaceholder">
+                    </div>
+                </div>
+
+                <!-- Contact Information -->
+                <div class="form-section">
+                    <h3 class="form-section-title" data-i18n="admin.modals.branch.contactInfo">Contact Information</h3>
+
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="branchEmail" class="form-label" data-i18n="admin.modals.branch.email">Email</label>
+                            <input type="email" id="branchEmail" name="email" class="form-input" required data-i18n-placeholder="admin.modals.branch.emailPlaceholder">
+                        </div>
+                        <div class="form-group">
+                            <label for="branchPhone" class="form-label" data-i18n="admin.modals.branch.phone">Phone</label>
+                            <input type="tel" id="branchPhone" name="phone" class="form-input" required data-i18n-placeholder="admin.modals.branch.phonePlaceholder">
+                        </div>
+                    </div>
+                </div>
+            </form>
+
+            <div class="modal-footer">
+                <button type="button" class="btn-secondary" onclick="closeAddBranchModal()" data-i18n="admin.modals.branch.cancel">Cancel</button>
+                <button type="submit" form="addBranchForm" class="btn-primary" onclick="submitAddBranch(event)">
+                    <i data-lucide="plus" style="width: 18px; height: 18px;"></i>
+                    <span data-i18n="admin.modals.branch.addSubmit">Add Branch</span>
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Edit Branch Modal -->
+    <div id="editBranchModal" class="modal">
+        <div class="modal-overlay" onclick="closeEditBranchModal()"></div>
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2 class="modal-title" data-i18n="admin.modals.branch.editTitle">Edit Branch</h2>
+                <button class="modal-close" onclick="closeEditBranchModal()">
+                    <i data-lucide="x" style="width: 24px; height: 24px;"></i>
+                </button>
+            </div>
+
+            <form id="editBranchForm" class="modal-body">
+                <input type="hidden" id="editBranchId" name="branchId">
+
+                <!-- Branch Information -->
+                <div class="form-section">
+                    <h3 class="form-section-title" data-i18n="admin.modals.branch.branchInfo">Branch Information</h3>
+
+                    <div class="form-group">
+                        <label for="editBranchName" class="form-label" data-i18n="admin.modals.branch.name">Branch Name</label>
+                        <input type="text" id="editBranchName" name="name" class="form-input" required data-i18n-placeholder="admin.modals.branch.namePlaceholder">
+                    </div>
+
+                    <div class="form-group">
+                        <label for="editBranchLocation" class="form-label" data-i18n="admin.modals.branch.location">Location</label>
+                        <input type="text" id="editBranchLocation" name="location" class="form-input" required data-i18n-placeholder="admin.modals.branch.locationPlaceholder">
+                    </div>
+                </div>
+
+                <!-- Contact Information -->
+                <div class="form-section">
+                    <h3 class="form-section-title" data-i18n="admin.modals.branch.contactInfo">Contact Information</h3>
+
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="editBranchEmail" class="form-label" data-i18n="admin.modals.branch.email">Email</label>
+                            <input type="email" id="editBranchEmail" name="email" class="form-input" required data-i18n-placeholder="admin.modals.branch.emailPlaceholder">
+                        </div>
+                        <div class="form-group">
+                            <label for="editBranchPhone" class="form-label" data-i18n="admin.modals.branch.phone">Phone</label>
+                            <input type="tel" id="editBranchPhone" name="phone" class="form-input" required data-i18n-placeholder="admin.modals.branch.phonePlaceholder">
+                        </div>
+                    </div>
+                </div>
+            </form>
+
+            <div class="modal-footer">
+                <button type="button" class="btn-secondary" onclick="closeEditBranchModal()" data-i18n="admin.modals.branch.cancel">Cancel</button>
+                <button type="submit" form="editBranchForm" class="btn-primary" onclick="submitEditBranch(event)">
+                    <i data-lucide="save" style="width: 18px; height: 18px;"></i>
+                    <span data-i18n="admin.modals.branch.editSubmit">Save Changes</span>
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- CSV/Excel Import Modal -->
+    <div id="csvImportModal" class="modal">
+        <div class="modal-overlay" onclick="closeCSVImportModal()"></div>
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2 class="modal-title" data-i18n="admin.ratings.importExcel">Import Ratings from Excel/CSV</h2>
+                <button class="modal-close" onclick="closeCSVImportModal()">
+                    <i data-lucide="x" style="width: 24px; height: 24px;"></i>
+                </button>
+            </div>
+
+            <div class="modal-body">
+                <div class="form-section">
+                    <h3 class="form-section-title" data-i18n="admin.ratings.fileFormat">Supported Formats</h3>
+                    <p style="color: #64748b; font-size: 0.875rem; margin-bottom: 1rem;" data-i18n="admin.ratings.fileFormatHint">
+                        Excel (.xlsx, .xls) or CSV with columns: Name (LastName FirstName), Rating
+                    </p>
+                    <div style="background: #f8fafc; border-radius: 0.5rem; padding: 1rem; font-family: monospace; font-size: 0.8rem; color: #475569; margin-bottom: 1rem;">
+                        <strong>Excel:</strong> Column A = Name, Column B = Rating<br>
+                        <strong>CSV:</strong> student_name,rating<br>
+                        Example: Ivanov Ivan,1250
+                    </div>
+                </div>
+
+                <div class="form-section">
+                    <h3 class="form-section-title" data-i18n="admin.ratings.selectFile">Select File</h3>
+                    <div class="photo-upload-container">
+                        <div class="photo-upload-actions" style="width: 100%;">
+                            <label for="csvFileInput" class="btn-upload" style="width: 100%; justify-content: center;">
+                                <i data-lucide="upload" style="width: 18px; height: 18px;"></i>
+                                <span data-i18n="admin.ratings.chooseFile">Choose Excel/CSV File</span>
+                            </label>
+                            <input type="file" id="csvFileInput" accept=".xlsx,.xls,.csv" style="display: none;" onchange="previewRatingFile(event)">
+                            <p class="upload-hint" id="csvFileName" style="text-align: center;" data-i18n="admin.ratings.noFileSelected">No file selected</p>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Google Sheets URL Section -->
+                <div class="form-section" style="margin-top: 0.5rem;">
+                    <p style="text-align: center; color: var(--text-secondary); font-size: 0.875rem; margin: 0.5rem 0;">— or —</p>
+                    <label class="form-label" data-i18n="admin.ratings.googleSheetUrl">Google Sheets URL</label>
+                    <div style="display: flex; gap: 0.5rem;">
+                        <input type="text" id="googleSheetUrl" class="form-input"
+                               placeholder="https://docs.google.com/spreadsheets/d/..."
+                               style="flex: 1;">
+                        <button type="button" class="btn-secondary" onclick="loadGoogleSheet()" id="loadGoogleSheetBtn">
+                            <i data-lucide="download" style="width: 18px; height: 18px;"></i>
+                            <span data-i18n="admin.ratings.load">Load</span>
+                        </button>
+                    </div>
+                    <p class="upload-hint" data-i18n="admin.ratings.googleSheetHint">Sheet must be publicly accessible (shared with "Anyone with the link")</p>
+                </div>
+
+                <!-- Preview Section -->
+                <div id="csvPreviewSection" style="display: none;">
+                    <div class="form-section">
+                        <h3 class="form-section-title" data-i18n="admin.ratings.preview">Preview</h3>
+                        <div style="max-height: 200px; overflow-y: auto; border: 1px solid #e2e8f0; border-radius: 0.5rem;">
+                            <table style="width: 100%; font-size: 0.8rem;">
+                                <thead style="background: #f8fafc; position: sticky; top: 0;">
+                                    <tr>
+                                        <th style="padding: 0.5rem; text-align: left;">Student</th>
+                                        <th style="padding: 0.5rem; text-align: left;">Rating</th>
+                                        <th style="padding: 0.5rem; text-align: left;">Date</th>
+                                        <th style="padding: 0.5rem; text-align: left;">Status</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="csvPreviewBody">
+                                </tbody>
+                            </table>
+                        </div>
+                        <div style="margin-top: 0.75rem; display: flex; gap: 1rem; font-size: 0.875rem;">
+                            <span style="color: #10b981;"><strong id="csvValidCount">0</strong> valid</span>
+                            <span style="color: #f59e0b;"><strong id="csvWarningCount">0</strong> warnings</span>
+                            <span style="color: #ef4444;"><strong id="csvErrorCount">0</strong> errors</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Import Progress Indicator -->
+            <div id="importProgressContainer" style="display: none; padding: 1rem 1.5rem; border-top: 1px solid var(--border-color);">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem;">
+                    <span id="importProgressText" style="font-size: 0.875rem; color: var(--text-secondary);">Importing ratings...</span>
+                    <span id="importProgressPercent" style="font-size: 0.875rem; font-weight: 600; color: var(--primary-color);">0%</span>
+                </div>
+                <div style="width: 100%; height: 8px; background: var(--bg-secondary); border-radius: 4px; overflow: hidden;">
+                    <div id="importProgressBar" style="width: 0%; height: 100%; background: linear-gradient(90deg, #10b981, #059669); border-radius: 4px; transition: width 0.3s ease;"></div>
+                </div>
+                <div style="display: flex; justify-content: space-between; margin-top: 0.5rem; font-size: 0.75rem; color: var(--text-secondary);">
+                    <span id="importProgressCount">0 / 0</span>
+                    <span id="importProgressStatus">Processing...</span>
+                </div>
+            </div>
+
+            <div class="modal-footer">
+                <button type="button" class="btn-secondary" onclick="closeCSVImportModal()" data-i18n="admin.modals.add.cancel">Cancel</button>
+                <button type="button" class="btn-primary" id="importCSVBtn" onclick="importCSVRatings()" disabled>
+                    <i data-lucide="upload" style="width: 18px; height: 18px;"></i>
+                    <span data-i18n="admin.ratings.import">Import</span>
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Unmatched Students Modal -->
+    <div id="unmatchedStudentsModal" class="modal">
+        <div class="modal-overlay" onclick="closeUnmatchedModal()"></div>
+        <div class="modal-content" style="max-width: 600px;">
+            <div class="modal-header">
+                <h2 class="modal-title" data-i18n="admin.ratings.unmatchedStudents">Unmatched Students</h2>
+                <button class="modal-close" onclick="closeUnmatchedModal()">
+                    <i data-lucide="x" style="width: 24px; height: 24px;"></i>
+                </button>
+            </div>
+
+            <div class="modal-body">
+                <div style="background: #fef3c7; border: 1px solid #f59e0b; border-radius: 0.5rem; padding: 1rem; margin-bottom: 1rem;">
+                    <p style="color: #92400e; font-size: 0.875rem; margin: 0;" data-i18n="admin.ratings.unmatchedHint">
+                        The following students from the rating list were not found in the database and were skipped:
+                    </p>
+                </div>
+                <div id="unmatchedStudentsList" style="max-height: 400px; overflow-y: auto;">
+                    <!-- Unmatched students will be listed here -->
+                </div>
+                <div style="margin-top: 1rem; padding-top: 1rem; border-top: 1px solid #e2e8f0;">
+                    <p style="font-size: 0.875rem; color: #64748b;">
+                        <span data-i18n="admin.ratings.totalUnmatched">Total unmatched:</span>
+                        <strong id="unmatchedCount">0</strong>
+                    </p>
+                </div>
+            </div>
+
+            <div class="modal-footer">
+                <button type="button" class="btn-secondary" onclick="copyUnmatchedList()">
+                    <i data-lucide="copy" style="width: 18px; height: 18px;"></i>
+                    <span data-i18n="admin.ratings.copyList">Copy List</span>
+                </button>
+                <button type="button" class="btn-primary" onclick="closeUnmatchedModal()" data-i18n="common.close">Close</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Rating History Modal -->
+    <div id="ratingHistoryModal" class="modal">
+        <div class="modal-overlay" onclick="closeRatingHistoryModal()"></div>
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2 class="modal-title" id="ratingHistoryTitle">Rating History</h2>
+                <button class="modal-close" onclick="closeRatingHistoryModal()">
+                    <i data-lucide="x" style="width: 24px; height: 24px;"></i>
+                </button>
+            </div>
+
+            <div class="modal-body">
+                <div id="ratingHistoryContent">
+                    <!-- History will be loaded here -->
+                </div>
+            </div>
+
+            <div class="modal-footer">
+                <button type="button" class="btn-secondary" onclick="closeRatingHistoryModal()" data-i18n="common.close">Close</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Attendance Import Modal (3-step wizard) -->
+    <div id="attendanceImportModal" class="modal">
+        <div class="modal-overlay" onclick="closeAttendanceImportModal()"></div>
+        <div class="modal-content" style="max-width: 800px;">
+            <div class="modal-header">
+                <h2 class="modal-title" data-i18n="admin.attendance.importExcel">Import Attendance from Excel</h2>
+                <button class="modal-close" onclick="closeAttendanceImportModal()">
+                    <i data-lucide="x" style="width: 24px; height: 24px;"></i>
+                </button>
+            </div>
+
+            <div class="modal-body">
+                <!-- Step Indicators -->
+                <div class="import-wizard-steps" style="display: flex; justify-content: center; gap: 2rem; margin-bottom: 2rem;">
+                    <div class="wizard-step active" id="wizardStep1">
+                        <div class="wizard-step-number">1</div>
+                        <div class="wizard-step-label" data-i18n="admin.attendance.step1Upload">Upload File</div>
+                    </div>
+                    <div class="wizard-step-connector"></div>
+                    <div class="wizard-step" id="wizardStep2">
+                        <div class="wizard-step-number">2</div>
+                        <div class="wizard-step-label" data-i18n="admin.attendance.step2Sheet">Select Sheet</div>
+                    </div>
+                    <div class="wizard-step-connector"></div>
+                    <div class="wizard-step" id="wizardStep3">
+                        <div class="wizard-step-number">3</div>
+                        <div class="wizard-step-label" data-i18n="admin.attendance.step3Match">Match Names</div>
+                    </div>
+                </div>
+
+                <!-- Step 1: File Upload -->
+                <div id="importStep1" class="import-step">
+                    <div class="form-section">
+                        <h3 class="form-section-title" data-i18n="admin.attendance.selectBranchFirst">Select Branch</h3>
+                        <select id="importBranchSelect" class="form-input" style="margin-bottom: 1.5rem;">
+                            <option value="" data-i18n="admin.attendance.selectBranch">Select Branch</option>
+                        </select>
+                    </div>
+
+                    <div class="form-section">
+                        <h3 class="form-section-title" data-i18n="admin.attendance.uploadExcelFile">Upload Excel File</h3>
+                        <p style="color: #64748b; font-size: 0.875rem; margin-bottom: 1rem;" data-i18n="admin.attendance.excelFormatHint">
+                            Excel file should have sheets for each schedule (Mon-Wed, Tue-Thu, Sat-Sun) with student names in column B and "V" marks for attendance.
+                        </p>
+                        <div class="photo-upload-container" style="border: 2px dashed #e2e8f0; border-radius: 0.75rem; padding: 2rem; text-align: center; cursor: pointer;" id="excelDropZone">
+                            <div class="photo-upload-actions" style="width: 100%;">
+                                <i data-lucide="file-spreadsheet" style="width: 48px; height: 48px; color: #94a3b8; margin-bottom: 1rem;"></i>
+                                <label for="attendanceFileInput" class="btn-upload" style="width: auto; justify-content: center; cursor: pointer;">
+                                    <i data-lucide="upload" style="width: 18px; height: 18px;"></i>
+                                    <span data-i18n="admin.attendance.chooseFile">Choose Excel File</span>
+                                </label>
+                                <input type="file" id="attendanceFileInput" accept=".xlsx,.xls" style="display: none;" onchange="onAttendanceFileSelect()">
+                                <p class="upload-hint" style="margin-top: 0.75rem;" data-i18n="admin.attendance.dragDropHint">or drag and drop your file here</p>
+                                <p class="upload-hint" id="attendanceFileName" style="color: #64748b; margin-top: 0.5rem;">No file selected</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Step 2: Sheet Selection -->
+                <div id="importStep2" class="import-step" style="display: none;">
+                    <div class="form-section">
+                        <h3 class="form-section-title" data-i18n="admin.attendance.selectSheets">Select Sheets to Import</h3>
+                        <p style="color: #64748b; font-size: 0.875rem; margin-bottom: 1rem;" data-i18n="admin.attendance.sheetSelectionHint">
+                            Choose which sheets contain attendance data to import.
+                        </p>
+                        <div id="sheetTabsContainer" class="sheet-tabs" style="display: flex; gap: 0.5rem; flex-wrap: wrap; margin-bottom: 1.5rem;">
+                            <!-- Sheet tabs will be populated by JavaScript -->
+                        </div>
+                    </div>
+
+                    <div class="form-section">
+                        <h3 class="form-section-title" data-i18n="admin.attendance.sheetPreview">Sheet Preview</h3>
+                        <div id="sheetPreviewContainer" style="max-height: 300px; overflow: auto; border: 1px solid #e2e8f0; border-radius: 0.5rem;">
+                            <p style="padding: 2rem; text-align: center; color: #64748b;" data-i18n="admin.attendance.selectSheetToPreview">Select a sheet to preview</p>
+                        </div>
+                        <div style="margin-top: 1rem; display: flex; gap: 1rem; font-size: 0.875rem;">
+                            <span><strong id="sheetRowCount">0</strong> <span data-i18n="admin.attendance.rowsFound">rows found</span></span>
+                            <span><strong id="sheetDateCount">0</strong> <span data-i18n="admin.attendance.datesFound">dates found</span></span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Step 3: Name Matching -->
+                <div id="importStep3" class="import-step" style="display: none;">
+                    <div class="form-section">
+                        <h3 class="form-section-title" data-i18n="admin.attendance.matchStudentNames">Match Student Names</h3>
+                        <p style="color: #64748b; font-size: 0.875rem; margin-bottom: 1rem;" data-i18n="admin.attendance.nameMatchingHint">
+                            Review and confirm the matching between Russian names from Excel and students in the database.
+                        </p>
+
+                        <!-- Match Summary -->
+                        <div style="display: flex; gap: 1.5rem; margin-bottom: 1.5rem; padding: 1rem; background: #f8fafc; border-radius: 0.75rem;">
+                            <div style="text-align: center;">
+                                <div style="font-size: 1.5rem; font-weight: 700; color: #10b981;" id="matchedCount">0</div>
+                                <div style="font-size: 0.75rem; color: #64748b;" data-i18n="admin.attendance.matched">Matched</div>
+                            </div>
+                            <div style="text-align: center;">
+                                <div style="font-size: 1.5rem; font-weight: 700; color: #f59e0b;" id="unmatchedCount">0</div>
+                                <div style="font-size: 0.75rem; color: #64748b;" data-i18n="admin.attendance.unmatched">Unmatched</div>
+                            </div>
+                            <div style="text-align: center;">
+                                <div style="font-size: 1.5rem; font-weight: 700; color: #3b82f6;" id="totalRecordsCount">0</div>
+                                <div style="font-size: 0.75rem; color: #64748b;" data-i18n="admin.attendance.totalRecords">Records</div>
+                            </div>
+                        </div>
+
+                        <!-- Name Matching Table -->
+                        <div style="max-height: 350px; overflow-y: auto; border: 1px solid #e2e8f0; border-radius: 0.5rem;">
+                            <table style="width: 100%; font-size: 0.875rem; border-collapse: collapse;">
+                                <thead style="background: #f8fafc; position: sticky; top: 0;">
+                                    <tr>
+                                        <th style="padding: 0.75rem; text-align: left; border-bottom: 1px solid #e2e8f0;" data-i18n="admin.attendance.excelName">Name in Excel</th>
+                                        <th style="padding: 0.75rem; text-align: center; border-bottom: 1px solid #e2e8f0;" data-i18n="admin.attendance.timeSlot">Time Slot</th>
+                                        <th style="padding: 0.75rem; text-align: left; border-bottom: 1px solid #e2e8f0;" data-i18n="admin.attendance.matchedStudent">Matched Student</th>
+                                        <th style="padding: 0.75rem; text-align: center; border-bottom: 1px solid #e2e8f0;" data-i18n="admin.attendance.confidence">Confidence</th>
+                                        <th style="padding: 0.75rem; text-align: center; border-bottom: 1px solid #e2e8f0;" data-i18n="admin.attendance.actions">Actions</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="nameMatchingBody">
+                                    <!-- Name matching rows will be populated by JavaScript -->
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="modal-footer" style="display: flex; justify-content: space-between;">
+                <button type="button" class="btn-secondary" id="importBackBtn" onclick="importWizardBack()" style="display: none;">
+                    <i data-lucide="arrow-left" style="width: 18px; height: 18px;"></i>
+                    <span data-i18n="common.back">Back</span>
+                </button>
+                <div style="display: flex; gap: 0.75rem; margin-left: auto;">
+                    <button type="button" class="btn-secondary" onclick="closeAttendanceImportModal()" data-i18n="admin.modals.add.cancel">Cancel</button>
+                    <button type="button" class="btn-primary" id="importNextBtn" onclick="importWizardNext()" disabled>
+                        <span data-i18n="common.next">Next</span>
+                        <i data-lucide="arrow-right" style="width: 18px; height: 18px;"></i>
+                    </button>
+                    <button type="button" class="btn-primary" id="importSubmitBtn" onclick="submitAttendanceImport()" style="display: none;">
+                        <i data-lucide="upload" style="width: 18px; height: 18px;"></i>
+                        <span data-i18n="admin.attendance.importData">Import Data</span>
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Add Student to Calendar Modal -->
+    <div id="addStudentToCalendarModal" class="modal">
+        <div class="modal-overlay" onclick="closeAddStudentToCalendarModal()"></div>
+        <div class="modal-content" style="max-width: 500px;">
+            <div class="modal-header">
+                <h2 class="modal-title" data-i18n="admin.attendance.addStudentToCalendar">Add Student to Calendar</h2>
+                <button class="modal-close" onclick="closeAddStudentToCalendarModal()">
+                    <i data-lucide="x" style="width: 24px; height: 24px;"></i>
+                </button>
+            </div>
+
+            <div class="modal-body">
+                <!-- Branch Selection -->
+                <div class="form-group" style="margin-bottom: 1.25rem;">
+                    <label class="form-label" data-i18n="admin.attendance.branch">Branch</label>
+                    <select id="addStudentBranchSelect" class="form-input" onchange="onAddStudentBranchChange()">
+                        <option value="" data-i18n="admin.attendance.selectBranch">Select Branch</option>
+                    </select>
+                </div>
+
+                <!-- Student Search/Selection -->
+                <div class="form-group" style="margin-bottom: 1.25rem;">
+                    <label class="form-label" data-i18n="admin.attendance.student">Student</label>
+                    <div class="add-student-search-container">
+                        <input type="text"
+                               id="addStudentSearchInput"
+                               class="form-input"
+                               placeholder="Search student..."
+                               data-i18n-placeholder="admin.attendance.searchStudent"
+                               oninput="handleAddStudentSearch(this.value)"
+                               onfocus="handleAddStudentSearch(this.value)"
+                               autocomplete="off">
+                        <svg class="add-student-search-icon" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <circle cx="11" cy="11" r="8"></circle>
+                            <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+                        </svg>
+                        <div id="addStudentSearchDropdown" class="add-student-search-dropdown"></div>
+                    </div>
+                    <input type="hidden" id="addStudentSelectedId">
+                    <div id="addStudentSelectedDisplay" class="add-student-selected-display" style="display: none;">
+                        <span id="addStudentSelectedName"></span>
+                        <button type="button" class="add-student-clear-btn" onclick="clearSelectedStudent()">
+                            <i data-lucide="x" style="width: 14px; height: 14px;"></i>
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Schedule Type Selection -->
+                <div class="form-group" style="margin-bottom: 1.25rem;">
+                    <label class="form-label" data-i18n="admin.attendance.scheduleType">Days</label>
+                    <select id="addStudentScheduleSelect" class="form-input" onchange="onAddStudentScheduleChange()">
+                        <option value="mon_wed" data-i18n="admin.attendance.monWed">Monday - Wednesday</option>
+                        <option value="tue_thu" data-i18n="admin.attendance.tueThu">Tuesday - Thursday</option>
+                        <option value="sat_sun" data-i18n="admin.attendance.satSun">Saturday - Sunday</option>
+                    </select>
+                </div>
+
+                <!-- Time Slot Selection -->
+                <div class="form-group" style="margin-bottom: 1.5rem;">
+                    <label class="form-label" data-i18n="admin.attendance.timeSlot">Time Slot</label>
+                    <select id="addStudentTimeSlotSelect" class="form-input">
+                        <option value="" data-i18n="admin.attendance.selectTimeSlot">Select Time Slot</option>
+                    </select>
+                </div>
+            </div>
+
+            <div class="modal-footer">
+                <button class="btn btn-secondary" onclick="closeAddStudentToCalendarModal()" data-i18n="admin.modals.add.cancel">Cancel</button>
+                <button class="btn btn-primary" onclick="submitAddStudentToCalendar()" data-i18n="admin.attendance.addStudent">Add Student</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Include CRUD Modals -->
+    <div id="crud-modals-container"></div>
+
+    <!-- Mobile Bottom Navigation (Wise Style) -->
+    <nav class="mobile-bottom-nav" id="mobileBottomNav">
+        <div class="mobile-bottom-nav-items">
+            <button class="mobile-nav-item active" onclick="showMobileSection('students', event)" data-section="students">
+                <i data-lucide="users"></i>
+                <span data-i18n="admin.nav.students">Students</span>
+            </button>
+            <button class="mobile-nav-item" onclick="showMobileSection('coaches', event)" data-section="coaches">
+                <i data-lucide="user-check"></i>
+                <span data-i18n="admin.nav.coaches">Coaches</span>
+            </button>
+            <button class="mobile-nav-item add-btn" onclick="addNewStudent()">
+                <i data-lucide="plus"></i>
+            </button>
+            <button class="mobile-nav-item" onclick="showMobileSection('attendance', event)" data-section="attendance">
+                <i data-lucide="calendar-check"></i>
+                <span data-i18n="admin.nav.attendance">Attendance</span>
+            </button>
+            <button class="mobile-nav-item" onclick="showMobileSection('settings', event)" data-section="settings">
+                <i data-lucide="settings"></i>
+                <span data-i18n="admin.nav.settings">More</span>
+            </button>
+        </div>
+    </nav>
+
+    <script src="toast-notifications.js?v=1771237740"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="supabase-config.js?v=1771237740"></script>
+    <script src="supabase-client.js?v=1771237740"></script>
+    <script src="supabase-data.js?v=1771237740"></script>
+    <script src="constants.js?v=1771237740"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <!-- SheetJS for Excel parsing/export -->
+    <script src="https://cdn.sheetjs.com/xlsx-0.20.0/package/dist/xlsx.full.min.js"></script>
+    <script src="data.js?v=1771237740"></script>
+    <script src="crud.js?v=1771237740"></script>
+    <script src="crud-handlers.js?v=1771237740"></script>
+    <script src="crud-management.js?v=1771237740"></script>
+    <script src="admin-v2.js?v=1771237740"></script>
+    <script>
+        // DEBUG: Check DOM values after 3 seconds
+        setTimeout(() => {
+            const totalStudentsElement = document.getElementById('totalStudents');
+            const activeStudentsElement = document.getElementById('activeStudents');
+            console.log('🔍 DOM CHECK (3 seconds after load):');
+            console.log('  totalStudents element:', totalStudentsElement);
+            console.log('  totalStudents.textContent:', totalStudentsElement?.textContent);
+            console.log('  activeStudents.textContent:', activeStudentsElement?.textContent);
+            console.log('  students array length:', window.students?.length);
+        }, 3000);
+
+        // Mobile menu functions
+        function toggleMobileMenu() {
+            const sidebar = document.getElementById('sidebar');
+            const overlay = document.getElementById('mobileOverlay');
+            const menuToggle = document.getElementById('mobileMenuToggle');
+
+            sidebar.classList.toggle('mobile-open');
+            overlay.classList.toggle('active');
+
+            // Update icon
+            const icon = menuToggle.querySelector('i');
+            if (sidebar.classList.contains('mobile-open')) {
+                icon.setAttribute('data-lucide', 'x');
+            } else {
+                icon.setAttribute('data-lucide', 'menu');
+            }
+            lucide.createIcons();
+        }
+
+        function closeMobileMenu() {
+            const sidebar = document.getElementById('sidebar');
+            const overlay = document.getElementById('mobileOverlay');
+            const menuToggle = document.getElementById('mobileMenuToggle');
+
+            sidebar.classList.remove('mobile-open');
+            overlay.classList.remove('active');
+
+            const icon = menuToggle.querySelector('i');
+            icon.setAttribute('data-lucide', 'menu');
+            lucide.createIcons();
+        }
+
+        // Close mobile menu when nav item is clicked
+        document.addEventListener('DOMContentLoaded', function() {
+            const navItems = document.querySelectorAll('.nav-item, .dropdown-item');
+            navItems.forEach(item => {
+                item.addEventListener('click', function() {
+                    if (window.innerWidth <= 768) {
+                        closeMobileMenu();
+                    }
+                });
+            });
+        });
+
+        // Check authentication on page load
+        console.log('Admin page loaded, checking auth...');
+        if (window.supabaseAuth) {
+            window.supabaseAuth.requireAuth().then(isAuth => {
+                console.log('requireAuth result:', isAuth);
+                if (!isAuth) {
+                    console.log('Not authenticated, redirecting to login...');
+                    // Will be redirected to login by requireAuth
+                    return;
+                }
+
+                // Check if user has admin or coach role
+                const role = window.supabaseAuth.getCurrentUserRole();
+                console.log('User role:', role);
+                if (role && role.role !== 'admin' && role.role !== 'coach') {
+                    alert('Access denied. Admin or coach privileges required.');
+                    window.location.href = 'index.html';
+                } else {
+                    console.log('✅ Admin/Coach access granted');
+                }
+
+                // Display logged-in user email
+                displayUserInfo();
+
+                // Hide menu items based on permissions
+                hideUnauthorizedMenuItems();
+            });
+        } else {
+            console.error('supabaseAuth not available!');
+        }
+
+        // Display user info
+        async function displayUserInfo() {
+            try {
+                if (window.supabaseClient) {
+                    const { data: { session }, error } = await window.supabaseClient.auth.getSession();
+
+                    if (session && session.user) {
+                        const userEmail = session.user.email;
+                        const userEmailElement = document.getElementById('userEmail');
+
+                        if (userEmailElement) {
+                            userEmailElement.textContent = userEmail;
+                        }
+
+                        console.log('User info displayed:', userEmail);
+                    }
+                }
+            } catch (error) {
+                console.error('Error displaying user info:', error);
+            }
+        }
+
+        // Hide menu items that user doesn't have permission to access
+        async function hideUnauthorizedMenuItems() {
+            try {
+                const client = window.supabaseClient;
+                if (!client) return;
+
+                const { data: { session }, error: sessionError } = await client.auth.getSession();
+                if (sessionError || !session || !session.user) return;
+
+                // Get user's role and permissions
+                const { data: userRole, error: roleError } = await client
+                    .from('user_roles')
+                    .select('role, can_manage_app_access')
+                    .eq('user_id', session.user.id)
+                    .single();
+
+                if (roleError) {
+                    console.error('Error fetching user role:', roleError);
+                    return;
+                }
+
+                // Hide App Access menu item if user doesn't have permission
+                const hasAppAccess = userRole.role === 'admin' || userRole.can_manage_app_access === true;
+                if (!hasAppAccess) {
+                    const appAccessMenuItem = document.querySelector('.nav-item[onclick*="showAppAccessManagement"]');
+                    if (appAccessMenuItem) {
+                        appAccessMenuItem.style.display = 'none';
+                        console.log('App Access menu item hidden - user does not have permission');
+                    }
+                }
+            } catch (error) {
+                console.error('Error hiding unauthorized menu items:', error);
+            }
+        }
+
+        // Logout handler
+        async function handleLogout() {
+            if (confirm(window.t ? window.t('admin.logout.confirm') : 'Are you sure you want to logout?')) {
+                if (window.supabaseAuth) {
+                    // Log the logout session (non-blocking but await briefly)
+                    try {
+                        if (window.supabaseData && window.supabaseData.logLogout) {
+                            const storedSessionId = sessionStorage.getItem('currentSessionId');
+                            await window.supabaseData.logLogout(storedSessionId || null);
+                            console.log('✅ Logout session recorded');
+                            sessionStorage.removeItem('currentSessionId');
+                        }
+                    } catch (logoutErr) {
+                        console.error('Session logout tracking error (non-blocking):', logoutErr);
+                    }
+
+                    const { error } = await window.supabaseAuth.signOut();
+                    if (error) {
+                        console.error('Logout error:', error);
+                        alert('Error logging out. Please try again.');
+                    } else {
+                        window.location.href = 'index.html';
+                    }
+                } else {
+                    window.location.href = 'index.html';
+                }
+            }
+        }
+
+        // ============================================
+        // SESSION HEARTBEAT & CONTEXT
+        // ============================================
+        (function initSessionTracking() {
+            const sessionId = sessionStorage.getItem('currentSessionId');
+            if (!sessionId) return;
+
+            let heartbeatInterval = null;
+            const HEARTBEAT_MS = 5 * 60 * 1000; // 5 minutes
+
+            // Set session context immediately for audit trail linking
+            async function refreshSessionContext() {
+                if (window.supabaseData && window.supabaseData.setSessionContext) {
+                    await window.supabaseData.setSessionContext(sessionId);
+                }
+            }
+
+            async function sendHeartbeat() {
+                if (window.supabaseData && window.supabaseData.sessionHeartbeat) {
+                    await window.supabaseData.sessionHeartbeat(sessionId);
+                }
+            }
+
+            function startHeartbeat() {
+                if (heartbeatInterval) return;
+                heartbeatInterval = setInterval(sendHeartbeat, HEARTBEAT_MS);
+            }
+
+            function stopHeartbeat() {
+                if (heartbeatInterval) {
+                    clearInterval(heartbeatInterval);
+                    heartbeatInterval = null;
+                }
+            }
+
+            // Set context on load
+            refreshSessionContext();
+
+            // Start heartbeat
+            startHeartbeat();
+
+            // Pause/resume on visibility change
+            document.addEventListener('visibilitychange', () => {
+                if (document.hidden) {
+                    stopHeartbeat();
+                } else {
+                    refreshSessionContext();
+                    sendHeartbeat();
+                    startHeartbeat();
+                }
+            });
+
+            // Try to log logout on tab close
+            window.addEventListener('beforeunload', () => {
+                const sid = sessionStorage.getItem('currentSessionId');
+                if (sid && window.supabaseData && window.supabaseData.logLogout) {
+                    // Use sendBeacon with fetch keepalive as fallback
+                    try {
+                        const supabaseUrl = window.supabaseClient?.supabaseUrl || 'https://papgcizhfkngubwofjuo.supabase.co';
+                        const supabaseKey = window.supabaseClient?.supabaseKey || '';
+                        // Fire-and-forget RPC call via fetch keepalive
+                        fetch(`${supabaseUrl}/rest/v1/rpc/log_user_logout`, {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/json',
+                                'apikey': supabaseKey,
+                                'Authorization': `Bearer ${supabaseKey}`
+                            },
+                            body: JSON.stringify({ p_session_id: sid }),
+                            keepalive: true
+                        }).catch(() => {});
+                    } catch (e) {
+                        // Best effort - stale session cleanup will catch it
+                    }
+                }
+            });
+        })();
+
+        // Load CRUD modals
+        fetch('crud-modals.html')
+            .then(response => response.text())
+            .then(html => {
+                document.getElementById('crud-modals-container').innerHTML = html;
+                lucide.createIcons();
+            });
+
+        // Initialize icons
+        lucide.createIcons();
+    </script>
+</body>
+</html>
