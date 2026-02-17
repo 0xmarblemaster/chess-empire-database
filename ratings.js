@@ -11,7 +11,7 @@
     }
 
     const supabase = window.supabaseClient;
-    let allData = { leaderboard: [], branches: [] };
+    let allData = { leaderboard: [], branches: [], coaches: [] };
 
     async function loadLeaderboard() {
         const { data: allRatings, error: ratErr } = await supabase
@@ -41,15 +41,17 @@
             const batch = studentIds.slice(i, i + batchSize);
             const { data } = await supabase
                 .from('students')
-                .select('id, first_name, last_name, photo_url, branch_id, branch:branches(name)')
+                .select('id, first_name, last_name, photo_url, branch_id, coach_id, branch:branches(name), coach:coaches(first_name, last_name)')
                 .in('id', batch);
             if (data) students.push(...data);
         }
 
-        const { data: branches } = await supabase
-            .from('branches')
-            .select('id, name')
-            .order('name');
+        const [branchesRes, coachesRes] = await Promise.all([
+            supabase.from('branches').select('id, name').order('name'),
+            supabase.from('coaches').select('id, first_name, last_name, branch_id').order('last_name')
+        ]);
+        const branches = branchesRes.data || [];
+        const coaches = coachesRes.data || [];
 
         const studentMap = new Map(students.map(s => [s.id, s]));
         const leaderboard = [];
@@ -65,6 +67,7 @@
                 photoUrl: student.photo_url,
                 branch: student.branch?.name || '',
                 branchId: student.branch_id,
+                coachId: student.coach_id,
                 rating: ratingData.rating,
                 delta
             });
@@ -72,7 +75,7 @@
         leaderboard.sort((a, b) => b.rating - a.rating);
         leaderboard.forEach((entry, i) => entry.rank = i + 1);
 
-        return { leaderboard, branches: branches || [] };
+        return { leaderboard, branches, coaches };
     }
 
     function getRowClass(rank) {
@@ -139,6 +142,7 @@
     function applyFilters() {
         const search = document.getElementById('searchInput').value.toLowerCase().trim();
         const branchId = document.getElementById('branchFilter').value;
+        const coachId = document.getElementById('coachFilter').value;
         let filtered = allData.leaderboard;
         if (search) {
             filtered = filtered.filter(e =>
@@ -148,7 +152,38 @@
         if (branchId) {
             filtered = filtered.filter(e => String(e.branchId) === branchId);
         }
+        if (coachId) {
+            filtered = filtered.filter(e => String(e.coachId) === coachId);
+        }
+        if (branchId || coachId) {
+            filtered = filtered.map((e, i) => ({ ...e, rank: i + 1 }));
+        }
+        document.getElementById('playerCount').textContent = `${filtered.length} players`;
         document.getElementById('tableContainer').innerHTML = renderTable(filtered);
+    }
+
+    function populateCoachFilter(branchId) {
+        const coachSelect = document.getElementById('coachFilter');
+        const currentVal = coachSelect.value;
+        coachSelect.innerHTML = '<option value="">All Coaches</option>';
+        let coaches = allData.coaches;
+        if (branchId) {
+            const coachIdsInBranch = new Set(
+                allData.leaderboard.filter(e => String(e.branchId) === branchId && e.coachId).map(e => e.coachId)
+            );
+            coaches = coaches.filter(c => coachIdsInBranch.has(c.id));
+        }
+        for (const c of coaches) {
+            const opt = document.createElement('option');
+            opt.value = c.id;
+            opt.textContent = `${c.first_name || ''} ${c.last_name || ''}`.trim();
+            coachSelect.appendChild(opt);
+        }
+        if (currentVal && [...coachSelect.options].some(o => o.value === currentVal)) {
+            coachSelect.value = currentVal;
+        } else {
+            coachSelect.value = '';
+        }
     }
 
     // Load data
@@ -172,9 +207,14 @@
     }
 
     // Render
+    populateCoachFilter('');
     applyFilters();
 
     // Event listeners
     document.getElementById('searchInput').addEventListener('input', applyFilters);
-    document.getElementById('branchFilter').addEventListener('change', applyFilters);
+    document.getElementById('branchFilter').addEventListener('change', () => {
+        populateCoachFilter(branchSelect.value);
+        applyFilters();
+    });
+    document.getElementById('coachFilter').addEventListener('change', applyFilters);
 })();
