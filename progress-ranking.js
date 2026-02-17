@@ -10,20 +10,22 @@
     }
 
     const supabase = window.supabaseClient;
-    let allData = { leaderboard: [], branches: [] };
+    let allData = { leaderboard: [], branches: [], coaches: [] };
 
     async function loadLeaderboard() {
-        const { data: students, error } = await supabase
-            .from('students')
-            .select('id, first_name, last_name, photo_url, current_level, current_lesson, branch_id, branch:branches(name), status')
-            .eq('status', 'active');
+        const [studentsRes, branchesRes, coachesRes] = await Promise.all([
+            supabase.from('students')
+                .select('id, first_name, last_name, photo_url, current_level, current_lesson, branch_id, coach_id, branch:branches(name), coach:coaches(first_name, last_name), status')
+                .eq('status', 'active'),
+            supabase.from('branches').select('id, name').order('name'),
+            supabase.from('coaches').select('id, first_name, last_name, branch_id').order('last_name')
+        ]);
 
+        const { data: students, error } = studentsRes;
         if (error) { console.error('Students error:', error); return null; }
 
-        const { data: branches } = await supabase
-            .from('branches')
-            .select('id, name')
-            .order('name');
+        const branches = branchesRes.data || [];
+        const coaches = coachesRes.data || [];
 
         students.sort((a, b) => {
             if ((b.current_level || 1) !== (a.current_level || 1)) return (b.current_level || 1) - (a.current_level || 1);
@@ -41,11 +43,13 @@
             photoUrl: s.photo_url,
             branch: s.branch?.name || '',
             branchId: s.branch_id,
+            coachId: s.coach_id,
+            coachName: s.coach ? `${s.coach.first_name || ''} ${s.coach.last_name || ''}`.trim() : '',
             level: Math.min(s.current_level || 1, 8),
             lesson: s.current_lesson || 1
         }));
 
-        return { leaderboard, branches: branches || [] };
+        return { leaderboard, branches, coaches };
     }
 
     function getRowClass(rank) {
@@ -105,6 +109,7 @@
     function applyFilters() {
         const search = document.getElementById('searchInput').value.toLowerCase().trim();
         const branchId = document.getElementById('branchFilter').value;
+        const coachId = document.getElementById('coachFilter').value;
         let filtered = allData.leaderboard;
         if (search) {
             filtered = filtered.filter(e =>
@@ -114,7 +119,41 @@
         if (branchId) {
             filtered = filtered.filter(e => String(e.branchId) === branchId);
         }
+        if (coachId) {
+            filtered = filtered.filter(e => String(e.coachId) === coachId);
+        }
+        // Re-rank within filtered results when any filter is active
+        if (branchId || coachId) {
+            filtered = filtered.map((e, i) => ({ ...e, rank: i + 1 }));
+        }
+        document.getElementById('playerCount').textContent = `${filtered.length} players`;
         document.getElementById('tableContainer').innerHTML = renderTable(filtered);
+    }
+
+    function populateCoachFilter(branchId) {
+        const coachSelect = document.getElementById('coachFilter');
+        const currentVal = coachSelect.value;
+        coachSelect.innerHTML = '<option value="">All Coaches</option>';
+        let coaches = allData.coaches;
+        if (branchId) {
+            // Show coaches that have students in this branch
+            const coachIdsInBranch = new Set(
+                allData.leaderboard.filter(e => String(e.branchId) === branchId && e.coachId).map(e => e.coachId)
+            );
+            coaches = coaches.filter(c => coachIdsInBranch.has(c.id));
+        }
+        for (const c of coaches) {
+            const opt = document.createElement('option');
+            opt.value = c.id;
+            opt.textContent = `${c.first_name || ''} ${c.last_name || ''}`.trim();
+            coachSelect.appendChild(opt);
+        }
+        // Preserve selection if still valid
+        if (currentVal && [...coachSelect.options].some(o => o.value === currentVal)) {
+            coachSelect.value = currentVal;
+        } else {
+            coachSelect.value = '';
+        }
     }
 
     const result = await loadLeaderboard();
@@ -134,8 +173,13 @@
         branchSelect.appendChild(opt);
     }
 
+    populateCoachFilter('');
     applyFilters();
 
     document.getElementById('searchInput').addEventListener('input', applyFilters);
-    document.getElementById('branchFilter').addEventListener('change', applyFilters);
+    document.getElementById('branchFilter').addEventListener('change', () => {
+        populateCoachFilter(branchSelect.value);
+        applyFilters();
+    });
+    document.getElementById('coachFilter').addEventListener('change', applyFilters);
 })();
