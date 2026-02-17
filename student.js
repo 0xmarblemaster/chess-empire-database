@@ -946,7 +946,7 @@ async function renderProfile() {
                         </div>
                     </div>
 
-                    <div class="progress-item rating-progress-item">
+                    <div class="progress-item rating-progress-item" onclick="window.location.href='ratings.html'" style="cursor: pointer;" title="View full leaderboard">
                         <div class="progress-header">
                             <div class="progress-label">
                                 <i data-lucide="trending-up" style="width: 16px; height: 16px;"></i>
@@ -1013,7 +1013,7 @@ async function renderProfile() {
 
                 ${currentRating ? `
                 <!-- Rating card (hidden on mobile, shown on desktop) -->
-                <div class="quick-stat-card mobile-hidden">
+                <div class="quick-stat-card mobile-hidden" onclick="window.location.href='ratings.html'" style="cursor: pointer;" title="View full leaderboard">
                     <div class="quick-stat-icon" style="background: ${leagueInfo.color}20; color: ${leagueInfo.color};">
                         <i data-lucide="trophy" style="width: 20px; height: 20px;"></i>
                     </div>
