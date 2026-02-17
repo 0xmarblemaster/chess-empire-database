@@ -460,7 +460,7 @@ body {
 .rating-button {
     position: fixed;
     top: 0.875rem;
-    right: calc(0.875rem + 100px);
+    right: calc(0.875rem + 110px);
     padding: 0.5rem 0.875rem;
     background: #5F192B;
     color: white;
