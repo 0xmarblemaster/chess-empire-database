@@ -725,7 +725,7 @@ function renderStatsContent() {
                     <i data-lucide="trending-up" style="width: 20px; height: 20px;"></i>
                     ${t('stats.ratingHistory') || 'Rating History'}
                 </h3>
-                <div class="current-rating-card tier-${leagueInfo.tier}">
+                <div class="current-rating-card tier-${leagueInfo.tier}" onclick="window.location.href='ratings.html'" style="cursor: pointer;" title="View full leaderboard">
                     <div class="rating-value">${ratings.current.rating}</div>
                     <div class="rating-league">${leagueInfo.name}</div>
                     ${ratings.current.rating_date ? `<div class="rating-date">${t('stats.asOf') || 'As of'} ${new Date(ratings.current.rating_date).toLocaleDateString()}</div>` : ''}
