@@ -336,7 +336,7 @@ function renderLevelRankInfoBoxes(rankings) {
             : '';
 
         branchRankHTML = `
-            <div class="info-item rank-info-item mobile-order-1 ${tierClass} ${animatedClass}">
+            <div class="info-item rank-info-item mobile-order-1 ${tierClass} ${animatedClass}" onclick="window.location.href='progress-ranking.html'" style="cursor: pointer;">
                 ${topBadgeHTML}
                 <div class="info-label">
                     <i data-lucide="users" style="width: 14px; height: 14px;"></i>
@@ -365,7 +365,7 @@ function renderLevelRankInfoBoxes(rankings) {
             : '';
 
         schoolRankHTML = `
-            <div class="info-item rank-info-item mobile-order-2 ${tierClass} ${animatedClass}">
+            <div class="info-item rank-info-item mobile-order-2 ${tierClass} ${animatedClass}" onclick="window.location.href='progress-ranking.html'" style="cursor: pointer;">
                 ${topBadgeHTML}
                 <div class="info-label">
                     <i data-lucide="school" style="width: 14px; height: 14px;"></i>
@@ -935,7 +935,7 @@ async function renderProfile() {
                         ${t('student.learningProgress')}
                     </h2>
 
-                    <div class="progress-item">
+                    <div class="progress-item" onclick="window.location.href='progress-ranking.html'" style="cursor: pointer;" title="View progress ranking">
                         <div class="progress-header">
                             <div class="progress-label">${t('student.levelLabel') || 'Level'} ${student.currentLevel}</div>
                             <div class="progress-percentage">${lessonProgress}%</div>
