@@ -1,6 +1,7 @@
--- Migration 032: Add current_lesson tracking to audit trigger
--- The original trigger (021) tracks current_level but missed current_lesson
--- This replaces the function in-place (CREATE OR REPLACE), no trigger recreation needed
+-- Migration 032: Add current_lesson tracking + fix non-existent column references
+-- The original trigger (021) referenced enrollment_date, school, address, notes
+-- which don't exist on the students table. Also adds current_lesson tracking.
+-- Applied: 2026-02-17
 
 CREATE OR REPLACE FUNCTION log_entity_changes()
 RETURNS TRIGGER AS $$
@@ -8,8 +9,6 @@ DECLARE
     v_user_id UUID;
     v_user_email TEXT;
     v_entity_type TEXT;
-    v_old_record JSONB;
-    v_new_record JSONB;
 BEGIN
     v_user_id := auth.uid();
     SELECT email INTO v_user_email FROM auth.users WHERE id = v_user_id;
@@ -17,22 +16,19 @@ BEGIN
     v_entity_type := TG_TABLE_NAME;
 
     IF (TG_OP = 'DELETE') THEN
-        INSERT INTO audit_log (entity_type, entity_id, action, field_name, old_value, new_value, changed_by, changed_by_email)
-        VALUES (v_entity_type, OLD.id, 'DELETE', NULL, NULL, NULL, v_user_id, v_user_email);
+        INSERT INTO audit_log (entity_type, entity_id, action, changed_by, changed_by_email)
+        VALUES (v_entity_type, OLD.id, 'DELETE', v_user_id, v_user_email);
         RETURN OLD;
     END IF;
 
     IF (TG_OP = 'INSERT') THEN
-        INSERT INTO audit_log (entity_type, entity_id, action, field_name, old_value, new_value, changed_by, changed_by_email)
-        VALUES (v_entity_type, NEW.id, 'CREATE', NULL, NULL, NULL, v_user_id, v_user_email);
+        INSERT INTO audit_log (entity_type, entity_id, action, changed_by, changed_by_email)
+        VALUES (v_entity_type, NEW.id, 'CREATE', v_user_id, v_user_email);
         RETURN NEW;
     END IF;
 
     IF (TG_OP = 'UPDATE') THEN
-        v_old_record := to_jsonb(OLD);
-        v_new_record := to_jsonb(NEW);
-
-        -- Students: Track 16 fields (added current_lesson)
+        -- Students: actual columns only
         IF v_entity_type = 'students' THEN
             IF OLD.first_name IS DISTINCT FROM NEW.first_name THEN
                 INSERT INTO audit_log (entity_type, entity_id, action, field_name, old_value, new_value, changed_by, changed_by_email)
@@ -78,22 +74,6 @@ BEGIN
                 INSERT INTO audit_log (entity_type, entity_id, action, field_name, old_value, new_value, changed_by, changed_by_email)
                 VALUES (v_entity_type, NEW.id, 'UPDATE', 'parent_email', OLD.parent_email, NEW.parent_email, v_user_id, v_user_email);
             END IF;
-            IF OLD.enrollment_date IS DISTINCT FROM NEW.enrollment_date THEN
-                INSERT INTO audit_log (entity_type, entity_id, action, field_name, old_value, new_value, changed_by, changed_by_email)
-                VALUES (v_entity_type, NEW.id, 'UPDATE', 'enrollment_date', OLD.enrollment_date::TEXT, NEW.enrollment_date::TEXT, v_user_id, v_user_email);
-            END IF;
-            IF OLD.school IS DISTINCT FROM NEW.school THEN
-                INSERT INTO audit_log (entity_type, entity_id, action, field_name, old_value, new_value, changed_by, changed_by_email)
-                VALUES (v_entity_type, NEW.id, 'UPDATE', 'school', OLD.school, NEW.school, v_user_id, v_user_email);
-            END IF;
-            IF OLD.address IS DISTINCT FROM NEW.address THEN
-                INSERT INTO audit_log (entity_type, entity_id, action, field_name, old_value, new_value, changed_by, changed_by_email)
-                VALUES (v_entity_type, NEW.id, 'UPDATE', 'address', OLD.address, NEW.address, v_user_id, v_user_email);
-            END IF;
-            IF OLD.notes IS DISTINCT FROM NEW.notes THEN
-                INSERT INTO audit_log (entity_type, entity_id, action, field_name, old_value, new_value, changed_by, changed_by_email)
-                VALUES (v_entity_type, NEW.id, 'UPDATE', 'notes', OLD.notes, NEW.notes, v_user_id, v_user_email);
-            END IF;
             IF OLD.photo_url IS DISTINCT FROM NEW.photo_url THEN
                 INSERT INTO audit_log (entity_type, entity_id, action, field_name, old_value, new_value, changed_by, changed_by_email)
                 VALUES (v_entity_type, NEW.id, 'UPDATE', 'photo_url', OLD.photo_url, NEW.photo_url, v_user_id, v_user_email);
@@ -116,10 +96,6 @@ BEGIN
             IF OLD.phone IS DISTINCT FROM NEW.phone THEN
                 INSERT INTO audit_log (entity_type, entity_id, action, field_name, old_value, new_value, changed_by, changed_by_email)
                 VALUES (v_entity_type, NEW.id, 'UPDATE', 'phone', OLD.phone, NEW.phone, v_user_id, v_user_email);
-            END IF;
-            IF OLD.branch_id IS DISTINCT FROM NEW.branch_id THEN
-                INSERT INTO audit_log (entity_type, entity_id, action, field_name, old_value, new_value, changed_by, changed_by_email)
-                VALUES (v_entity_type, NEW.id, 'UPDATE', 'branch_id', OLD.branch_id::TEXT, NEW.branch_id::TEXT, v_user_id, v_user_email);
             END IF;
         END IF;
 
