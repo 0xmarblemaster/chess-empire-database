@@ -813,6 +813,13 @@ const translations = {
         "admin.coachActivity.fieldNotes": "Notes",
         "admin.coachActivity.fieldFirstName": "First Name",
         "admin.coachActivity.fieldLastName": "Last Name",
+        "admin.coachActivity.fieldCurrentLesson": "Current Lesson",
+        "admin.coachActivity.filterField": "Field",
+        "admin.coachActivity.fieldAll": "All Fields",
+        "admin.coachActivity.fieldLevelChanges": "Level Changes",
+        "admin.coachActivity.fieldLessonChanges": "Lesson Changes",
+        "admin.coachActivity.levelUpdates": "Level Updates",
+        "admin.coachActivity.lessonUpdates": "Lesson Updates",
 
         // Admin User Activity Analytics
         "admin.userActivity.title": "User Activity",
@@ -1642,6 +1649,13 @@ const translations = {
         "admin.coachActivity.fieldNotes": "Жазбалар",
         "admin.coachActivity.fieldFirstName": "Аты",
         "admin.coachActivity.fieldLastName": "Тегі",
+        "admin.coachActivity.fieldCurrentLesson": "Ағымдағы сабақ",
+        "admin.coachActivity.filterField": "Өріс",
+        "admin.coachActivity.fieldAll": "Барлық өрістер",
+        "admin.coachActivity.fieldLevelChanges": "Деңгей өзгерістері",
+        "admin.coachActivity.fieldLessonChanges": "Сабақ өзгерістері",
+        "admin.coachActivity.levelUpdates": "Деңгей жаңартулары",
+        "admin.coachActivity.lessonUpdates": "Сабақ жаңартулары",
 
         // Admin User Activity Analytics
         "admin.userActivity.title": "Пайдаланушы белсенділігі",
@@ -2515,6 +2529,13 @@ const translations = {
         "admin.coachActivity.fieldNotes": "Заметки",
         "admin.coachActivity.fieldFirstName": "Имя",
         "admin.coachActivity.fieldLastName": "Фамилия",
+        "admin.coachActivity.fieldCurrentLesson": "Текущий урок",
+        "admin.coachActivity.filterField": "Поле",
+        "admin.coachActivity.fieldAll": "Все поля",
+        "admin.coachActivity.fieldLevelChanges": "Изменения уровня",
+        "admin.coachActivity.fieldLessonChanges": "Изменения урока",
+        "admin.coachActivity.levelUpdates": "Обновления уровней",
+        "admin.coachActivity.lessonUpdates": "Обновления уроков",
 
         // Admin User Activity Analytics
         "admin.userActivity.title": "Активность пользователей",

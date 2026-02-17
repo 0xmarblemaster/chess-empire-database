@@ -1269,6 +1269,14 @@
                             <option value="DELETE" data-i18n="admin.activityLog.delete">Delete</option>
                         </select>
                     </div>
+                    <div>
+                        <label class="form-label" style="margin-bottom: 0.5rem;" data-i18n="admin.coachActivity.filterField">Field</label>
+                        <select id="caFieldFilter" class="form-input" onchange="loadCoachActivity()">
+                            <option value="" data-i18n="admin.coachActivity.fieldAll">All Fields</option>
+                            <option value="current_level" data-i18n="admin.coachActivity.fieldLevelChanges">Level Changes</option>
+                            <option value="current_lesson" data-i18n="admin.coachActivity.fieldLessonChanges">Lesson Changes</option>
+                        </select>
+                    </div>
                 </div>
 
                 <!-- Summary Cards -->
@@ -1284,6 +1292,14 @@
                     <div class="stat-card">
                         <div class="stat-label" data-i18n="admin.coachActivity.mostActiveCoach">Most Active Coach</div>
                         <div class="stat-value" id="caMostActive">-</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-label" data-i18n="admin.coachActivity.levelUpdates">Level Updates</div>
+                        <div class="stat-value" id="caLevelUpdates">0</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-label" data-i18n="admin.coachActivity.lessonUpdates">Lesson Updates</div>
+                        <div class="stat-value" id="caLessonUpdates">0</div>
                     </div>
                 </div>
 
