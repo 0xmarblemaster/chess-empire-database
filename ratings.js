@@ -14,66 +14,30 @@
     let allData = { leaderboard: [], branches: [], coaches: [] };
 
     async function loadLeaderboard() {
-        const { data: allRatings, error: ratErr } = await supabase
-            .from('student_ratings')
-            .select('student_id, rating, rating_date')
-            .order('rating_date', { ascending: false });
+        const { data, error } = await supabase.rpc('get_rating_leaderboard');
+        if (error) { console.error('RPC error:', error); return null; }
 
-        if (ratErr) { console.error('Ratings error:', ratErr); return null; }
+        const branchMap = new Map();
+        const coachMap = new Map();
+        const leaderboard = data.map((r, i) => {
+            if (r.branch_id && r.branch_name) branchMap.set(r.branch_id, r.branch_name);
+            if (r.coach_id && r.coach_first_name) coachMap.set(r.coach_id, { id: r.coach_id, first_name: r.coach_first_name, last_name: r.coach_last_name });
+            return {
+                studentId: r.student_id,
+                firstName: r.first_name || '',
+                lastName: r.last_name || '',
+                photoUrl: r.photo_url,
+                branch: r.branch_name || '',
+                branchId: r.branch_id,
+                coachId: r.coach_id,
+                rating: r.rating,
+                delta: r.delta === 0 ? null : r.delta,
+                rank: i + 1
+            };
+        });
 
-        const latestMap = new Map();
-        const previousMap = new Map();
-        for (const r of allRatings) {
-            if (!latestMap.has(r.student_id)) {
-                latestMap.set(r.student_id, { rating: r.rating, date: r.rating_date });
-            } else if (!previousMap.has(r.student_id)) {
-                previousMap.set(r.student_id, { rating: r.rating, date: r.rating_date });
-            }
-        }
-
-        const studentIds = Array.from(latestMap.keys());
-        if (studentIds.length === 0) return { leaderboard: [], branches: [] };
-
-        // Fetch in batches if needed (Supabase .in() limit)
-        let students = [];
-        const batchSize = 200;
-        for (let i = 0; i < studentIds.length; i += batchSize) {
-            const batch = studentIds.slice(i, i + batchSize);
-            const { data } = await supabase
-                .from('students')
-                .select('id, first_name, last_name, photo_url, branch_id, coach_id, branch:branches(name), coach:coaches(first_name, last_name)')
-                .in('id', batch);
-            if (data) students.push(...data);
-        }
-
-        const [branchesRes, coachesRes] = await Promise.all([
-            supabase.from('branches').select('id, name').order('name'),
-            supabase.from('coaches').select('id, first_name, last_name, branch_id').order('last_name')
-        ]);
-        const branches = branchesRes.data || [];
-        const coaches = coachesRes.data || [];
-
-        const studentMap = new Map(students.map(s => [s.id, s]));
-        const leaderboard = [];
-        for (const [studentId, ratingData] of latestMap) {
-            const student = studentMap.get(studentId);
-            if (!student || ratingData.rating <= 0) continue;
-            const prev = previousMap.get(studentId);
-            const delta = prev ? ratingData.rating - prev.rating : null;
-            leaderboard.push({
-                studentId,
-                firstName: student.first_name || '',
-                lastName: student.last_name || '',
-                photoUrl: student.photo_url,
-                branch: student.branch?.name || '',
-                branchId: student.branch_id,
-                coachId: student.coach_id,
-                rating: ratingData.rating,
-                delta
-            });
-        }
-        leaderboard.sort((a, b) => b.rating - a.rating);
-        leaderboard.forEach((entry, i) => entry.rank = i + 1);
+        const branches = Array.from(branchMap, ([id, name]) => ({ id, name })).sort((a, b) => a.name.localeCompare(b.name));
+        const coaches = Array.from(coachMap.values()).sort((a, b) => (a.last_name || '').localeCompare(b.last_name || ''));
 
         return { leaderboard, branches, coaches };
     }
@@ -101,7 +65,7 @@
     function renderAvatar(entry) {
         const name = `${entry.firstName} ${entry.lastName}`.trim();
         if (entry.photoUrl) {
-            return `<img class="avatar" src="${entry.photoUrl}" alt="${name}" onerror="this.style.display='none';this.nextElementSibling.style.display='flex'"><div class="avatar-initials" style="display:none;background:${getInitialsColor(name)}">${(entry.firstName[0]||'')+(entry.lastName[0]||'')}</div>`;
+            return `<img class="avatar" src="${entry.photoUrl}" alt="${name}" loading="lazy" onerror="this.style.display='none';this.nextElementSibling.style.display='flex'"><div class="avatar-initials" style="display:none;background:${getInitialsColor(name)}">${(entry.firstName[0]||'')+(entry.lastName[0]||'')}</div>`;
         }
         const initials = ((entry.firstName[0]||'') + (entry.lastName[0]||'')).toUpperCase();
         return `<div class="avatar-initials" style="background:${getInitialsColor(name)}">${initials}</div>`;
