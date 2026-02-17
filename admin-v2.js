@@ -9478,6 +9478,10 @@ async function fetchCoachActivityPage() {
             query = query.eq('action', actionFilter);
         }
 
+        // Field name filter
+        const fieldFilter = document.getElementById('caFieldFilter')?.value;
+        if (fieldFilter) query = query.eq('field_name', fieldFilter);
+
         if (dateRange.from) query = query.gte('changed_at', dateRange.from);
         if (dateRange.to) query = query.lte('changed_at', dateRange.to);
 
@@ -9593,6 +9597,12 @@ function updateCaSummary(total) {
         }
     }
     document.getElementById('caMostActive').textContent = mostActive;
+
+    // Level & Lesson update counts
+    const levelCount = caAllEntries.filter(e => e.field_name === 'current_level').length;
+    const lessonCount = caAllEntries.filter(e => e.field_name === 'current_lesson').length;
+    document.getElementById('caLevelUpdates').textContent = levelCount;
+    document.getElementById('caLessonUpdates').textContent = lessonCount;
 }
 
 function renderCaTable() {
@@ -9623,7 +9633,7 @@ function renderCaTable() {
         // Details
         let details = '';
         if (action === 'UPDATE' && e.field_name) {
-            const fieldMap = {current_level:'admin.coachActivity.fieldCurrentLevel', status:'admin.coachActivity.fieldStatus', branch:'admin.coachActivity.fieldBranch', coach:'admin.coachActivity.fieldCoach', phone:'admin.coachActivity.fieldPhone', notes:'admin.coachActivity.fieldNotes', first_name:'admin.coachActivity.fieldFirstName', last_name:'admin.coachActivity.fieldLastName'};
+            const fieldMap = {current_level:'admin.coachActivity.fieldCurrentLevel', current_lesson:'admin.coachActivity.fieldCurrentLesson', status:'admin.coachActivity.fieldStatus', branch:'admin.coachActivity.fieldBranch', coach:'admin.coachActivity.fieldCoach', phone:'admin.coachActivity.fieldPhone', notes:'admin.coachActivity.fieldNotes', first_name:'admin.coachActivity.fieldFirstName', last_name:'admin.coachActivity.fieldLastName'};
             const fieldLabel = (window.t && fieldMap[e.field_name]) ? window.t(fieldMap[e.field_name]) : (e.field_name || '');
             const oldVal = e.old_value || '-';
             const newVal = e.new_value || '-';
