@@ -41,7 +41,7 @@
             photoUrl: s.photo_url,
             branch: s.branch?.name || '',
             branchId: s.branch_id,
-            level: s.current_level || 1,
+            level: Math.min(s.current_level || 1, 8),
             lesson: s.current_lesson || 1
         }));
 

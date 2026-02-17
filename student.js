@@ -61,7 +61,15 @@ function updateDashboardButton() {
 
 // Wait for data to load from Supabase before rendering
 async function initializeStudentProfile() {
-    const studentId = localStorage.getItem('selectedStudentId');
+    let studentId = localStorage.getItem('selectedStudentId');
+
+    // Support direct links via URL parameter (from leaderboards)
+    const urlParams = new URLSearchParams(window.location.search);
+    const urlId = urlParams.get('id');
+    if (urlId) {
+        studentId = urlId;
+        localStorage.setItem('selectedStudentId', urlId);
+    }
 
     if (!studentId) {
         window.location.href = 'index.html';
