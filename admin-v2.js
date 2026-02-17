@@ -2484,19 +2484,18 @@ async function loadEditStudentProgressData(studentId) {
     try {
         // Fetch bot progress
         let botProgress = { defeated: [], highestRating: 0 };
-        if (window.supabaseData && typeof window.supabaseData.getBotBattles === 'function') {
-            const botBattles = await window.supabaseData.getBotBattles(studentId);
-            const defeated = botBattles.filter(b => b.result === 'win');
+        if (window.supabaseData && typeof window.supabaseData.getStudentBotBattles === 'function') {
+            const botBattles = await window.supabaseData.getStudentBotBattles(studentId);
             botProgress = {
-                defeated: defeated,
-                highestRating: defeated.length > 0 ? Math.max(...defeated.map(b => b.bot_rating || 0)) : 0
+                defeated: botBattles,
+                highestRating: botBattles.length > 0 ? Math.max(...botBattles.map(b => b.botRating || 0)) : 0
             };
         }
 
         // Fetch survival/puzzle rush data
         let survivalBest = null;
-        if (window.supabaseData && typeof window.supabaseData.getSurvivalScores === 'function') {
-            const scores = await window.supabaseData.getSurvivalScores(studentId);
+        if (window.supabaseData && typeof window.supabaseData.getStudentSurvivalScores === 'function') {
+            const scores = await window.supabaseData.getStudentSurvivalScores(studentId);
             if (scores && scores.length > 0) {
                 survivalBest = scores.reduce((best, s) => (!best || s.score > best.score) ? s : best, null);
             }
