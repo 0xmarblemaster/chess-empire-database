@@ -5593,6 +5593,7 @@ function getScheduleDaysOfWeek(scheduleType) {
         case 'mon_wed': return [1, 3]; // Monday, Wednesday
         case 'mon_wed_fri': return [1, 3, 5]; // Monday, Wednesday, Friday (Debut only)
         case 'tue_thu': return [2, 4]; // Tuesday, Thursday
+        case 'wed_fri': return [3, 5]; // Wednesday, Friday (NIS only)
         case 'sat_sun': return [0, 6]; // Saturday, Sunday
         default: return [];
     }
@@ -5616,6 +5617,9 @@ function getScheduleDates(year, month, scheduleType, offset = 0) {
             break;
         case 'tue_thu':
             targetDays = [2, 4]; // Tuesday, Thursday
+            break;
+        case 'wed_fri':
+            targetDays = [3, 5]; // Wednesday, Friday (NIS only)
             break;
         case 'sat_sun':
             targetDays = [0, 6]; // Saturday, Sunday
