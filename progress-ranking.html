@@ -150,6 +150,11 @@
 </head>
 <body>
     <div class="container">
+        <div id="backButtonContainer" style="display:none; margin-bottom: 12px;">
+            <a id="backButton" href="admin-v2.html" onclick="if(document.referrer && document.referrer.includes(location.host)){event.preventDefault();history.back();}" style="display:inline-flex;align-items:center;gap:6px;padding:8px 16px;background:white;border:1px solid #d1d5db;border-radius:10px;font-size:0.9rem;font-weight:500;color:#475569;text-decoration:none;cursor:pointer;transition:all 0.2s;" onmouseover="this.style.borderColor='#3b82f6';this.style.color='#3b82f6'" onmouseout="this.style.borderColor='#d1d5db';this.style.color='#475569'">
+                ← Back
+            </a>
+        </div>
         <div class="header">
             <h1>Chess Empire Progress Ranking 📚</h1>
             <span class="badge" id="playerCount">Loading...</span>
@@ -168,5 +173,20 @@
         </div>
     </div>
     <script src="progress-ranking.js?v=1"></script>
+    <script>
+        // Show back button for logged-in users or if navigated from within the app
+        (async function() {
+            try {
+                const { data: { session } } = await supabaseClient.auth.getSession();
+                if (session || (document.referrer && document.referrer.includes(location.host))) {
+                    document.getElementById('backButtonContainer').style.display = 'block';
+                }
+            } catch(e) {
+                if (document.referrer && document.referrer.includes(location.host)) {
+                    document.getElementById('backButtonContainer').style.display = 'block';
+                }
+            }
+        })();
+    </script>
 </body>
 </html>
