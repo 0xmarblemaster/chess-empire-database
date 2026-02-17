@@ -126,7 +126,7 @@
         for (const e of entries) {
             html += `<tr class="row ${getRowClass(e.rank)}">
                 <td class="rank-cell">${getRankDisplay(e.rank)}</td>
-                <td><div class="name-cell">${renderAvatar(e)}<span class="student-name">${e.firstName} ${e.lastName}</span></div></td>
+                <td><div class="name-cell">${renderAvatar(e)}<a href="student.html?id=${e.studentId}" class="student-name" style="color:inherit;text-decoration:none;">${e.firstName} ${e.lastName}</a></div></td>
                 <td class="branch-col" style="color:#64748b;font-size:0.85rem">${e.branch}</td>
                 <td class="rating-cell">${e.rating}</td>
                 <td>${renderDelta(e.delta)}</td>
