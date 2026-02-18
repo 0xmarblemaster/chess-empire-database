@@ -920,6 +920,15 @@ async function renderProfile() {
             </button>
         </div>
 
+        <!-- Monthly Stats Button -->
+        <div style="padding: 12px 20px 0;">
+            <a href="student-stats.html?id=${student.id}&month=${new Date().toISOString().slice(0,7)}" 
+               style="display:flex;align-items:center;justify-content:center;gap:8px;padding:12px 20px;background:#C2A580;color:#5F192B;border-radius:12px;font-weight:600;font-size:14px;text-decoration:none;transition:opacity 0.15s;"
+               onmouseover="this.style.opacity='0.85'" onmouseout="this.style.opacity='1'">
+                📊 Итоги месяца
+            </a>
+        </div>
+
         <!-- Tab Content -->
         <div class="tab-content active" id="tab-overview">
             <div class="overview-mobile-grid">

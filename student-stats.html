@@ -1,0 +1,372 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Итоги месяца — Chess Empire</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: 'Inter', sans-serif;
+            background: #f5f0eb;
+            display: flex;
+            justify-content: center;
+            align-items: flex-start;
+            min-height: 100vh;
+            padding: 16px;
+        }
+        .stats-wrapper {
+            width: 100%;
+            max-width: 390px;
+        }
+        .stats-card {
+            background: linear-gradient(180deg, #5F192B 0%, #7a2640 40%, #5F192B 100%);
+            border-radius: 24px;
+            overflow: hidden;
+            color: #fff;
+            position: relative;
+        }
+        .card-inner {
+            padding: 32px 24px 28px;
+        }
+        .card-header {
+            text-align: center;
+            margin-bottom: 24px;
+        }
+        .student-name {
+            font-size: 26px;
+            font-weight: 800;
+            letter-spacing: -0.5px;
+            margin-bottom: 4px;
+        }
+        .branch-name {
+            font-size: 14px;
+            color: #C2A580;
+            font-weight: 500;
+            letter-spacing: 1px;
+            text-transform: uppercase;
+        }
+        .month-title {
+            margin-top: 12px;
+            font-size: 16px;
+            font-weight: 600;
+            color: rgba(255,255,255,0.85);
+        }
+        .stats-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 12px;
+            margin-bottom: 20px;
+        }
+        .stat-tile {
+            border-radius: 16px;
+            padding: 16px 14px;
+            position: relative;
+            overflow: hidden;
+        }
+        .stat-tile::before {
+            content: '';
+            position: absolute;
+            top: -20px;
+            right: -20px;
+            width: 60px;
+            height: 60px;
+            border-radius: 50%;
+            background: rgba(255,255,255,0.08);
+        }
+        .stat-emoji {
+            font-size: 22px;
+            margin-bottom: 8px;
+            display: block;
+        }
+        .stat-value {
+            font-size: 28px;
+            font-weight: 800;
+            line-height: 1;
+            margin-bottom: 4px;
+        }
+        .stat-label {
+            font-size: 12px;
+            font-weight: 500;
+            opacity: 0.85;
+            line-height: 1.3;
+        }
+        /* Tile colors - warm muted tones */
+        .tile-lessons { background: rgba(194, 165, 128, 0.25); }
+        .tile-time { background: rgba(134, 179, 167, 0.25); }
+        .tile-attendance { background: rgba(167, 139, 191, 0.25); }
+        .tile-streak { background: rgba(209, 146, 117, 0.25); }
+        .tile-rating { background: rgba(129, 168, 204, 0.25); }
+        .tile-bots { background: rgba(194, 165, 128, 0.35); }
+
+        .coach-row {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            background: rgba(255,255,255,0.1);
+            border-radius: 12px;
+            padding: 12px 16px;
+            margin-bottom: 20px;
+        }
+        .coach-row .coach-emoji { font-size: 20px; }
+        .coach-row .coach-label { font-size: 12px; opacity: 0.7; }
+        .coach-row .coach-name { font-size: 15px; font-weight: 600; }
+
+        .rating-delta {
+            font-size: 14px;
+            font-weight: 600;
+            margin-left: 4px;
+        }
+        .rating-up { color: #6ee7a0; }
+        .rating-down { color: #f87171; }
+        .rating-neutral { color: rgba(255,255,255,0.5); }
+
+        .card-footer {
+            text-align: center;
+            padding-top: 8px;
+            border-top: 1px solid rgba(255,255,255,0.1);
+        }
+        .footer-logo {
+            width: 40px;
+            height: 40px;
+            margin: 0 auto 6px;
+            border-radius: 10px;
+        }
+        .footer-brand {
+            font-size: 14px;
+            font-weight: 700;
+            color: #C2A580;
+            letter-spacing: 1px;
+        }
+        .footer-tagline {
+            font-size: 11px;
+            color: rgba(255,255,255,0.5);
+            margin-top: 2px;
+        }
+
+        /* Buttons */
+        .action-buttons {
+            display: flex;
+            gap: 10px;
+            margin-top: 16px;
+        }
+        .action-buttons button {
+            flex: 1;
+            padding: 14px;
+            border: none;
+            border-radius: 14px;
+            font-family: 'Inter', sans-serif;
+            font-size: 15px;
+            font-weight: 600;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            transition: transform 0.15s, opacity 0.15s;
+        }
+        .action-buttons button:active { transform: scale(0.97); }
+        .btn-download {
+            background: #C2A580;
+            color: #5F192B;
+        }
+        .btn-share {
+            background: #5F192B;
+            color: #fff;
+            border: 2px solid #C2A580 !important;
+        }
+
+        .loading {
+            text-align: center;
+            padding: 80px 20px;
+            color: #5F192B;
+        }
+        .loading-spinner {
+            width: 40px; height: 40px;
+            border: 3px solid #e5ddd5;
+            border-top-color: #5F192B;
+            border-radius: 50%;
+            animation: spin 0.8s linear infinite;
+            margin: 0 auto 16px;
+        }
+        @keyframes spin { to { transform: rotate(360deg); } }
+
+        .stat-tile.tile-wide {
+            grid-column: 1 / -1;
+        }
+    </style>
+</head>
+<body>
+    <div class="stats-wrapper">
+        <div id="loading" class="loading">
+            <div class="loading-spinner"></div>
+            <div style="font-weight:600;">Загрузка...</div>
+        </div>
+        <div id="cardContainer" style="display:none;">
+            <div class="stats-card" id="statsCard">
+                <div class="card-inner">
+                    <div class="card-header">
+                        <div class="student-name" id="studentName"></div>
+                        <div class="branch-name" id="branchName"></div>
+                        <div class="month-title" id="monthTitle"></div>
+                    </div>
+                    <div class="stats-grid" id="statsGrid"></div>
+                    <div class="coach-row" id="coachRow">
+                        <span class="coach-emoji">👨‍🏫</span>
+                        <div>
+                            <div class="coach-label">Тренер</div>
+                            <div class="coach-name" id="coachName"></div>
+                        </div>
+                    </div>
+                    <div class="card-footer">
+                        <img src="chess-empire-logo.png" alt="Chess Empire" class="footer-logo" crossorigin="anonymous">
+                        <div class="footer-brand">CHESS EMPIRE</div>
+                        <div class="footer-tagline">♟ Шахматная школа для чемпионов</div>
+                    </div>
+                </div>
+            </div>
+            <div class="action-buttons" id="actionButtons">
+                <button class="btn-download" onclick="downloadCard()">📥 Скачать</button>
+                <button class="btn-share" onclick="shareCard()">📤 Поделиться</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script>
+    const SUPABASE_URL = 'https://papgcizhfkngubwofjuo.supabase.co';
+    const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InBhcGdjaXpoZmtuZ3Vid29manVvIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjE5MzAzNTEsImV4cCI6MjA3NzUwNjM1MX0.lN94-p4L3gUTU1vw_odZt6ruv_K40lOIKXXE80LIS_U';
+    const sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+
+    const MONTHS_RU = ['Январь','Февраль','Март','Апрель','Май','Июнь','Июль','Август','Сентябрь','Октябрь','Ноябрь','Декабрь'];
+
+    const params = new URLSearchParams(location.search);
+    const studentId = params.get('id');
+    const monthParam = params.get('month') || new Date().toISOString().slice(0,7);
+    const [year, month] = monthParam.split('-').map(Number);
+    const monthStart = `${monthParam}-01`;
+    const monthEnd = month === 12 ? `${year+1}-01-01` : `${year}-${String(month+1).padStart(2,'0')}-01`;
+
+    async function load() {
+        if (!studentId) { document.getElementById('loading').innerHTML = '<div style="font-weight:600;color:#5F192B;">Не указан ID ученика</div>'; return; }
+
+        try {
+            // Parallel fetch
+            const [studentRes, attendanceRes, ratingsRes, botsRes] = await Promise.all([
+                sb.from('students').select('*, branches(name), coaches(first_name, last_name)').eq('id', studentId).single(),
+                sb.from('attendance').select('*').eq('student_id', studentId).gte('attendance_date', monthStart).lt('attendance_date', monthEnd).order('attendance_date'),
+                sb.from('student_ratings').select('*').eq('student_id', studentId).gte('rating_date', monthStart).lt('rating_date', monthEnd).order('rating_date'),
+                sb.from('bot_battles').select('*').eq('student_id', studentId).gte('defeated_at', monthStart).lt('defeated_at', monthEnd),
+            ]);
+
+            const student = studentRes.data;
+            if (!student) { document.getElementById('loading').innerHTML = '<div style="font-weight:600;color:#5F192B;">Ученик не найден</div>'; return; }
+
+            const attendance = attendanceRes.data || [];
+            const ratings = ratingsRes.data || [];
+            const bots = botsRes.data || [];
+
+            // Compute stats
+            const present = attendance.filter(a => a.status === 'present');
+            const absent = attendance.filter(a => a.status === 'absent');
+            const presentCount = present.length;
+            const totalRelevant = presentCount + absent.length;
+            const attendancePct = totalRelevant > 0 ? Math.round((presentCount / totalRelevant) * 100) : 0;
+            const hours = presentCount; // 1 hour per lesson
+
+            // Longest streak
+            let maxStreak = 0, streak = 0;
+            const sorted = attendance.sort((a,b) => a.attendance_date.localeCompare(b.attendance_date));
+            for (const a of sorted) {
+                if (a.status === 'present') { streak++; maxStreak = Math.max(maxStreak, streak); }
+                else { streak = 0; }
+            }
+
+            // Rating
+            const latestRating = ratings.length > 0 ? ratings[ratings.length - 1].rating : null;
+            const firstRating = ratings.length > 0 ? ratings[0].rating : null;
+            const ratingDelta = (latestRating && firstRating) ? latestRating - firstRating : null;
+
+            // Render
+            document.getElementById('studentName').textContent = `${student.first_name} ${student.last_name}`;
+            document.getElementById('branchName').textContent = student.branches?.name || '';
+            document.getElementById('monthTitle').textContent = `Итоги ${MONTHS_RU[month-1]} ${year}`;
+            document.getElementById('coachName').textContent = student.coaches ? `${student.coaches.first_name} ${student.coaches.last_name}` : '—';
+
+            // Build tiles
+            let ratingHTML = latestRating ? String(latestRating) : '—';
+            if (ratingDelta !== null && ratingDelta !== 0) {
+                const cls = ratingDelta > 0 ? 'rating-up' : 'rating-down';
+                const sign = ratingDelta > 0 ? '+' : '';
+                ratingHTML += `<span class="rating-delta ${cls}">${sign}${ratingDelta}</span>`;
+            }
+
+            const tiles = [
+                { emoji: '🏫', value: presentCount, label: 'Занятий пройдено', cls: 'tile-lessons' },
+                { emoji: '⏱', value: `${hours} ч`, label: 'Время обучения', cls: 'tile-time' },
+                { emoji: '📊', value: `${attendancePct}%`, label: 'Посещаемость', cls: 'tile-attendance' },
+                { emoji: '🔥', value: maxStreak, label: 'Серия занятий', cls: 'tile-streak' },
+                { emoji: '📈', value: ratingHTML, label: 'Рейтинг', cls: 'tile-rating', raw: true },
+                { emoji: '🤖', value: bots.length, label: 'Боты побеждены', cls: 'tile-bots' },
+            ];
+
+            document.getElementById('statsGrid').innerHTML = tiles.map(t => `
+                <div class="stat-tile ${t.cls}">
+                    <span class="stat-emoji">${t.emoji}</span>
+                    <div class="stat-value">${t.raw ? t.value : escapeHtml(String(t.value))}</div>
+                    <div class="stat-label">${t.label}</div>
+                </div>
+            `).join('');
+
+            document.getElementById('loading').style.display = 'none';
+            document.getElementById('cardContainer').style.display = 'block';
+        } catch(e) {
+            console.error(e);
+            document.getElementById('loading').innerHTML = '<div style="font-weight:600;color:#5F192B;">Ошибка загрузки данных</div>';
+        }
+    }
+
+    function escapeHtml(s) { return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+
+    async function generateImage() {
+        const btns = document.getElementById('actionButtons');
+        btns.style.display = 'none';
+        const canvas = await html2canvas(document.getElementById('statsCard'), {
+            scale: 2,
+            backgroundColor: null,
+            useCORS: true,
+            logging: false,
+        });
+        btns.style.display = 'flex';
+        return canvas;
+    }
+
+    async function downloadCard() {
+        const canvas = await generateImage();
+        const link = document.createElement('a');
+        link.download = `chess-empire-stats-${monthParam}.png`;
+        link.href = canvas.toDataURL('image/png');
+        link.click();
+    }
+
+    async function shareCard() {
+        const canvas = await generateImage();
+        canvas.toBlob(async (blob) => {
+            const file = new File([blob], `chess-empire-stats-${monthParam}.png`, { type: 'image/png' });
+            if (navigator.share && navigator.canShare && navigator.canShare({ files: [file] })) {
+                try {
+                    await navigator.share({ files: [file], title: 'Chess Empire — Итоги месяца' });
+                } catch(e) { if (e.name !== 'AbortError') downloadCard(); }
+            } else {
+                downloadCard();
+            }
+        }, 'image/png');
+    }
+
+    load();
+    </script>
+</body>
+</html>
