@@ -636,7 +636,7 @@ function renderSurvivalContent() {
 
     // School percentile for survival
     if (survivalRank?.percentile) {
-        const rankInfo = formatPercentile(survivalRank.percentile);
+        const rankInfo = getPercentileLabel(survivalRank.percentile);
         if (rankInfo) {
             html += `
                 <div class="survival-rank-badge tier-${rankInfo.tier}">
@@ -866,7 +866,7 @@ async function renderProfile() {
     let rankBadgesHTML = '';
 
     if (rankings.branch?.percentile) {
-        const branchRank = formatPercentile(rankings.branch.percentile);
+        const branchRank = getPercentileLabel(rankings.branch.percentile);
         if (branchRank) {
             rankBadgesHTML += `
                 <div class="rank-badge tier-${branchRank.tier}">
@@ -878,7 +878,7 @@ async function renderProfile() {
     }
 
     if (rankings.school?.percentile) {
-        const schoolRank = formatPercentile(rankings.school.percentile);
+        const schoolRank = getPercentileLabel(rankings.school.percentile);
         if (schoolRank) {
             rankBadgesHTML += `
                 <div class="rank-badge tier-${schoolRank.tier}">
