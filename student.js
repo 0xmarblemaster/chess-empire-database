@@ -107,7 +107,7 @@ async function initializeStudentProfile() {
     }
 
     // Render the profile
-    renderProfile();
+    await renderProfile();
 }
 
 function animateProgressBars() {
@@ -798,7 +798,7 @@ function renderStatsContent() {
 async function renderProfile() {
     const student = window.currentStudent;
 
-    if (!student) {
+    if (!student || !student.id) {
         console.error('No student data available for rendering');
         return;
     }
