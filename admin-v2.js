@@ -4534,7 +4534,10 @@ const ATTENDANCE_TIME_SLOTS_GAGARIN_TUE_THU_VASILY = [
     '9:00-10:00',
     '10:00-11:00',
     '11:00-12:00',
-    '14:00-15:00'
+    '14:00-15:00',
+    '15:00-16:00',
+    '16:00-17:00',
+    '17:00-18:00'
 ];
 
 // Gagarin Park Saturday-Sunday schedule for Coach Vasily Mikhaylovich (сб-вс)
