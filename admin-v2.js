@@ -4529,6 +4529,22 @@ const ATTENDANCE_TIME_SLOTS_GAGARIN_TUE_THU = [
     '17:30-19:00'
 ];
 
+// Gagarin Park Tuesday-Thursday schedule for Coach Vasily Mikhaylovich (вт-чт)
+const ATTENDANCE_TIME_SLOTS_GAGARIN_TUE_THU_VASILY = [
+    '9:00-10:00',
+    '10:00-11:00',
+    '11:00-12:00',
+    '14:00-15:00'
+];
+
+// Gagarin Park Saturday-Sunday schedule for Coach Vasily Mikhaylovich (сб-вс)
+const ATTENDANCE_TIME_SLOTS_GAGARIN_SAT_SUN_VASILY = [
+    '9:00-10:00',
+    '10:00-11:00',
+    '11:00-12:00',
+    '12:00-13:00'
+];
+
 // Gagarin Park Monday-Wednesday schedule (пн-ср)
 const ATTENDANCE_TIME_SLOTS_GAGARIN_MON_WED = [
     '9:00-10:00',
@@ -4600,6 +4616,19 @@ function getTimeSlotsForBranch(branchName, scheduleType = null, coachName = null
     }
 
     if (normalizedName.includes('gagarin') || normalizedName.includes('гагарин')) {
+        // Coach-specific handling for Gagarin Park
+        const normalizedCoach = coachName ? coachName.toLowerCase().trim() : '';
+
+        // Coach Vasily Mikhaylovich has custom slots for Tue-Thu and Sat-Sun
+        if (normalizedCoach.includes('vasily') || normalizedCoach.includes('василий')) {
+            if (scheduleType === 'tue_thu') {
+                return ATTENDANCE_TIME_SLOTS_GAGARIN_TUE_THU_VASILY;
+            }
+            if (scheduleType === 'sat_sun') {
+                return ATTENDANCE_TIME_SLOTS_GAGARIN_SAT_SUN_VASILY;
+            }
+        }
+
         // Gagarin Park has different schedules for Mon-Wed, Tue-Thu, and Sat-Sun
         if (scheduleType === 'mon_wed') {
             return ATTENDANCE_TIME_SLOTS_GAGARIN_MON_WED;
