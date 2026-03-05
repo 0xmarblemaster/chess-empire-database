@@ -231,8 +231,9 @@ body {
 }
 
 .nav-dropdown.open {
-    max-height: 650px;
+    max-height: 1200px;
     opacity: 1;
+    overflow-y: auto;
 }
 
 .dropdown-item {
