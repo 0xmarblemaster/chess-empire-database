@@ -6450,6 +6450,8 @@ function updateCheckboxUI(checkbox, status) {
 // Toggle attendance checkbox (simplified present/absent toggle)
 async function toggleAttendanceCheckbox(studentId, dateStr, cell) {
     if (!attendanceCurrentBranch) return;
+    if (cell.dataset.processing === 'true') return;
+    cell.dataset.processing = 'true';
 
     // Find branch ID
     const branchObj = window.branches.find(b => b.name === attendanceCurrentBranch);
@@ -6586,6 +6588,8 @@ async function toggleAttendanceCheckbox(studentId, dateStr, cell) {
         showToast(errorMsg, 'error');
         // Revert checkbox on error
         updateCheckboxUI(checkbox, currentStatus);
+    } finally {
+        cell.dataset.processing = '';
     }
 }
 

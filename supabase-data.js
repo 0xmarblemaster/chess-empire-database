@@ -2093,11 +2093,10 @@ const supabaseData = {
             throw error;
         }
 
-        // Check if any rows were actually deleted
+        // Record already gone (e.g. double-click) — not an error
         if (!data || data.length === 0) {
-            const message = 'Failed to delete attendance record (not found or insufficient permissions)';
-            console.warn(message, { attendanceId });
-            throw new Error(message);
+            console.warn('Attendance record already deleted or not found:', attendanceId);
+            return true;
         }
 
         console.log('Successfully deleted attendance record:', attendanceId);
@@ -2130,11 +2129,10 @@ const supabaseData = {
             throw error;
         }
 
-        // Check if any rows were actually deleted
+        // Record already gone (e.g. double-click) — not an error
         if (!data || data.length === 0) {
-            const message = 'Failed to delete attendance record (not found or insufficient permissions)';
-            console.warn(message, { studentId, attendanceDate, scheduleType, timeSlot });
-            throw new Error(message);
+            console.warn('Attendance record already deleted or not found:', { studentId, attendanceDate, scheduleType, timeSlot });
+            return true;
         }
 
         console.log('Successfully deleted attendance record by key');
