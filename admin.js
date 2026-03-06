@@ -4372,6 +4372,31 @@ let attendanceHideEmptyRows = true; // Hide empty placeholder rows by default
 let attendanceCurrentMode = 'present'; // Current attendance marking mode: 'present', 'excused', or 'absent'
 let mobileCalendarOffset = 0; // Mobile: tracks which 4-day chunk (0, 4, 8, 12...)
 
+/**
+ * Find an attendance record matching date AND current time slot filter.
+ * When timeSlot filter is 'all' or empty, matches any record for that date.
+ * Otherwise, matches only records whose time_slot matches the filter (or null).
+ */
+function findAttendanceRecord(attendanceArray, dateStr) {
+    const slotFilter = attendanceCurrentTimeSlot;
+    if (!slotFilter || slotFilter === 'all') {
+        return attendanceArray.find(a => a.attendance_date === dateStr);
+    }
+    const exact = attendanceArray.find(a => a.attendance_date === dateStr && a.time_slot === slotFilter);
+    if (exact) return exact;
+    return attendanceArray.find(a => a.attendance_date === dateStr && !a.time_slot);
+}
+
+function findAttendanceIndex(attendanceArray, dateStr) {
+    const slotFilter = attendanceCurrentTimeSlot;
+    if (!slotFilter || slotFilter === 'all') {
+        return attendanceArray.findIndex(a => a.attendance_date === dateStr);
+    }
+    const exact = attendanceArray.findIndex(a => a.attendance_date === dateStr && a.time_slot === slotFilter);
+    if (exact !== -1) return exact;
+    return attendanceArray.findIndex(a => a.attendance_date === dateStr && !a.time_slot);
+}
+
 // Save attendance filter state to localStorage
 function saveAttendanceFilterState() {
     try {
@@ -5950,7 +5975,7 @@ function renderAttendanceCalendar(preFilteredData = null) {
                 // Add day cells only for filtered dates
                 scheduleDates.forEach(day => {
                     const dateStr = `${attendanceCurrentYear}-${String(attendanceCurrentMonth + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
-                    const attendance = student.attendance.find(a => a.attendance_date === dateStr);
+                    const attendance = findAttendanceRecord(student.attendance, dateStr);
 
                     const status = attendance?.status || '';
 
@@ -6359,7 +6384,7 @@ async function toggleAttendanceStatus(studentId, dateStr, cell) {
         // Update local data
         const studentData = attendanceCalendarData.find(s => s.id === studentId);
         if (studentData) {
-            const existingIndex = studentData.attendance.findIndex(a => a.attendance_date === dateStr);
+            const existingIndex = findAttendanceIndex(studentData.attendance, dateStr);
             if (newStatus === '') {
                 if (existingIndex !== -1) {
                     studentData.attendance.splice(existingIndex, 1);
@@ -6455,9 +6480,9 @@ async function toggleAttendanceCheckbox(studentId, dateStr, cell) {
     const checkbox = cell.querySelector('.attendance-checkbox');
     if (!checkbox) return;
 
-    // Check current state from data (not CSS class)
+    // Check current state from data (not CSS class) — match by date AND time_slot
     const studentData = attendanceCalendarData.find(s => s.id === studentId);
-    const attendanceRecord = studentData?.attendance.find(a => a.attendance_date === dateStr);
+    const attendanceRecord = studentData ? findAttendanceRecord(studentData.attendance, dateStr) : null;
     const currentStatus = attendanceRecord?.status || '';
 
     // Determine new status based on current mode and current status
@@ -6514,7 +6539,7 @@ async function toggleAttendanceCheckbox(studentId, dateStr, cell) {
 
             // Update local data (only after successful deletion)
             if (studentData) {
-                const existingIndex = studentData.attendance.findIndex(a => a.attendance_date === dateStr);
+                const existingIndex = findAttendanceIndex(studentData.attendance, dateStr);
                 if (existingIndex !== -1) {
                     studentData.attendance.splice(existingIndex, 1);
                 }
@@ -6538,7 +6563,7 @@ async function toggleAttendanceCheckbox(studentId, dateStr, cell) {
                 // Update local data
                 const studentData = attendanceCalendarData.find(s => s.id === studentId);
                 if (studentData) {
-                    const existingIndex = studentData.attendance.findIndex(a => a.attendance_date === dateStr);
+                    const existingIndex = findAttendanceIndex(studentData.attendance, dateStr);
                     if (existingIndex !== -1) {
                         // Update existing record
                         studentData.attendance[existingIndex].status = newStatus;
@@ -7213,7 +7238,7 @@ function updateRowAttendanceRate(studentId) {
     let presentCount = 0;
     scheduleDates.forEach(day => {
         const dateStr = `${attendanceCurrentYear}-${String(attendanceCurrentMonth + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
-        const attendance = studentData.attendance.find(a => a.attendance_date === dateStr);
+        const attendance = findAttendanceRecord(studentData.attendance, dateStr);
         if (attendance && attendance.status === 'present') {
             presentCount++;
         }
@@ -8232,7 +8257,7 @@ async function exportAttendanceExcel() {
 
             for (let day = 1; day <= daysInMonth; day++) {
                 const dateStr = `${attendanceCurrentYear}-${String(attendanceCurrentMonth + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
-                const attendance = student.attendance.find(a => a.attendance_date === dateStr);
+                const attendance = findAttendanceRecord(student.attendance, dateStr);
 
                 if (attendance) {
                     totalDays++;
