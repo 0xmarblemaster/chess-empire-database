@@ -197,6 +197,90 @@
         .stat-tile.tile-wide {
             grid-column: 1 / -1;
         }
+
+        /* Period picker */
+        .period-picker {
+            background: white;
+            border-radius: 16px;
+            padding: 16px;
+            margin-bottom: 16px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+        }
+        .period-picker-title {
+            font-size: 13px;
+            font-weight: 600;
+            color: #5F192B;
+            margin-bottom: 12px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+        .preset-buttons {
+            display: flex;
+            gap: 8px;
+            overflow-x: auto;
+            margin-bottom: 12px;
+            padding-bottom: 4px;
+            scrollbar-width: thin;
+            scrollbar-color: #C2A580 transparent;
+        }
+        .preset-buttons::-webkit-scrollbar { height: 4px; }
+        .preset-buttons::-webkit-scrollbar-track { background: transparent; }
+        .preset-buttons::-webkit-scrollbar-thumb { background: #C2A580; border-radius: 2px; }
+        .preset-btn {
+            flex: 0 0 auto;
+            padding: 8px 14px;
+            border: 1px solid #e2e8f0;
+            border-radius: 20px;
+            background: white;
+            color: #64748b;
+            font-family: 'Inter', sans-serif;
+            font-size: 13px;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.15s;
+            white-space: nowrap;
+        }
+        .preset-btn:hover {
+            border-color: #C2A580;
+            color: #5F192B;
+        }
+        .preset-btn.active {
+            background: #5F192B;
+            border-color: #5F192B;
+            color: white;
+        }
+        .custom-dates {
+            display: none;
+            gap: 8px;
+            margin-top: 12px;
+        }
+        .custom-dates.visible {
+            display: flex;
+        }
+        .date-input-group {
+            flex: 1;
+        }
+        .date-input-label {
+            font-size: 11px;
+            font-weight: 500;
+            color: #64748b;
+            margin-bottom: 4px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+        .date-input-group input {
+            width: 100%;
+            padding: 8px 12px;
+            border: 1px solid #e2e8f0;
+            border-radius: 8px;
+            font-family: 'Inter', sans-serif;
+            font-size: 13px;
+            color: #1e293b;
+        }
+        .date-input-group input:focus {
+            outline: none;
+            border-color: #C2A580;
+        }
     </style>
 </head>
 <body>
@@ -206,6 +290,27 @@
             <div style="font-weight:600;">Загрузка...</div>
         </div>
         <div id="cardContainer" style="display:none;">
+            <div class="period-picker" id="periodPicker">
+                <div class="period-picker-title">Период</div>
+                <div class="preset-buttons">
+                    <button class="preset-btn" data-preset="current-month">Этот месяц</button>
+                    <button class="preset-btn" data-preset="last-month">Прошлый месяц</button>
+                    <button class="preset-btn" data-preset="3-months">3 месяца</button>
+                    <button class="preset-btn" data-preset="6-months">6 месяцев</button>
+                    <button class="preset-btn" data-preset="year">Год</button>
+                    <button class="preset-btn" data-preset="custom">Свой период</button>
+                </div>
+                <div class="custom-dates" id="customDates">
+                    <div class="date-input-group">
+                        <div class="date-input-label">С</div>
+                        <input type="date" id="dateFrom">
+                    </div>
+                    <div class="date-input-group">
+                        <div class="date-input-label">По</div>
+                        <input type="date" id="dateTo">
+                    </div>
+                </div>
+            </div>
             <div class="stats-card" id="statsCard">
                 <div class="card-inner">
                     <div class="card-header">
@@ -245,10 +350,193 @@
 
     const params = new URLSearchParams(location.search);
     const studentId = params.get('id');
-    const monthParam = params.get('month') || new Date().toISOString().slice(0,7);
-    const [year, month] = monthParam.split('-').map(Number);
-    const monthStart = `${monthParam}-01`;
-    const monthEnd = month === 12 ? `${year+1}-01-01` : `${year}-${String(month+1).padStart(2,'0')}-01`;
+
+    // Period handling - support both new (from/to) and legacy (month) params
+    let monthStart, monthEnd;
+    let isMonthMode = false;
+
+    if (params.has('from') && params.has('to')) {
+        // New mode: from/to dates (to is inclusive, convert to exclusive for queries)
+        monthStart = params.get('from');
+        const toInclusive = new Date(params.get('to'));
+        toInclusive.setDate(toInclusive.getDate() + 1);
+        monthEnd = toInclusive.toISOString().slice(0, 10);
+    } else if (params.has('month')) {
+        // Legacy mode: single month
+        const monthParam = params.get('month');
+        const [year, month] = monthParam.split('-').map(Number);
+        monthStart = `${monthParam}-01`;
+        monthEnd = month === 12 ? `${year+1}-01-01` : `${year}-${String(month+1).padStart(2,'0')}-01`;
+        isMonthMode = true;
+    } else {
+        // Default: current month
+        const now = new Date();
+        const year = now.getFullYear();
+        const month = now.getMonth() + 1;
+        const monthParam = `${year}-${String(month).padStart(2,'0')}`;
+        monthStart = `${monthParam}-01`;
+        monthEnd = month === 12 ? `${year+1}-01-01` : `${year}-${String(month+1).padStart(2,'0')}-01`;
+        isMonthMode = true;
+    }
+
+    function formatPeriodTitle(start, end) {
+        const startDate = new Date(start);
+        const endDate = new Date(end);
+        endDate.setDate(endDate.getDate() - 1); // end is exclusive, so subtract 1 day
+
+        const startYear = startDate.getFullYear();
+        const startMonth = startDate.getMonth();
+        const endYear = endDate.getFullYear();
+        const endMonth = endDate.getMonth();
+
+        // Check if it's a single month
+        if (startYear === endYear && startMonth === endMonth) {
+            return `Итоги ${MONTHS_RU[startMonth]} ${startYear}`;
+        }
+
+        // Multi-month range
+        const startMonthName = MONTHS_RU[startMonth];
+        const endMonthName = MONTHS_RU[endMonth];
+
+        if (startYear === endYear) {
+            return `Итоги ${startMonthName} — ${endMonthName} ${startYear}`;
+        } else {
+            return `Итоги ${startMonthName} ${startYear} — ${endMonthName} ${endYear}`;
+        }
+    }
+
+    function initPeriodPicker() {
+        const presetButtons = document.querySelectorAll('.preset-btn');
+        const customDates = document.getElementById('customDates');
+        const dateFrom = document.getElementById('dateFrom');
+        const dateTo = document.getElementById('dateTo');
+
+        // Set active button based on current params
+        const currentPreset = detectCurrentPreset();
+        if (currentPreset) {
+            document.querySelector(`[data-preset="${currentPreset}"]`)?.classList.add('active');
+            if (currentPreset === 'custom') {
+                customDates.classList.add('visible');
+                dateFrom.value = monthStart;
+                const toDate = new Date(monthEnd);
+                toDate.setDate(toDate.getDate() - 1);
+                dateTo.value = toDate.toISOString().slice(0, 10);
+            }
+        }
+
+        presetButtons.forEach(btn => {
+            btn.addEventListener('click', () => {
+                const preset = btn.dataset.preset;
+                presetButtons.forEach(b => b.classList.remove('active'));
+                btn.classList.add('active');
+
+                if (preset === 'custom') {
+                    customDates.classList.add('visible');
+                } else {
+                    customDates.classList.remove('visible');
+                    applyPreset(preset);
+                }
+            });
+        });
+
+        dateFrom.addEventListener('change', applyCustomDates);
+        dateTo.addEventListener('change', applyCustomDates);
+    }
+
+    function detectCurrentPreset() {
+        const now = new Date();
+        const currentYear = now.getFullYear();
+        const currentMonth = now.getMonth() + 1;
+
+        // Check current month
+        const currentMonthStart = `${currentYear}-${String(currentMonth).padStart(2,'0')}-01`;
+        const currentMonthEnd = currentMonth === 12
+            ? `${currentYear+1}-01-01`
+            : `${currentYear}-${String(currentMonth+1).padStart(2,'0')}-01`;
+        if (monthStart === currentMonthStart && monthEnd === currentMonthEnd) return 'current-month';
+
+        // Check last month
+        const lastMonth = currentMonth === 1 ? 12 : currentMonth - 1;
+        const lastMonthYear = currentMonth === 1 ? currentYear - 1 : currentYear;
+        const lastMonthStart = `${lastMonthYear}-${String(lastMonth).padStart(2,'0')}-01`;
+        const lastMonthEnd = `${currentYear}-${String(currentMonth).padStart(2,'0')}-01`;
+        if (monthStart === lastMonthStart && monthEnd === lastMonthEnd) return 'last-month';
+
+        // Check 3 months
+        const threeMonthsAgo = new Date(currentYear, currentMonth - 1, 1);
+        threeMonthsAgo.setMonth(threeMonthsAgo.getMonth() - 3);
+        const threeMonthsStart = `${threeMonthsAgo.getFullYear()}-${String(threeMonthsAgo.getMonth() + 1).padStart(2,'0')}-01`;
+        if (monthStart === threeMonthsStart && monthEnd === currentMonthEnd) return '3-months';
+
+        // Check 6 months
+        const sixMonthsAgo = new Date(currentYear, currentMonth - 1, 1);
+        sixMonthsAgo.setMonth(sixMonthsAgo.getMonth() - 6);
+        const sixMonthsStart = `${sixMonthsAgo.getFullYear()}-${String(sixMonthsAgo.getMonth() + 1).padStart(2,'0')}-01`;
+        if (monthStart === sixMonthsStart && monthEnd === currentMonthEnd) return '6-months';
+
+        // Check year
+        const yearStart = `${currentYear}-01-01`;
+        if (monthStart === yearStart && monthEnd === currentMonthEnd) return 'year';
+
+        // Otherwise custom
+        return 'custom';
+    }
+
+    function applyPreset(preset) {
+        const now = new Date();
+        const currentYear = now.getFullYear();
+        const currentMonth = now.getMonth() + 1;
+        let from, to;
+
+        switch(preset) {
+            case 'current-month':
+                from = `${currentYear}-${String(currentMonth).padStart(2,'0')}-01`;
+                to = currentMonth === 12
+                    ? `${currentYear+1}-01-01`
+                    : `${currentYear}-${String(currentMonth+1).padStart(2,'0')}-01`;
+                break;
+            case 'last-month':
+                const lastMonth = currentMonth === 1 ? 12 : currentMonth - 1;
+                const lastMonthYear = currentMonth === 1 ? currentYear - 1 : currentYear;
+                from = `${lastMonthYear}-${String(lastMonth).padStart(2,'0')}-01`;
+                to = `${currentYear}-${String(currentMonth).padStart(2,'0')}-01`;
+                break;
+            case '3-months':
+                const threeMonthsAgo = new Date(currentYear, currentMonth - 1, 1);
+                threeMonthsAgo.setMonth(threeMonthsAgo.getMonth() - 3);
+                from = `${threeMonthsAgo.getFullYear()}-${String(threeMonthsAgo.getMonth() + 1).padStart(2,'0')}-01`;
+                to = currentMonth === 12
+                    ? `${currentYear+1}-01-01`
+                    : `${currentYear}-${String(currentMonth+1).padStart(2,'0')}-01`;
+                break;
+            case '6-months':
+                const sixMonthsAgo = new Date(currentYear, currentMonth - 1, 1);
+                sixMonthsAgo.setMonth(sixMonthsAgo.getMonth() - 6);
+                from = `${sixMonthsAgo.getFullYear()}-${String(sixMonthsAgo.getMonth() + 1).padStart(2,'0')}-01`;
+                to = currentMonth === 12
+                    ? `${currentYear+1}-01-01`
+                    : `${currentYear}-${String(currentMonth+1).padStart(2,'0')}-01`;
+                break;
+            case 'year':
+                from = `${currentYear}-01-01`;
+                to = currentMonth === 12
+                    ? `${currentYear+1}-01-01`
+                    : `${currentYear}-${String(currentMonth+1).padStart(2,'0')}-01`;
+                break;
+        }
+
+        const toDate = new Date(to);
+        toDate.setDate(toDate.getDate() - 1);
+        window.location.href = `?id=${studentId}&from=${from}&to=${toDate.toISOString().slice(0,10)}`;
+    }
+
+    function applyCustomDates() {
+        const from = document.getElementById('dateFrom').value;
+        const to = document.getElementById('dateTo').value;
+        if (from && to && from <= to) {
+            window.location.href = `?id=${studentId}&from=${from}&to=${to}`;
+        }
+    }
 
     async function load() {
         if (!studentId) { document.getElementById('loading').innerHTML = '<div style="font-weight:600;color:#5F192B;">Не указан ID ученика</div>'; return; }
@@ -293,7 +581,7 @@
             // Render
             document.getElementById('studentName').textContent = `${student.first_name} ${student.last_name}`;
             document.getElementById('branchName').textContent = student.branches?.name || '';
-            document.getElementById('monthTitle').textContent = `Итоги ${MONTHS_RU[month-1]} ${year}`;
+            document.getElementById('monthTitle').textContent = formatPeriodTitle(monthStart, monthEnd);
             document.getElementById('coachName').textContent = student.coaches ? `${student.coaches.first_name} ${student.coaches.last_name}` : '—';
 
             // Build tiles
@@ -323,6 +611,7 @@
 
             document.getElementById('loading').style.display = 'none';
             document.getElementById('cardContainer').style.display = 'block';
+            initPeriodPicker();
         } catch(e) {
             console.error(e);
             document.getElementById('loading').innerHTML = '<div style="font-weight:600;color:#5F192B;">Ошибка загрузки данных</div>';
@@ -333,7 +622,9 @@
 
     async function generateImage() {
         const btns = document.getElementById('actionButtons');
+        const picker = document.getElementById('periodPicker');
         btns.style.display = 'none';
+        picker.style.display = 'none';
         const canvas = await html2canvas(document.getElementById('statsCard'), {
             scale: 2,
             backgroundColor: null,
@@ -341,13 +632,15 @@
             logging: false,
         });
         btns.style.display = 'flex';
+        picker.style.display = 'block';
         return canvas;
     }
 
     async function downloadCard() {
         const canvas = await generateImage();
         const link = document.createElement('a');
-        link.download = `chess-empire-stats-${monthParam}.png`;
+        const filename = `chess-empire-stats-${monthStart}_${new Date(monthEnd).toISOString().slice(0,10)}.png`;
+        link.download = filename;
         link.href = canvas.toDataURL('image/png');
         link.click();
     }
@@ -355,7 +648,8 @@
     async function shareCard() {
         const canvas = await generateImage();
         canvas.toBlob(async (blob) => {
-            const file = new File([blob], `chess-empire-stats-${monthParam}.png`, { type: 'image/png' });
+            const filename = `chess-empire-stats-${monthStart}_${new Date(monthEnd).toISOString().slice(0,10)}.png`;
+            const file = new File([blob], filename, { type: 'image/png' });
             if (navigator.share && navigator.canShare && navigator.canShare({ files: [file] })) {
                 try {
                     await navigator.share({ files: [file], title: 'Chess Empire — Итоги месяца' });
