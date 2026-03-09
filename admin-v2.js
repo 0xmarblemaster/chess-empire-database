@@ -5224,7 +5224,7 @@ async function navigateToGlobalStudent(studentId) {
         attendanceCurrentCoach = 'all';
     }
 
-    // Reset schedule to show all
+    // Reset schedule to show all initially (needed to load schedule assignments)
     attendanceCurrentSchedule = '';
     const scheduleSelect = document.getElementById('attendanceScheduleFilter');
     if (scheduleSelect) scheduleSelect.value = '';
@@ -5233,7 +5233,20 @@ async function navigateToGlobalStudent(studentId) {
     populateAttendanceTimeSlots();
     saveAttendanceFilterState();
 
+    // First load to populate schedule assignments
     await loadAttendanceData();
+
+    // Now look up the student's actual schedule and reload with it selected
+    const studentSchedule = attendanceStudentScheduleAssignments?.[studentId];
+    if (studentSchedule) {
+        attendanceCurrentSchedule = studentSchedule;
+        const schSelect = document.getElementById('attendanceScheduleFilter');
+        if (schSelect) schSelect.value = studentSchedule;
+        const mobileSchSelect = document.getElementById('mobileScheduleFilter');
+        if (mobileSchSelect) mobileSchSelect.value = studentSchedule;
+        saveAttendanceFilterState();
+        await loadAttendanceData();
+    }
 
     // Scroll to and highlight the student row
     setTimeout(() => {
