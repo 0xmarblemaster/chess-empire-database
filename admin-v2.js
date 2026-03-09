@@ -5135,6 +5135,123 @@ function onAttendanceCoachChange() {
     loadAttendanceData();
 }
 
+// ========== Global Student Search ==========
+
+function handleGlobalStudentSearch(query) {
+    const resultsDiv = document.getElementById('globalSearchResults');
+    const clearBtn = document.getElementById('globalSearchClear');
+    if (!resultsDiv) return;
+
+    if (clearBtn) clearBtn.style.display = query.length > 0 ? 'block' : 'none';
+
+    if (!query || query.length < 2) {
+        resultsDiv.style.display = 'none';
+        return;
+    }
+
+    const q = query.toLowerCase().trim();
+    const students = window.students || [];
+    const matches = students.filter(s => {
+        const fullName = `${s.firstName || ''} ${s.lastName || ''}`.toLowerCase();
+        return fullName.includes(q);
+    }).slice(0, 15);
+
+    if (matches.length === 0) {
+        resultsDiv.innerHTML = '<div style="padding: 1rem; text-align: center; color: #94a3b8; font-size: 0.875rem;">Ученик не найден</div>';
+        resultsDiv.style.display = 'block';
+        return;
+    }
+
+    resultsDiv.innerHTML = matches.map(s => {
+        const branchName = i18n?.translateBranchName?.(s.branch) || s.branch || '—';
+        const coachName = s.coach || '—';
+        return `<div onmousedown="navigateToGlobalStudent('${s.id}')" style="padding: 0.75rem 1rem; cursor: pointer; border-bottom: 1px solid #f1f5f9; transition: background 0.15s;"
+            onmouseover="this.style.background='#fef2f2'" onmouseout="this.style.background='white'">
+            <div style="font-weight: 500; color: #1e293b; font-size: 0.9375rem;">${s.firstName} ${s.lastName}</div>
+            <div style="font-size: 0.8125rem; color: #64748b; margin-top: 2px;">${branchName} · ${coachName}</div>
+        </div>`;
+    }).join('');
+    resultsDiv.style.display = 'block';
+}
+
+function clearGlobalSearch() {
+    const input = document.getElementById('globalStudentSearchInput');
+    const resultsDiv = document.getElementById('globalSearchResults');
+    const clearBtn = document.getElementById('globalSearchClear');
+    if (input) input.value = '';
+    if (resultsDiv) resultsDiv.style.display = 'none';
+    if (clearBtn) clearBtn.style.display = 'none';
+}
+
+async function navigateToGlobalStudent(studentId) {
+    const student = (window.students || []).find(s => String(s.id) === String(studentId));
+    if (!student) return;
+
+    clearGlobalSearch();
+
+    // Set branch
+    const branchSelect = document.getElementById('attendanceBranchFilter');
+    if (branchSelect && student.branch) {
+        attendanceCurrentBranch = student.branch;
+        branchSelect.value = student.branch;
+    }
+
+    // Populate coach dropdown for this branch
+    populateAttendanceCoachDropdown();
+
+    // Try to find coach by coachId or name
+    if (student.coachId && window.coaches) {
+        const coach = window.coaches.find(c => c.id === student.coachId);
+        if (coach) {
+            attendanceCurrentCoach = coach.id;
+            const coachSelect = document.getElementById('attendanceCoachFilter');
+            if (coachSelect) coachSelect.value = coach.id;
+            attendanceCurrentCoachName = `${coach.firstName} ${coach.lastName}`;
+        } else {
+            attendanceCurrentCoach = 'all';
+        }
+    } else if (student.coach && window.coaches) {
+        const coach = window.coaches.find(c => `${c.firstName} ${c.lastName}` === student.coach);
+        if (coach) {
+            attendanceCurrentCoach = coach.id;
+            const coachSelect = document.getElementById('attendanceCoachFilter');
+            if (coachSelect) coachSelect.value = coach.id;
+            attendanceCurrentCoachName = student.coach;
+        } else {
+            attendanceCurrentCoach = 'all';
+        }
+    } else {
+        attendanceCurrentCoach = 'all';
+    }
+
+    // Reset schedule to show all
+    attendanceCurrentSchedule = '';
+    const scheduleSelect = document.getElementById('attendanceScheduleFilter');
+    if (scheduleSelect) scheduleSelect.value = '';
+
+    populateAttendanceScheduleDropdown();
+    populateAttendanceTimeSlots();
+    saveAttendanceFilterState();
+
+    await loadAttendanceData();
+
+    // Scroll to and highlight the student row
+    setTimeout(() => {
+        const rows = document.querySelectorAll('.attendance-student-name, .attendance-row, [data-student-id]');
+        for (const row of rows) {
+            if (row.dataset?.studentId === String(studentId) ||
+                row.textContent?.includes(student.firstName + ' ' + student.lastName)) {
+                const targetRow = row.closest('tr') || row.closest('.attendance-row') || row;
+                targetRow.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                targetRow.style.transition = 'background 0.3s';
+                targetRow.style.background = '#fce7f3';
+                setTimeout(() => { targetRow.style.background = ''; }, 3000);
+                break;
+            }
+        }
+    }, 500);
+}
+
 // Mobile filter handlers - sync with desktop filters
 function onMobileAttendanceBranchChange() {
     const mobileSelect = document.getElementById('mobileBranchFilter');
