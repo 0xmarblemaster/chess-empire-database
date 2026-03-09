@@ -543,12 +543,13 @@
 
         try {
             // Parallel fetch
-            const [studentRes, attendanceRes, ratingsRes, botsRes, puzzlesRes] = await Promise.all([
+            const [studentRes, attendanceRes, ratingsRes, botsRes, puzzlesRes, bestPuzzleAllTimeRes] = await Promise.all([
                 sb.from('students').select('*, branches(name), coaches(first_name, last_name)').eq('id', studentId).single(),
                 sb.from('attendance').select('*').eq('student_id', studentId).gte('attendance_date', monthStart).lt('attendance_date', monthEnd).order('attendance_date'),
                 sb.from('student_ratings').select('*').eq('student_id', studentId).gte('rating_date', monthStart).lt('rating_date', monthEnd).order('rating_date'),
                 sb.from('bot_battles').select('*').eq('student_id', studentId).gte('defeated_at', monthStart).lt('defeated_at', monthEnd),
                 sb.from('survival_scores').select('*').eq('student_id', studentId).eq('mode', 'puzzle_rush').gte('achieved_at', monthStart).lt('achieved_at', monthEnd).order('score', { ascending: false }),
+                sb.from('survival_scores').select('score').eq('student_id', studentId).eq('mode', 'puzzle_rush').order('score', { ascending: false }).limit(1),
             ]);
 
             const student = studentRes.data;
@@ -567,8 +568,8 @@
             const attendancePct = totalRelevant > 0 ? Math.round((presentCount / totalRelevant) * 100) : 0;
             const hours = presentCount; // 1 hour per lesson
 
-            // Puzzle stats
-            const bestPuzzle = puzzles.length > 0 ? puzzles[0].score : 0;
+            // Puzzle stats — always show all-time best, period attempts as context
+            const bestPuzzleAllTime = bestPuzzleAllTimeRes.data?.length > 0 ? bestPuzzleAllTimeRes.data[0].score : 0;
             const puzzleAttempts = puzzles.length;
 
             // Longest streak
@@ -600,7 +601,7 @@
 
             const tiles = [
                 { emoji: '🏫', value: presentCount, label: 'Занятий пройдено', cls: 'tile-lessons' },
-                { emoji: '🧩', value: bestPuzzle, label: `Лучший Puzzle Rush${puzzleAttempts > 0 ? ' (' + puzzleAttempts + ' попыт.)' : ''}`, cls: 'tile-time' },
+                { emoji: '🧩', value: bestPuzzleAllTime, label: `Лучший Puzzle Rush${puzzleAttempts > 0 ? ' (за период: ' + puzzleAttempts + ' попыт.)' : ' (за всё время)'}`, cls: 'tile-time' },
                 { emoji: '📊', value: `${attendancePct}%`, label: 'Посещаемость', cls: 'tile-attendance' },
                 { emoji: '🔥', value: maxStreak, label: 'Серия занятий', cls: 'tile-streak' },
                 { emoji: '📈', value: ratingHTML, label: 'Рейтинг', cls: 'tile-rating', raw: true },
