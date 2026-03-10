@@ -738,11 +738,6 @@ function renderStatsContent() {
                     <div class="rating-league">${leagueInfo.name}</div>
                     ${ratings.current.rating_date ? `<div class="rating-date">${t('stats.asOf') || 'As of'} ${new Date(ratings.current.rating_date).toLocaleDateString()}</div>` : ''}
                 </div>
-                <a href="student-stats.html?id=${window.currentStudent?.id}"
-                   style="display:flex;align-items:center;justify-content:center;gap:6px;margin-top:12px;padding:10px 16px;border:1px solid #e2e8f0;border-radius:10px;color:#64748b;font-size:13px;font-weight:500;text-decoration:none;transition:all 0.15s;"
-                   onmouseover="this.style.borderColor='#C2A580';this.style.color='#5F192B'" onmouseout="this.style.borderColor='#e2e8f0';this.style.color='#64748b'">
-                    📊 Посмотреть итоги месяца →
-                </a>
             </div>
         `;
     }
@@ -904,6 +899,12 @@ async function renderProfile() {
             </div>
             ${editButtonHTML}
         </div>
+
+        <a href="student-stats.html?id=${student.id}" class="check-stats-cta">
+            <i data-lucide="bar-chart-3" style="width: 18px; height: 18px;"></i>
+            <span>📊 Посмотреть итоги месяца</span>
+            <i data-lucide="arrow-right" style="width: 16px; height: 16px;"></i>
+        </a>
 
         <!-- Tab Navigation -->
         <div class="tab-navigation">

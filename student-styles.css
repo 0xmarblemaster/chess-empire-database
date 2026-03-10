@@ -155,6 +155,36 @@ body {
     position: relative;
 }
 
+.check-stats-cta {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    margin: -1.5rem 0 1.5rem 0;
+    padding: 14px 24px;
+    background: linear-gradient(135deg, #5F192B 0%, #8B2E47 100%);
+    border: none;
+    border-radius: 14px;
+    color: white;
+    font-size: 15px;
+    font-weight: 600;
+    text-decoration: none;
+    transition: all 0.25s ease;
+    box-shadow: 0 4px 14px rgba(95, 25, 43, 0.25);
+    cursor: pointer;
+}
+
+.check-stats-cta:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 6px 20px rgba(95, 25, 43, 0.35);
+    background: linear-gradient(135deg, #7A2238 0%, #A33B5A 100%);
+}
+
+.check-stats-cta:active {
+    transform: translateY(0);
+    box-shadow: 0 2px 8px rgba(95, 25, 43, 0.2);
+}
+
 .edit-button {
     position: absolute;
     top: 0;
