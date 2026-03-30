@@ -6478,9 +6478,9 @@ async function toggleAttendanceStatus(studentId, dateStr, cell) {
     const branchObj = window.branches.find(b => b.name === attendanceCurrentBranch);
     if (!branchObj) return;
 
-    // Status cycle: empty -> present -> absent -> late -> excused -> empty
-    const statusCycle = ['', 'present', 'absent', 'late', 'excused'];
-    const charMap = { '': '', 'present': 'V', 'absent': 'X', 'late': 'L', 'excused': 'E' };
+    // Status cycle: empty -> present -> absent -> late -> excused -> no_homework -> empty
+    const statusCycle = ['', 'present', 'absent', 'late', 'excused', 'no_homework'];
+    const charMap = { '': '', 'present': 'V', 'absent': 'X', 'late': 'L', 'excused': 'E', 'no_homework': 'H' };
 
     // Get current status from cell
     const currentChar = cell.textContent.trim();
@@ -6552,7 +6552,7 @@ async function toggleAttendanceStatus(studentId, dateStr, cell) {
  */
 function setAttendanceMode(mode) {
     // Validate mode
-    const validModes = ['present', 'excused', 'absent'];
+    const validModes = ['present', 'excused', 'absent', 'no_homework'];
     if (!validModes.includes(mode)) {
         console.error('Invalid attendance mode:', mode);
         return;
@@ -6567,7 +6567,9 @@ function setAttendanceMode(mode) {
         btn.setAttribute('aria-pressed', 'false');
     });
 
-    const activeBtn = document.getElementById(`attendanceMode${mode.charAt(0).toUpperCase() + mode.slice(1)}`);
+    // Convert no_homework to NoHomework for ID
+    const modeCamelCase = mode === 'no_homework' ? 'NoHomework' : mode.charAt(0).toUpperCase() + mode.slice(1);
+    const activeBtn = document.getElementById(`attendanceMode${modeCamelCase}`);
     if (activeBtn) {
         activeBtn.classList.add('active');
         activeBtn.setAttribute('aria-pressed', 'true');
@@ -6579,11 +6581,11 @@ function setAttendanceMode(mode) {
 /**
  * Helper function to update checkbox UI based on status
  * @param {HTMLElement} checkbox - The checkbox div element
- * @param {string} status - The status: '', 'present', 'excused', or 'absent'
+ * @param {string} status - The status: '', 'present', 'excused', 'absent', or 'no_homework'
  */
 function updateCheckboxUI(checkbox, status) {
     // Remove all status classes
-    checkbox.classList.remove('checked', 'excused', 'absent');
+    checkbox.classList.remove('checked', 'excused', 'absent', 'no_homework');
 
     if (status === '') {
         // Unchecked state
@@ -6600,6 +6602,10 @@ function updateCheckboxUI(checkbox, status) {
         // Red X
         checkbox.classList.add('absent');
         checkbox.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>';
+    } else if (status === 'no_homework') {
+        // Yellow book icon (H)
+        checkbox.classList.add('no_homework');
+        checkbox.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5v-15A2.5 2.5 0 0 1 6.5 2H20v20H6.5a2.5 2.5 0 0 1 0-5H20"></path></svg>';
     }
 }
 

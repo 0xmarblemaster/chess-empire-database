@@ -935,6 +935,12 @@
                             </svg>
                             <span data-i18n="admin.attendance.absent">Absent</span>
                         </button>
+                        <button id="attendanceModeNoHomework" class="attendance-mode-btn" onclick="setAttendanceMode('no_homework')" aria-label="Mark attendance as No Homework" aria-pressed="false">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                                <path d="M4 19.5v-15A2.5 2.5 0 0 1 6.5 2H20v20H6.5a2.5 2.5 0 0 1 0-5H20"></path>
+                            </svg>
+                            <span data-i18n="admin.attendance.noHomework">No Homework</span>
+                        </button>
                     </div>
                 </div>
 
@@ -969,6 +975,10 @@
                     <div style="display: flex; align-items: center; gap: 0.5rem;">
                         <span class="attendance-cell excused" style="width: 24px; height: 24px; display: inline-flex; align-items: center; justify-content: center; border-radius: 4px; font-size: 0.75rem; font-weight: 600;">E</span>
                         <span style="font-size: 0.875rem; color: #475569;" data-i18n="admin.attendance.excused">Excused</span>
+                    </div>
+                    <div style="display: flex; align-items: center; gap: 0.5rem;">
+                        <span class="attendance-cell no_homework" style="width: 24px; height: 24px; display: inline-flex; align-items: center; justify-content: center; border-radius: 4px; font-size: 0.75rem; font-weight: 600;">H</span>
+                        <span style="font-size: 0.875rem; color: #475569;" data-i18n="admin.attendance.noHomework">No Homework</span>
                     </div>
                     <div style="margin-left: auto; font-size: 0.875rem; color: #64748b;">
                         <span data-i18n="admin.attendance.clickToChange">Click cell to change status</span>

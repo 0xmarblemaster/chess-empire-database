@@ -3184,6 +3184,12 @@ td {
     border: 1px solid #93c5fd;
 }
 
+.attendance-cell.no_homework {
+    background: #fef3c7;
+    color: #ca8a04;
+    border: 1px solid #fde047;
+}
+
 .attendance-cell.empty {
     background: #f8fafc;
     color: #94a3b8;
@@ -3316,6 +3322,14 @@ td {
     box-shadow: 0 0 0 3px rgba(239, 68, 68, 0.1);
 }
 
+/* Active state for No Homework mode */
+.attendance-mode-btn#attendanceModeNoHomework.active {
+    background: #eab308;
+    color: white;
+    border-color: #eab308;
+    box-shadow: 0 0 0 3px rgba(234, 179, 8, 0.1);
+}
+
 /* ====================================
    ATTENDANCE CHECKBOX STATUS STATES
    ==================================== */
@@ -3342,8 +3356,20 @@ td {
     box-shadow: 0 0 0 3px rgba(239, 68, 68, 0.1);
 }
 
+/* No Homework status - Yellow book */
+.attendance-checkbox.no_homework {
+    background: #eab308;
+    border-color: #eab308;
+}
+
+.attendance-checkbox.no_homework:hover {
+    border-color: #eab308;
+    box-shadow: 0 0 0 3px rgba(234, 179, 8, 0.1);
+}
+
 .attendance-checkbox.excused svg,
-.attendance-checkbox.absent svg {
+.attendance-checkbox.absent svg,
+.attendance-checkbox.no_homework svg {
     width: 16px;
     height: 16px;
     color: white;
