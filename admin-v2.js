@@ -4540,6 +4540,13 @@ const ATTENDANCE_TIME_SLOTS_DEBUT_TUE_THU_NAIL = [
     '18:00-19:30'
 ];
 
+// Debut branch Tuesday-Thursday schedule for coach Assylkhan Agbaevich
+const ATTENDANCE_TIME_SLOTS_DEBUT_TUE_THU_ASYLKHAN = [
+    '15:00-16:30',
+    '16:30-18:00',
+    '18:00-19:30'
+];
+
 // Debut branch Saturday-Sunday schedule: extended slots for coach Asylkhan Agbaevich
 const ATTENDANCE_TIME_SLOTS_DEBUT_SAT_SUN_ASYLKHAN = [
     '9:00-10:30',
@@ -4703,6 +4710,10 @@ function getTimeSlotsForBranch(branchName, scheduleType = null, coachName = null
 
         // Coach Asylkhan Agbaevich has custom time slots for multiple schedules
         if (normalizedCoach.includes('sylkhan') || normalizedCoach.includes('асылхан')) {
+            // Tue-Thu: Afternoon slots only
+            if (scheduleType === 'tue_thu') {
+                return ATTENDANCE_TIME_SLOTS_DEBUT_TUE_THU_ASYLKHAN;
+            }
             // Sat-Sun: Extended slots (9:00-10:30, 10:30-12:00)
             if (scheduleType === 'sat_sun') {
                 return ATTENDANCE_TIME_SLOTS_DEBUT_SAT_SUN_ASYLKHAN;
