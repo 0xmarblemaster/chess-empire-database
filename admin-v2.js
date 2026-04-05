@@ -4703,9 +4703,11 @@ function getTimeSlotsForBranch(branchName, scheduleType = null, coachName = null
         }
 
         // Coach Asylkhan Agbaevich has custom time slots for multiple schedules
+        console.log(`[DEBUG] asylkhan check: includes='${normalizedCoach.includes('asylkhan')}' schedule='${scheduleType}'`);
         if (normalizedCoach.includes('asylkhan') || normalizedCoach.includes('асылхан')) {
             // Sat-Sun: Extended slots (9:00-10:30, 10:30-12:00)
             if (scheduleType === 'sat_sun') {
+                console.log('[DEBUG] RETURNING Asylkhan sat_sun slots:', JSON.stringify(ATTENDANCE_TIME_SLOTS_DEBUT_SAT_SUN_ASYLKHAN));
                 return ATTENDANCE_TIME_SLOTS_DEBUT_SAT_SUN_ASYLKHAN;
             }
             // Mon-Wed: Extended midday slot (11:00-12:30)
@@ -4721,6 +4723,7 @@ function getTimeSlotsForBranch(branchName, scheduleType = null, coachName = null
 
         // Default Debut slots (for other schedules like tue_thu, or sat_sun for other coaches)
         if (scheduleType === 'sat_sun') {
+            console.log('[DEBUG] FALLTHROUGH to default SAT_SUN - this should NOT happen for Asylkhan!');
             return ATTENDANCE_TIME_SLOTS_SAT_SUN;
         }
         return ATTENDANCE_TIME_SLOTS_DEBUT;
@@ -5410,11 +5413,13 @@ async function populateAttendanceTimeSlots() {
 
     // Use client-side time slot logic with coach-specific handling
     const timeSlots = getTimeSlotsForBranch(attendanceCurrentBranch, attendanceCurrentSchedule, attendanceCurrentCoachName);
+    console.log(`[DEBUG populateAttendanceTimeSlots] got ${timeSlots.length} slots:`, JSON.stringify(timeSlots));
     timeSlots.forEach(slot => {
         if (slot) {
             select.innerHTML += `<option value="${slot}">${slot}</option>`;
         }
     });
+    console.log(`[DEBUG populateAttendanceTimeSlots] dropdown now has ${select.options.length} options`);
 }
 
 // Navigate month backward
