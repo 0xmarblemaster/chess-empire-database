@@ -4649,6 +4649,7 @@ function getStudentsForTimeSlot(slotIndex, filteredData) {
 // Get time slots for a specific branch, schedule type, and coach
 // Saturday-Sunday has shorter hours (last slot 13:00-14:00) for ALL branches
 function getTimeSlotsForBranch(branchName, scheduleType = null, coachName = null) {
+    console.log('[DEBUG getTimeSlotsForBranch]', { branchName, scheduleType, coachName });
     if (!branchName) return ATTENDANCE_TIME_SLOTS_DEFAULT;
     const normalizedName = branchName.toLowerCase().trim();
 
@@ -4795,14 +4796,17 @@ function showAttendanceManagement(updateHash = true) {
 
     // Apply saved coach selection to dropdown and resolve coach name
     const coachSelect = document.getElementById('attendanceCoachFilter');
+    console.log('[DEBUG init] attendanceCurrentCoach:', attendanceCurrentCoach, 'coachSelect exists:', !!coachSelect);
     if (coachSelect && attendanceCurrentCoach) {
         coachSelect.value = attendanceCurrentCoach;
         // Resolve coach name for time slot logic (not set by localStorage restore)
         if (attendanceCurrentCoach !== 'all' && attendanceCurrentCoach !== 'unassigned') {
             const coach = window.coaches.find(c => c.id === attendanceCurrentCoach);
             attendanceCurrentCoachName = coach ? `${coach.firstName} ${coach.lastName}` : null;
+            console.log('[DEBUG init] resolved coach:', coach, 'attendanceCurrentCoachName:', attendanceCurrentCoachName);
         }
     }
+    console.log('[DEBUG init] attendanceCurrentSchedule:', attendanceCurrentSchedule, 'attendanceCurrentBranch:', attendanceCurrentBranch);
 
     // Populate time slots based on schedule
     populateAttendanceTimeSlots();
