@@ -6955,14 +6955,14 @@ function onAddStudentScheduleChange() {
 
     if (!timeSlotSelect) return;
 
-    // Get coach name from selected student if available
-    let coachName = null;
+    // Get coach name from selected student, or fall back to the currently active coach in the attendance view
+    let coachName = attendanceCurrentCoachName || null;
     const studentId = document.getElementById('addStudentSelectedId')?.value;
     if (studentId) {
         const student = window.students?.find(s => s.id === studentId);
         if (student && student.coachId) {
             const coach = window.coaches?.find(c => c.id === student.coachId);
-            coachName = coach ? `${coach.firstName} ${coach.lastName}` : null;
+            if (coach) coachName = `${coach.firstName} ${coach.lastName}`;
         }
     }
 
