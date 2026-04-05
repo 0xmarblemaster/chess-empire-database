@@ -4649,7 +4649,7 @@ function getStudentsForTimeSlot(slotIndex, filteredData) {
 // Get time slots for a specific branch, schedule type, and coach
 // Saturday-Sunday has shorter hours (last slot 13:00-14:00) for ALL branches
 function getTimeSlotsForBranch(branchName, scheduleType = null, coachName = null) {
-    console.log('[DEBUG getTimeSlotsForBranch]', { branchName, scheduleType, coachName });
+    console.log(`[DEBUG getTimeSlotsForBranch] branch="${branchName}" schedule="${scheduleType}" coach="${coachName}"`);
     if (!branchName) return ATTENDANCE_TIME_SLOTS_DEFAULT;
     const normalizedName = branchName.toLowerCase().trim();
 
@@ -5122,11 +5122,13 @@ function onAttendanceTimeSlotChange() {
 function onAttendanceCoachChange() {
     const select = document.getElementById('attendanceCoachFilter');
     attendanceCurrentCoach = select.value;
+    console.log(`[DEBUG onAttendanceCoachChange] coachId="${attendanceCurrentCoach}"`);
 
     // Get coach name for time slot logic
     if (attendanceCurrentCoach && attendanceCurrentCoach !== 'all' && attendanceCurrentCoach !== 'unassigned') {
         const coach = window.coaches.find(c => c.id === attendanceCurrentCoach);
         attendanceCurrentCoachName = coach ? `${coach.firstName} ${coach.lastName}` : null;
+        console.log(`[DEBUG onAttendanceCoachChange] resolved name="${attendanceCurrentCoachName}"`);
     } else {
         attendanceCurrentCoachName = null;
     }
