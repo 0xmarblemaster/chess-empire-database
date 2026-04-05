@@ -4649,7 +4649,6 @@ function getStudentsForTimeSlot(slotIndex, filteredData) {
 // Get time slots for a specific branch, schedule type, and coach
 // Saturday-Sunday has shorter hours (last slot 13:00-14:00) for ALL branches
 function getTimeSlotsForBranch(branchName, scheduleType = null, coachName = null) {
-    console.log(`[DEBUG getTimeSlotsForBranch] branch="${branchName}" schedule="${scheduleType}" coach="${coachName}"`);
     if (!branchName) return ATTENDANCE_TIME_SLOTS_DEFAULT;
     const normalizedName = branchName.toLowerCase().trim();
 
@@ -4703,11 +4702,9 @@ function getTimeSlotsForBranch(branchName, scheduleType = null, coachName = null
         }
 
         // Coach Asylkhan Agbaevich has custom time slots for multiple schedules
-        console.log(`[DEBUG] asylkhan check: includes='${normalizedCoach.includes('asylkhan')}' schedule='${scheduleType}'`);
-        if (normalizedCoach.includes('asylkhan') || normalizedCoach.includes('асылхан')) {
+        if (normalizedCoach.includes('sylkhan') || normalizedCoach.includes('асылхан')) {
             // Sat-Sun: Extended slots (9:00-10:30, 10:30-12:00)
             if (scheduleType === 'sat_sun') {
-                console.log('[DEBUG] RETURNING Asylkhan sat_sun slots:', JSON.stringify(ATTENDANCE_TIME_SLOTS_DEBUT_SAT_SUN_ASYLKHAN));
                 return ATTENDANCE_TIME_SLOTS_DEBUT_SAT_SUN_ASYLKHAN;
             }
             // Mon-Wed: Extended midday slot (11:00-12:30)
@@ -4723,7 +4720,6 @@ function getTimeSlotsForBranch(branchName, scheduleType = null, coachName = null
 
         // Default Debut slots (for other schedules like tue_thu, or sat_sun for other coaches)
         if (scheduleType === 'sat_sun') {
-            console.log('[DEBUG] FALLTHROUGH to default SAT_SUN - this should NOT happen for Asylkhan!');
             return ATTENDANCE_TIME_SLOTS_SAT_SUN;
         }
         return ATTENDANCE_TIME_SLOTS_DEBUT;
@@ -4799,17 +4795,14 @@ function showAttendanceManagement(updateHash = true) {
 
     // Apply saved coach selection to dropdown and resolve coach name
     const coachSelect = document.getElementById('attendanceCoachFilter');
-    console.log('[DEBUG init] attendanceCurrentCoach:', attendanceCurrentCoach, 'coachSelect exists:', !!coachSelect);
     if (coachSelect && attendanceCurrentCoach) {
         coachSelect.value = attendanceCurrentCoach;
         // Resolve coach name for time slot logic (not set by localStorage restore)
         if (attendanceCurrentCoach !== 'all' && attendanceCurrentCoach !== 'unassigned') {
             const coach = window.coaches.find(c => c.id === attendanceCurrentCoach);
             attendanceCurrentCoachName = coach ? `${coach.firstName} ${coach.lastName}` : null;
-            console.log('[DEBUG init] resolved coach:', coach, 'attendanceCurrentCoachName:', attendanceCurrentCoachName);
         }
     }
-    console.log('[DEBUG init] attendanceCurrentSchedule:', attendanceCurrentSchedule, 'attendanceCurrentBranch:', attendanceCurrentBranch);
 
     // Populate time slots based on schedule
     populateAttendanceTimeSlots();
@@ -5125,13 +5118,11 @@ function onAttendanceTimeSlotChange() {
 function onAttendanceCoachChange() {
     const select = document.getElementById('attendanceCoachFilter');
     attendanceCurrentCoach = select.value;
-    console.log(`[DEBUG onAttendanceCoachChange] coachId="${attendanceCurrentCoach}"`);
 
     // Get coach name for time slot logic
     if (attendanceCurrentCoach && attendanceCurrentCoach !== 'all' && attendanceCurrentCoach !== 'unassigned') {
         const coach = window.coaches.find(c => c.id === attendanceCurrentCoach);
         attendanceCurrentCoachName = coach ? `${coach.firstName} ${coach.lastName}` : null;
-        console.log(`[DEBUG onAttendanceCoachChange] resolved name="${attendanceCurrentCoachName}"`);
     } else {
         attendanceCurrentCoachName = null;
     }
@@ -5413,13 +5404,11 @@ async function populateAttendanceTimeSlots() {
 
     // Use client-side time slot logic with coach-specific handling
     const timeSlots = getTimeSlotsForBranch(attendanceCurrentBranch, attendanceCurrentSchedule, attendanceCurrentCoachName);
-    console.log(`[DEBUG populateAttendanceTimeSlots] got ${timeSlots.length} slots:`, JSON.stringify(timeSlots));
     timeSlots.forEach(slot => {
         if (slot) {
             select.innerHTML += `<option value="${slot}">${slot}</option>`;
         }
     });
-    console.log(`[DEBUG populateAttendanceTimeSlots] dropdown now has ${select.options.length} options`);
 }
 
 // Navigate month backward

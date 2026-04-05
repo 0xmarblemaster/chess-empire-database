@@ -4702,7 +4702,7 @@ function getTimeSlotsForBranch(branchName, scheduleType = null, coachName = null
         }
 
         // Coach Asylkhan Agbaevich has custom time slots for multiple schedules
-        if (normalizedCoach.includes('asylkhan') || normalizedCoach.includes('асылхан')) {
+        if (normalizedCoach.includes('sylkhan') || normalizedCoach.includes('асылхан')) {
             // Sat-Sun: Extended slots (9:00-10:30, 10:30-12:00)
             if (scheduleType === 'sat_sun') {
                 return ATTENDANCE_TIME_SLOTS_DEBUT_SAT_SUN_ASYLKHAN;
