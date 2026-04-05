@@ -4527,6 +4527,19 @@ const ATTENDANCE_TIME_SLOTS_DEBUT_SAT_SUN_NAIL = [
     '17:00-18:00'
 ];
 
+// Debut branch Tuesday-Thursday schedule for coach Nail Ildusovich
+const ATTENDANCE_TIME_SLOTS_DEBUT_TUE_THU_NAIL = [
+    '9:00-10:00',
+    '10:00-11:00',
+    '11:00-12:00',
+    '12:00-13:00',
+    '14:00-15:00',
+    '15:00-16:00',
+    '16:00-17:00',
+    '17:00-18:00',
+    '18:00-19:30'
+];
+
 // Debut branch Saturday-Sunday schedule: extended slots for coach Asylkhan Agbaevich
 const ATTENDANCE_TIME_SLOTS_DEBUT_SAT_SUN_ASYLKHAN = [
     '9:00-10:30',
@@ -4677,6 +4690,9 @@ function getTimeSlotsForBranch(branchName, scheduleType = null, coachName = null
 
         // Coach Nail Ildusovich has custom slots
         if (normalizedCoach.includes('nail') || normalizedCoach.includes('наиль')) {
+            if (scheduleType === 'tue_thu') {
+                return ATTENDANCE_TIME_SLOTS_DEBUT_TUE_THU_NAIL;
+            }
             if (scheduleType === 'sat_sun') {
                 return ATTENDANCE_TIME_SLOTS_DEBUT_SAT_SUN_NAIL;
             }
