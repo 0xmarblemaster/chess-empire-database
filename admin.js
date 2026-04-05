@@ -4799,6 +4799,12 @@ function showAttendanceManagement(updateHash = true) {
         coachSelect.value = attendanceCurrentCoach;
     }
 
+    // Resolve coach name for time slot logic (needed on page load, not just on interactive change)
+    if (attendanceCurrentCoach && attendanceCurrentCoach !== 'all' && attendanceCurrentCoach !== 'unassigned') {
+        const coach = window.coaches?.find(c => c.id === attendanceCurrentCoach);
+        attendanceCurrentCoachName = coach ? `${coach.firstName} ${coach.lastName}` : null;
+    }
+
     // Populate time slots based on schedule
     populateAttendanceTimeSlots();
 
