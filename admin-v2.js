@@ -4529,10 +4529,9 @@ const ATTENDANCE_TIME_SLOTS_DEBUT_SAT_SUN_NAIL = [
 
 // Debut branch Saturday-Sunday schedule: extended slots for coach Asylkhan Agbaevich
 const ATTENDANCE_TIME_SLOTS_DEBUT_SAT_SUN_ASYLKHAN = [
-    '9:00-10:30',   // Extended from 9:00-10:00
-    '10:30-12:00',  // Replaces 10:00-11:00 and 11:00-12:00
-    '12:00-13:00',
-    '13:00-14:00'
+    '9:00-10:30',
+    '10:30-12:00',
+    '12:00-13:30'
 ];
 
 // Gagarin Park Saturday-Sunday schedule (сб-вс)
