@@ -3086,6 +3086,7 @@ window.addEventListener('resize', function() {
 // CSV/Excel data storage for import
 let csvParsedData = null;
 let unmatchedStudentsData = [];
+let csvAmbiguousCount = 0;
 
 // Fuzzy name matching function for Excel/CSV import
 function fuzzyMatchStudent(excelName, students) {
@@ -3097,6 +3098,7 @@ function fuzzyMatchStudent(excelName, students) {
     const parts = normalizedExcel.split(/\s+/).filter(p => p.length > 0);
 
     // Try exact match first (lastName firstName or firstName lastName)
+    const exactMatches = [];
     for (const student of students) {
         const firstName = (student.firstName || '').toLowerCase();
         const lastName = (student.lastName || '').toLowerCase();
@@ -3104,8 +3106,15 @@ function fuzzyMatchStudent(excelName, students) {
         const fullName2 = `${firstName} ${lastName}`;
 
         if (normalizedExcel === fullName1 || normalizedExcel === fullName2) {
-            return { matched: true, student, confidence: 100 };
+            exactMatches.push(student);
         }
+    }
+
+    if (exactMatches.length === 1) {
+        return { matched: true, student: exactMatches[0], confidence: 100 };
+    }
+    if (exactMatches.length > 1) {
+        return { matched: true, student: exactMatches[0], confidence: 100, ambiguous: true, candidates: exactMatches };
     }
 
     // Try partial match with improved validation (80% confidence)
@@ -3114,6 +3123,7 @@ function fuzzyMatchStudent(excelName, students) {
     const MIN_TOKEN_SIMILARITY = 0.75;     // 75% for spelling variations
     const MIN_WHOLE_NAME_SIMILARITY = 0.80; // 80% overall similarity
 
+    const fuzzyMatches80 = [];
     for (const student of students) {
         const firstName = (student.firstName || '').toLowerCase();
         const lastName = (student.lastName || '').toLowerCase();
@@ -3171,12 +3181,20 @@ function fuzzyMatchStudent(excelName, students) {
 
             // Accept only if overall similarity is high
             if (wholeSimilarity >= MIN_WHOLE_NAME_SIMILARITY) {
-                return { matched: true, student, confidence: 80 };
+                fuzzyMatches80.push(student);
             }
         }
     }
 
+    if (fuzzyMatches80.length === 1) {
+        return { matched: true, student: fuzzyMatches80[0], confidence: 80 };
+    }
+    if (fuzzyMatches80.length > 1) {
+        return { matched: true, student: fuzzyMatches80[0], confidence: 80, ambiguous: true, candidates: fuzzyMatches80 };
+    }
+
     // Try matching with slight variations (first or last name matches exactly)
+    const fuzzyMatches60 = [];
     for (const student of students) {
         const firstName = (student.firstName || '').toLowerCase();
         const lastName = (student.lastName || '').toLowerCase();
@@ -3187,12 +3205,296 @@ function fuzzyMatchStudent(excelName, students) {
             if (otherParts.length === 0 || otherParts.some(p =>
                 firstName.includes(p) || lastName.includes(p) || p.includes(firstName) || p.includes(lastName)
             )) {
-                return { matched: true, student, confidence: 60 };
+                fuzzyMatches60.push(student);
             }
         }
     }
 
+    if (fuzzyMatches60.length === 1) {
+        return { matched: true, student: fuzzyMatches60[0], confidence: 60 };
+    }
+    if (fuzzyMatches60.length > 1) {
+        return { matched: true, student: fuzzyMatches60[0], confidence: 60, ambiguous: true, candidates: fuzzyMatches60 };
+    }
+
     return { matched: false, student: null, confidence: 0 };
+}
+
+// Build student description for disambiguation dropdown
+function getStudentDisambiguationLabel(student) {
+    const name = `${student.firstName} ${student.lastName}`;
+    const parts = [name];
+    if (student.age) parts.push(`${t('admin.ratings.disambiguateAge')}: ${student.age}`);
+    if (student.dateOfBirth) parts.push(`${t('admin.ratings.disambiguateDob')}: ${student.dateOfBirth}`);
+    if (student.currentLevel) parts.push(`${t('admin.ratings.disambiguateLevel')}: ${student.currentLevel}`);
+    if (student.branch) {
+        const branchName = typeof i18n !== 'undefined' && i18n.translateBranchName
+            ? i18n.translateBranchName(student.branch)
+            : student.branch;
+        parts.push(`${t('admin.ratings.disambiguateBranch')}: ${branchName}`);
+    }
+    if (student.coach) parts.push(`${t('admin.ratings.disambiguateCoach')}: ${student.coach}`);
+    return parts.join(' | ');
+}
+
+// Process matched rows — shared by both CSV parsing paths
+function processMatchedRows(rows) {
+    const parsedData = [];
+    const unmatched = [];
+    let validCount = 0;
+    let warningCount = 0;
+    let errorCount = 0;
+    let ambiguousCount = 0;
+
+    const previewRows = [];
+    const today = new Date().toISOString().split('T')[0];
+    let rowIndex = 0;
+
+    for (const row of rows) {
+        if (!row.name) continue;
+
+        const matchResult = fuzzyMatchStudent(row.name, window.students);
+
+        let statusText = '';
+        let statusColor = '#10b981';
+        let statusIcon = '✓';
+        let extraHtml = '';
+
+        if (!matchResult.matched) {
+            statusText = t('admin.ratings.unmatched');
+            statusColor = '#ef4444';
+            statusIcon = '✗';
+            errorCount++;
+            unmatched.push({ rowNum: row.rowNum, name: row.name, rating: row.rating });
+        } else if (matchResult.ambiguous) {
+            // Multiple students with same name — needs disambiguation
+            statusText = t('admin.ratings.ambiguousMatch');
+            statusColor = '#f97316';
+            statusIcon = '⚠';
+            ambiguousCount++;
+
+            const candidates = matchResult.candidates;
+            const selectId = `ambiguous-select-${rowIndex}`;
+            let options = `<option value="" selected disabled>${t('admin.ratings.selectCorrectStudent')}</option>`;
+            for (const c of candidates) {
+                const label = getStudentDisambiguationLabel(c);
+                options += `<option value="${c.id}">${label}</option>`;
+            }
+            extraHtml = `
+                <tr data-ambiguous-row="${rowIndex}">
+                    <td colspan="4" style="padding: 0.25rem 0.5rem 0.5rem; border-bottom: 1px solid #f1f5f9; background: #fff7ed;">
+                        <select id="${selectId}" class="ambiguous-select"
+                            data-row-index="${rowIndex}"
+                            data-row-name="${row.name}"
+                            data-row-rating="${row.rating}"
+                            data-row-date="${today}"
+                            onchange="resolveAmbiguousRow(this)"
+                            style="width: 100%; padding: 0.375rem 0.5rem; border: 1px solid #f97316; border-radius: 0.375rem; font-size: 0.8rem; background: white;">
+                            ${options}
+                        </select>
+                    </td>
+                </tr>`;
+        } else if (isNaN(row.rating) || row.rating < 0 || row.rating > 3000) {
+            statusText = t('admin.ratings.invalidRating');
+            statusColor = '#f59e0b';
+            statusIcon = '⚠';
+            warningCount++;
+        } else {
+            statusText = t('admin.ratings.matched');
+            if (matchResult.confidence < 100) {
+                statusText += ` (${matchResult.confidence}%)`;
+                statusColor = '#22c55e';
+            }
+            validCount++;
+            parsedData.push({
+                studentId: matchResult.student.id,
+                studentName: row.name,
+                matchedName: `${matchResult.student.firstName} ${matchResult.student.lastName}`,
+                rating: row.rating,
+                date: today
+            });
+        }
+
+        previewRows.push(`
+            <tr>
+                <td style="padding: 0.5rem; border-bottom: 1px solid #f1f5f9;">${row.name}</td>
+                <td style="padding: 0.5rem; border-bottom: 1px solid #f1f5f9;">${row.rating || '-'}</td>
+                <td style="padding: 0.5rem; border-bottom: 1px solid #f1f5f9;">${today}</td>
+                <td style="padding: 0.5rem; border-bottom: 1px solid #f1f5f9; color: ${statusColor};">
+                    <span style="font-weight: 600;">${statusIcon}</span> ${statusText}
+                </td>
+            </tr>`);
+        if (extraHtml) previewRows.push(extraHtml);
+
+        rowIndex++;
+    }
+
+    return { csvParsedData: parsedData, unmatchedStudentsData: unmatched, previewRows, validCount, warningCount, errorCount, ambiguousCount };
+}
+
+// Update the ambiguous counter display
+function updateAmbiguousCounter(count) {
+    let span = document.getElementById('csvAmbiguousCount');
+    if (!span) {
+        // Insert the ambiguous counter after the error counter
+        const statsContainer = document.getElementById('csvErrorCount')?.parentElement?.parentElement;
+        if (statsContainer) {
+            const ambiguousSpan = document.createElement('span');
+            ambiguousSpan.style.color = '#f97316';
+            ambiguousSpan.innerHTML = `<strong id="csvAmbiguousCount">${count}</strong> ${t('admin.ratings.ambiguous')}`;
+            ambiguousSpan.id = 'csvAmbiguousCountContainer';
+            statsContainer.appendChild(ambiguousSpan);
+        }
+    } else {
+        span.textContent = count;
+    }
+    const container = document.getElementById('csvAmbiguousCountContainer');
+    if (container) {
+        container.style.display = count > 0 ? '' : 'none';
+    }
+}
+
+// Handle disambiguation dropdown selection
+function resolveAmbiguousRow(selectEl) {
+    const studentId = selectEl.value;
+    if (!studentId) return;
+
+    const rowName = selectEl.dataset.rowName;
+    const rowRating = parseInt(selectEl.dataset.rowRating);
+    const rowDate = selectEl.dataset.rowDate;
+
+    const student = window.students.find(s => String(s.id) === String(studentId));
+    if (!student) return;
+
+    // Add to csvParsedData
+    csvParsedData.push({
+        studentId: student.id,
+        studentName: rowName,
+        matchedName: `${student.firstName} ${student.lastName}`,
+        rating: rowRating,
+        date: rowDate
+    });
+
+    // Mark this row as resolved visually
+    const tr = selectEl.closest('tr');
+    if (tr) {
+        tr.style.background = '#f0fdf4';
+        selectEl.style.borderColor = '#10b981';
+    }
+    // Update the status cell in the row above
+    const statusRow = tr?.previousElementSibling;
+    if (statusRow) {
+        const statusCell = statusRow.querySelector('td:last-child');
+        if (statusCell) {
+            statusCell.style.color = '#10b981';
+            statusCell.innerHTML = `<span style="font-weight: 600;">✓</span> ${t('admin.ratings.matched')} → ${student.firstName} ${student.lastName}`;
+        }
+    }
+
+    // Decrement ambiguous count and update button state
+    csvAmbiguousCount--;
+    updateAmbiguousCounter(csvAmbiguousCount);
+
+    // Update valid count display
+    const validCountEl = document.getElementById('csvValidCount');
+    if (validCountEl) {
+        validCountEl.textContent = parseInt(validCountEl.textContent) + 1;
+    }
+
+    // Disable the select to prevent re-selection
+    selectEl.disabled = true;
+
+    // Enable import button if no more ambiguous rows
+    const importBtn = document.getElementById('importCSVBtn');
+    if (importBtn && csvAmbiguousCount <= 0) {
+        importBtn.disabled = csvParsedData.length === 0;
+    }
+}
+
+// Show a disambiguation modal for selecting the correct student from candidates.
+// Returns a Promise that resolves with the selected student, or null if cancelled.
+function showDisambiguationModal(excelName, candidates) {
+    return new Promise((resolve) => {
+        // Remove existing modal if any
+        let modal = document.getElementById('disambiguationModal');
+        if (modal) modal.remove();
+
+        const rows = candidates.map(c => {
+            const age = calculateAge(c.dateOfBirth) ?? c.age ?? '—';
+            const branchName = typeof i18n !== 'undefined' && i18n.translateBranchName
+                ? i18n.translateBranchName(c.branch || '')
+                : (c.branch || '—');
+            return `
+                <tr class="disambiguation-row" data-student-id="${c.id}" style="cursor: pointer; transition: background 0.15s;">
+                    <td style="padding: 0.75rem;">${c.firstName} ${c.lastName}</td>
+                    <td style="padding: 0.75rem; text-align: center;">${age}</td>
+                    <td style="padding: 0.75rem;">${branchName}</td>
+                    <td style="padding: 0.75rem;">${c.coach || '—'}</td>
+                    <td style="padding: 0.75rem; text-align: center;">${c.currentLevel ?? '—'}</td>
+                </tr>`;
+        }).join('');
+
+        modal = document.createElement('div');
+        modal.id = 'disambiguationModal';
+        modal.className = 'modal active';
+        modal.innerHTML = `
+            <div class="modal-overlay" onclick="closeDisambiguationModal()"></div>
+            <div class="modal-content" style="max-width: 700px;">
+                <div class="modal-header">
+                    <h2 class="modal-title">${t('admin.ratings.disambiguateTitle') !== 'admin.ratings.disambiguateTitle' ? t('admin.ratings.disambiguateTitle') : 'Select Student'}</h2>
+                    <button class="modal-close" onclick="closeDisambiguationModal()">
+                        <i data-lucide="x" style="width: 20px; height: 20px;"></i>
+                    </button>
+                </div>
+                <div class="modal-body">
+                    <p style="margin-bottom: 1rem; color: #64748b;">
+                        ${t('admin.ratings.disambiguatePrompt') !== 'admin.ratings.disambiguatePrompt'
+                            ? t('admin.ratings.disambiguatePrompt').replace('{name}', `<strong>${excelName}</strong>`)
+                            : `Multiple students match <strong>${excelName}</strong>. Select the correct one:`}
+                    </p>
+                    <table style="width: 100%; border-collapse: collapse;">
+                        <thead>
+                            <tr style="border-bottom: 2px solid #e2e8f0; text-align: left;">
+                                <th style="padding: 0.5rem 0.75rem; font-weight: 600; color: #475569;">${t('admin.ratings.disambiguateName') !== 'admin.ratings.disambiguateName' ? t('admin.ratings.disambiguateName') : 'Name'}</th>
+                                <th style="padding: 0.5rem 0.75rem; font-weight: 600; color: #475569; text-align: center;">${t('admin.ratings.disambiguateAge')}</th>
+                                <th style="padding: 0.5rem 0.75rem; font-weight: 600; color: #475569;">${t('admin.ratings.disambiguateBranch')}</th>
+                                <th style="padding: 0.5rem 0.75rem; font-weight: 600; color: #475569;">${t('admin.ratings.disambiguateCoach')}</th>
+                                <th style="padding: 0.5rem 0.75rem; font-weight: 600; color: #475569; text-align: center;">${t('admin.ratings.disambiguateLevel')}</th>
+                            </tr>
+                        </thead>
+                        <tbody>${rows}</tbody>
+                    </table>
+                </div>
+            </div>`;
+        document.body.appendChild(modal);
+
+        // Style hover and click for rows
+        const tableRows = modal.querySelectorAll('.disambiguation-row');
+        tableRows.forEach(tr => {
+            tr.addEventListener('mouseenter', () => { tr.style.background = '#f0fdf4'; });
+            tr.addEventListener('mouseleave', () => { tr.style.background = ''; });
+            tr.addEventListener('click', () => {
+                const studentId = tr.dataset.studentId;
+                const selected = candidates.find(c => String(c.id) === String(studentId));
+                modal.remove();
+                resolve(selected || null);
+            });
+        });
+
+        // Store resolve so closeDisambiguationModal can call it
+        window._disambiguationResolve = resolve;
+
+        if (typeof lucide !== 'undefined') lucide.createIcons();
+    });
+}
+
+function closeDisambiguationModal() {
+    const modal = document.getElementById('disambiguationModal');
+    if (modal) modal.remove();
+    if (window._disambiguationResolve) {
+        window._disambiguationResolve(null);
+        window._disambiguationResolve = null;
+    }
 }
 
 // Show Ratings Management section
@@ -3842,77 +4144,23 @@ async function previewRatingFile(event) {
         }
 
         // Process rows with fuzzy matching
-        csvParsedData = [];
-        unmatchedStudentsData = [];
-        let validCount = 0;
-        let warningCount = 0;
-        let errorCount = 0;
-
-        const previewRows = [];
-        const today = new Date().toISOString().split('T')[0];
-
-        for (const row of rows) {
-            if (!row.name) continue;
-
-            // Use fuzzy matching to find student
-            const matchResult = fuzzyMatchStudent(row.name, window.students);
-
-            let statusText = '';
-            let statusColor = '#10b981';
-            let statusIcon = '✓';
-
-            if (!matchResult.matched) {
-                statusText = t('admin.ratings.unmatched');
-                statusColor = '#ef4444';
-                statusIcon = '✗';
-                errorCount++;
-                unmatchedStudentsData.push({
-                    rowNum: row.rowNum,
-                    name: row.name,
-                    rating: row.rating
-                });
-            } else if (isNaN(row.rating) || row.rating < 0 || row.rating > 3000) {
-                statusText = t('admin.ratings.invalidRating');
-                statusColor = '#f59e0b';
-                statusIcon = '⚠';
-                warningCount++;
-            } else {
-                statusText = t('admin.ratings.matched');
-                if (matchResult.confidence < 100) {
-                    statusText += ` (${matchResult.confidence}%)`;
-                    statusColor = '#22c55e';
-                }
-                validCount++;
-                csvParsedData.push({
-                    studentId: matchResult.student.id,
-                    studentName: row.name,
-                    matchedName: `${matchResult.student.firstName} ${matchResult.student.lastName}`,
-                    rating: row.rating,
-                    date: today
-                });
-            }
-
-            previewRows.push(`
-                <tr>
-                    <td style="padding: 0.5rem; border-bottom: 1px solid #f1f5f9;">${row.name}</td>
-                    <td style="padding: 0.5rem; border-bottom: 1px solid #f1f5f9;">${row.rating || '-'}</td>
-                    <td style="padding: 0.5rem; border-bottom: 1px solid #f1f5f9;">${today}</td>
-                    <td style="padding: 0.5rem; border-bottom: 1px solid #f1f5f9; color: ${statusColor};">
-                        <span style="font-weight: 600;">${statusIcon}</span> ${statusText}
-                    </td>
-                </tr>
-            `);
-        }
+        const result = processMatchedRows(rows);
+        csvParsedData = result.csvParsedData;
+        unmatchedStudentsData = result.unmatchedStudentsData;
+        csvAmbiguousCount = result.ambiguousCount;
 
         // Update preview
-        document.getElementById('csvPreviewBody').innerHTML = previewRows.join('');
-        document.getElementById('csvValidCount').textContent = validCount;
-        document.getElementById('csvWarningCount').textContent = warningCount;
-        document.getElementById('csvErrorCount').textContent = errorCount;
+        document.getElementById('csvPreviewBody').innerHTML = result.previewRows.join('');
+        document.getElementById('csvValidCount').textContent = result.validCount;
+        document.getElementById('csvWarningCount').textContent = result.warningCount;
+        document.getElementById('csvErrorCount').textContent = result.errorCount;
         document.getElementById('csvPreviewSection').style.display = 'block';
 
-        // Enable import button if we have valid data
-        document.getElementById('importCSVBtn').disabled = validCount === 0;
+        // Show ambiguous count if any
+        updateAmbiguousCounter(result.ambiguousCount);
+
+        // Enable import button only if valid data AND no unresolved ambiguous rows
+        document.getElementById('importCSVBtn').disabled = result.validCount === 0 || result.ambiguousCount > 0;
 
     } catch (error) {
         console.error('Error parsing file:', error);
@@ -4003,77 +4251,23 @@ async function processRatingFile(file, fileName = null) {
         }
 
         // Process rows with fuzzy matching
-        csvParsedData = [];
-        unmatchedStudentsData = [];
-        let validCount = 0;
-        let warningCount = 0;
-        let errorCount = 0;
-
-        const previewRows = [];
-        const today = new Date().toISOString().split('T')[0];
-
-        for (const row of rows) {
-            if (!row.name) continue;
-
-            // Use fuzzy matching to find student
-            const matchResult = fuzzyMatchStudent(row.name, window.students);
-
-            let statusText = '';
-            let statusColor = '#10b981';
-            let statusIcon = '✓';
-
-            if (!matchResult.matched) {
-                statusText = t('admin.ratings.unmatched');
-                statusColor = '#ef4444';
-                statusIcon = '✗';
-                errorCount++;
-                unmatchedStudentsData.push({
-                    rowNum: row.rowNum,
-                    name: row.name,
-                    rating: row.rating
-                });
-            } else if (isNaN(row.rating) || row.rating < 0 || row.rating > 3000) {
-                statusText = t('admin.ratings.invalidRating');
-                statusColor = '#f59e0b';
-                statusIcon = '⚠';
-                warningCount++;
-            } else {
-                statusText = t('admin.ratings.matched');
-                if (matchResult.confidence < 100) {
-                    statusText += ` (${matchResult.confidence}%)`;
-                    statusColor = '#22c55e';
-                }
-                validCount++;
-                csvParsedData.push({
-                    studentId: matchResult.student.id,
-                    studentName: row.name,
-                    matchedName: `${matchResult.student.firstName} ${matchResult.student.lastName}`,
-                    rating: row.rating,
-                    date: today
-                });
-            }
-
-            previewRows.push(`
-                <tr>
-                    <td style="padding: 0.5rem; border-bottom: 1px solid #f1f5f9;">${row.name}</td>
-                    <td style="padding: 0.5rem; border-bottom: 1px solid #f1f5f9;">${row.rating || '-'}</td>
-                    <td style="padding: 0.5rem; border-bottom: 1px solid #f1f5f9;">${today}</td>
-                    <td style="padding: 0.5rem; border-bottom: 1px solid #f1f5f9; color: ${statusColor};">
-                        <span style="font-weight: 600;">${statusIcon}</span> ${statusText}
-                    </td>
-                </tr>
-            `);
-        }
+        const result = processMatchedRows(rows);
+        csvParsedData = result.csvParsedData;
+        unmatchedStudentsData = result.unmatchedStudentsData;
+        csvAmbiguousCount = result.ambiguousCount;
 
         // Update preview
-        document.getElementById('csvPreviewBody').innerHTML = previewRows.join('');
-        document.getElementById('csvValidCount').textContent = validCount;
-        document.getElementById('csvWarningCount').textContent = warningCount;
-        document.getElementById('csvErrorCount').textContent = errorCount;
+        document.getElementById('csvPreviewBody').innerHTML = result.previewRows.join('');
+        document.getElementById('csvValidCount').textContent = result.validCount;
+        document.getElementById('csvWarningCount').textContent = result.warningCount;
+        document.getElementById('csvErrorCount').textContent = result.errorCount;
         document.getElementById('csvPreviewSection').style.display = 'block';
 
-        // Enable import button if we have valid data
-        document.getElementById('importCSVBtn').disabled = validCount === 0;
+        // Show ambiguous count if any
+        updateAmbiguousCounter(result.ambiguousCount);
+
+        // Enable import button only if valid data AND no unresolved ambiguous rows
+        document.getElementById('importCSVBtn').disabled = result.validCount === 0 || result.ambiguousCount > 0;
 
         return true;
 
@@ -8055,15 +8249,23 @@ async function matchStudentNames(excelStudents, dbStudents) {
             }
         }
 
-        // 2. Try exact English name match
+        // 2. Try exact English name match (check for duplicates)
         if (!match) {
-            const exactMatch = dbStudents.find(s =>
+            const exactMatches = dbStudents.filter(s =>
                 `${s.firstName} ${s.lastName}`.toLowerCase() === name.toLowerCase()
             );
-            if (exactMatch) {
-                match = exactMatch;
+            if (exactMatches.length === 1) {
+                match = exactMatches[0];
                 confidence = 100;
                 matchType = 'exact';
+            } else if (exactMatches.length > 1) {
+                // Multiple exact matches — show disambiguation modal
+                const selected = await showDisambiguationModal(name, exactMatches);
+                if (selected) {
+                    match = selected;
+                    confidence = 100;
+                    matchType = 'exact';
+                }
             }
         }
 
@@ -8073,9 +8275,19 @@ async function matchStudentNames(excelStudents, dbStudents) {
             const fuzzyResult = findBestFuzzyMatch(transliterated, dbStudents);
             // Lower threshold to 60% to account for transliteration variations
             if (fuzzyResult && fuzzyResult.confidence >= 60) {
-                match = fuzzyResult.student;
-                confidence = fuzzyResult.confidence;
-                matchType = 'fuzzy';
+                if (fuzzyResult.ambiguous && fuzzyResult.candidates.length > 1) {
+                    // Multiple fuzzy matches — show disambiguation modal
+                    const selected = await showDisambiguationModal(name, fuzzyResult.candidates);
+                    if (selected) {
+                        match = selected;
+                        confidence = fuzzyResult.confidence;
+                        matchType = 'fuzzy';
+                    }
+                } else {
+                    match = fuzzyResult.student;
+                    confidence = fuzzyResult.confidence;
+                    matchType = 'fuzzy';
+                }
             }
         }
 
@@ -8129,9 +8341,6 @@ function levenshteinDistance(str1, str2) {
 // Find best fuzzy match for a name
 // Handles Russian name order (LastName FirstName) vs English (FirstName LastName)
 function findBestFuzzyMatch(transliteratedName, students) {
-    let bestMatch = null;
-    let bestConfidence = 0;
-
     const nameLower = transliteratedName.toLowerCase().trim();
 
     // Also try reversed name order (Russian: "Иванов Демьян" → "Demyan Ivanov")
@@ -8140,6 +8349,8 @@ function findBestFuzzyMatch(transliteratedName, students) {
         ? nameParts.slice(1).join(' ') + ' ' + nameParts[0]
         : nameLower;
 
+    // Score all students
+    const scored = [];
     for (const student of students) {
         // Try both "FirstName LastName" and "LastName FirstName" formats
         const fullNameNormal = `${student.firstName} ${student.lastName}`.toLowerCase();
@@ -8162,14 +8373,29 @@ function findBestFuzzyMatch(transliteratedName, students) {
 
         // Take the best match from all three comparisons
         const bestSimilarity = Math.max(similarityNormal, similarityReversed, similarityDbReversed);
-
-        if (bestSimilarity > bestConfidence) {
-            bestConfidence = bestSimilarity;
-            bestMatch = student;
-        }
+        scored.push({ student, confidence: bestSimilarity });
     }
 
-    return bestMatch ? { student: bestMatch, confidence: Math.round(bestConfidence) } : null;
+    if (scored.length === 0) return null;
+
+    // Find the best confidence
+    const bestConfidence = Math.max(...scored.map(s => s.confidence));
+    if (bestConfidence < 60) return null;
+
+    // Collect all students within 2% of the best score (effectively tied)
+    const topMatches = scored.filter(s => s.confidence >= bestConfidence - 2 && s.confidence >= 60);
+
+    if (topMatches.length === 1) {
+        return { student: topMatches[0].student, confidence: Math.round(bestConfidence) };
+    }
+
+    // Multiple students tied — return as ambiguous
+    return {
+        student: topMatches[0].student,
+        confidence: Math.round(bestConfidence),
+        ambiguous: true,
+        candidates: topMatches.map(m => m.student)
+    };
 }
 
 // Render name matching table
