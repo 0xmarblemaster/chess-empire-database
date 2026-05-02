@@ -244,12 +244,12 @@ function renderCoachProfile() {
 
         <div class="coach-stats">
             <div class="stat-card">
-                <div class="stat-value">${totalStudents}</div>
-                <div class="stat-label">${t('coach.totalStudents') || 'Total Students'}</div>
-            </div>
-            <div class="stat-card">
                 <div class="stat-value">${activeStudents}</div>
                 <div class="stat-label">${t('coach.activeStudents') || 'Active'}</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-value">${totalStudents}</div>
+                <div class="stat-label">${t('coach.totalStudents') || 'Total Students'}</div>
             </div>
             <div class="stat-card">
                 <div class="stat-value">${avgLevel}</div>
