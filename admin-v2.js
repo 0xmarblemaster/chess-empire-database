@@ -1217,10 +1217,10 @@ function loadBranchView(branch) {
     document.getElementById('branchViewPhone').textContent = branch.phone;
     document.getElementById('branchViewEmail').textContent = branch.email;
 
-    // Update statistics (use all students for total count)
+    // Update statistics (use all students for total count, active for avgLevel)
     const activeStudentsCount = branchStudents.filter(s => s.status === 'active').length;
-    const avgLevel = branchStudents.length > 0
-        ? (branchStudents.reduce((sum, s) => sum + s.currentLevel, 0) / branchStudents.length).toFixed(1)
+    const avgLevel = activeStudentsOnly.length > 0
+        ? (activeStudentsOnly.reduce((sum, s) => sum + s.currentLevel, 0) / activeStudentsOnly.length).toFixed(1)
         : 0;
 
     document.getElementById('branchTotalStudents').textContent = branchStudents.length;
@@ -1816,6 +1816,7 @@ function viewCoach(coachFullName) {
 function loadCoachView(coach) {
     const coachFullName = `${coach.firstName} ${coach.lastName}`;
     const coachStudents = students.filter(s => s.coach === coachFullName);
+    const activeCoachStudents = coachStudents.filter(s => s.status === 'active');
 
     // Update header
     document.getElementById('coachViewName').textContent = coachFullName;
@@ -1823,13 +1824,13 @@ function loadCoachView(coach) {
     document.getElementById('coachViewPhone').textContent = coach.phone;
     document.getElementById('coachViewEmail').textContent = coach.email;
 
-    // Calculate statistics
-    const activeStudents = coachStudents.filter(s => s.status === 'active').length;
-    const avgLevel = coachStudents.length > 0
-        ? (coachStudents.reduce((sum, s) => sum + s.currentLevel, 0) / coachStudents.length).toFixed(1)
+    // Calculate statistics (active students only for avgLevel and razryadники)
+    const activeStudents = activeCoachStudents.length;
+    const avgLevel = activeCoachStudents.length > 0
+        ? (activeCoachStudents.reduce((sum, s) => sum + s.currentLevel, 0) / activeCoachStudents.length).toFixed(1)
         : 0;
-    // Count all students with any razryad (excluding 'none' and null)
-    const kmsStudents = coachStudents.filter(s => s.razryad && s.razryad !== 'none' && s.razryad !== 'None').length;
+    // Count active students with any razryad (excluding 'none' and null)
+    const kmsStudents = activeCoachStudents.filter(s => s.razryad && s.razryad !== 'none' && s.razryad !== 'None').length;
 
     // Update statistics
     document.getElementById('coachTotalStudents').textContent = coachStudents.length;
@@ -1838,7 +1839,7 @@ function loadCoachView(coach) {
     document.getElementById('coachKMSStudents').textContent = kmsStudents;
 
     loadCoachStudents(coachStudents);
-    loadCoachCharts(coachStudents);
+    loadCoachCharts(activeCoachStudents);
 }
 
 // Load coach students list
@@ -3544,7 +3545,9 @@ async function loadRatingsData() {
         const oneWeekAgo = new Date();
         oneWeekAgo.setDate(oneWeekAgo.getDate() - 7);
 
-        for (const student of window.students) {
+        // Only count active students for ratings stats
+        const activeStudents = window.students.filter(s => s.status === 'active');
+        for (const student of activeStudents) {
             let currentRating = null;
             let lastUpdated = null;
             let leagueName = t('rankings.beginner');
