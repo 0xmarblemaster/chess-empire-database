@@ -91,6 +91,8 @@ function updateMenuVisibility() {
     // Get attendance menu item
     const menuAttendance = document.getElementById('menuAttendance');
 
+    const menuTournaments = document.getElementById('menuTournaments');
+
     // Admins see everything
     if (userRole.role === 'admin') {
         if (menuRatings) menuRatings.style.display = 'flex';
@@ -99,6 +101,7 @@ function updateMenuVisibility() {
         if (menuManageBranches) menuManageBranches.style.display = 'flex';
         if (menuDataManagement) menuDataManagement.style.display = 'flex';
         if (menuAttendance) menuAttendance.style.display = 'flex';
+        if (menuTournaments) menuTournaments.style.display = 'flex';
         if (managementSectionTitle) managementSectionTitle.style.display = 'block';
 
         // Analytics - Grant access to specific admin emails
@@ -179,6 +182,14 @@ function updateMenuVisibility() {
     if (userRole.can_manage_attendance === true) {
         if (menuAttendance) {
             menuAttendance.style.display = 'flex';
+            hasAnyManagementAccess = true;
+        }
+    }
+
+    // Tournaments management
+    if (userRole.can_manage_tournaments === true) {
+        if (menuTournaments) {
+            menuTournaments.style.display = 'flex';
             hasAnyManagementAccess = true;
         }
     }
@@ -272,6 +283,9 @@ function navigateToSection(sectionName) {
             break;
         case 'appAccess':
             showAppAccessManagement();
+            break;
+        case 'tournaments':
+            showTournamentsManagement(false);
             break;
         default:
             // Default to students section
@@ -10151,5 +10165,494 @@ function truncate(str, len) {
 async function loadMoreCoachActivity() {
     caOffset += caLimit;
     await fetchCoachActivityPage();
+}
+
+// =====================================================================
+// Tournaments Management — Phase 2b
+// Swiss-Manager CSV importer UI. Permission-gated by can_manage_tournaments.
+// =====================================================================
+
+let tournamentImportState = []; // [{ file, parsed, matchResult, resolutions: Map(raw_name -> student_id|'skip'), error }]
+
+function _canManageTournaments() {
+    const role = window.supabaseAuth?.getCurrentUserRole();
+    if (!role) return false;
+    return role.role === 'admin' || role.can_manage_tournaments === true;
+}
+
+function showTournamentsManagement(updateHash = true) {
+    if (!_canManageTournaments()) {
+        if (typeof showToast === 'function') {
+            showToast(t('admin.tournaments.noAccess'), 'error');
+        }
+        return;
+    }
+
+    // Hide all sections
+    document.querySelectorAll('.content-section').forEach(s => s.classList.remove('active'));
+
+    let section = document.getElementById('tournamentsSection');
+    if (!section) {
+        const mainContent = document.querySelector('.main-content');
+        const html = `
+            <div id="tournamentsSection" class="content-section">
+                <div class="header">
+                    <h1 class="header-title" data-i18n="admin.tournaments.title">Tournaments</h1>
+                </div>
+
+                <div class="branch-card" style="margin-bottom: 1.5rem;">
+                    <div class="card-header-inline">
+                        <h2 class="card-title-inline">
+                            <i data-lucide="upload" style="width: 20px; height: 20px;"></i>
+                            <span data-i18n="admin.tournaments.upload">Upload Swiss-Manager files</span>
+                        </h2>
+                    </div>
+                    <div style="padding: 1.5rem;">
+                        <div id="tournamentDropZone" style="border: 2px dashed #cbd5e1; border-radius: 0.75rem; padding: 2.5rem 1rem; text-align: center; cursor: pointer; transition: background 0.2s, border-color 0.2s;">
+                            <i data-lucide="cloud-upload" style="width: 40px; height: 40px; color: #94a3b8; margin-bottom: 0.75rem;"></i>
+                            <div style="color: #64748b; font-size: 0.95rem;" data-i18n="admin.tournaments.dropHint">Drag &amp; drop .csv / .txt files here, or click to browse</div>
+                            <input type="file" id="tournamentFileInput" accept=".csv,.txt" multiple style="display: none;">
+                        </div>
+                        <div id="tournamentPreviewContainer" style="margin-top: 1.25rem;"></div>
+                        <div id="tournamentImportActions" style="margin-top: 1.25rem; display: none;">
+                            <button class="btn btn-primary" id="tournamentImportAllBtn" onclick="importAllTournaments()" disabled>
+                                <i data-lucide="check" style="width: 18px; height: 18px;"></i>
+                                <span data-i18n="admin.tournaments.importAll">Import all</span>
+                            </button>
+                            <span id="tournamentImportStatus" style="margin-left: 1rem; color: #64748b; font-size: 0.875rem;"></span>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="branch-card">
+                    <div class="card-header-inline">
+                        <h2 class="card-title-inline">
+                            <i data-lucide="trophy" style="width: 20px; height: 20px;"></i>
+                            <span data-i18n="admin.tournaments.past">Past tournaments</span>
+                        </h2>
+                    </div>
+                    <div style="padding: 1.5rem;">
+                        <div id="pastTournamentsList">
+                            <div style="color: #94a3b8;" data-i18n="admin.tournaments.noPast">No tournaments imported yet</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        `;
+        mainContent.insertAdjacentHTML('beforeend', html);
+        section = document.getElementById('tournamentsSection');
+        _wireTournamentDropZone();
+    }
+
+    section.classList.add('active');
+
+    // Update nav
+    document.querySelectorAll('.nav-item').forEach(item => item.classList.remove('active'));
+    const menuItem = document.getElementById('menuTournaments');
+    if (menuItem) menuItem.classList.add('active');
+
+    if (updateHash) {
+        history.pushState({ section: 'tournaments' }, '', '#tournaments');
+    }
+
+    loadPastTournaments();
+
+    if (typeof lucide !== 'undefined') lucide.createIcons();
+    if (typeof i18n !== 'undefined' && typeof i18n.applyTranslations === 'function') {
+        i18n.applyTranslations();
+    }
+}
+
+function _wireTournamentDropZone() {
+    const dz = document.getElementById('tournamentDropZone');
+    const input = document.getElementById('tournamentFileInput');
+    if (!dz || !input) return;
+
+    dz.addEventListener('click', () => input.click());
+    input.addEventListener('change', (e) => {
+        if (e.target.files && e.target.files.length > 0) {
+            handleTournamentFiles(Array.from(e.target.files));
+            input.value = '';
+        }
+    });
+
+    ['dragenter', 'dragover'].forEach(ev => {
+        dz.addEventListener(ev, (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            dz.style.background = '#f0fdf4';
+            dz.style.borderColor = '#10b981';
+        });
+    });
+    ['dragleave', 'drop'].forEach(ev => {
+        dz.addEventListener(ev, (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            dz.style.background = '';
+            dz.style.borderColor = '#cbd5e1';
+        });
+    });
+    dz.addEventListener('drop', (e) => {
+        const files = Array.from(e.dataTransfer?.files || [])
+            .filter(f => /\.(csv|txt)$/i.test(f.name));
+        if (files.length > 0) handleTournamentFiles(files);
+    });
+}
+
+async function handleTournamentFiles(files) {
+    if (!window.tournamentsData) {
+        showToast('Tournament data layer not loaded', 'error');
+        return;
+    }
+
+    const statusEl = document.getElementById('tournamentImportStatus');
+    if (statusEl) statusEl.textContent = t('admin.tournaments.parsing');
+
+    tournamentImportState = [];
+    for (const file of files) {
+        try {
+            const text = await file.text();
+            const parsed = window.tournamentsData.parseSwissManagerCSV(text, file.name);
+            const matchResult = await window.tournamentsData.matchParticipants(
+                parsed.participants,
+                window.students || []
+            );
+            const resolutions = new Map();
+            tournamentImportState.push({ file, parsed, matchResult, resolutions, error: null });
+        } catch (err) {
+            tournamentImportState.push({ file, parsed: null, matchResult: null, resolutions: new Map(), error: err.message || String(err) });
+        }
+    }
+
+    renderTournamentPreviews();
+    if (statusEl) statusEl.textContent = '';
+}
+
+function renderTournamentPreviews() {
+    const container = document.getElementById('tournamentPreviewContainer');
+    const actions = document.getElementById('tournamentImportActions');
+    if (!container) return;
+
+    if (tournamentImportState.length === 0) {
+        container.innerHTML = '';
+        if (actions) actions.style.display = 'none';
+        return;
+    }
+
+    const cards = tournamentImportState.map((entry, idx) => _renderPreviewCard(entry, idx)).join('');
+    container.innerHTML = cards;
+
+    if (actions) {
+        actions.style.display = 'block';
+        _updateImportButtonState();
+    }
+
+    if (typeof lucide !== 'undefined') lucide.createIcons();
+}
+
+function _escapeHtml(s) {
+    return String(s || '').replace(/[&<>"']/g, ch => ({
+        '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+    }[ch]));
+}
+
+function _renderPreviewCard(entry, idx) {
+    if (entry.error) {
+        return `
+            <div style="border: 1px solid #fecaca; background: #fef2f2; border-radius: 0.75rem; padding: 1rem; margin-bottom: 0.75rem;">
+                <strong>${_escapeHtml(entry.file.name)}</strong><br>
+                <span style="color: #dc2626;">${_escapeHtml(entry.error)}</span>
+            </div>`;
+    }
+
+    const t_ = entry.parsed.tournament;
+    const warnings = entry.parsed.warnings || [];
+    const m = entry.matchResult;
+
+    let unresolvedAmbiguous = 0;
+    let unresolvedUnmatched = 0;
+    for (const a of m.ambiguous) if (!entry.resolutions.has(a.participant.raw_name)) unresolvedAmbiguous++;
+    for (const u of m.unmatched) if (!entry.resolutions.has(u.participant.raw_name)) unresolvedUnmatched++;
+
+    const ambiguousRows = m.ambiguous.map((a, i) => _renderAmbiguousRow(entry, idx, a, 'ambiguous', i)).join('');
+    const unmatchedRows = m.unmatched.map((u, i) => _renderAmbiguousRow(entry, idx, u, 'unmatched', i)).join('');
+
+    const warningsHtml = warnings.length > 0
+        ? `<div style="margin-top: 0.5rem; padding: 0.5rem; background: #fffbeb; border-radius: 0.375rem; font-size: 0.8125rem; color: #92400e;">
+               ${warnings.map(w => `<div>⚠ ${_escapeHtml(w)}</div>`).join('')}
+           </div>`
+        : '';
+
+    return `
+        <div class="tournament-preview-card" data-idx="${idx}" style="border: 1px solid #e2e8f0; background: white; border-radius: 0.75rem; padding: 1rem; margin-bottom: 0.75rem;">
+            <div style="display: flex; align-items: center; justify-content: space-between; gap: 1rem; flex-wrap: wrap;">
+                <div>
+                    <div style="font-weight: 600; font-size: 1rem; color: #1e293b;">
+                        ${_escapeHtml(t_.name || entry.file.name)}
+                    </div>
+                    <div style="font-size: 0.875rem; color: #64748b; margin-top: 0.25rem;">
+                        <span>${t('admin.tournaments.previewLeague')}: <strong>${_escapeHtml(t_.league || '?')}</strong></span> ·
+                        <span>${t('admin.tournaments.previewDate')}: <strong>${_escapeHtml(t_.date || '?')}</strong></span> ·
+                        <span>${t('admin.tournaments.previewPlayers')}: <strong>${entry.parsed.participants.length}</strong></span>
+                    </div>
+                </div>
+                <div style="font-size: 0.875rem;">
+                    <span style="color: #059669;">✓ ${m.matched.length} ${t('admin.tournaments.previewMatch')}</span>,
+                    <span style="color: #d97706;">${m.ambiguous.length} ${t('admin.tournaments.previewAmbiguous')}</span>,
+                    <span style="color: #dc2626;">${m.unmatched.length} ${t('admin.tournaments.previewUnmatched')}</span>
+                </div>
+                <button class="icon-button" onclick="removeTournamentEntry(${idx})" title="Remove" style="color: #94a3b8;">
+                    <i data-lucide="x" style="width: 18px; height: 18px;"></i>
+                </button>
+            </div>
+            ${warningsHtml}
+            ${(ambiguousRows + unmatchedRows) ? `
+                <div style="margin-top: 0.75rem;">
+                    <div style="font-size: 0.8125rem; color: #475569; margin-bottom: 0.5rem; font-weight: 600;">
+                        ${t('admin.tournaments.resolve')} (${unresolvedAmbiguous + unresolvedUnmatched})
+                    </div>
+                    <table style="width: 100%; font-size: 0.875rem;">
+                        <tbody>${ambiguousRows}${unmatchedRows}</tbody>
+                    </table>
+                </div>` : ''}
+        </div>`;
+}
+
+function _renderAmbiguousRow(entry, idx, item, kind, itemIdx) {
+    const raw = item.participant.raw_name;
+    const candidates = kind === 'ambiguous' ? (item.candidates || []) : (window.students || []);
+    const resolved = entry.resolutions.get(raw);
+
+    // Cap candidate list for unmatched: top-20 closest by simple prefix match.
+    let optionList = candidates;
+    if (kind === 'unmatched') {
+        const needle = (raw || '').toLowerCase();
+        optionList = (window.students || [])
+            .slice()
+            .sort((a, b) => {
+                const an = `${a.firstName} ${a.lastName}`.toLowerCase();
+                const bn = `${b.firstName} ${b.lastName}`.toLowerCase();
+                const ai = an.includes(needle.split(' ')[0] || '') ? 0 : 1;
+                const bi = bn.includes(needle.split(' ')[0] || '') ? 0 : 1;
+                return ai - bi || an.localeCompare(bn);
+            })
+            .slice(0, 50);
+    }
+
+    const options = optionList.map(c => {
+        const branch = (typeof i18n !== 'undefined' && i18n.translateBranchName)
+            ? i18n.translateBranchName(c.branch || '')
+            : (c.branch || '');
+        const selected = String(resolved) === String(c.id) ? 'selected' : '';
+        return `<option value="${_escapeHtml(c.id)}" ${selected}>${_escapeHtml(c.firstName + ' ' + c.lastName)}${branch ? ' — ' + _escapeHtml(branch) : ''}</option>`;
+    }).join('');
+
+    const skipSel = resolved === 'skip' ? 'selected' : '';
+    const statusIcon = resolved
+        ? (resolved === 'skip' ? '⊘' : '✓')
+        : (kind === 'ambiguous' ? '?' : '✗');
+    const statusColor = resolved
+        ? (resolved === 'skip' ? '#94a3b8' : '#059669')
+        : (kind === 'ambiguous' ? '#d97706' : '#dc2626');
+
+    return `
+        <tr data-raw="${_escapeHtml(raw)}">
+            <td style="padding: 0.375rem 0.5rem; color: ${statusColor}; width: 1.5rem;">${statusIcon}</td>
+            <td style="padding: 0.375rem 0.5rem; white-space: nowrap;">${_escapeHtml(raw)}</td>
+            <td style="padding: 0.375rem 0.5rem;">
+                <select class="form-input" style="padding: 0.25rem 0.5rem; font-size: 0.875rem;"
+                        onchange="resolveTournamentName(${idx}, '${kind}', ${itemIdx}, this.value)">
+                    <option value="">— ${t('admin.tournaments.resolve')} —</option>
+                    ${options}
+                    <option value="skip" ${skipSel}>${t('admin.tournaments.skip')}</option>
+                    <option value="" disabled>${t('admin.tournaments.createNew')}</option>
+                </select>
+            </td>
+        </tr>`;
+}
+
+function resolveTournamentName(idx, kind, itemIdx, value) {
+    const entry = tournamentImportState[idx];
+    if (!entry) return;
+    const bucket = kind === 'ambiguous' ? entry.matchResult.ambiguous : entry.matchResult.unmatched;
+    const item = bucket[itemIdx];
+    if (!item) return;
+    const rawName = item.participant.raw_name;
+    if (value === '') {
+        entry.resolutions.delete(rawName);
+    } else {
+        entry.resolutions.set(rawName, value);
+    }
+    renderTournamentPreviews();
+}
+
+function removeTournamentEntry(idx) {
+    tournamentImportState.splice(idx, 1);
+    renderTournamentPreviews();
+}
+
+function _allEntriesResolved() {
+    for (const entry of tournamentImportState) {
+        if (entry.error) continue;
+        const m = entry.matchResult;
+        for (const a of m.ambiguous) {
+            if (!entry.resolutions.has(a.participant.raw_name)) return false;
+        }
+        for (const u of m.unmatched) {
+            if (!entry.resolutions.has(u.participant.raw_name)) return false;
+        }
+    }
+    return tournamentImportState.some(e => !e.error);
+}
+
+function _updateImportButtonState() {
+    const btn = document.getElementById('tournamentImportAllBtn');
+    if (!btn) return;
+    btn.disabled = !_allEntriesResolved();
+}
+
+function _buildResolvedParticipants(entry) {
+    const studentsById = new Map((window.students || []).map(s => [String(s.id), s]));
+    const resolved = [];
+    // Auto-matched first
+    for (const m of entry.matchResult.matched) {
+        resolved.push({ participant: m.participant, student: m.student });
+    }
+    // Ambiguous + unmatched (with resolutions)
+    const allUnresolved = [...entry.matchResult.ambiguous, ...entry.matchResult.unmatched];
+    for (const item of allUnresolved) {
+        const choice = entry.resolutions.get(item.participant.raw_name);
+        if (!choice || choice === 'skip') continue;
+        const student = studentsById.get(String(choice));
+        if (student) resolved.push({ participant: item.participant, student });
+    }
+    return resolved;
+}
+
+async function importAllTournaments() {
+    if (!_canManageTournaments()) {
+        showToast(t('admin.tournaments.noAccess'), 'error');
+        return;
+    }
+    const btn = document.getElementById('tournamentImportAllBtn');
+    const statusEl = document.getElementById('tournamentImportStatus');
+    if (btn) btn.disabled = true;
+    if (statusEl) statusEl.textContent = t('admin.tournaments.importing');
+
+    const results = [];
+    for (const entry of tournamentImportState) {
+        if (entry.error) continue;
+        try {
+            const resolvedParts = _buildResolvedParticipants(entry);
+            const r = await window.tournamentsData.importTournament(entry.parsed, resolvedParts);
+            results.push({ ok: true, file: entry.file.name, ...r });
+        } catch (err) {
+            results.push({ ok: false, file: entry.file.name, error: err.message || String(err) });
+        }
+    }
+
+    const totalInserted = results.filter(r => r.ok).reduce((a, r) => a + (r.inserted || 0), 0);
+    const totalSkipped = results.filter(r => r.ok).reduce((a, r) => a + (r.skipped || 0), 0);
+    const failures = results.filter(r => !r.ok);
+
+    if (failures.length === 0) {
+        showToast(t('admin.tournaments.importDone', { inserted: totalInserted, skipped: totalSkipped }), 'success');
+    } else {
+        showToast(t('admin.tournaments.importFailed', { error: failures.map(f => f.file).join(', ') }), 'error');
+    }
+
+    tournamentImportState = [];
+    renderTournamentPreviews();
+    if (statusEl) statusEl.textContent = '';
+    loadPastTournaments();
+}
+
+async function loadPastTournaments() {
+    const list = document.getElementById('pastTournamentsList');
+    if (!list || !window.tournamentsData) return;
+
+    const isAdmin = window.supabaseAuth?.isAdmin?.();
+
+    try {
+        const { tournaments } = await window.tournamentsData.listTournaments({ pageSize: 50 });
+        if (!tournaments || tournaments.length === 0) {
+            list.innerHTML = `<div style="color: #94a3b8;">${t('admin.tournaments.noPast')}</div>`;
+            return;
+        }
+
+        // Fetch participant counts in one batch.
+        const counts = await _fetchParticipantCounts(tournaments.map(t => t.id));
+
+        const rows = tournaments.map(tr => {
+            const count = counts.get(tr.id) || 0;
+            const delBtn = isAdmin
+                ? `<button class="icon-button" onclick="deletePastTournament('${_escapeHtml(tr.id)}')" title="${t('admin.tournaments.delete')}" style="color: #dc2626;">
+                       <i data-lucide="trash-2" style="width: 16px; height: 16px;"></i>
+                   </button>`
+                : '';
+            return `
+                <tr>
+                    <td style="padding: 0.5rem; white-space: nowrap;">${_escapeHtml(tr.tournament_date || '')}</td>
+                    <td style="padding: 0.5rem;">${_escapeHtml(tr.name || '')}</td>
+                    <td style="padding: 0.5rem;">${_escapeHtml(tr.league || '')}</td>
+                    <td style="padding: 0.5rem;">${count}</td>
+                    <td style="padding: 0.5rem; text-align: right;">${delBtn}</td>
+                </tr>`;
+        }).join('');
+
+        list.innerHTML = `
+            <table style="width: 100%; font-size: 0.875rem;">
+                <thead>
+                    <tr style="border-bottom: 1px solid #e2e8f0; text-align: left; color: #475569;">
+                        <th style="padding: 0.5rem;">${t('admin.tournaments.previewDate')}</th>
+                        <th style="padding: 0.5rem;">${t('admin.tournaments.title')}</th>
+                        <th style="padding: 0.5rem;">${t('admin.tournaments.previewLeague')}</th>
+                        <th style="padding: 0.5rem;">${t('admin.tournaments.previewPlayers')}</th>
+                        <th></th>
+                    </tr>
+                </thead>
+                <tbody>${rows}</tbody>
+            </table>`;
+
+        if (typeof lucide !== 'undefined') lucide.createIcons();
+    } catch (err) {
+        console.error('loadPastTournaments error', err);
+        list.innerHTML = `<div style="color: #dc2626;">${_escapeHtml(err.message || String(err))}</div>`;
+    }
+}
+
+async function _fetchParticipantCounts(tournamentIds) {
+    const counts = new Map();
+    if (!tournamentIds || tournamentIds.length === 0) return counts;
+    const client = window.supabaseClient;
+    if (!client) return counts;
+    const { data, error } = await client
+        .from('tournament_participants')
+        .select('tournament_id')
+        .in('tournament_id', tournamentIds);
+    if (error || !data) return counts;
+    for (const row of data) {
+        counts.set(row.tournament_id, (counts.get(row.tournament_id) || 0) + 1);
+    }
+    return counts;
+}
+
+async function deletePastTournament(tournamentId) {
+    if (!window.supabaseAuth?.isAdmin?.()) {
+        showToast(t('admin.tournaments.noAccess'), 'error');
+        return;
+    }
+    if (!confirm(t('admin.tournaments.deleteConfirm'))) return;
+
+    const client = window.supabaseClient;
+    if (!client) return;
+
+    const { error } = await client.from('tournaments').delete().eq('id', tournamentId);
+    if (error) {
+        showToast(error.message, 'error');
+        return;
+    }
+    showToast(t('admin.tournaments.delete'), 'success');
+    loadPastTournaments();
 }
 

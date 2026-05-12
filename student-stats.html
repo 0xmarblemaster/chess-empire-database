@@ -198,6 +198,19 @@
             grid-column: 1 / -1;
         }
 
+        .league-pill {
+            display: inline-block;
+            padding: 4px 12px;
+            border-radius: 999px;
+            font-size: 12px;
+            font-weight: 700;
+            letter-spacing: 0.5px;
+            margin-top: 6px;
+        }
+        .league-pill.league-a { background: rgba(255, 215, 0, 0.25); color: #ffd700; }
+        .league-pill.league-b { background: rgba(192, 192, 192, 0.25); color: #e2e8f0; }
+        .league-pill.league-c { background: rgba(205, 127, 50, 0.25); color: #cd7f32; }
+
         /* Period picker */
         .period-picker {
             background: white;
@@ -316,6 +329,7 @@
                     <div class="card-header">
                         <div class="student-name" id="studentName"></div>
                         <div class="branch-name" id="branchName"></div>
+                        <div id="leaguePillWrap"></div>
                         <div class="month-title" id="monthTitle"></div>
                     </div>
                     <div class="stats-grid" id="statsGrid"></div>
@@ -347,6 +361,15 @@
     const sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
     const MONTHS_RU = ['Январь','Февраль','Март','Апрель','Май','Июнь','Июль','Август','Сентябрь','Октябрь','Ноябрь','Декабрь'];
+
+    // League thresholds per Phase 3 spec: <450=C, 450-800=B, >800=A.
+    function leagueLetter(rating) {
+        if (rating === null || rating === undefined || !Number.isFinite(Number(rating))) return null;
+        const r = Number(rating);
+        if (r > 800) return 'A';
+        if (r >= 450) return 'B';
+        return 'C';
+    }
 
     const params = new URLSearchParams(location.search);
     const studentId = params.get('id');
@@ -543,7 +566,7 @@
 
         try {
             // Parallel fetch
-            const [studentRes, attendanceRes, ratingsRes, botsRes, puzzlesRes, bestPuzzleAllTimeRes, bestBotAllTimeRes] = await Promise.all([
+            const [studentRes, attendanceRes, ratingsRes, botsRes, puzzlesRes, bestPuzzleAllTimeRes, bestBotAllTimeRes, tournamentsRes] = await Promise.all([
                 sb.from('students').select('*, branches(name), coaches(first_name, last_name)').eq('id', studentId).single(),
                 sb.from('attendance').select('*').eq('student_id', studentId).gte('attendance_date', monthStart).lt('attendance_date', monthEnd).order('attendance_date'),
                 sb.from('student_ratings').select('*').eq('student_id', studentId).gte('rating_date', monthStart).lt('rating_date', monthEnd).order('rating_date'),
@@ -551,6 +574,9 @@
                 sb.from('survival_scores').select('*').eq('student_id', studentId).eq('mode', 'puzzle_rush').gte('achieved_at', monthStart).lt('achieved_at', monthEnd).order('score', { ascending: false }),
                 sb.from('survival_scores').select('score').eq('student_id', studentId).eq('mode', 'puzzle_rush').order('score', { ascending: false }).limit(1),
                 sb.from('bot_battles').select('bot_name, bot_rating').eq('student_id', studentId).order('bot_rating', { ascending: false }).limit(1),
+                sb.from('tournament_participants')
+                    .select('place, rating_delta, tournament:tournaments(name, league, tournament_date)')
+                    .eq('student_id', studentId),
             ]);
 
             const student = studentRes.data;
@@ -589,11 +615,28 @@
             const firstRating = ratings.length > 0 ? ratings[0].rating : null;
             const ratingDelta = (latestRating && firstRating) ? latestRating - firstRating : null;
 
+            // Tournament stats — active students only, mirroring student.html gate.
+            const isActive = (student.status || 'active') === 'active';
+            const allTournaments = (tournamentsRes?.data || []).filter(r => r.tournament?.tournament_date);
+            const periodTournaments = isActive
+                ? allTournaments.filter(r => r.tournament.tournament_date >= monthStart && r.tournament.tournament_date < monthEnd)
+                : [];
+            const tournamentCount = periodTournaments.length;
+            const tournamentPlaces = periodTournaments.map(r => r.place).filter(p => Number.isFinite(p));
+            const bestPeriodPlace = tournamentPlaces.length ? Math.min(...tournamentPlaces) : null;
+
             // Render
             document.getElementById('studentName').textContent = `${student.first_name} ${student.last_name}`;
             document.getElementById('branchName').textContent = student.branches?.name || '';
             document.getElementById('monthTitle').textContent = formatPeriodTitle(monthStart, monthEnd);
             document.getElementById('coachName').textContent = student.coaches ? `${student.coaches.first_name} ${student.coaches.last_name}` : '—';
+
+            // League pill — only for active students with a known rating
+            const pillWrap = document.getElementById('leaguePillWrap');
+            const currentLeague = isActive ? leagueLetter(latestRating ?? student.rating) : null;
+            pillWrap.innerHTML = currentLeague
+                ? `<span class="league-pill league-${currentLeague.toLowerCase()}">Лига ${currentLeague}</span>`
+                : '';
 
             // Build tiles
             let ratingHTML = latestRating ? String(latestRating) : '—';
@@ -611,6 +654,16 @@
                 { emoji: '📈', value: ratingHTML, label: 'Рейтинг', cls: 'tile-rating', raw: true },
                 { emoji: '🤖', value: bestBotAllTime ? `${bestBotAllTime.bot_name} (${bestBotAllTime.bot_rating})` : '—', label: 'Сильнейший бот', cls: 'tile-bots' },
             ];
+
+            if (isActive && tournamentCount > 0) {
+                const placeLabel = bestPeriodPlace !== null ? ` (лучшее место: ${bestPeriodPlace})` : '';
+                tiles.push({
+                    emoji: '🏆',
+                    value: tournamentCount,
+                    label: `Турниров за период${placeLabel}`,
+                    cls: 'tile-streak',
+                });
+            }
 
             document.getElementById('statsGrid').innerHTML = tiles.map(t => `
                 <div class="stat-tile ${t.cls}">

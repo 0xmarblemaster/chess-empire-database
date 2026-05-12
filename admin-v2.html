@@ -127,6 +127,10 @@
                     <i data-lucide="calendar-check" style="width: 20px; height: 20px;"></i>
                     <span data-i18n="admin.sidebar.attendance">Attendance</span>
                 </div>
+                <div class="nav-item" id="menuTournaments" onclick="showTournamentsManagement()" style="display: none;">
+                    <i data-lucide="trophy" style="width: 20px; height: 20px;"></i>
+                    <span data-i18n="admin.sidebar.tournaments">Tournaments</span>
+                </div>
 
                 <!-- Analytics Section (oxmarblemaster only) -->
                 <div class="nav-section-title" id="analyticsSectionTitle" style="margin-top: 1.5rem; display: none;" data-i18n="admin.sidebar.analytics">Analytics</div>
@@ -2374,6 +2378,7 @@
     <script src="supabase-config.js?v=1771237740"></script>
     <script src="supabase-client.js?v=1771237740"></script>
     <script src="supabase-data.js?v=1771237740"></script>
+    <script src="supabase-data-tournaments.js?v=1771237740"></script>
     <script src="constants.js?v=1771237740"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <!-- SheetJS for Excel parsing/export -->

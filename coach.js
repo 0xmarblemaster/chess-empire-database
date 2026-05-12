@@ -72,6 +72,10 @@ async function initializeCoachProfile() {
     // Load coach's students count
     await loadCoachStudents(coach);
 
+    // Load cadence (last tournament date per active student). Non-blocking
+    // failures fall back to an empty map → all students render as Inactive.
+    window.coachStudentCadence = await loadCoachStudentCadence(window.coachStudents);
+
     // Render the profile
     renderCoachProfile();
 
@@ -104,6 +108,60 @@ async function loadCoachStudents(coach) {
     } else {
         window.coachStudents = [];
     }
+}
+
+// Compute cadence label for a single lastDate string ("YYYY-MM-DD"|null).
+// Delegates to supabase-data-tournaments._cadenceFromDate so the 4w/8w cutoffs
+// stay in lockstep with student.js. Returns 'active' | 'occasional' | 'inactive'.
+function computeStudentCadence(lastDateStr, now) {
+    const helper = window.tournamentsData && window.tournamentsData._internal && window.tournamentsData._internal._cadenceFromDate;
+    if (typeof helper === 'function') return helper(lastDateStr, now);
+    // Fallback when supabase-data-tournaments.js failed to load.
+    if (!lastDateStr) return 'inactive';
+    const last = new Date(lastDateStr);
+    const today = now || new Date();
+    const weeks = (today - last) / (1000 * 60 * 60 * 24 * 7);
+    if (weeks <= 4) return 'active';
+    if (weeks <= 8) return 'occasional';
+    return 'inactive';
+}
+
+// Load last-tournament-date per active student in one query so we can render
+// cadence badges without N+1 round-trips. Returns a Map(studentId → 'YYYY-MM-DD').
+async function loadCoachStudentCadence(students) {
+    const cadenceMap = new Map();
+    const activeIds = (students || []).filter(s => s.status === 'active').map(s => s.id);
+    if (activeIds.length === 0 || !window.supabaseClient) return cadenceMap;
+
+    try {
+        const { data, error } = await window.supabaseClient
+            .from('tournament_participants')
+            .select('student_id, tournament:tournaments(tournament_date)')
+            .in('student_id', activeIds);
+        if (error) {
+            console.error('loadCoachStudentCadence error', error);
+            return cadenceMap;
+        }
+        for (const row of data || []) {
+            const date = row.tournament && row.tournament.tournament_date;
+            if (!date) continue;
+            const prev = cadenceMap.get(row.student_id);
+            if (!prev || date > prev) cadenceMap.set(row.student_id, date);
+        }
+    } catch (e) {
+        console.error('loadCoachStudentCadence threw', e);
+    }
+    return cadenceMap;
+}
+
+// Pure renderer for the cadence badge — returns an HTML string. Exported on
+// window for the DOM unit tests in tests/test-coach-cadence-view.js.
+function renderCadenceBadge(student, lastDateStr, now) {
+    if (!student || student.status !== 'active') return '';
+    const cadence = computeStudentCadence(lastDateStr, now);
+    const key = `coach.cadence.${cadence}`;
+    const label = (typeof t === 'function' && t(key)) || cadence.charAt(0).toUpperCase() + cadence.slice(1);
+    return `<span class="coach-cadence-badge cadence-${cadence}" title="${label}">${label}</span>`;
 }
 
 // Render the coach profile
@@ -183,6 +241,8 @@ function renderCoachProfile() {
                         const statusClass = student.status === 'active' ? 'status-active' :
                                           student.status === 'frozen' ? 'status-frozen' : 'status-left';
                         const razryadBadge = student.razryad ? `<span class="razryad-badge">${student.razryad}</span>` : '';
+                        const lastDate = (window.coachStudentCadence && window.coachStudentCadence.get(student.id)) || null;
+                        const cadenceBadge = renderCadenceBadge(student, lastDate);
 
                         return `
                             <div class="student-item" onclick="viewStudent('${student.id}')">
@@ -195,6 +255,7 @@ function renderCoachProfile() {
                                 <div class="student-info">
                                     <div class="student-name-row">
                                         <span class="student-name">${student.firstName} ${student.lastName}</span>
+                                        ${cadenceBadge}
                                         ${razryadBadge}
                                     </div>
                                     <div class="student-meta">
@@ -625,6 +686,9 @@ window.saveCoachEdits = saveCoachEdits;
 window.canEditCoach = canEditCoach;
 window.openAvatarLightbox = openAvatarLightbox;
 window.closeAvatarLightbox = closeAvatarLightbox;
+window.computeStudentCadence = computeStudentCadence;
+window.renderCadenceBadge = renderCadenceBadge;
+window.loadCoachStudentCadence = loadCoachStudentCadence;
 
 // Initialize when DOM is ready
 document.addEventListener('DOMContentLoaded', async () => {

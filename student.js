@@ -716,6 +716,217 @@ function renderSurvivalContent() {
     return html;
 }
 
+// ===================== Tournament widgets (Phase 3) =====================
+
+// Format an ISO date string ("YYYY-MM-DD") for display in the current locale.
+function formatTournamentDate(dateStr) {
+    if (!dateStr) return '';
+    const d = new Date(`${dateStr}T00:00:00`);
+    if (Number.isNaN(d.getTime())) return dateStr;
+    return d.toLocaleDateString();
+}
+
+function getLeagueLetterFromRating(rating) {
+    const helpers = window.tournamentsData?._internal;
+    if (helpers && typeof helpers._leagueFromRating === 'function') {
+        return helpers._leagueFromRating(rating);
+    }
+    if (rating === null || rating === undefined || !Number.isFinite(Number(rating))) return null;
+    const r = Number(rating);
+    if (r > 800) return 'A';
+    if (r >= 450) return 'B';
+    return 'C';
+}
+
+// Render the league pill rendered alongside the name. Returns HTML string.
+function renderLeagueLetterBadge(rating) {
+    const letter = getLeagueLetterFromRating(rating);
+    if (!letter) return '';
+    // Reuse existing tier colors: A=gold, B=silver, C=bronze.
+    const tier = letter === 'A' ? 'gold' : letter === 'B' ? 'silver' : 'bronze';
+    const label = t('student.tournaments.leagueBadge', { league: letter }) || `League ${letter}`;
+    return `
+        <div class="league-badge tier-${tier}" title="${label}">
+            <i data-lucide="trophy" style="width: 16px; height: 16px;"></i>
+            <span>${label}</span>
+        </div>
+    `;
+}
+
+function renderTournamentRecentTable(tournaments) {
+    if (!tournaments || tournaments.length === 0) {
+        return `<div class="empty-state">
+            <i data-lucide="trophy" style="width: 48px; height: 48px; color: #cbd5e1;"></i>
+            <p>${t('student.tournaments.none') || 'No tournaments yet'}</p>
+        </div>`;
+    }
+    const rows = tournaments.map(tn => {
+        const delta = Number.isFinite(tn.ratingDelta) ? tn.ratingDelta : 0;
+        const sign = delta > 0 ? '+' : '';
+        const cls = delta > 0 ? 'delta-up' : delta < 0 ? 'delta-down' : 'delta-neutral';
+        return `<tr>
+            <td>${formatTournamentDate(tn.date)}</td>
+            <td>${escapeHtmlSafe(tn.tournamentName || '')}</td>
+            <td><span class="league-tag league-${(tn.league || '').toLowerCase()}">${escapeHtmlSafe(tn.league || '')}</span></td>
+            <td>${tn.place ?? '—'}</td>
+            <td class="${cls}">${sign}${delta}</td>
+        </tr>`;
+    }).join('');
+    return `
+        <table class="tournaments-table">
+            <thead><tr>
+                <th>${t('student.tournaments.colDate') || 'Date'}</th>
+                <th>${t('student.tournaments.colName') || 'Tournament'}</th>
+                <th>${t('student.tournaments.colLeague') || 'League'}</th>
+                <th>${t('student.tournaments.colPlace') || 'Place'}</th>
+                <th>${t('student.tournaments.colDelta') || 'Δ rating'}</th>
+            </tr></thead>
+            <tbody>${rows}</tbody>
+        </table>
+    `;
+}
+
+function escapeHtmlSafe(s) {
+    return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+}
+
+function renderTournamentCadence(aggregates) {
+    if (!aggregates || !aggregates.lastDate) {
+        return `<div class="cadence-line cadence-inactive">${t('student.tournaments.cadenceNever') || 'No tournaments yet'}</div>`;
+    }
+    const dateLabel = formatTournamentDate(aggregates.lastDate);
+    const key = `student.tournaments.cadence${aggregates.cadence.charAt(0).toUpperCase()}${aggregates.cadence.slice(1)}`;
+    const text = t(key, { date: dateLabel }) || dateLabel;
+    return `<div class="cadence-line cadence-${aggregates.cadence}">${text}</div>`;
+}
+
+function renderTournamentAggregates(aggregates) {
+    const items = [
+        { label: t('student.tournaments.statsTotal') || 'Tournaments played', value: aggregates.total || 0 },
+        { label: t('student.tournaments.statsBestPlace') || 'Best place', value: aggregates.bestPlace ?? '—' },
+        { label: t('student.tournaments.statsAvgPlace') || 'Avg place', value: aggregates.avgPlace ?? '—' },
+        {
+            label: t('student.tournaments.statsGained') || 'Total rating gained',
+            value: aggregates.totalRatingGained > 0 ? `+${aggregates.totalRatingGained}` : String(aggregates.totalRatingGained || 0)
+        },
+    ];
+    return `
+        <div class="tournament-stats-grid">
+            ${items.map(i => `
+                <div class="tournament-stat-cell">
+                    <div class="tournament-stat-value">${escapeHtmlSafe(String(i.value))}</div>
+                    <div class="tournament-stat-label">${i.label}</div>
+                </div>
+            `).join('')}
+        </div>
+    `;
+}
+
+function renderLeagueProgressionNote(crossing) {
+    if (!crossing) return '';
+    const dateLabel = formatTournamentDate(crossing.date);
+    const key = crossing.direction === 'demoted'
+        ? 'student.tournaments.demoted'
+        : 'student.tournaments.promoted';
+    const text = t(key, { from: crossing.from, to: crossing.to, date: dateLabel })
+        || `${crossing.direction === 'demoted' ? 'Demoted' : 'Promoted'} ${crossing.from} → ${crossing.to} on ${dateLabel}`;
+    const cls = crossing.direction === 'demoted' ? 'progression-demoted' : 'progression-promoted';
+    return `<div class="league-progression ${cls}">${text}</div>`;
+}
+
+// Sparkline lifecycle: chart instance tracked so re-renders dispose cleanly.
+let tournamentSparkline = null;
+
+function drawTournamentSparkline(tournaments) {
+    const canvas = document.getElementById('tournamentSparkline');
+    if (!canvas || typeof Chart === 'undefined') return;
+    if (tournamentSparkline) {
+        tournamentSparkline.destroy();
+        tournamentSparkline = null;
+    }
+    // tournaments come newest-first (limit 10); reverse to plot chronologically.
+    const ordered = [...tournaments].reverse();
+    const labels = ordered.map(tn => formatTournamentDate(tn.date));
+    const values = ordered.map(tn => tn.ratingAfter ?? null);
+    tournamentSparkline = new Chart(canvas, {
+        type: 'line',
+        data: {
+            labels,
+            datasets: [{
+                data: values,
+                borderColor: '#5F192B',
+                backgroundColor: 'rgba(95, 25, 43, 0.12)',
+                fill: true,
+                tension: 0.3,
+                pointRadius: 3,
+                pointBackgroundColor: '#5F192B',
+            }],
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: { legend: { display: false } },
+            scales: {
+                x: { display: true, ticks: { autoSkip: true, maxTicksLimit: 5, font: { size: 10 } } },
+                y: { display: true, ticks: { font: { size: 10 } } },
+            },
+        },
+    });
+}
+
+// Fetch data and render into the placeholder mounted inside the stats tab.
+// Called after renderProfile has set the page innerHTML.
+async function mountTournamentSection(studentId) {
+    const mount = document.getElementById('tournamentSectionMount');
+    if (!mount || !window.tournamentsData) return;
+
+    let sparkRows = [];
+    let aggregates = { total: 0, bestPlace: null, avgPlace: null, totalRatingGained: 0, lastDate: null, cadence: 'inactive' };
+    let crossing = null;
+
+    try {
+        [sparkRows, aggregates, crossing] = await Promise.all([
+            window.tournamentsData.getStudentTournaments(studentId, 10),
+            window.tournamentsData.getStudentTournamentAggregates(studentId),
+            window.tournamentsData.detectLeaguePromotion(studentId, 90),
+        ]);
+    } catch (e) {
+        console.error('Tournament section load error', e);
+        return;
+    }
+
+    const recent = (sparkRows || []).slice(0, 5);
+    const hasAny = (recent && recent.length > 0) || aggregates.total > 0;
+
+    mount.innerHTML = `
+        <div class="stats-section tournament-section">
+            <h3 class="subsection-title">
+                <i data-lucide="trophy" style="width: 20px; height: 20px;"></i>
+                ${t('student.tournaments.title') || 'Tournaments'}
+            </h3>
+            ${renderLeagueProgressionNote(crossing)}
+            <div class="cadence-row">
+                <div class="cadence-label">${t('student.tournaments.cadence') || 'Cadence'}</div>
+                ${renderTournamentCadence(aggregates)}
+            </div>
+            ${hasAny ? renderTournamentAggregates(aggregates) : ''}
+            ${sparkRows && sparkRows.length > 0 ? `
+                <div class="tournament-sparkline-wrap">
+                    <div class="tournament-sparkline-label">${t('student.tournaments.sparkline') || 'Rating across last 10 tournaments'}</div>
+                    <div class="tournament-sparkline-canvas-wrap">
+                        <canvas id="tournamentSparkline" height="80"></canvas>
+                    </div>
+                </div>
+            ` : ''}
+            <h4 class="tournament-subheading">${t('student.tournaments.recent') || 'Recent tournaments'}</h4>
+            ${renderTournamentRecentTable(recent)}
+        </div>
+    `;
+
+    if (typeof lucide !== 'undefined') lucide.createIcons();
+    if (sparkRows && sparkRows.length > 0) drawTournamentSparkline(sparkRows);
+}
+
 // Render stats tab content
 function renderStatsContent() {
     const student = window.currentStudent;
@@ -723,6 +934,12 @@ function renderStatsContent() {
     const achievements = studentProfileData?.achievements || [];
 
     let html = '';
+
+    // Tournament section placeholder (active students only). Filled async by
+    // mountTournamentSection after renderProfile sets innerHTML.
+    if (student && (student.status || 'active') === 'active') {
+        html += `<div id="tournamentSectionMount"></div>`;
+    }
 
     // Rating history
     if (ratings?.current) {
@@ -857,6 +1074,11 @@ async function renderProfile() {
            </div>`
         : '';
 
+    // Tournament-specific A/B/C league pill — shown only for active students
+    // (Phase 3 widget). Hidden for frozen/left to mirror the wider section gate.
+    const isActiveStudent = (student.status || 'active') === 'active';
+    const tournamentLeagueBadgeHTML = isActiveStudent ? renderLeagueLetterBadge(currentRating) : '';
+
     // Rank badges (using rankings already declared above)
     let rankBadgesHTML = '';
 
@@ -894,6 +1116,7 @@ async function renderProfile() {
                 </div>
                 <div class="badge-row">
                     ${leagueBadgeHTML}
+                    ${tournamentLeagueBadgeHTML}
                     ${rankBadgesHTML}
                 </div>
             </div>
@@ -1061,6 +1284,11 @@ async function renderProfile() {
 
     lucide.createIcons();
     animateProgressBars();
+
+    // Phase 3 — async mount of tournament widgets (active students only).
+    if (isActiveStudent && window.tournamentsData) {
+        mountTournamentSection(student.id);
+    }
 }
 
 // Make tab switching globally available
