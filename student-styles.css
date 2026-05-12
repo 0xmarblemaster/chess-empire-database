@@ -2650,3 +2650,72 @@ body {
         font-size: 12px;
     }
 }
+
+/* ============ Tournament widgets (Phase 5) ============ */
+.tournament-section .tournament-streak-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    margin-left: 12px;
+    padding: 4px 10px;
+    border-radius: 999px;
+    background: rgba(217, 119, 6, 0.12);
+    color: #b45309;
+    font-size: 12px;
+    font-weight: 600;
+    vertical-align: middle;
+    line-height: 1;
+}
+.tournament-section .season-summary-card {
+    background: rgba(95, 25, 43, 0.05);
+    border-radius: 12px;
+    padding: 14px;
+    margin-bottom: 16px;
+}
+.tournament-section .season-summary-title {
+    font-size: 12px;
+    font-weight: 700;
+    color: #64748b;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    margin-bottom: 10px;
+}
+.tournament-section .season-summary-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 10px;
+}
+.tournament-section .season-summary-cell {
+    background: rgba(255, 255, 255, 0.6);
+    border-radius: 10px;
+    padding: 10px;
+    text-align: center;
+}
+.tournament-section .season-summary-value {
+    font-size: 18px;
+    font-weight: 800;
+    color: #1e293b;
+}
+.tournament-section .season-summary-value.delta-up { color: #047857; }
+.tournament-section .season-summary-value.delta-down { color: #b91c1c; }
+.tournament-section .season-summary-value.delta-neutral { color: #64748b; }
+.tournament-section .season-summary-label {
+    font-size: 11px;
+    color: #64748b;
+    font-weight: 500;
+    margin-top: 2px;
+}
+.tournament-section .season-summary-empty {
+    font-size: 13px;
+    color: #64748b;
+    text-align: center;
+    padding: 8px 0;
+}
+@media (max-width: 480px) {
+    .tournament-section .season-summary-grid {
+        grid-template-columns: repeat(3, 1fr);
+        gap: 6px;
+    }
+    .tournament-section .season-summary-value { font-size: 16px; }
+    .tournament-section .tournament-streak-pill { font-size: 11px; padding: 3px 8px; }
+}

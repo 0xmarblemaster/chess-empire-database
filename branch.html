@@ -150,12 +150,38 @@
                     <!-- Students will be loaded here -->
                 </div>
             </div>
+
+            <!-- Tournament Leaderboard (Phase 5) -->
+            <div class="card card--leaderboard">
+                <div class="card-header card-header--leaderboard">
+                    <h2 class="card-title">
+                        <i data-lucide="trophy" style="width: 20px; height: 20px;"></i>
+                        <span data-i18n="branch.leaderboard.title">Tournament Leaderboard</span>
+                    </h2>
+                    <div class="leaderboard-controls">
+                        <label class="leaderboard-filter-label" for="leaderboardLeagueFilter" data-i18n="branch.leaderboard.leagueFilter">League</label>
+                        <select id="leaderboardLeagueFilter" class="leaderboard-filter">
+                            <option value="All" data-i18n="branch.leaderboard.leagueAll">All Leagues</option>
+                            <option value="A" data-i18n="branch.leaderboard.leagueA">League A</option>
+                            <option value="B" data-i18n="branch.leaderboard.leagueB">League B</option>
+                            <option value="C" data-i18n="branch.leaderboard.leagueC">League C</option>
+                        </select>
+                    </div>
+                </div>
+                <p class="leaderboard-subtitle" data-i18n="branch.leaderboard.subtitle">Top 10 by tournaments played (last 90 days)</p>
+                <div class="leaderboard-body" id="leaderboardBody">
+                    <!-- populated by branch.js -->
+                </div>
+            </div>
         </div>
     </div>
 
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="supabase-config.js"></script>
     <script src="toast-notifications.js?v=1762500000"></script>
+    <script src="supabase-data-tournaments.js?v=1771500000"></script>
     <script src="data.js"></script>
-    <script src="branch.js"></script>
+    <script src="branch.js?v=1771500000"></script>
     <script>
         lucide.createIcons();
     </script>

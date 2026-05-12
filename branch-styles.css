@@ -561,3 +561,105 @@ body {
         height: 220px;
     }
 }
+
+/* ============ Branch tournament leaderboard (Phase 5) ============ */
+.card--leaderboard {
+    grid-column: 1 / -1;
+}
+.card-header--leaderboard {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+    margin-bottom: 0.5rem;
+}
+.leaderboard-controls {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+.leaderboard-filter-label {
+    font-size: 0.75rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: #64748b;
+}
+.leaderboard-filter {
+    padding: 0.5rem 0.75rem;
+    border: 1px solid #e2e8f0;
+    border-radius: 0.5rem;
+    background: white;
+    font-family: 'Inter', sans-serif;
+    font-size: 0.875rem;
+    color: #1e293b;
+    cursor: pointer;
+}
+.leaderboard-filter:focus {
+    outline: none;
+    border-color: #5F192B;
+}
+.leaderboard-subtitle {
+    color: #64748b;
+    font-size: 0.875rem;
+    margin: 0 0 1rem;
+}
+.leaderboard-body {
+    overflow-x: auto;
+}
+.leaderboard-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.875rem;
+}
+.leaderboard-table th,
+.leaderboard-table td {
+    padding: 0.625rem 0.75rem;
+    text-align: left;
+    border-bottom: 1px solid #f1f5f9;
+}
+.leaderboard-table th {
+    font-weight: 700;
+    font-size: 0.75rem;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: #64748b;
+}
+.leaderboard-table .text-right {
+    text-align: right;
+}
+.leaderboard-table tr:last-child td {
+    border-bottom: none;
+}
+.leaderboard-rank {
+    width: 2.5rem;
+    font-weight: 700;
+    color: #5F192B;
+}
+.leaderboard-link {
+    color: #1e293b;
+    font-weight: 600;
+    text-decoration: none;
+}
+.leaderboard-link:hover {
+    color: #5F192B;
+    text-decoration: underline;
+}
+.leaderboard-table .delta-up { color: #047857; font-weight: 600; }
+.leaderboard-table .delta-down { color: #b91c1c; font-weight: 600; }
+.leaderboard-table .delta-neutral { color: #64748b; }
+.leaderboard-empty,
+.leaderboard-loading {
+    color: #94a3b8;
+    text-align: center;
+    padding: 1.5rem;
+    font-size: 0.875rem;
+}
+@media (max-width: 640px) {
+    .leaderboard-table th,
+    .leaderboard-table td {
+        padding: 0.5rem;
+        font-size: 0.8125rem;
+    }
+}

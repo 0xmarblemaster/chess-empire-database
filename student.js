@@ -822,6 +822,50 @@ function renderTournamentAggregates(aggregates) {
     `;
 }
 
+// Phase 5 — compact streak pill ("Streak: 3 (best: 5)"). Hidden when zero plays.
+function renderTournamentStreak(streak) {
+    if (!streak || (!streak.current && !streak.longest)) return '';
+    const label = t('student.tournaments.streak', { current: streak.current, longest: streak.longest })
+        || `Streak: ${streak.current} (best: ${streak.longest})`;
+    return `<span class="tournament-streak-pill" title="${escapeHtmlSafe(label)}">
+        <i data-lucide="flame" style="width: 14px; height: 14px;"></i>
+        <span>${escapeHtmlSafe(label)}</span>
+    </span>`;
+}
+
+// Phase 5 — season summary card: last `daysWindow` (default 90) days roll-up.
+function renderTournamentSeasonSummary(season) {
+    const window = (season && season.daysWindow) || 90;
+    const title = t('student.tournaments.season', { days: window }) || `Last ${window} days`;
+    if (!season || season.tournamentsPlayed === 0) {
+        const empty = t('student.tournaments.seasonEmpty', { days: window })
+            || `No tournaments in the last ${window} days`;
+        return `<div class="season-summary-card">
+            <div class="season-summary-title">${escapeHtmlSafe(title)}</div>
+            <div class="season-summary-empty">${escapeHtmlSafe(empty)}</div>
+        </div>`;
+    }
+    const deltaVal = season.totalRatingDelta || 0;
+    const deltaText = deltaVal > 0 ? `+${deltaVal}` : String(deltaVal);
+    const deltaCls = deltaVal > 0 ? 'delta-up' : deltaVal < 0 ? 'delta-down' : 'delta-neutral';
+    const items = [
+        { label: t('student.tournaments.seasonPlayed') || 'Tournaments played', value: season.tournamentsPlayed },
+        { label: t('student.tournaments.seasonBestPlace') || 'Best place', value: season.bestPlace ?? '—' },
+        { label: t('student.tournaments.seasonDelta') || 'Total Δ rating', value: deltaText, valueClass: deltaCls },
+    ];
+    return `<div class="season-summary-card">
+        <div class="season-summary-title">${escapeHtmlSafe(title)}</div>
+        <div class="season-summary-grid">
+            ${items.map(i => `
+                <div class="season-summary-cell">
+                    <div class="season-summary-value ${i.valueClass || ''}">${escapeHtmlSafe(String(i.value))}</div>
+                    <div class="season-summary-label">${i.label}</div>
+                </div>
+            `).join('')}
+        </div>
+    </div>`;
+}
+
 function renderLeagueProgressionNote(crossing) {
     if (!crossing) return '';
     const dateLabel = formatTournamentDate(crossing.date);
@@ -883,12 +927,16 @@ async function mountTournamentSection(studentId) {
     let sparkRows = [];
     let aggregates = { total: 0, bestPlace: null, avgPlace: null, totalRatingGained: 0, lastDate: null, cadence: 'inactive' };
     let crossing = null;
+    let allRows = [];
 
     try {
-        [sparkRows, aggregates, crossing] = await Promise.all([
+        [sparkRows, aggregates, crossing, allRows] = await Promise.all([
             window.tournamentsData.getStudentTournaments(studentId, 10),
             window.tournamentsData.getStudentTournamentAggregates(studentId),
             window.tournamentsData.detectLeaguePromotion(studentId, 90),
+            window.tournamentsData.getStudentTournamentsAll
+                ? window.tournamentsData.getStudentTournamentsAll(studentId)
+                : Promise.resolve([]),
         ]);
     } catch (e) {
         console.error('Tournament section load error', e);
@@ -897,12 +945,21 @@ async function mountTournamentSection(studentId) {
 
     const recent = (sparkRows || []).slice(0, 5);
     const hasAny = (recent && recent.length > 0) || aggregates.total > 0;
+    // Phase 5 — streak pill + 90-day season summary, both derived from the
+    // full participation history.
+    const streak = window.tournamentsData.computeStreak
+        ? window.tournamentsData.computeStreak(allRows)
+        : { current: 0, longest: 0 };
+    const season = window.tournamentsData.computeSeasonSummary
+        ? window.tournamentsData.computeSeasonSummary(allRows, 90)
+        : { tournamentsPlayed: 0, bestPlace: null, totalRatingDelta: 0, daysWindow: 90 };
 
     mount.innerHTML = `
         <div class="stats-section tournament-section">
             <h3 class="subsection-title">
                 <i data-lucide="trophy" style="width: 20px; height: 20px;"></i>
                 ${t('student.tournaments.title') || 'Tournaments'}
+                ${renderTournamentStreak(streak)}
             </h3>
             ${renderLeagueProgressionNote(crossing)}
             <div class="cadence-row">
@@ -910,6 +967,7 @@ async function mountTournamentSection(studentId) {
                 ${renderTournamentCadence(aggregates)}
             </div>
             ${hasAny ? renderTournamentAggregates(aggregates) : ''}
+            ${renderTournamentSeasonSummary(season)}
             ${sparkRows && sparkRows.length > 0 ? `
                 <div class="tournament-sparkline-wrap">
                     <div class="tournament-sparkline-label">${t('student.tournaments.sparkline') || 'Rating across last 10 tournaments'}</div>

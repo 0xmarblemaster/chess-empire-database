@@ -355,6 +355,7 @@
     </div>
 
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="supabase-data-tournaments.js?v=1771500000"></script>
     <script>
     const SUPABASE_URL = 'https://papgcizhfkngubwofjuo.supabase.co';
     const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InBhcGdjaXpoZmtuZ3Vid29manVvIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjE5MzAzNTEsImV4cCI6MjA3NzUwNjM1MX0.lN94-p4L3gUTU1vw_odZt6ruv_K40lOIKXXE80LIS_U';
@@ -663,6 +664,35 @@
                     label: `Турниров за период${placeLabel}`,
                     cls: 'tile-streak',
                 });
+            }
+
+            // Phase 5 — streak + 90-day season summary tiles (active students only).
+            if (isActive && window.tournamentsData && allTournaments.length > 0) {
+                const historyRows = allTournaments.map(r => ({
+                    place: r.place,
+                    rating_delta: r.rating_delta,
+                    date: r.tournament?.tournament_date,
+                }));
+                const streak = window.tournamentsData.computeStreak(historyRows);
+                if (streak && streak.current > 0) {
+                    tiles.push({
+                        emoji: '🔥',
+                        value: streak.current,
+                        label: `Серия турниров (лучшая: ${streak.longest})`,
+                        cls: 'tile-streak',
+                    });
+                }
+                const season = window.tournamentsData.computeSeasonSummary(historyRows, 90);
+                if (season && season.tournamentsPlayed > 0) {
+                    const dVal = season.totalRatingDelta || 0;
+                    const dSign = dVal > 0 ? '+' : '';
+                    tiles.push({
+                        emoji: '📅',
+                        value: season.tournamentsPlayed,
+                        label: `За 90 дней (Δ ${dSign}${dVal})`,
+                        cls: 'tile-time',
+                    });
+                }
             }
 
             document.getElementById('statsGrid').innerHTML = tiles.map(t => `

@@ -505,6 +505,110 @@
         };
     }
 
+    // Phase 5 — streak: N tournaments where each is within `maxGapDays` (default 14)
+    // of the previous one. Returns {current, longest}. `current` = streak ending at
+    // the most recent tournament; `longest` = max streak across the whole history.
+    // Accepts rows shaped as {date} | {tournament_date} | {tournament:{tournament_date}}.
+    function _extractDate(row) {
+        if (!row) return null;
+        if (row.date) return row.date;
+        if (row.tournament_date) return row.tournament_date;
+        if (row.tournament && row.tournament.tournament_date) return row.tournament.tournament_date;
+        return null;
+    }
+
+    function computeStreak(tournaments, opts) {
+        const maxGapDays = (opts && Number.isFinite(opts.maxGapDays)) ? opts.maxGapDays : 14;
+        if (!Array.isArray(tournaments) || tournaments.length === 0) {
+            return { current: 0, longest: 0 };
+        }
+        const dates = tournaments.map(_extractDate).filter(Boolean).sort();
+        if (dates.length === 0) return { current: 0, longest: 0 };
+
+        let current = 1;
+        let longest = 1;
+        for (let i = 1; i < dates.length; i++) {
+            const prev = new Date(`${dates[i - 1]}T00:00:00Z`);
+            const curr = new Date(`${dates[i]}T00:00:00Z`);
+            const diffDays = (curr - prev) / 86400000;
+            if (diffDays <= maxGapDays) {
+                current++;
+                if (current > longest) longest = current;
+            } else {
+                current = 1;
+            }
+        }
+        return { current, longest };
+    }
+
+    // Phase 5 — season summary: last `daysWindow` days (default 90) roll-up.
+    // Returns {tournamentsPlayed, bestPlace, totalRatingDelta, daysWindow}.
+    function computeSeasonSummary(tournaments, daysWindow, today) {
+        daysWindow = (Number.isFinite(daysWindow) ? daysWindow : 90);
+        const now = today || new Date();
+        const empty = { tournamentsPlayed: 0, bestPlace: null, totalRatingDelta: 0, daysWindow };
+        if (!Array.isArray(tournaments) || tournaments.length === 0) return empty;
+
+        const cutoff = new Date(now);
+        cutoff.setUTCDate(cutoff.getUTCDate() - daysWindow);
+        const cutoffStr = cutoff.toISOString().split('T')[0];
+
+        const inWindow = tournaments.filter(t => {
+            const d = _extractDate(t);
+            return d && d >= cutoffStr;
+        });
+        if (inWindow.length === 0) return empty;
+
+        const places = inWindow.map(t => t.place).filter(p => Number.isFinite(p));
+        const totalRatingDelta = inWindow.reduce((sum, t) => {
+            const d = (t.ratingDelta !== undefined) ? t.ratingDelta : t.rating_delta;
+            return sum + (Number.isFinite(d) ? d : 0);
+        }, 0);
+
+        return {
+            tournamentsPlayed: inWindow.length,
+            bestPlace: places.length ? Math.min(...places) : null,
+            totalRatingDelta,
+            daysWindow,
+        };
+    }
+
+    // Phase 5 — branch leaderboard aggregation. Pure function: merges leaderboard
+    // rows from one or more leagues by student_id, sorts by tournaments_played
+    // desc with total_rating_gained as tie-break, returns the top 10 ranked.
+    function _aggregateLeaderboard(rows, limit) {
+        limit = Number.isFinite(limit) ? limit : 10;
+        const byStudent = new Map();
+        for (const r of (rows || [])) {
+            if (!r || !r.student_id) continue;
+            const slot = byStudent.get(r.student_id) || {
+                student_id: r.student_id,
+                first_name: r.first_name || '',
+                last_name: r.last_name || '',
+                tournaments_played: 0,
+                total_rating_gained: 0,
+                best_place: null,
+            };
+            slot.tournaments_played += Number.isFinite(r.tournaments_played) ? r.tournaments_played : 0;
+            slot.total_rating_gained += Number.isFinite(r.total_rating_gained) ? r.total_rating_gained : 0;
+            if (Number.isFinite(r.best_place)) {
+                if (slot.best_place === null || r.best_place < slot.best_place) {
+                    slot.best_place = r.best_place;
+                }
+            }
+            byStudent.set(r.student_id, slot);
+        }
+
+        const sorted = [...byStudent.values()].sort((a, b) => {
+            if (b.tournaments_played !== a.tournaments_played) {
+                return b.tournaments_played - a.tournaments_played;
+            }
+            return (b.total_rating_gained || 0) - (a.total_rating_gained || 0);
+        });
+
+        return sorted.slice(0, limit).map((s, i) => ({ ...s, rank: i + 1 }));
+    }
+
     // Pure crossing detector — accepts an ordered array of {rating, rating_date}
     // and returns the most recent league change within `days`, or null.
     // Reports both promotions and demotions; direction is 'promoted' | 'demoted'.
@@ -595,6 +699,84 @@
         return { tournaments: data || [], total: count || 0, page, pageSize };
     }
 
+    // Phase 5 — fetch every tournament participation for a student, oldest first.
+    // Used by streak / season-summary widgets that need the full history.
+    async function getStudentTournamentsAll(studentId) {
+        const client = (typeof window !== 'undefined' && window.supabaseClient) || null;
+        if (!client) return [];
+        const { data, error } = await client
+            .from('tournament_participants')
+            .select(`
+                id, place, rating_before, rating_after, rating_delta,
+                tournament:tournaments(id, name, league, tournament_date)
+            `)
+            .eq('student_id', studentId);
+        if (error || !data) {
+            if (error) console.error('getStudentTournamentsAll error', error);
+            return [];
+        }
+        return data
+            .map(row => ({
+                id: row.id,
+                place: row.place,
+                ratingBefore: row.rating_before,
+                ratingAfter: row.rating_after,
+                ratingDelta: row.rating_delta,
+                tournamentId: row.tournament?.id,
+                tournamentName: row.tournament?.name,
+                league: row.tournament?.league,
+                date: row.tournament?.tournament_date || null,
+            }))
+            .filter(r => r.date)
+            .sort((a, b) => a.date.localeCompare(b.date));
+    }
+
+    // Phase 5 — branch leaderboard. Calls the analytics-tournaments edge function
+    // (action=branch_leaderboard) once per league. Pass league='All' (or no
+    // league) to merge A / B / C into one top-10 ranking.
+    //
+    // `opts.fetch` is injectable for tests; defaults to global fetch.
+    // `opts.config` overrides Supabase URL / API key (test seam).
+    async function getBranchLeaderboard(branchId, league, opts) {
+        if (!branchId) return [];
+        opts = opts || {};
+        const fetchFn = opts.fetch || (typeof fetch === 'function' ? fetch : null);
+        if (!fetchFn) return [];
+
+        const config = opts.config || (typeof window !== 'undefined' && window.supabaseConfig) || {};
+        const url = config.url || '';
+        const apiKey = config.apiKey || 'ce-api-2026-k8x9m2p4q7w1';
+        const days = Number.isFinite(opts.days) ? opts.days : 90;
+
+        const leagues = (!league || league === 'All') ? ['A', 'B', 'C'] : [league];
+        const allRows = [];
+
+        for (const lg of leagues) {
+            const endpoint = `${url}/functions/v1/analytics-tournaments`
+                + `?action=branch_leaderboard`
+                + `&branch_id=${encodeURIComponent(branchId)}`
+                + `&league=${encodeURIComponent(lg)}`
+                + `&days=${days}`;
+            try {
+                const resp = await fetchFn(endpoint, {
+                    method: 'GET',
+                    headers: { 'x-api-key': apiKey, 'Content-Type': 'application/json' },
+                });
+                if (!resp || !resp.ok) continue;
+                const body = await resp.json();
+                if (body && body.success && Array.isArray(body.data)) {
+                    for (const row of body.data) {
+                        allRows.push({ ...row, league: lg });
+                    }
+                }
+            } catch (e) {
+                console.error(`getBranchLeaderboard fetch error (league ${lg})`, e);
+            }
+        }
+
+        return _aggregateLeaderboard(allRows);
+    }
+
     async function getTournamentDetail(tournamentId) {
         const client = (typeof window !== 'undefined' && window.supabaseClient) || null;
         if (!client) return null;
@@ -636,10 +818,14 @@
         matchParticipants,
         importTournament,
         getStudentTournaments,
+        getStudentTournamentsAll,
         getStudentTournamentAggregates,
         detectLeaguePromotion,
         listTournaments,
         getTournamentDetail,
+        computeStreak,
+        computeSeasonSummary,
+        getBranchLeaderboard,
         // internal helpers exposed for tests
         _internal: {
             levenshteinDistance,
@@ -651,6 +837,8 @@
             _leagueFromRating,
             _aggregateFromRows,
             _detectCrossingFromRatings,
+            _aggregateLeaderboard,
+            _extractDate,
         },
     };
 

@@ -46,7 +46,95 @@ function renderBranchPage() {
     loadCoaches();
     loadCharts();
     loadStudents();
+    loadBranchLeaderboard();
     lucide.createIcons();
+}
+
+// Phase 5 — branch tournament leaderboard. Top 10 by tournaments-played in
+// the selected league for the last 90 days. League dropdown is initialised once
+// (re-render driven by the change handler hooked up below).
+let leaderboardInitialised = false;
+let currentLeaderboardLeague = 'All';
+
+async function loadBranchLeaderboard() {
+    const body = document.getElementById('leaderboardBody');
+    const filter = document.getElementById('leaderboardLeagueFilter');
+    if (!body || !filter || !currentBranch) return;
+
+    if (!leaderboardInitialised) {
+        filter.addEventListener('change', () => {
+            currentLeaderboardLeague = filter.value || 'All';
+            renderLeaderboard();
+        });
+        leaderboardInitialised = true;
+    }
+    filter.value = currentLeaderboardLeague;
+    await renderLeaderboard();
+}
+
+async function renderLeaderboard() {
+    const body = document.getElementById('leaderboardBody');
+    if (!body) return;
+    body.innerHTML = `<div class="leaderboard-loading">${t('branch.leaderboard.loading') || 'Loading…'}</div>`;
+
+    if (!window.tournamentsData || typeof window.tournamentsData.getBranchLeaderboard !== 'function') {
+        body.innerHTML = `<div class="leaderboard-empty">${t('branch.leaderboard.error') || 'Could not load leaderboard'}</div>`;
+        return;
+    }
+
+    let rows = [];
+    try {
+        rows = await window.tournamentsData.getBranchLeaderboard(currentBranch.id, currentLeaderboardLeague);
+    } catch (e) {
+        console.error('branch leaderboard error', e);
+        body.innerHTML = `<div class="leaderboard-empty">${t('branch.leaderboard.error') || 'Could not load leaderboard'}</div>`;
+        return;
+    }
+
+    if (!rows || rows.length === 0) {
+        body.innerHTML = `<div class="leaderboard-empty">${t('branch.leaderboard.empty') || 'No participation yet'}</div>`;
+        return;
+    }
+
+    const rankCol = t('branch.leaderboard.colRank') || '#';
+    const nameCol = t('branch.leaderboard.colName') || 'Student';
+    const tCol = t('branch.leaderboard.colTournaments') || 'Tournaments';
+    const dCol = t('branch.leaderboard.colTotalDelta') || 'Total Δ';
+
+    body.innerHTML = `
+        <table class="leaderboard-table">
+            <thead>
+                <tr>
+                    <th>${rankCol}</th>
+                    <th>${nameCol}</th>
+                    <th class="text-right">${tCol}</th>
+                    <th class="text-right">${dCol}</th>
+                </tr>
+            </thead>
+            <tbody>
+                ${rows.map(r => {
+                    const delta = r.total_rating_gained || 0;
+                    const sign = delta > 0 ? '+' : '';
+                    const cls = delta > 0 ? 'delta-up' : delta < 0 ? 'delta-down' : 'delta-neutral';
+                    const fullName = `${escapeBranchHtml(r.first_name)} ${escapeBranchHtml(r.last_name)}`.trim();
+                    return `
+                        <tr>
+                            <td class="leaderboard-rank">${r.rank}</td>
+                            <td>
+                                <a href="student.html?id=${encodeURIComponent(r.student_id)}" class="leaderboard-link">${fullName || '—'}</a>
+                            </td>
+                            <td class="text-right">${r.tournaments_played}</td>
+                            <td class="text-right ${cls}">${sign}${delta}</td>
+                        </tr>
+                    `;
+                }).join('')}
+            </tbody>
+        </table>
+    `;
+}
+
+function escapeBranchHtml(s) {
+    return String(s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 }
 
 // Load branch header information
