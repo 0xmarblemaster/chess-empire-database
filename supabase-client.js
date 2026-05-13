@@ -177,6 +177,19 @@ window.supabaseAuth = {
     },
 
     /**
+     * Resolve {isAdmin, coachId} from auth user + coaches lookup by email.
+     * Implementation lives in auth-helpers.js; this is a thin pass-through so
+     * callers don't need to know about the module split. If auth-helpers.js
+     * has not loaded yet, returns the unauthenticated default.
+     */
+    getRoleInfo: async () => {
+        if (window.authHelpers && typeof window.authHelpers.getRoleInfo === 'function') {
+            return window.authHelpers.getRoleInfo(supabaseClient);
+        }
+        return { isAdmin: false, coachId: null, email: null };
+    },
+
+    /**
      * Redirect to home if not admin
      */
     requireAdmin: async () => {
