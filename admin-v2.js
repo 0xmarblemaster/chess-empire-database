@@ -10358,8 +10358,8 @@ function showTournamentsManagement(updateHash = true) {
                     <div style="padding: 1.5rem;">
                         <div id="tournamentDropZone" style="border: 2px dashed #cbd5e1; border-radius: 0.75rem; padding: 2.5rem 1rem; text-align: center; cursor: pointer; transition: background 0.2s, border-color 0.2s;">
                             <i data-lucide="cloud-upload" style="width: 40px; height: 40px; color: #94a3b8; margin-bottom: 0.75rem;"></i>
-                            <div style="color: #64748b; font-size: 0.95rem;" data-i18n="admin.tournaments.dropHint">Drag &amp; drop .csv / .txt files here, or click to browse</div>
-                            <input type="file" id="tournamentFileInput" accept=".csv,.txt" multiple style="display: none;">
+                            <div style="color: #64748b; font-size: 0.95rem;" data-i18n="admin.tournaments.dropHint">Drag &amp; drop .csv / .txt / .xlsx files here, or click to browse</div>
+                            <input type="file" id="tournamentFileInput" accept=".csv,.txt,.xlsx,.xls" multiple style="display: none;">
                         </div>
                         <div id="tournamentPreviewContainer" style="margin-top: 1.25rem;"></div>
                         <div id="tournamentImportActions" style="margin-top: 1.25rem; display: none;">
@@ -10442,7 +10442,7 @@ function _wireTournamentDropZone() {
     });
     dz.addEventListener('drop', (e) => {
         const files = Array.from(e.dataTransfer?.files || [])
-            .filter(f => /\.(csv|txt)$/i.test(f.name));
+            .filter(f => /\.(csv|txt|xlsx|xls)$/i.test(f.name));
         if (files.length > 0) handleTournamentFiles(files);
     });
 }
