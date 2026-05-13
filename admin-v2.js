@@ -5044,6 +5044,16 @@ async function showAttendanceManagement(updateHash = true) {
         attendanceCurrentCoach = window.attendanceRoleLock.resolveCoachFilter(
             roleInfo, attendanceCurrentCoach
         );
+
+        // Discard a saved branch that's outside the coach's coach_branches
+        // assignments — the dropdown defaults will pick a valid one.
+        const allowedBranches = window.attendanceRoleLock.coachAllowedBranchNames(
+            roleInfo, window.coaches
+        );
+        if (Array.isArray(allowedBranches) && attendanceCurrentBranch
+            && !allowedBranches.includes(attendanceCurrentBranch)) {
+            attendanceCurrentBranch = null;
+        }
     }
 
     // Populate branch dropdown (both desktop and mobile)
@@ -5116,7 +5126,17 @@ function populateAttendanceBranchDropdown() {
     if (!select) return;
 
     // Get unique branches from students
-    const uniqueBranches = [...new Set(window.students.map(s => s.branch))].filter(Boolean);
+    let uniqueBranches = [...new Set(window.students.map(s => s.branch))].filter(Boolean);
+
+    // Coach lock: restrict the dropdown to branches the coach is assigned to
+    // in coach_branches (migration 019). Prevents auto-jumping into — or even
+    // selecting — a branch outside the coach's scope.
+    const allowedBranches = window.attendanceRoleLock
+        ? window.attendanceRoleLock.coachAllowedBranchNames(attendanceRoleInfo, window.coaches)
+        : null;
+    if (Array.isArray(allowedBranches)) {
+        uniqueBranches = uniqueBranches.filter(b => allowedBranches.includes(b));
+    }
 
     select.innerHTML = `
         <option value="">${t('admin.attendance.selectBranch')}</option>
@@ -5127,10 +5147,17 @@ function populateAttendanceBranchDropdown() {
         `).join('')}
     `;
 
-    // If no branch selected and we have branches, select the first one
-    if (!attendanceCurrentBranch && uniqueBranches.length > 0) {
-        attendanceCurrentBranch = uniqueBranches[0];
-        select.value = attendanceCurrentBranch;
+    // Pick a default branch, respecting the coach lock (no auto-jump out of scope).
+    const resolved = window.attendanceRoleLock
+        ? window.attendanceRoleLock.resolveBranchSelection(
+            attendanceRoleInfo, allowedBranches, attendanceCurrentBranch, uniqueBranches)
+        : (attendanceCurrentBranch || uniqueBranches[0] || null);
+
+    if (resolved !== attendanceCurrentBranch) {
+        attendanceCurrentBranch = resolved;
+    }
+    if (resolved) {
+        select.value = resolved;
     }
 }
 
@@ -5351,7 +5378,20 @@ function populateAttendanceScheduleDropdown() {
 // Handle branch filter change
 function onAttendanceBranchChange() {
     const select = document.getElementById('attendanceBranchFilter');
-    attendanceCurrentBranch = select.value;
+    const requested = select.value;
+
+    // Coach lock: only accept branches the coach is assigned to. The dropdown
+    // is already filtered, but guard programmatic / stale selections too.
+    if (window.attendanceRoleLock) {
+        const allowedBranches = window.attendanceRoleLock.coachAllowedBranchNames(
+            attendanceRoleInfo, window.coaches
+        );
+        if (Array.isArray(allowedBranches) && requested && !allowedBranches.includes(requested)) {
+            select.value = attendanceCurrentBranch || '';
+            return;
+        }
+    }
+    attendanceCurrentBranch = requested;
 
     // Reset coach filter to 'all' for admins; coaches stay pinned to their id.
     attendanceCurrentCoach = window.attendanceRoleLock
@@ -5495,17 +5535,28 @@ async function navigateToGlobalStudent(studentId) {
 
     clearGlobalSearch();
 
-    // Set branch
-    const branchSelect = document.getElementById('attendanceBranchFilter');
-    if (branchSelect && student.branch) {
-        attendanceCurrentBranch = student.branch;
-        branchSelect.value = student.branch;
-    }
-
     // Resolve role (cached) so the lock applies to deep-link navigation too.
     await loadAttendanceRoleInfo();
     const coachLocked = window.attendanceRoleLock &&
         window.attendanceRoleLock.isCoachLocked(attendanceRoleInfo);
+
+    // Set branch — but for coaches, do not auto-jump to a branch they aren't
+    // assigned to in coach_branches.
+    const branchSelect = document.getElementById('attendanceBranchFilter');
+    if (branchSelect && student.branch) {
+        let canSwitchBranch = true;
+        if (coachLocked) {
+            const allowedBranches = window.attendanceRoleLock.coachAllowedBranchNames(
+                attendanceRoleInfo, window.coaches
+            );
+            canSwitchBranch = Array.isArray(allowedBranches)
+                && allowedBranches.includes(student.branch);
+        }
+        if (canSwitchBranch) {
+            attendanceCurrentBranch = student.branch;
+            branchSelect.value = student.branch;
+        }
+    }
 
     // Populate coach dropdown for this branch
     populateAttendanceCoachDropdown();
@@ -5587,7 +5638,20 @@ function onMobileAttendanceBranchChange() {
     const mobileSelect = document.getElementById('mobileBranchFilter');
     const desktopSelect = document.getElementById('attendanceBranchFilter');
 
-    attendanceCurrentBranch = mobileSelect.value;
+    const requested = mobileSelect.value;
+
+    // Coach lock: reject branches outside coach_branches scope.
+    if (window.attendanceRoleLock) {
+        const allowedBranches = window.attendanceRoleLock.coachAllowedBranchNames(
+            attendanceRoleInfo, window.coaches
+        );
+        if (Array.isArray(allowedBranches) && requested && !allowedBranches.includes(requested)) {
+            mobileSelect.value = attendanceCurrentBranch || '';
+            return;
+        }
+    }
+
+    attendanceCurrentBranch = requested;
     if (desktopSelect) desktopSelect.value = mobileSelect.value;
 
     // Reset coach filter to 'all' for admins; coaches stay pinned to their id.
@@ -5689,7 +5753,15 @@ function populateMobileBranchFilter() {
     if (!select) return;
 
     // Get unique branches from students (same as desktop)
-    const uniqueBranches = [...new Set(window.students.map(s => s.branch))].filter(Boolean);
+    let uniqueBranches = [...new Set(window.students.map(s => s.branch))].filter(Boolean);
+
+    // Coach lock: restrict to coach_branches assignments (parity with desktop).
+    const allowedBranches = window.attendanceRoleLock
+        ? window.attendanceRoleLock.coachAllowedBranchNames(attendanceRoleInfo, window.coaches)
+        : null;
+    if (Array.isArray(allowedBranches)) {
+        uniqueBranches = uniqueBranches.filter(b => allowedBranches.includes(b));
+    }
 
     select.innerHTML = `
         <option value="">${t('admin.attendance.selectBranch')}</option>

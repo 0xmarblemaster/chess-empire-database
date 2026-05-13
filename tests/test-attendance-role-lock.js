@@ -11,6 +11,9 @@
  *   - resolveCoachFilter: unlocked preserves caller's value
  *   - coachSelectorVisibility: locked → hidden+disabled; unlocked → visible
  *   - coachOnBranchChange: locked keeps coachId; unlocked resets to 'all'
+ *   - coachAllowedBranchNames: returns coach's branchNames (from coach_branches)
+ *     when locked, null when unlocked
+ *   - resolveBranchSelection: locked stays in scope; unlocked picks any
  *   - Guards: null roleInfo, missing fields, admin without coachId
  */
 
@@ -40,6 +43,8 @@ assert(typeof lock.isCoachLocked === 'function', 'isCoachLocked exported');
 assert(typeof lock.resolveCoachFilter === 'function', 'resolveCoachFilter exported');
 assert(typeof lock.coachSelectorVisibility === 'function', 'coachSelectorVisibility exported');
 assert(typeof lock.coachOnBranchChange === 'function', 'coachOnBranchChange exported');
+assert(typeof lock.coachAllowedBranchNames === 'function', 'coachAllowedBranchNames exported');
+assert(typeof lock.resolveBranchSelection === 'function', 'resolveBranchSelection exported');
 
 console.log('\n=== isCoachLocked =====================================================\n');
 assertEqual(lock.isCoachLocked(COACH), true, 'coach with id → locked');
@@ -129,6 +134,103 @@ console.log('\n=== end-to-end behavioral scenarios =============================
     attendanceCurrentCoach = lock.coachOnBranchChange(role);
     assertEqual(attendanceCurrentCoach, 'all',
         'admin: branch change resets to "all" (unchanged from prior behavior)');
+}
+
+console.log('\n=== coachAllowedBranchNames ===========================================\n');
+// Simulates the shape from supabase-data.js getCoaches(): each coach has
+// branchNames (the array sourced from coach_branches).
+const COACHES = [
+    { id: 'coach-uuid-1', branchNames: ['Nish', 'Halyk Arena'] },
+    { id: 'coach-uuid-2', branchNames: ['Debut'] },
+    { id: 'coach-uuid-3', branchNames: [] }, // assigned to no branches
+];
+
+assertEqual(lock.coachAllowedBranchNames(COACH, COACHES), ['Nish', 'Halyk Arena'],
+    'locked: returns the coach\'s branchNames from coach_branches');
+assertEqual(lock.coachAllowedBranchNames({ isAdmin: false, coachId: 'coach-uuid-3' }, COACHES), [],
+    'locked: coach with zero branch assignments → empty array (not null)');
+assertEqual(lock.coachAllowedBranchNames({ isAdmin: false, coachId: 'missing' }, COACHES), [],
+    'locked: missing coach record → empty array (lock still applies, but no scope)');
+assertEqual(lock.coachAllowedBranchNames(COACH, []), [],
+    'locked: empty coaches list → empty array');
+assertEqual(lock.coachAllowedBranchNames(COACH, null), [],
+    'locked: null coaches list → empty array (defensive)');
+assertEqual(lock.coachAllowedBranchNames(ADMIN, COACHES), null,
+    'admin: returns null (no restriction)');
+assertEqual(lock.coachAllowedBranchNames(ANON, COACHES), null,
+    'anon: returns null (no restriction)');
+assertEqual(lock.coachAllowedBranchNames(null, COACHES), null,
+    'null roleInfo: returns null');
+
+console.log('\n=== resolveBranchSelection ============================================\n');
+// Locked path — must stay inside coach's branch scope.
+const ALLOWED = ['Nish', 'Halyk Arena'];
+const AVAILABLE = ['Debut', 'Nish', 'Halyk Arena']; // dropdown options before filtering
+
+assertEqual(lock.resolveBranchSelection(COACH, ALLOWED, 'Nish', AVAILABLE), 'Nish',
+    'locked: currentBranch in allowed → keep it');
+assertEqual(lock.resolveBranchSelection(COACH, ALLOWED, 'Halyk Arena', AVAILABLE), 'Halyk Arena',
+    'locked: another allowed currentBranch → keep it');
+assertEqual(lock.resolveBranchSelection(COACH, ALLOWED, 'Debut', AVAILABLE), 'Nish',
+    'locked: currentBranch NOT in allowed → DO NOT keep it; fall back to first allowed-and-available');
+assertEqual(lock.resolveBranchSelection(COACH, ALLOWED, null, AVAILABLE), 'Nish',
+    'locked: no currentBranch → first allowed-and-available branch');
+assertEqual(lock.resolveBranchSelection(COACH, ALLOWED, '', AVAILABLE), 'Nish',
+    'locked: empty-string currentBranch → first allowed-and-available branch');
+assertEqual(lock.resolveBranchSelection(COACH, [], 'Nish', AVAILABLE), null,
+    'locked: coach has zero allowed branches → null (do not auto-jump anywhere)');
+assertEqual(lock.resolveBranchSelection(COACH, ['Other'], null, AVAILABLE), null,
+    'locked: coach\'s allowed branches have no overlap with available → null (no auto-jump)');
+assertEqual(lock.resolveBranchSelection(COACH, ALLOWED, null, []), null,
+    'locked: no available branches → null');
+
+// Unlocked path — preserve existing UX exactly.
+assertEqual(lock.resolveBranchSelection(ADMIN, null, 'Debut', AVAILABLE), 'Debut',
+    'admin: currentBranch preserved (no restriction)');
+assertEqual(lock.resolveBranchSelection(ADMIN, null, null, AVAILABLE), 'Debut',
+    'admin: no current → first available');
+assertEqual(lock.resolveBranchSelection(ADMIN, null, null, []), null,
+    'admin: no available → null');
+assertEqual(lock.resolveBranchSelection(ANON, null, 'Nish', AVAILABLE), 'Nish',
+    'anon: preserves currentBranch');
+assertEqual(lock.resolveBranchSelection(null, null, null, AVAILABLE), 'Debut',
+    'null roleInfo: behaves like unlocked, falls back to first available');
+
+console.log('\n=== end-to-end: branch-change scenarios honor coach_branches ==========\n');
+// Scenario: coach has stored 'Debut' in localStorage (e.g. from a prior admin
+// session or because they were reassigned away from it). On load, the helper
+// should drop the stale branch and pick a current allowed one.
+{
+    const role = COACH;
+    const allowed = lock.coachAllowedBranchNames(role, COACHES);
+    let attendanceCurrentBranch = 'Debut'; // simulate localStorage
+    // Pretend the available dropdown after filtering.
+    const filteredAvailable = AVAILABLE.filter(b => !allowed || allowed.includes(b));
+    attendanceCurrentBranch = lock.resolveBranchSelection(
+        role, allowed, attendanceCurrentBranch, filteredAvailable
+    );
+    assertEqual(attendanceCurrentBranch, 'Nish',
+        'stale branch from localStorage that the coach is no longer in → first valid branch');
+}
+
+// Scenario: navigateToGlobalStudent for a student in 'Debut' when the coach
+// is only in 'Nish' / 'Halyk Arena'. The helper should refuse the jump.
+{
+    const role = COACH;
+    const allowed = lock.coachAllowedBranchNames(role, COACHES);
+    const studentBranch = 'Debut';
+    const allow = Array.isArray(allowed) && allowed.includes(studentBranch);
+    assertEqual(allow, false,
+        'navigate to out-of-scope student branch: helper reports not allowed');
+}
+
+// Scenario: admin / unlocked — branch change behaves exactly as before.
+{
+    const role = ADMIN;
+    const allowed = lock.coachAllowedBranchNames(role, COACHES);
+    assertEqual(allowed, null, 'admin: allowed is null (no restriction)');
+    assertEqual(lock.resolveBranchSelection(role, allowed, 'Debut', AVAILABLE), 'Debut',
+        'admin: can land on any branch');
 }
 
 console.log(`\n--- ${passed} passed, ${failed} failed ---\n`);

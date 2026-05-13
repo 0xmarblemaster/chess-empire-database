@@ -54,11 +54,53 @@
         return 'all';
     }
 
+    /**
+     * Branch names the locked coach is assigned to (from coach_branches).
+     *   - Locked → array of branch names from the matching coach record
+     *     (empty array if record / assignments are missing).
+     *   - Unlocked → null (caller should treat this as "no restriction").
+     *
+     * @param {object} roleInfo
+     * @param {Array<{id: string, branchNames?: string[]}>} coaches
+     * @returns {string[]|null}
+     */
+    function coachAllowedBranchNames(roleInfo, coaches) {
+        if (!isCoachLocked(roleInfo)) return null;
+        const list = Array.isArray(coaches) ? coaches : [];
+        const coach = list.find(c => c && c.id === roleInfo.coachId);
+        if (!coach || !Array.isArray(coach.branchNames)) return [];
+        return coach.branchNames.slice();
+    }
+
+    /**
+     * Pick the branch to land on, honoring the coach lock.
+     *   - Locked + currentBranch in allowed → currentBranch (stable).
+     *   - Locked + currentBranch invalid (or null) → first `available` that's
+     *     also in allowed; null if no overlap (don't auto-jump elsewhere).
+     *   - Unlocked → currentBranch if truthy, else first of available, else null.
+     *
+     * `allowedBranchNames` is the result of `coachAllowedBranchNames` — null
+     * means "no restriction" (admin / anon).
+     */
+    function resolveBranchSelection(roleInfo, allowedBranchNames, currentBranch, available) {
+        const avail = Array.isArray(available) ? available : [];
+        if (isCoachLocked(roleInfo)) {
+            const allowed = Array.isArray(allowedBranchNames) ? allowedBranchNames : [];
+            if (currentBranch && allowed.includes(currentBranch)) return currentBranch;
+            const fallback = avail.find(b => allowed.includes(b));
+            return fallback || null;
+        }
+        if (currentBranch) return currentBranch;
+        return avail[0] || null;
+    }
+
     const api = {
         isCoachLocked,
         resolveCoachFilter,
         coachSelectorVisibility,
         coachOnBranchChange,
+        coachAllowedBranchNames,
+        resolveBranchSelection,
     };
 
     if (typeof window !== 'undefined') {
