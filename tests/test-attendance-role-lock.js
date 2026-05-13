@@ -233,5 +233,57 @@ console.log('\n=== end-to-end: branch-change scenarios honor coach_branches ====
         'admin: can land on any branch');
 }
 
+console.log('\n=== admin keeps current behavior: full visibility + working dropdown ==\n');
+// Ralph PRD attendance-fix-1 item: "Admins keep current behavior: full
+// visibility and the working dropdown." This block ties the admin assertions
+// together as a single integrated scenario so the requirement is traceable to
+// the policy module. None of the lock policies may narrow the admin's view.
+{
+    const role = ADMIN;
+
+    // Gate — the lock is the single switch every consumer checks first.
+    assertEqual(lock.isCoachLocked(role), false,
+        'admin: lock is off (every downstream check short-circuits to existing UX)');
+
+    // Full visibility — branch filter is null, so admin.js / admin-v2.js
+    // skip the `if (Array.isArray(allowedBranches))` branch and render every
+    // branch. The dropdown reflects window.students, unfiltered.
+    const allowed = lock.coachAllowedBranchNames(role, COACHES);
+    assertEqual(allowed, null,
+        'admin: coachAllowedBranchNames is null (consumers treat as "no restriction")');
+    const filteredAvailable = AVAILABLE.filter(b => !allowed || allowed.includes(b));
+    assertEqual(filteredAvailable, AVAILABLE,
+        'admin: branch dropdown contains every available branch (full visibility)');
+
+    // Working dropdown — coach selector is visible and enabled. The signed-in
+    // admin sees the full coach list with the "All" option intact.
+    assertEqual(lock.coachSelectorVisibility(role), { hidden: false, disabled: false },
+        'admin: coach selector is visible and enabled (working dropdown)');
+
+    // localStorage values for both coach and branch must survive init —
+    // resolveCoachFilter does not override admin saves, resolveBranchSelection
+    // keeps the admin's previous branch.
+    assertEqual(lock.resolveCoachFilter(role, 'all'), 'all',
+        'admin: saved "all" coach filter survives init');
+    assertEqual(lock.resolveCoachFilter(role, 'some-coach-id'), 'some-coach-id',
+        'admin: saved specific coach id survives init');
+    assertEqual(lock.resolveBranchSelection(role, allowed, 'Debut', AVAILABLE), 'Debut',
+        'admin: saved branch "Debut" survives init (no coach-scope rewrite)');
+
+    // Existing UX preserved — branch change resets the coach filter to "all".
+    // This is the original behavior; the lock must not change it for admins.
+    assertEqual(lock.coachOnBranchChange(role), 'all',
+        'admin: branch change resets coach filter to "all" (unchanged from prior behavior)');
+
+    // Coverage check: nothing in this scenario should accidentally exercise the
+    // locked branch. If any policy ever flips on for an admin, this scenario
+    // shouts before the UI does.
+    assert(allowed === null
+        && !lock.isCoachLocked(role)
+        && lock.coachSelectorVisibility(role).hidden === false
+        && lock.coachOnBranchChange(role) === 'all',
+        'admin: every policy returns its unlocked default — no admin path is ever scoped');
+}
+
 console.log(`\n--- ${passed} passed, ${failed} failed ---\n`);
 if (failed > 0) process.exit(1);
