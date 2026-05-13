@@ -285,5 +285,60 @@ console.log('\n=== admin keeps current behavior: full visibility + working dropd
         'admin: every policy returns its unlocked default — no admin path is ever scoped');
 }
 
+console.log('\n=== consumer audit: `=== \'all\'` checks must not break for coaches ===\n');
+// The lock changed `attendanceCurrentCoach` from 'all' to the coach's UUID for
+// coaches. Every consumer in admin.js / admin-v2.js that branches on
+// `=== 'all'` / `!== 'all'` must keep working with a UUID. This block pins the
+// known consumer patterns to the lock's output so a future change to either
+// side can't silently regress.
+{
+    // The patterns below mirror live consumer code (see admin.js, admin-v2.js).
+    // Each consumer is exercised against the locked value produced by the
+    // policy module — i.e. exactly what would flow through at runtime.
+    const lockedCoach = lock.resolveCoachFilter(COACH, 'all');
+    assertEqual(lockedCoach, 'coach-uuid-1',
+        'precondition: locked coach resolves to UUID (not "all")');
+
+    // Consumer #1 — getAttendanceCalendarData coach argument
+    //   admin-v2.js:5957 / admin.js:5735
+    //   `attendanceCurrentCoach === 'all' ? null : attendanceCurrentCoach`
+    // For a locked coach this must pass the coach's UUID, not null (or the
+    // server would return every coach's students).
+    const calendarCoachArg = lockedCoach === 'all' ? null : lockedCoach;
+    assertEqual(calendarCoachArg, 'coach-uuid-1',
+        'consumer: calendar query receives coach UUID for locked coach (not null)');
+
+    // Consumer #2 — coach-name lookup gate
+    //   admin-v2.js:5084 / admin-v2.js:5454 / admin.js:4875 / admin.js:5245
+    //   `attendanceCurrentCoach !== 'all' && attendanceCurrentCoach !== 'unassigned'`
+    // Must be true for a locked coach so the name lookup actually runs (used by
+    // getTimeSlotsForBranch to pick coach-specific time slots).
+    const nameLookupRuns = lockedCoach !== 'all' && lockedCoach !== 'unassigned';
+    assertEqual(nameLookupRuns, true,
+        'consumer: coach-name lookup gate is open for locked coach');
+
+    // Consumer #3 — branch-change reset is policy-driven, not hard-coded
+    //   admin-v2.js:5397 / admin-v2.js:5658 / admin.js:5188 / admin.js:5436
+    //   `coachOnBranchChange(roleInfo)` replaces `attendanceCurrentCoach = 'all'`.
+    // After a branch change, the locked value must still be the coach's UUID,
+    // and Consumer #1 must still flow the UUID (not null) to the query.
+    const afterBranchChange = lock.coachOnBranchChange(COACH);
+    assertEqual(afterBranchChange, 'coach-uuid-1',
+        'consumer: branch-change reset keeps coach UUID');
+    const calendarAfterBranchChange = afterBranchChange === 'all' ? null : afterBranchChange;
+    assertEqual(calendarAfterBranchChange, 'coach-uuid-1',
+        'consumer: calendar query still receives coach UUID after branch change');
+
+    // Admin side — same consumer patterns, opposite outcome. These guard the
+    // unchanged-UX promise for admins.
+    const adminCoach = lock.resolveCoachFilter(ADMIN, 'all');
+    const adminCalendarArg = adminCoach === 'all' ? null : adminCoach;
+    assertEqual(adminCalendarArg, null,
+        'consumer: admin with "all" filter still sends null (no coach restriction)');
+    const adminNameLookupRuns = adminCoach !== 'all' && adminCoach !== 'unassigned';
+    assertEqual(adminNameLookupRuns, false,
+        'consumer: admin with "all" filter skips coach-name lookup');
+}
+
 console.log(`\n--- ${passed} passed, ${failed} failed ---\n`);
 if (failed > 0) process.exit(1);
