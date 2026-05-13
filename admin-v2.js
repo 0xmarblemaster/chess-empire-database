@@ -10459,7 +10459,7 @@ async function handleTournamentFiles(files) {
     tournamentImportState = [];
     for (const file of files) {
         try {
-            const text = await file.text();
+            const text = await window.tournamentsData.extractTextFromTournamentFile(file);
             const parsed = window.tournamentsData.parseSwissManagerCSV(text, file.name);
             const matchResult = await window.tournamentsData.matchParticipants(
                 parsed.participants,

@@ -141,6 +141,34 @@
         return line.trim().split(/\s{2,}/).map(s => s.trim());
     }
 
+    // ----- file extraction ------------------------------------------------
+
+    // Read a tournament file (.csv / .txt / .xlsx / .xls) into the plain-text
+    // form parseSwissManagerCSV expects. For .xlsx/.xls we convert via SheetJS
+    // to a tab-separated string so splitRow() takes its tab branch and the
+    // header lines (Дата, Организатор, Лига, …) stay on their own rows.
+    //
+    // The `file` param only needs `.name` and `.arrayBuffer()` (Node tests can
+    // pass a plain object). `xlsxLib` is injectable for tests; in the browser
+    // we fall back to the global `XLSX` loaded by SheetJS's CDN script.
+    async function extractTextFromTournamentFile(file, xlsxLib) {
+        const ext = (file.name.split('.').pop() || '').toLowerCase();
+        if (ext === 'xlsx' || ext === 'xls') {
+            const XLSXRef = xlsxLib || (typeof XLSX !== 'undefined' ? XLSX : null);
+            if (!XLSXRef) {
+                throw new Error('SheetJS (XLSX) not loaded — cannot read Excel file');
+            }
+            const buf = await file.arrayBuffer();
+            const wb = XLSXRef.read(buf, { type: 'array' });
+            const sheetName = wb.SheetNames[0];
+            const ws = wb.Sheets[sheetName];
+            // FS:'\t' so splitRow() takes the tab branch in parseSwissManagerCSV.
+            // blankrows:false drops empty rows that would prematurely terminate the participant loop.
+            return XLSXRef.utils.sheet_to_csv(ws, { FS: '\t', blankrows: false });
+        }
+        return await file.text();
+    }
+
     // ----- parser ---------------------------------------------------------
 
     function parseSwissManagerCSV(fileText, filename) {
@@ -814,6 +842,7 @@
     // ----- export ---------------------------------------------------------
 
     const tournamentsData = {
+        extractTextFromTournamentFile,
         parseSwissManagerCSV,
         matchParticipants,
         importTournament,
