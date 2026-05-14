@@ -94,6 +94,84 @@
         return avail[0] || null;
     }
 
+    /**
+     * Coaches assigned to a specific branch (by branch name, from coach_branches).
+     *   - Returns an array of {id, name} for every coach whose branchNames
+     *     contains `branchName`.
+     *   - Empty array if no match, or if inputs are missing/malformed.
+     *
+     * @param {Array<{id: string, firstName?: string, lastName?: string, fullName?: string, branchNames?: string[]}>} coaches
+     * @param {string} branchName
+     * @returns {Array<{id: string, name: string}>}
+     */
+    function coachesAtBranch(coaches, branchName) {
+        if (!branchName) return [];
+        const list = Array.isArray(coaches) ? coaches : [];
+        return list
+            .filter(c => c && Array.isArray(c.branchNames) && c.branchNames.includes(branchName))
+            .map(c => ({
+                id: c.id,
+                name: c.fullName || `${c.firstName || ''} ${c.lastName || ''}`.trim(),
+            }));
+    }
+
+    /**
+     * True when the user is a locked coach AND the selected branch has at least
+     * two coaches assigned (i.e. the coach is allowed to switch among peers at
+     * this branch). Admins and unlocked users return false.
+     */
+    function isMultiCoachBranchForCoach(roleInfo, coaches, branchName) {
+        if (!isCoachLocked(roleInfo)) return false;
+        return coachesAtBranch(coaches, branchName).length >= 2;
+    }
+
+    /**
+     * Branch-aware selector visibility for the attendance coach dropdown.
+     *   - Admin / unlocked → fully visible, allowedCoachIds = null (no restriction).
+     *   - Locked coach at multi-coach branch → visible + enabled, allowedCoachIds
+     *     is every coach id at that branch (so the coach can switch among peers).
+     *   - Locked coach at single-coach branch → hidden + disabled, allowedCoachIds
+     *     = [self] (the original lock — only the signed-in coach is allowed).
+     *
+     * @returns {{hidden: boolean, disabled: boolean, allowedCoachIds: string[]|null}}
+     */
+    function coachSelectorVisibilityForBranch(roleInfo, coaches, branchName) {
+        if (!isCoachLocked(roleInfo)) {
+            return { hidden: false, disabled: false, allowedCoachIds: null };
+        }
+        const branchCoaches = coachesAtBranch(coaches, branchName);
+        if (branchCoaches.length >= 2) {
+            return {
+                hidden: false,
+                disabled: false,
+                allowedCoachIds: branchCoaches.map(c => c.id),
+            };
+        }
+        return { hidden: true, disabled: true, allowedCoachIds: [roleInfo.coachId] };
+    }
+
+    /**
+     * Pick the coach-filter value, honoring the branch-scoped lock.
+     *   - Admin / unlocked → caller's existing value (or 'all').
+     *   - Locked coach at single-coach branch → coach's own id.
+     *   - Locked coach at multi-coach branch:
+     *       * keep `currentValue` if it's a coach id at this branch (so a
+     *         previously-selected peer survives a branch hop);
+     *       * otherwise fall back to the coach's own id.
+     */
+    function resolveCoachFilterForBranch(roleInfo, coaches, branchName, currentValue) {
+        if (!isCoachLocked(roleInfo)) {
+            return currentValue == null ? 'all' : currentValue;
+        }
+        const branchCoaches = coachesAtBranch(coaches, branchName);
+        if (branchCoaches.length >= 2) {
+            const allowed = branchCoaches.map(c => c.id);
+            if (currentValue && allowed.includes(currentValue)) return currentValue;
+            return roleInfo.coachId;
+        }
+        return roleInfo.coachId;
+    }
+
     const api = {
         isCoachLocked,
         resolveCoachFilter,
@@ -101,6 +179,10 @@
         coachOnBranchChange,
         coachAllowedBranchNames,
         resolveBranchSelection,
+        coachesAtBranch,
+        isMultiCoachBranchForCoach,
+        coachSelectorVisibilityForBranch,
+        resolveCoachFilterForBranch,
     };
 
     if (typeof window !== 'undefined') {

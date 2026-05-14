@@ -340,5 +340,239 @@ console.log('\n=== consumer audit: `=== \'all\'` checks must not break for coach
         'consumer: admin with "all" filter skips coach-name lookup');
 }
 
+console.log('\n=== coachesAtBranch ===================================================\n');
+// Branch-scoped coach roster, sourced from coach_branches (coach.branchNames).
+// Each coach appears once per branchName they're assigned to.
+const MULTI_COACHES = [
+    { id: 'c1', firstName: 'Alice', lastName: 'A', fullName: 'Alice A',
+      branchNames: ['Debut', 'Halyk Arena'] },
+    { id: 'c2', firstName: 'Bob', lastName: 'B', fullName: 'Bob B',
+      branchNames: ['Debut'] },
+    { id: 'c3', firstName: 'Cara', lastName: 'C', fullName: 'Cara C',
+      branchNames: ['Halyk Arena'] },
+    { id: 'c4', firstName: 'Dan', lastName: 'D', fullName: 'Dan D',
+      branchNames: ['Nish'] }, // single-coach branch
+    { id: 'c5', firstName: 'Eve', lastName: 'E', fullName: 'Eve E',
+      branchNames: [] }, // unassigned
+];
+
+assertEqual(lock.coachesAtBranch(MULTI_COACHES, 'Debut'),
+    [{ id: 'c1', name: 'Alice A' }, { id: 'c2', name: 'Bob B' }],
+    'Debut has Alice + Bob (two coaches)');
+assertEqual(lock.coachesAtBranch(MULTI_COACHES, 'Halyk Arena'),
+    [{ id: 'c1', name: 'Alice A' }, { id: 'c3', name: 'Cara C' }],
+    'Halyk Arena has Alice + Cara (two coaches)');
+assertEqual(lock.coachesAtBranch(MULTI_COACHES, 'Nish'),
+    [{ id: 'c4', name: 'Dan D' }],
+    'Nish has only Dan (single-coach branch)');
+assertEqual(lock.coachesAtBranch(MULTI_COACHES, 'Ghost'), [],
+    'unknown branch → empty array');
+assertEqual(lock.coachesAtBranch(MULTI_COACHES, ''), [],
+    'empty branch → empty array');
+assertEqual(lock.coachesAtBranch(MULTI_COACHES, null), [],
+    'null branch → empty array');
+assertEqual(lock.coachesAtBranch(null, 'Debut'), [],
+    'null coaches → empty array');
+assertEqual(lock.coachesAtBranch([], 'Debut'), [],
+    'empty coaches → empty array');
+// Coach with falsy fullName falls back to "first last"; missing parts trim cleanly.
+assertEqual(
+    lock.coachesAtBranch(
+        [{ id: 'c9', firstName: 'Only', lastName: 'Name', branchNames: ['X'] }],
+        'X'
+    ),
+    [{ id: 'c9', name: 'Only Name' }],
+    'fullName missing → derived from firstName + lastName');
+
+console.log('\n=== isMultiCoachBranchForCoach =======================================\n');
+const COACH_C1 = { isAdmin: false, coachId: 'c1', email: 'alice@chessempire.kz' };
+const COACH_C4 = { isAdmin: false, coachId: 'c4', email: 'dan@chessempire.kz' };
+
+assertEqual(lock.isMultiCoachBranchForCoach(COACH_C1, MULTI_COACHES, 'Debut'), true,
+    'coach at Debut (Alice + Bob) → multi-coach branch');
+assertEqual(lock.isMultiCoachBranchForCoach(COACH_C1, MULTI_COACHES, 'Halyk Arena'), true,
+    'coach at Halyk Arena (Alice + Cara) → multi-coach branch');
+assertEqual(lock.isMultiCoachBranchForCoach(COACH_C4, MULTI_COACHES, 'Nish'), false,
+    'coach at Nish (Dan only) → NOT a multi-coach branch');
+assertEqual(lock.isMultiCoachBranchForCoach(ADMIN, MULTI_COACHES, 'Debut'), false,
+    'admin: never multi-coach scoped (uses full admin UI)');
+assertEqual(lock.isMultiCoachBranchForCoach(ANON, MULTI_COACHES, 'Debut'), false,
+    'anon: never multi-coach scoped');
+assertEqual(lock.isMultiCoachBranchForCoach(null, MULTI_COACHES, 'Debut'), false,
+    'null roleInfo: never multi-coach scoped');
+assertEqual(lock.isMultiCoachBranchForCoach(COACH_C1, MULTI_COACHES, 'Ghost'), false,
+    'unknown branch: not multi-coach (no coaches assigned)');
+
+console.log('\n=== coachSelectorVisibilityForBranch =================================\n');
+// Locked coach at multi-coach branch → visible + enabled, allowedCoachIds set.
+assertEqual(
+    lock.coachSelectorVisibilityForBranch(COACH_C1, MULTI_COACHES, 'Debut'),
+    { hidden: false, disabled: false, allowedCoachIds: ['c1', 'c2'] },
+    'locked coach at multi-coach branch (Debut) → visible+enabled, allowed=[c1,c2]');
+assertEqual(
+    lock.coachSelectorVisibilityForBranch(COACH_C1, MULTI_COACHES, 'Halyk Arena'),
+    { hidden: false, disabled: false, allowedCoachIds: ['c1', 'c3'] },
+    'locked coach at multi-coach branch (Halyk Arena) → visible+enabled, allowed=[c1,c3]');
+// Locked coach at single-coach branch → original behavior (hidden + pinned).
+assertEqual(
+    lock.coachSelectorVisibilityForBranch(COACH_C4, MULTI_COACHES, 'Nish'),
+    { hidden: true, disabled: true, allowedCoachIds: ['c4'] },
+    'locked coach at single-coach branch (Nish) → hidden+disabled, allowed=[self]');
+// Admin / unlocked → no restriction.
+assertEqual(
+    lock.coachSelectorVisibilityForBranch(ADMIN, MULTI_COACHES, 'Debut'),
+    { hidden: false, disabled: false, allowedCoachIds: null },
+    'admin: visible, no allowed-id restriction (null)');
+assertEqual(
+    lock.coachSelectorVisibilityForBranch(ADMIN, MULTI_COACHES, 'Nish'),
+    { hidden: false, disabled: false, allowedCoachIds: null },
+    'admin at single-coach branch: still no restriction (null)');
+assertEqual(
+    lock.coachSelectorVisibilityForBranch(ANON, MULTI_COACHES, 'Debut'),
+    { hidden: false, disabled: false, allowedCoachIds: null },
+    'anon: no restriction');
+assertEqual(
+    lock.coachSelectorVisibilityForBranch(null, MULTI_COACHES, 'Debut'),
+    { hidden: false, disabled: false, allowedCoachIds: null },
+    'null roleInfo: no restriction');
+
+console.log('\n=== resolveCoachFilterForBranch ======================================\n');
+// Locked coach at single-coach branch → always pin to self.
+assertEqual(
+    lock.resolveCoachFilterForBranch(COACH_C4, MULTI_COACHES, 'Nish', 'c4'),
+    'c4',
+    'locked coach at single-coach branch → self');
+assertEqual(
+    lock.resolveCoachFilterForBranch(COACH_C4, MULTI_COACHES, 'Nish', 'someone-else'),
+    'c4',
+    'locked coach at single-coach branch: stray value → self');
+assertEqual(
+    lock.resolveCoachFilterForBranch(COACH_C4, MULTI_COACHES, 'Nish', null),
+    'c4',
+    'locked coach at single-coach branch: null current → self');
+
+// Locked coach at multi-coach branch — default = self; previous peer preserved.
+assertEqual(
+    lock.resolveCoachFilterForBranch(COACH_C1, MULTI_COACHES, 'Debut', null),
+    'c1',
+    'locked coach at multi-coach branch, null current → self');
+assertEqual(
+    lock.resolveCoachFilterForBranch(COACH_C1, MULTI_COACHES, 'Debut', 'c2'),
+    'c2',
+    'locked coach at multi-coach branch: previously selected peer (c2) at this branch → preserved');
+assertEqual(
+    lock.resolveCoachFilterForBranch(COACH_C1, MULTI_COACHES, 'Debut', 'c1'),
+    'c1',
+    'locked coach at multi-coach branch: previously self → self');
+// Branch hop where previous peer is NOT at the new branch.
+assertEqual(
+    lock.resolveCoachFilterForBranch(COACH_C1, MULTI_COACHES, 'Halyk Arena', 'c2'),
+    'c1',
+    'locked coach, branch hop: previous peer (c2) is NOT at new branch → fall back to self');
+assertEqual(
+    lock.resolveCoachFilterForBranch(COACH_C1, MULTI_COACHES, 'Halyk Arena', 'c3'),
+    'c3',
+    'locked coach, branch hop: previous peer (c3) IS at new branch → preserved');
+// Stale / bogus currentValue.
+assertEqual(
+    lock.resolveCoachFilterForBranch(COACH_C1, MULTI_COACHES, 'Debut', 'unassigned'),
+    'c1',
+    'locked coach at multi-coach branch: "unassigned" rejected → self');
+assertEqual(
+    lock.resolveCoachFilterForBranch(COACH_C1, MULTI_COACHES, 'Debut', 'all'),
+    'c1',
+    'locked coach at multi-coach branch: "all" rejected → self');
+
+// Admin / unlocked — caller's value preserved.
+assertEqual(
+    lock.resolveCoachFilterForBranch(ADMIN, MULTI_COACHES, 'Debut', 'all'),
+    'all',
+    'admin: preserves "all"');
+assertEqual(
+    lock.resolveCoachFilterForBranch(ADMIN, MULTI_COACHES, 'Debut', 'c1'),
+    'c1',
+    'admin: preserves chosen coach id');
+assertEqual(
+    lock.resolveCoachFilterForBranch(ADMIN, MULTI_COACHES, 'Debut', null),
+    'all',
+    'admin: null current → "all"');
+assertEqual(
+    lock.resolveCoachFilterForBranch(ANON, MULTI_COACHES, 'Debut', null),
+    'all',
+    'anon: null current → "all"');
+assertEqual(
+    lock.resolveCoachFilterForBranch(null, MULTI_COACHES, 'Debut', 'all'),
+    'all',
+    'null roleInfo: preserves "all"');
+
+console.log('\n=== end-to-end: multi-coach branch unlocks dropdown ==================\n');
+// Acceptance scenarios from the task spec.
+{
+    // 1. Coach at single-coach branch → selector hidden, pinned to self.
+    const vis = lock.coachSelectorVisibilityForBranch(COACH_C4, MULTI_COACHES, 'Nish');
+    assertEqual(vis.hidden, true, 'single-coach branch: hidden=true (original lock preserved)');
+    assertEqual(vis.disabled, true, 'single-coach branch: disabled=true');
+    const val = lock.resolveCoachFilterForBranch(COACH_C4, MULTI_COACHES, 'Nish', 'c4');
+    assertEqual(val, 'c4', 'single-coach branch: value pinned to self');
+}
+{
+    // 2. Coach at multi-coach branch → selector visible+enabled, allowedCoachIds
+    //    contains all coaches at that branch, default value = self.
+    const vis = lock.coachSelectorVisibilityForBranch(COACH_C1, MULTI_COACHES, 'Debut');
+    assertEqual(vis.hidden, false, 'multi-coach branch: hidden=false');
+    assertEqual(vis.disabled, false, 'multi-coach branch: disabled=false');
+    assertEqual(vis.allowedCoachIds, ['c1', 'c2'],
+        'multi-coach branch: allowedCoachIds = all coaches at branch');
+    const val = lock.resolveCoachFilterForBranch(COACH_C1, MULTI_COACHES, 'Debut', null);
+    assertEqual(val, 'c1', 'multi-coach branch: default value = self (signed-in coach)');
+}
+{
+    // 3. Branch hop: switching to a multi-coach branch where previously selected
+    //    coach is also present → selection preserved.
+    // Alice (c1) is at both Debut + Halyk Arena. She picked Cara (c3) at Halyk
+    // Arena, then hops back to Halyk Arena later — selection preserved.
+    const preserved = lock.resolveCoachFilterForBranch(
+        COACH_C1, MULTI_COACHES, 'Halyk Arena', 'c3'
+    );
+    assertEqual(preserved, 'c3',
+        'branch hop: previously-selected peer at new branch → preserved');
+}
+{
+    // 4. Branch hop where previously selected coach is NOT present → self.
+    // Alice picked Bob (c2) at Debut; she hops to Halyk Arena where Bob isn't.
+    const fallback = lock.resolveCoachFilterForBranch(
+        COACH_C1, MULTI_COACHES, 'Halyk Arena', 'c2'
+    );
+    assertEqual(fallback, 'c1',
+        'branch hop: previously-selected peer NOT at new branch → fall back to self');
+}
+{
+    // 5. Defense in depth: onAttendanceCoachChange must reject ids outside the
+    //    allowed set for the current branch. The policy module surfaces this via
+    //    coachSelectorVisibilityForBranch.allowedCoachIds — admin.js checks it.
+    const vis = lock.coachSelectorVisibilityForBranch(COACH_C1, MULTI_COACHES, 'Debut');
+    const incomingChange = 'c3'; // Cara — not at Debut
+    const allowed = Array.isArray(vis.allowedCoachIds)
+        && vis.allowedCoachIds.includes(incomingChange);
+    assertEqual(allowed, false,
+        'onAttendanceCoachChange: rejects coach id not in allowedCoachIds for current branch');
+    // And the valid case keeps working.
+    const validChange = 'c2';
+    const allowedValid = Array.isArray(vis.allowedCoachIds)
+        && vis.allowedCoachIds.includes(validChange);
+    assertEqual(allowedValid, true,
+        'onAttendanceCoachChange: accepts coach id in allowedCoachIds for current branch');
+}
+{
+    // 6. Admin is entirely unaffected by the new functions.
+    const vis = lock.coachSelectorVisibilityForBranch(ADMIN, MULTI_COACHES, 'Debut');
+    assertEqual(vis, { hidden: false, disabled: false, allowedCoachIds: null },
+        'admin: branch-aware visibility is fully open, no allowed-id restriction');
+    assertEqual(lock.resolveCoachFilterForBranch(ADMIN, MULTI_COACHES, 'Debut', 'all'), 'all',
+        'admin: branch-aware coach filter preserves "all" exactly');
+    assertEqual(lock.isMultiCoachBranchForCoach(ADMIN, MULTI_COACHES, 'Debut'), false,
+        'admin: never enters multi-coach branch logic');
+}
+
 console.log(`\n--- ${passed} passed, ${failed} failed ---\n`);
 if (failed > 0) process.exit(1);
