@@ -10098,18 +10098,39 @@ function showCoachActivity() {
     showSection('coachActivity');
 }
 
-// Coach Performance dashboard — section + render wiring lands in Phase 2
-// (PRD_COACH_KPI.md). For now this stub keeps the nav item clickable and
-// surfaces a toast so admins know the feature is coming.
+// Coach Performance dashboard — toggles the .content-section.hidden contract
+// for #section-coach-kpi and hands off rendering to window.initCoachKpi.
 function showCoachPerformance() {
-    if (typeof showToast === 'function') {
-        showToast(
-            (typeof t === 'function' ? t('admin.sidebar.coachPerformance') : 'Coach Performance')
-                + ' — coming soon',
-            'info'
-        );
-    } else {
-        console.log('Coach Performance — coming soon');
+    document.querySelectorAll('.content-section').forEach(s => {
+        s.classList.remove('active');
+    });
+
+    const section = document.getElementById('section-coach-kpi');
+    if (section) {
+        section.classList.remove('hidden');
+        section.classList.add('active');
+    }
+
+    document.querySelectorAll('.nav-item').forEach(item => item.classList.remove('active'));
+    const menuItem = document.getElementById('menuCoachPerformance');
+    if (menuItem) menuItem.classList.add('active');
+
+    history.pushState({ section: 'coach-kpi' }, '', '#coach-kpi');
+
+    const userRole = window.supabaseAuth ? window.supabaseAuth.getCurrentUserRole() : null;
+    const roleInfo = {
+        isAdmin: !!(userRole && userRole.role === 'admin'),
+        isCoach: !!(userRole && userRole.role === 'coach'),
+        coachId: (userRole && userRole.coachId) || null
+    };
+
+    if (typeof window.initCoachKpi === 'function') {
+        window.initCoachKpi(roleInfo, window.supabaseClient);
+    }
+
+    if (typeof lucide !== 'undefined') lucide.createIcons();
+    if (typeof i18n !== 'undefined' && typeof i18n.applyTranslations === 'function') {
+        i18n.applyTranslations();
     }
 }
 

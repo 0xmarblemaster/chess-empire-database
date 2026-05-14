@@ -9841,6 +9841,42 @@ function showCoachActivity() {
     showSection('coachActivity');
 }
 
+// Coach Performance dashboard — toggles the .content-section.hidden contract
+// for #section-coach-kpi and hands off rendering to window.initCoachKpi.
+function showCoachPerformance() {
+    document.querySelectorAll('.content-section').forEach(s => {
+        s.classList.remove('active');
+    });
+
+    const section = document.getElementById('section-coach-kpi');
+    if (section) {
+        section.classList.remove('hidden');
+        section.classList.add('active');
+    }
+
+    document.querySelectorAll('.nav-item').forEach(item => item.classList.remove('active'));
+    const menuItem = document.getElementById('menuCoachPerformance');
+    if (menuItem) menuItem.classList.add('active');
+
+    history.pushState({ section: 'coach-kpi' }, '', '#coach-kpi');
+
+    const userRole = window.supabaseAuth ? window.supabaseAuth.getCurrentUserRole() : null;
+    const roleInfo = {
+        isAdmin: !!(userRole && userRole.role === 'admin'),
+        isCoach: !!(userRole && userRole.role === 'coach'),
+        coachId: (userRole && userRole.coachId) || null
+    };
+
+    if (typeof window.initCoachKpi === 'function') {
+        window.initCoachKpi(roleInfo, window.supabaseClient);
+    }
+
+    if (typeof lucide !== 'undefined') lucide.createIcons();
+    if (typeof i18n !== 'undefined' && typeof i18n.applyTranslations === 'function') {
+        i18n.applyTranslations();
+    }
+}
+
 async function initCoachActivity() {
     if (!caInitialized) {
         await loadCaUsers();
