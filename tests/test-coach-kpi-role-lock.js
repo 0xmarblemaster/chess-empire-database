@@ -343,16 +343,47 @@ assertEqual(lock.canViewCoachKpi({ isAdmin: false, isCoach: false, role: 'viewer
     false, 'defensive: viewer role with both isAdmin/isCoach explicitly false → blocked');
 
 console.log('\n=== getInitialBranchScope (transparency model) ========================\n');
+// Task §2 coverage: admin and coach must both land on `'all'` so the Phase 2
+// dashboard opens with the full school in view. The function is intentionally
+// role-agnostic (the argument is `_roleInfo`) — these assertions cement that
+// contract across every plausible role shape so a future "personalize the
+// landing scope" refactor cannot quietly regress the transparency model.
 assertEqual(lock.getInitialBranchScope(ADMIN), 'all',  'admin → \'all\'');
-assertEqual(lock.getInitialBranchScope(COACH), 'all',  'coach → \'all\'');
+assertEqual(lock.getInitialBranchScope(COACH), 'all',  'coach (coachId set) → \'all\'');
+assertEqual(lock.getInitialBranchScope({ isAdmin: true, coachId: 'coach-uuid-7' }), 'all',
+    'admin who also has a coachId → \'all\' (admin still sees everything)');
+assertEqual(lock.getInitialBranchScope({ isAdmin: false, isCoach: true }), 'all',
+    'coach via explicit isCoach flag → \'all\'');
+assertEqual(lock.getInitialBranchScope({ isAdmin: false, isCoach: true, coachId: 'coach-uuid-2' }), 'all',
+    'coach with both isCoach flag and coachId → \'all\'');
+assertEqual(lock.getInitialBranchScope({ isAdmin: false, coachId: 'coach-uuid-2' }), 'all',
+    'a different coach id still → \'all\' (the specific id must not change the answer)');
 assertEqual(lock.getInitialBranchScope(ANON),  'all',  'anon → \'all\' (gated by canViewCoachKpi)');
 assertEqual(lock.getInitialBranchScope(null),  'all',  'null → \'all\'');
+assertEqual(lock.getInitialBranchScope(undefined), 'all', 'undefined → \'all\'');
+assertEqual(lock.getInitialBranchScope({}),    'all',  'empty roleInfo → \'all\'');
+assertEqual(lock.getInitialBranchScope({ role: 'viewer' }), 'all',
+    'defensive: viewer-shaped roleInfo → \'all\' (transparency; gating is in canViewCoachKpi)');
 
 console.log('\n=== getInitialCoachScope (transparency model) =========================\n');
+// Same matrix as getInitialBranchScope: both initial-scope helpers share the
+// transparency contract, so they share the test shape.
 assertEqual(lock.getInitialCoachScope(ADMIN), 'all',  'admin → \'all\'');
-assertEqual(lock.getInitialCoachScope(COACH), 'all',  'coach → \'all\'');
+assertEqual(lock.getInitialCoachScope(COACH), 'all',  'coach (coachId set) → \'all\'');
+assertEqual(lock.getInitialCoachScope({ isAdmin: true, coachId: 'coach-uuid-7' }), 'all',
+    'admin who also has a coachId → \'all\' (admin still sees everything)');
+assertEqual(lock.getInitialCoachScope({ isAdmin: false, isCoach: true }), 'all',
+    'coach via explicit isCoach flag → \'all\'');
+assertEqual(lock.getInitialCoachScope({ isAdmin: false, isCoach: true, coachId: 'coach-uuid-2' }), 'all',
+    'coach with both isCoach flag and coachId → \'all\'');
+assertEqual(lock.getInitialCoachScope({ isAdmin: false, coachId: 'coach-uuid-2' }), 'all',
+    'a different coach id still → \'all\' (the specific id must not change the answer)');
 assertEqual(lock.getInitialCoachScope(ANON),  'all',  'anon → \'all\' (gated by canViewCoachKpi)');
 assertEqual(lock.getInitialCoachScope(null),  'all',  'null → \'all\'');
+assertEqual(lock.getInitialCoachScope(undefined), 'all', 'undefined → \'all\'');
+assertEqual(lock.getInitialCoachScope({}),    'all',  'empty roleInfo → \'all\'');
+assertEqual(lock.getInitialCoachScope({ role: 'viewer' }), 'all',
+    'defensive: viewer-shaped roleInfo → \'all\' (transparency; gating is in canViewCoachKpi)');
 
 console.log('\n=== end-to-end scenarios ==============================================\n');
 
