@@ -317,6 +317,10 @@ assertEqual(lock.kpiQueryScope(ADMIN, 'bogus', {}), null,
     'unknown view → null');
 
 console.log('\n=== canViewCoachKpi (Phase 2 dashboard gate) ==========================\n');
+// Task §2 coverage matrix: admin → true; coach → true;
+// viewer → false (defensive — getRoleInfo does not emit an isViewer flag today,
+// but the gate must still reject a viewer-shaped roleInfo if one ever shows up);
+// unauthenticated / null → false.
 assertEqual(lock.canViewCoachKpi(ADMIN), true,  'admin → can view dashboard');
 assertEqual(lock.canViewCoachKpi(COACH), true,  'coach (coachId set) → can view dashboard');
 assertEqual(lock.canViewCoachKpi({ isAdmin: false, isCoach: true }), true,
@@ -327,6 +331,16 @@ assertEqual(lock.canViewCoachKpi(undefined), false, 'undefined roleInfo → bloc
 assertEqual(lock.canViewCoachKpi({}),    false, 'empty roleInfo → blocked');
 assertEqual(lock.canViewCoachKpi({ isAdmin: false, isCoach: false, coachId: null }),
     false, 'viewer-like role (no admin, no coach) → blocked');
+// Defensive: a viewer-shaped roleInfo carrying the literal `role: 'viewer'`
+// string used by supabase-schema.sql / supabase-client.js must NOT bypass
+// the gate. Today no caller passes such a shape, but if `getRoleInfo` ever
+// starts surfacing role strings, this assertion catches accidental allow-list.
+assertEqual(lock.canViewCoachKpi({ role: 'viewer' }), false,
+    'defensive: { role: "viewer" } literal → blocked');
+assertEqual(lock.canViewCoachKpi({ isAdmin: false, role: 'viewer', coachId: null }),
+    false, 'defensive: viewer role with explicit non-admin + null coachId → blocked');
+assertEqual(lock.canViewCoachKpi({ isAdmin: false, isCoach: false, role: 'viewer', coachId: null }),
+    false, 'defensive: viewer role with both isAdmin/isCoach explicitly false → blocked');
 
 console.log('\n=== getInitialBranchScope (transparency model) ========================\n');
 assertEqual(lock.getInitialBranchScope(ADMIN), 'all',  'admin → \'all\'');
