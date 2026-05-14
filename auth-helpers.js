@@ -15,10 +15,14 @@
     /**
      * Resolve current auth user to {isAdmin, coachId}.
      *
-     * Looks up the user's email in the `coaches` table:
-     *   - found     → { isAdmin: false, coachId: <uuid> }
-     *   - not found → { isAdmin: true,  coachId: null   } (authenticated non-coach = admin)
-     *   - no auth   → { isAdmin: false, coachId: null   }
+     * Resolution order:
+     *   1. user_roles.role for auth user.id → if 'admin', short-circuit to admin
+     *      (even if the user also has a coach row).
+     *   2. coaches.email lookup:
+     *        found     → { isAdmin: false, coachId: <uuid> }
+     *        not found → { isAdmin: true,  coachId: null   }
+     *
+     *   - no auth → { isAdmin: false, coachId: null }
      *
      * @param {object} client Supabase client (defaults to window.supabaseClient)
      * @returns {Promise<{isAdmin: boolean, coachId: string|null, email: string|null}>}
@@ -35,6 +39,23 @@
         }
 
         const email = userData.user.email;
+        const userId = userData.user.id;
+
+        const { data: roleRow, error: roleError } = await sb
+            .from('user_roles')
+            .select('role')
+            .eq('user_id', userId)
+            .maybeSingle();
+
+        if (roleError) {
+            // Surface query errors rather than silently misclassifying the user.
+            throw roleError;
+        }
+
+        if (roleRow && roleRow.role === 'admin') {
+            return { isAdmin: true, coachId: null, email };
+        }
+
         const { data: coach, error: coachError } = await sb
             .from('coaches')
             .select('id')
