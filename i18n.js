@@ -973,7 +973,32 @@ const translations = {
         "coach.botRemoved": "Removed {{name}} from defeated bots",
         "coach.scoreAdded": "Score of {{score}} added successfully",
         "coach.updateFailed": "Failed to update",
-        "coach.invalidScore": "Please enter a valid score (0-100)"
+        "coach.invalidScore": "Please enter a valid score (0-100)",
+
+        // Coach KPI Dashboard
+        "coachKpiTitle": "Coach Performance",
+        "coachKpiSchoolView": "School",
+        "coachKpiBranchView": "Branch",
+        "coachKpiCoachView": "Coach",
+        "coachKpiActiveStudents": "Active students",
+        "coachKpiTournamentsYtd": "Tournaments YTD",
+        "coachKpiTop3": "Top-3 finishes",
+        "coachKpiPromotions": "Promotions",
+        "coachKpiNewRazryads": "New razryads",
+        "coachKpiParticipation": "Participation",
+        "coachKpiScore": "Score",
+        "coachKpiTimeWindow30d": "30 days",
+        "coachKpiTimeWindow90d": "90 days",
+        "coachKpiTimeWindowYtd": "YTD",
+        "coachKpiTimeWindowAll": "All time",
+        "coachKpiLeagueAll": "All leagues",
+        "coachKpiLeagueA": "League A",
+        "coachKpiLeagueB": "League B",
+        "coachKpiLeagueC": "League C",
+        "coachKpiInactiveStudent": "Inactive student",
+        "coachKpiTopPerformer": "Top performer",
+        "coachKpiBiggestClimber": "Biggest climber",
+        "coachKpiEmptyState": "Coach KPI data not yet available — apply migrations 036/037/038 on Supabase to enable."
     },
     kk: {
         "common.brand": "Chess Empire",
@@ -2845,7 +2870,32 @@ const translations = {
         "coach.botRemoved": "{{name}} удалён из побеждённых ботов",
         "coach.scoreAdded": "Результат {{score}} успешно добавлен",
         "coach.updateFailed": "Не удалось обновить",
-        "coach.invalidScore": "Введите корректный результат (0-100)"
+        "coach.invalidScore": "Введите корректный результат (0-100)",
+
+        // Coach KPI Dashboard
+        "coachKpiTitle": "Эффективность тренеров",
+        "coachKpiSchoolView": "Школа",
+        "coachKpiBranchView": "Филиал",
+        "coachKpiCoachView": "Тренер",
+        "coachKpiActiveStudents": "Активные ученики",
+        "coachKpiTournamentsYtd": "Турниры с начала года",
+        "coachKpiTop3": "Топ-3 места",
+        "coachKpiPromotions": "Повышения уровня",
+        "coachKpiNewRazryads": "Новые разряды",
+        "coachKpiParticipation": "Участие",
+        "coachKpiScore": "Балл",
+        "coachKpiTimeWindow30d": "30 дней",
+        "coachKpiTimeWindow90d": "90 дней",
+        "coachKpiTimeWindowYtd": "С начала года",
+        "coachKpiTimeWindowAll": "За всё время",
+        "coachKpiLeagueAll": "Все лиги",
+        "coachKpiLeagueA": "Лига A",
+        "coachKpiLeagueB": "Лига B",
+        "coachKpiLeagueC": "Лига C",
+        "coachKpiInactiveStudent": "Неактивный ученик",
+        "coachKpiTopPerformer": "Лучший результат",
+        "coachKpiBiggestClimber": "Наибольший прогресс",
+        "coachKpiEmptyState": "Данные KPI ещё недоступны — примените миграции 036/037/038 в Supabase."
     }
 };
 
