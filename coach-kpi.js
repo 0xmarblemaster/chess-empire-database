@@ -46,6 +46,19 @@
         C: 'League C',
     });
 
+    // Razryad order + colors match the existing branch / coach doughnuts in
+    // admin-v2.js so the dashboards read consistently.
+    const RAZRYAD_ORDER = Object.freeze(['KMS', '1st', '2nd', '3rd', '4th', 'None']);
+    const RAZRYAD_COLORS = Object.freeze([
+        '#d97706', '#3b82f6', '#10b981', '#8b5cf6', '#ec4899', '#94a3b8',
+    ]);
+    const LEAGUE_PLOT_ORDER = Object.freeze(['A', 'B', 'C']);
+    const LEAGUE_COLORS = Object.freeze({
+        A: '#d97706',
+        B: '#3b82f6',
+        C: '#10b981',
+    });
+
     function pad2(n) { return String(n).padStart(2, '0'); }
     function ymd(date) {
         return `${date.getUTCFullYear()}-${pad2(date.getUTCMonth() + 1)}-${pad2(date.getUTCDate())}`;
@@ -419,6 +432,220 @@
     }
 
     /**
+     * Bucket students into the canonical razryad slots so the doughnut can be
+     * fed from `coach_kpi_summary.data.students` directly. Unknown / null
+     * razryads roll into the `None` slot — the doughnut never silently drops
+     * a student. Accepts the legacy `'1' / '2' / '3' / '4'` and modern
+     * `'1st' / ...` spellings.
+     */
+    function aggregateRazryadFromStudents(students) {
+        const out = { KMS: 0, '1st': 0, '2nd': 0, '3rd': 0, '4th': 0, None: 0 };
+        if (!Array.isArray(students)) return out;
+        for (const s of students) {
+            if (!s || typeof s !== 'object') continue;
+            const r = s.razryad;
+            if (r === 'KMS') out.KMS++;
+            else if (r === '1st' || r === '1') out['1st']++;
+            else if (r === '2nd' || r === '2') out['2nd']++;
+            else if (r === '3rd' || r === '3') out['3rd']++;
+            else if (r === '4th' || r === '4') out['4th']++;
+            else out.None++;
+        }
+        return out;
+    }
+
+    function _resolveChartCtor() {
+        if (typeof window !== 'undefined' && window.Chart) return window.Chart;
+        if (typeof globalThis !== 'undefined' && globalThis.Chart) return globalThis.Chart;
+        if (typeof Chart !== 'undefined') return Chart;
+        return null;
+    }
+
+    function _mountCanvas(container) {
+        container.innerHTML = '';
+        const canvas = _el('canvas', { className: 'kpi-chart-canvas' });
+        container.appendChild(canvas);
+        return canvas;
+    }
+
+    function _allZero(obj) {
+        if (!obj || typeof obj !== 'object') return true;
+        const vals = Object.values(obj);
+        if (vals.length === 0) return true;
+        for (const v of vals) {
+            const n = Number(v);
+            if (Number.isFinite(n) && n !== 0) return false;
+        }
+        return true;
+    }
+
+    /**
+     * Razryad doughnut (PRD §5: school view + coach view both render this).
+     * `counts` is keyed by `RAZRYAD_ORDER` — pass the output of
+     * `aggregateRazryadFromStudents` or any equivalent object. Empty counts
+     * fall through to `renderEmptyState`. Returns the Chart instance, or
+     * null when Chart.js is unavailable / data is empty.
+     */
+    function renderRazryadDoughnut(container, counts, opts) {
+        if (typeof document === 'undefined' || !container) return null;
+        if (_allZero(counts)) { renderEmptyState(container); return null; }
+        const ChartCtor = _resolveChartCtor();
+        if (!ChartCtor) { renderEmptyState(container, 'Chart.js not loaded'); return null; }
+        const o = opts || {};
+        const t = typeof o.t === 'function' ? o.t : null;
+        const label = (key, fb) => (t ? t(key, fb) : fb);
+        const canvas = _mountCanvas(container);
+        const labels = RAZRYAD_ORDER.map(k => label('coachKpiRazryad' + k, k));
+        const data = RAZRYAD_ORDER.map(k => Number(counts && counts[k]) || 0);
+        return new ChartCtor(canvas, {
+            type: 'doughnut',
+            data: {
+                labels,
+                datasets: [{
+                    data,
+                    backgroundColor: RAZRYAD_COLORS.slice(),
+                    borderWidth: 0,
+                }],
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: { position: 'bottom' },
+                },
+            },
+        });
+    }
+
+    /**
+     * School view — tournaments by league as a stacked bar with one column
+     * per branch (PRD §5). `byBranch` is an array of
+     * `{ branch_name, league_counts: { A, B, C } }`. The renderer is
+     * permissive about key casing so the caller can pass either snake_case
+     * (matches edge-function payloads) or camelCase. Empty input → empty state.
+     */
+    function renderTournamentsByLeagueStackedBar(container, byBranch, opts) {
+        if (typeof document === 'undefined' || !container) return null;
+        const list = Array.isArray(byBranch) ? byBranch.filter(Boolean) : [];
+        if (list.length === 0) { renderEmptyState(container); return null; }
+        const ChartCtor = _resolveChartCtor();
+        if (!ChartCtor) { renderEmptyState(container, 'Chart.js not loaded'); return null; }
+        const o = opts || {};
+        const t = typeof o.t === 'function' ? o.t : null;
+        const label = (key, fb) => (t ? t(key, fb) : fb);
+        const canvas = _mountCanvas(container);
+        const labels = list.map(b => b.branch_name || b.branchName || b.name || '—');
+        const datasets = LEAGUE_PLOT_ORDER.map(lg => ({
+            label: label('coachKpiLeague' + lg, LEAGUE_LABELS[lg]),
+            data: list.map(b => {
+                const lc = b.league_counts || b.leagueCounts || {};
+                return Number(lc[lg]) || 0;
+            }),
+            backgroundColor: LEAGUE_COLORS[lg],
+            borderWidth: 0,
+        }));
+        return new ChartCtor(canvas, {
+            type: 'bar',
+            data: { labels, datasets },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: { position: 'bottom' },
+                },
+                scales: {
+                    x: { stacked: true },
+                    y: { stacked: true, beginAtZero: true, ticks: { precision: 0 } },
+                },
+            },
+        });
+    }
+
+    /**
+     * Coach view — tournaments by league as a plain (non-stacked) bar
+     * (PRD §5). `counts` is `{ A, B, C }`. Empty / all-zero → empty state.
+     */
+    function renderTournamentsByLeagueBar(container, counts, opts) {
+        if (typeof document === 'undefined' || !container) return null;
+        if (_allZero(counts)) { renderEmptyState(container); return null; }
+        const ChartCtor = _resolveChartCtor();
+        if (!ChartCtor) { renderEmptyState(container, 'Chart.js not loaded'); return null; }
+        const o = opts || {};
+        const t = typeof o.t === 'function' ? o.t : null;
+        const label = (key, fb) => (t ? t(key, fb) : fb);
+        const canvas = _mountCanvas(container);
+        const labels = LEAGUE_PLOT_ORDER.map(lg => label('coachKpiLeague' + lg, LEAGUE_LABELS[lg]));
+        const data = LEAGUE_PLOT_ORDER.map(lg => Number(counts && counts[lg]) || 0);
+        const colors = LEAGUE_PLOT_ORDER.map(lg => LEAGUE_COLORS[lg]);
+        return new ChartCtor(canvas, {
+            type: 'bar',
+            data: {
+                labels,
+                datasets: [{
+                    label: label('coachKpiTournaments', 'Tournaments'),
+                    data,
+                    backgroundColor: colors,
+                    borderRadius: 6,
+                    borderSkipped: false,
+                }],
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: { legend: { display: false } },
+                scales: { y: { beginAtZero: true, ticks: { precision: 0 } } },
+            },
+        });
+    }
+
+    /**
+     * Coach view — avg place trend (line). `points` is an ordered array of
+     * `{ month, avg_place }`. Y-axis is reversed because lower place = better,
+     * so an upward visual trend reads as improvement. Missing avg_place
+     * values render as gaps (Chart.js spanGaps left default false).
+     */
+    function renderAvgPlaceTrendLine(container, points, opts) {
+        if (typeof document === 'undefined' || !container) return null;
+        const list = Array.isArray(points) ? points.filter(Boolean) : [];
+        if (list.length === 0) { renderEmptyState(container); return null; }
+        const ChartCtor = _resolveChartCtor();
+        if (!ChartCtor) { renderEmptyState(container, 'Chart.js not loaded'); return null; }
+        const o = opts || {};
+        const t = typeof o.t === 'function' ? o.t : null;
+        const label = (key, fb) => (t ? t(key, fb) : fb);
+        const canvas = _mountCanvas(container);
+        const labels = list.map(p => p.month || p.label || '');
+        const data = list.map(p => {
+            const v = (p.avg_place !== undefined ? p.avg_place : p.avgPlace);
+            return Number.isFinite(v) ? v : null;
+        });
+        return new ChartCtor(canvas, {
+            type: 'line',
+            data: {
+                labels,
+                datasets: [{
+                    label: label('coachKpiAvgPlace', 'Avg place'),
+                    data,
+                    borderColor: '#3b82f6',
+                    backgroundColor: 'rgba(59, 130, 246, 0.15)',
+                    fill: true,
+                    tension: 0.3,
+                    spanGaps: true,
+                }],
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: { legend: { display: false } },
+                scales: {
+                    // Lower place is better — flip so improvement reads upward.
+                    y: { reverse: true, beginAtZero: false },
+                },
+            },
+        });
+    }
+
+    /**
      * Render the filter bar (time window pill toggles + league select + branch
      * select). `current` should be a normalized filter state; unknown values
      * are clamped. `onChange` is invoked with the next normalized state every
@@ -540,6 +767,10 @@
         LEAGUE_LABELS,
         SCORE_THRESHOLDS,
         EMPTY_STATE_MESSAGE,
+        RAZRYAD_ORDER,
+        RAZRYAD_COLORS,
+        LEAGUE_PLOT_ORDER,
+        LEAGUE_COLORS,
         resolveTimeWindow,
         scoreColor,
         formatScore,
@@ -547,6 +778,7 @@
         sortLeaderboard,
         filterLeaderboardByBranch,
         aggregateSchoolHero,
+        aggregateRazryadFromStudents,
         defaultFilterState,
         normalizeFilters,
         buildKpiQuery,
@@ -558,6 +790,10 @@
         renderSchoolHero,
         renderLeaderboard,
         renderFilters,
+        renderRazryadDoughnut,
+        renderTournamentsByLeagueStackedBar,
+        renderTournamentsByLeagueBar,
+        renderAvgPlaceTrendLine,
     };
 
     if (typeof window !== 'undefined') {

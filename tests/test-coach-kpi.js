@@ -824,6 +824,239 @@ async function runFetchTests() {
         'locked coach + school: loadDashboard returns null (canAccessView gate)');
 }
 
+console.log('\n=== aggregateRazryadFromStudents ======================================\n');
+assertEqual(kpi.aggregateRazryadFromStudents([
+    { razryad: 'KMS' },
+    { razryad: '1st' },
+    { razryad: '1' },   // legacy spelling
+    { razryad: '2nd' },
+    { razryad: '3rd' },
+    { razryad: '3' },   // legacy
+    { razryad: '4th' },
+    { razryad: null },
+    { razryad: undefined },
+    {},
+]), { KMS: 1, '1st': 2, '2nd': 1, '3rd': 2, '4th': 1, None: 3 },
+    'tallies KMS/1st/.../4th and rolls unknown into None');
+assertEqual(kpi.aggregateRazryadFromStudents([]),
+    { KMS: 0, '1st': 0, '2nd': 0, '3rd': 0, '4th': 0, None: 0 },
+    'empty list → zeroed slots (no NaN leak)');
+assertEqual(kpi.aggregateRazryadFromStudents(null),
+    { KMS: 0, '1st': 0, '2nd': 0, '3rd': 0, '4th': 0, None: 0 },
+    'null input → zeroed slots');
+
+console.log('\n=== chart renderers (PRD §5: school 2 charts, coach 3 charts) =========\n');
+// Capture Chart.js constructor calls without pulling the real lib in.
+const chartCalls = [];
+function MockChart(ctx, config) {
+    chartCalls.push({ ctx, config });
+    this.ctx = ctx;
+    this.config = config;
+    this.destroyed = false;
+}
+MockChart.prototype.destroy = function () { this.destroyed = true; };
+global.Chart = MockChart;
+
+function lastCall() { return chartCalls[chartCalls.length - 1]; }
+
+// ---- renderRazryadDoughnut --------------------------------------------------
+(function testRazryadEmpty() {
+    chartCalls.length = 0;
+    const c = makeMockEl('div');
+    const ret = kpi.renderRazryadDoughnut(c, null);
+    assertEqual(ret, null, 'null counts → null return');
+    assertEqual(chartCalls.length, 0, 'null counts → no Chart constructor call');
+    assert(/\bempty-state\b/.test(c.children[0].className),
+        'null counts → empty-state card rendered');
+
+    const c2 = makeMockEl('div');
+    kpi.renderRazryadDoughnut(c2, { KMS: 0, '1st': 0, '2nd': 0, '3rd': 0, '4th': 0, None: 0 });
+    assertEqual(chartCalls.length, 0, 'all-zero counts → no chart created');
+    assert(/\bempty-state\b/.test(c2.children[0].className),
+        'all-zero counts → empty-state card rendered');
+})();
+
+(function testRazryadHappy() {
+    chartCalls.length = 0;
+    const c = makeMockEl('div');
+    const inst = kpi.renderRazryadDoughnut(c, { KMS: 1, '1st': 2, '2nd': 3, '3rd': 1, '4th': 0, None: 4 });
+    assertEqual(chartCalls.length, 1, 'one Chart instance per render');
+    assert(inst instanceof MockChart, 'returns the Chart instance');
+    const call = lastCall();
+    assertEqual(call.config.type, 'doughnut', 'razryad chart type = doughnut');
+    assertEqual(call.config.data.labels, ['KMS', '1st', '2nd', '3rd', '4th', 'None'],
+        'razryad labels in canonical order');
+    assertEqual(call.config.data.datasets[0].data, [1, 2, 3, 1, 0, 4],
+        'razryad data mirrors RAZRYAD_ORDER');
+    assertEqual(call.config.data.datasets[0].backgroundColor.length, 6,
+        'six segment colors (one per razryad slot)');
+    assertEqual(call.ctx.tagName, 'canvas', 'chart mounted on a <canvas>');
+    assertEqual(c.children.length, 1, 'container holds the canvas only (no leftover empty-state)');
+})();
+
+(function testRazryadCanvasReset() {
+    chartCalls.length = 0;
+    const c = makeMockEl('div');
+    c.appendChild(makeMockEl('p'));  // stale child
+    kpi.renderRazryadDoughnut(c, { KMS: 5 });
+    assertEqual(c.children.length, 1, 'render clears prior container content');
+    assertEqual(c.children[0].tagName, 'canvas', 'after clear, only the canvas remains');
+})();
+
+(function testRazryadNoChartLib() {
+    chartCalls.length = 0;
+    delete global.Chart;
+    const c = makeMockEl('div');
+    const ret = kpi.renderRazryadDoughnut(c, { KMS: 1 });
+    assertEqual(ret, null, 'no Chart.js → null return');
+    assert(/\bempty-state\b/.test(c.children[0].className),
+        'no Chart.js → empty-state fallback (does not crash)');
+    global.Chart = MockChart;
+})();
+
+(function testRazryadI18n() {
+    chartCalls.length = 0;
+    const c = makeMockEl('div');
+    kpi.renderRazryadDoughnut(c, { KMS: 1, '1st': 1 }, {
+        t: (key, fb) => key === 'coachKpiRazryadKMS' ? 'КМС' : fb,
+    });
+    assertEqual(lastCall().config.data.labels[0], 'КМС',
+        'i18n: razryad label resolved via t()');
+})();
+
+// ---- renderTournamentsByLeagueStackedBar (school view) ----------------------
+(function testStackedEmpty() {
+    chartCalls.length = 0;
+    const c = makeMockEl('div');
+    kpi.renderTournamentsByLeagueStackedBar(c, []);
+    assertEqual(chartCalls.length, 0, 'empty branches → no chart');
+    assert(/\bempty-state\b/.test(c.children[0].className),
+        'empty branches → empty-state card');
+
+    const c2 = makeMockEl('div');
+    kpi.renderTournamentsByLeagueStackedBar(c2, null);
+    assert(/\bempty-state\b/.test(c2.children[0].className),
+        'null branches → empty-state card');
+})();
+
+(function testStackedHappy() {
+    chartCalls.length = 0;
+    const c = makeMockEl('div');
+    kpi.renderTournamentsByLeagueStackedBar(c, [
+        { branch_name: 'Nish',        league_counts: { A: 3, B: 2, C: 1 } },
+        { branch_name: 'Halyk Arena', league_counts: { A: 1, B: 0, C: 4 } },
+        { branch_name: 'Debut',       league_counts: { A: 0, B: 5, C: 2 } },
+    ]);
+    const call = lastCall();
+    assertEqual(call.config.type, 'bar', 'stacked chart type = bar');
+    assertEqual(call.config.data.labels, ['Nish', 'Halyk Arena', 'Debut'],
+        'x-axis labels are branch names in input order');
+    assertEqual(call.config.data.datasets.length, 3, 'one dataset per league (A/B/C)');
+    assertEqual(call.config.data.datasets[0].data, [3, 1, 0], 'A dataset');
+    assertEqual(call.config.data.datasets[1].data, [2, 0, 5], 'B dataset');
+    assertEqual(call.config.data.datasets[2].data, [1, 4, 2], 'C dataset');
+    assertEqual(call.config.options.scales.x.stacked, true, 'x axis stacked');
+    assertEqual(call.config.options.scales.y.stacked, true, 'y axis stacked');
+    assertEqual(call.config.options.scales.y.beginAtZero, true, 'y axis begins at zero');
+})();
+
+(function testStackedCamelCaseKeys() {
+    chartCalls.length = 0;
+    const c = makeMockEl('div');
+    kpi.renderTournamentsByLeagueStackedBar(c, [
+        { branchName: 'Nish', leagueCounts: { A: 1, B: 1, C: 1 } },
+    ]);
+    assertEqual(lastCall().config.data.labels, ['Nish'],
+        'accepts camelCase branchName key');
+    assertEqual(lastCall().config.data.datasets[0].data, [1],
+        'accepts camelCase leagueCounts key');
+})();
+
+(function testStackedMissingLeague() {
+    // Missing keys count as zero — chart never renders NaN bars.
+    chartCalls.length = 0;
+    const c = makeMockEl('div');
+    kpi.renderTournamentsByLeagueStackedBar(c, [
+        { branch_name: 'X', league_counts: { A: 5 } },  // B/C missing
+    ]);
+    assertEqual(lastCall().config.data.datasets[1].data, [0], 'missing B → 0');
+    assertEqual(lastCall().config.data.datasets[2].data, [0], 'missing C → 0');
+})();
+
+// ---- renderTournamentsByLeagueBar (coach view) ------------------------------
+(function testLeagueBarEmpty() {
+    chartCalls.length = 0;
+    const c = makeMockEl('div');
+    kpi.renderTournamentsByLeagueBar(c, { A: 0, B: 0, C: 0 });
+    assertEqual(chartCalls.length, 0, 'all-zero counts → no chart');
+    assert(/\bempty-state\b/.test(c.children[0].className),
+        'all-zero counts → empty-state card');
+})();
+
+(function testLeagueBarHappy() {
+    chartCalls.length = 0;
+    const c = makeMockEl('div');
+    kpi.renderTournamentsByLeagueBar(c, { A: 4, B: 2, C: 7 });
+    const call = lastCall();
+    assertEqual(call.config.type, 'bar', 'league bar type = bar');
+    assertEqual(call.config.data.datasets.length, 1, 'single dataset (not stacked)');
+    assertEqual(call.config.data.datasets[0].data, [4, 2, 7],
+        'data follows LEAGUE_PLOT_ORDER (A/B/C)');
+    assertEqual(call.config.options.plugins.legend.display, false,
+        'single-series bar hides the legend');
+    assert(!call.config.options.scales || !call.config.options.scales.x || !call.config.options.scales.x.stacked,
+        'coach view bar is NOT stacked');
+})();
+
+// ---- renderAvgPlaceTrendLine (coach view) -----------------------------------
+(function testTrendEmpty() {
+    chartCalls.length = 0;
+    const c = makeMockEl('div');
+    kpi.renderAvgPlaceTrendLine(c, []);
+    assertEqual(chartCalls.length, 0, 'empty points → no chart');
+    assert(/\bempty-state\b/.test(c.children[0].className),
+        'empty points → empty-state card');
+})();
+
+(function testTrendHappy() {
+    chartCalls.length = 0;
+    const c = makeMockEl('div');
+    kpi.renderAvgPlaceTrendLine(c, [
+        { month: '2025-12', avg_place: 4.2 },
+        { month: '2026-01', avg_place: 3.8 },
+        { month: '2026-02', avg_place: null }, // gap
+        { month: '2026-03', avg_place: 2.5 },
+    ]);
+    const call = lastCall();
+    assertEqual(call.config.type, 'line', 'trend chart type = line');
+    assertEqual(call.config.data.labels, ['2025-12', '2026-01', '2026-02', '2026-03'],
+        'x labels follow input order');
+    assertEqual(call.config.data.datasets[0].data, [4.2, 3.8, null, 2.5],
+        'non-finite avg_place becomes null (Chart.js renders gap)');
+    assertEqual(call.config.options.scales.y.reverse, true,
+        'y axis reversed (lower place = better → upward visual trend)');
+    assertEqual(call.config.data.datasets[0].spanGaps, true,
+        'spanGaps true so null months do not break the line entirely');
+})();
+
+(function testTrendCamelCaseKeys() {
+    chartCalls.length = 0;
+    const c = makeMockEl('div');
+    kpi.renderAvgPlaceTrendLine(c, [{ month: '2026-01', avgPlace: 3.0 }]);
+    assertEqual(lastCall().config.data.datasets[0].data, [3.0],
+        'accepts camelCase avgPlace key');
+})();
+
+console.log('\n=== chart renderers — exports + constants =============================\n');
+assertEqual(kpi.RAZRYAD_ORDER, ['KMS', '1st', '2nd', '3rd', '4th', 'None'],
+    'RAZRYAD_ORDER exported in canonical order');
+assertEqual(kpi.LEAGUE_PLOT_ORDER, ['A', 'B', 'C'],
+    'LEAGUE_PLOT_ORDER exported (matches league filter set, minus "all")');
+assert(Array.isArray(kpi.RAZRYAD_COLORS) && kpi.RAZRYAD_COLORS.length === 6,
+    'RAZRYAD_COLORS exported with one color per razryad slot');
+assert(kpi.LEAGUE_COLORS && kpi.LEAGUE_COLORS.A && kpi.LEAGUE_COLORS.B && kpi.LEAGUE_COLORS.C,
+    'LEAGUE_COLORS exported for A/B/C');
+
 (async () => {
     try {
         await runFetchTests();
