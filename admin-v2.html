@@ -1351,6 +1351,53 @@
             </div>
             <!-- End Activity Log Section -->
 
+            <!-- Coach Performance (KPI) Section — PRD_COACH_KPI.md Phase 2 -->
+            <section id="section-coach-kpi" class="content-section hidden">
+                <!-- Header -->
+                <div class="header">
+                    <h1 class="header-title" data-i18n="admin.sidebar.coachPerformance">Coach Performance</h1>
+                    <div class="header-actions">
+                        <div class="kpi-view-switcher" role="tablist" aria-label="Coach KPI view">
+                            <button type="button" class="kpi-view-btn is-active" data-kpi-view="school" role="tab" aria-selected="true" data-i18n="admin.coachKpi.viewSchool">School</button>
+                            <button type="button" class="kpi-view-btn" data-kpi-view="branch" role="tab" aria-selected="false" data-i18n="admin.coachKpi.viewBranch">Branch</button>
+                            <button type="button" class="kpi-view-btn" data-kpi-view="coach" role="tab" aria-selected="false" data-i18n="admin.coachKpi.viewCoach">Coach</button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Filter bar (time window / league / branch) — populated by coach-kpi.js renderFilters() -->
+                <div id="coach-kpi-filters" class="kpi-filters-host"></div>
+
+                <!-- School-wide view (admin only) -->
+                <div id="coach-kpi-school-view" class="kpi-subview is-active" role="tabpanel" aria-labelledby="kpi-tab-school">
+                    <div class="stats-grid" id="coach-kpi-school-hero"></div>
+                    <div class="table-container" id="coach-kpi-school-leaderboard"></div>
+                    <div class="kpi-chart-grid">
+                        <div class="kpi-chart-card" id="coach-kpi-school-tournaments-chart"></div>
+                        <div class="kpi-chart-card" id="coach-kpi-school-razryad-chart"></div>
+                    </div>
+                </div>
+
+                <!-- Branch detail view -->
+                <div id="coach-kpi-branch-view" class="kpi-subview" role="tabpanel" aria-labelledby="kpi-tab-branch" hidden>
+                    <div class="stats-grid" id="coach-kpi-branch-hero"></div>
+                    <div class="table-container" id="coach-kpi-branch-leaderboard"></div>
+                </div>
+
+                <!-- Coach detail view -->
+                <div id="coach-kpi-coach-view" class="kpi-subview" role="tabpanel" aria-labelledby="kpi-tab-coach" hidden>
+                    <div class="stats-grid" id="coach-kpi-coach-hero"></div>
+                    <div class="table-container" id="coach-kpi-coach-students"></div>
+                    <div class="kpi-chart-grid">
+                        <div class="kpi-chart-card" id="coach-kpi-coach-avgplace-chart"></div>
+                        <div class="kpi-chart-card" id="coach-kpi-coach-razryad-chart"></div>
+                        <div class="kpi-chart-card" id="coach-kpi-coach-tournaments-chart"></div>
+                    </div>
+                    <div class="kpi-insights" id="coach-kpi-coach-insights"></div>
+                </div>
+            </section>
+            <!-- End Coach Performance Section -->
+
             <!-- More Menu Section -->
             <div id="moreMenuSection" class="content-section">
                 <div class="header">
