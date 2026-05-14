@@ -25,10 +25,26 @@
 
     const TIME_WINDOWS = Object.freeze(['30d', '90d', 'ytd', 'all']);
     const DEFAULT_WINDOW = '90d';
+    const LEAGUES = Object.freeze(['all', 'A', 'B', 'C']);
+    const DEFAULT_LEAGUE = 'all';
+    const DEFAULT_BRANCH = 'all';
     const SCORE_THRESHOLDS = Object.freeze({ red: 40, amber: 70 });
     const ALL_TIME_START = '2000-01-01';
     const EMPTY_STATE_MESSAGE =
         'Coach KPI data not yet available — apply migrations 036/037/038 on Supabase to enable.';
+
+    const WINDOW_LABELS = Object.freeze({
+        '30d': '30 days',
+        '90d': '90 days',
+        'ytd': 'YTD',
+        'all': 'All time',
+    });
+    const LEAGUE_LABELS = Object.freeze({
+        all: 'All leagues',
+        A: 'League A',
+        B: 'League B',
+        C: 'League C',
+    });
 
     function pad2(n) { return String(n).padStart(2, '0'); }
     function ymd(date) {
@@ -169,6 +185,33 @@
             out.total_rating_gained   += Number(r.total_rating_gained)   || 0;
         }
         return out;
+    }
+
+    /**
+     * Default filter state for the dashboard's three controls.
+     * PRD §5: window defaults to 90d, league + branch default to 'all'.
+     * `roleInfo` is reserved for future per-role defaults (kept transparent
+     * today — see `getInitialBranchScope` / `getInitialCoachScope`).
+     */
+    function defaultFilterState(_roleInfo) {
+        return { window: DEFAULT_WINDOW, league: DEFAULT_LEAGUE, branchId: DEFAULT_BRANCH };
+    }
+
+    /**
+     * Clamp an arbitrary filter object back to a known-good state. Used when
+     * loading persisted state or merging a partial update so the dashboard
+     * never issues a call with `window=garbage` / `league=xss`. Unknown values
+     * fall back to defaults; `branchId` is treated as opaque (any non-empty
+     * string is accepted — branch ids are server-owned).
+     */
+    function normalizeFilters(input) {
+        const i = (input && typeof input === 'object') ? input : {};
+        const win = TIME_WINDOWS.includes(i.window) ? i.window : DEFAULT_WINDOW;
+        const lg = LEAGUES.includes(i.league) ? i.league : DEFAULT_LEAGUE;
+        const branchId = (typeof i.branchId === 'string' && i.branchId.length > 0)
+            ? i.branchId
+            : DEFAULT_BRANCH;
+        return { window: win, league: lg, branchId };
     }
 
     /**
@@ -376,6 +419,103 @@
     }
 
     /**
+     * Render the filter bar (time window pill toggles + league select + branch
+     * select). `current` should be a normalized filter state; unknown values
+     * are clamped. `onChange` is invoked with the next normalized state every
+     * time the user picks a different value.
+     *
+     * `opts.branches` — array of `{ id, name }` or strings. When empty, the
+     * branch selector is rendered but only offers "All branches".
+     * `opts.t(key, fallback)` — optional i18n lookup. When absent the labels
+     * fall back to the hard-coded English strings in WINDOW_LABELS /
+     * LEAGUE_LABELS.
+     */
+    function renderFilters(container, current, opts) {
+        if (typeof document === 'undefined' || !container) return null;
+        const o = opts || {};
+        const state = normalizeFilters(current);
+        const onChange = typeof o.onChange === 'function' ? o.onChange : null;
+        const t = typeof o.t === 'function' ? o.t : null;
+        const label = (key, fallback) => (t ? t(key, fallback) : fallback);
+
+        const branchOptions = (Array.isArray(o.branches) ? o.branches : [])
+            .map(b => (typeof b === 'string' ? { id: b, name: b } : b))
+            .filter(b => b && typeof b.id === 'string' && b.id.length > 0);
+
+        container.innerHTML = '';
+        const root = _el('div', { className: 'kpi-filters', role: 'group' });
+
+        const windowGroup = _el('div', {
+            className: 'kpi-filter-window',
+            role: 'tablist',
+            'aria-label': label('coachKpiTimeWindowGroup', 'Time window'),
+        });
+        const WINDOW_I18N = { '30d': '30d', '90d': '90d', 'ytd': 'Ytd', 'all': 'All' };
+        for (const w of TIME_WINDOWS) {
+            const i18nKey = 'coachKpiTimeWindow' + WINDOW_I18N[w];
+            const btn = _el('button', {
+                type: 'button',
+                className: 'kpi-filter-pill' + (state.window === w ? ' is-active' : ''),
+                'aria-pressed': state.window === w ? 'true' : 'false',
+                dataset: { window: w },
+                text: label(i18nKey, WINDOW_LABELS[w]),
+            });
+            btn.addEventListener && btn.addEventListener('click', () => {
+                const next = normalizeFilters({ ...state, window: w });
+                if (onChange) onChange(next);
+            });
+            windowGroup.appendChild(btn);
+        }
+        root.appendChild(windowGroup);
+
+        const leagueSelect = _el('select', {
+            className: 'kpi-filter-league',
+            'aria-label': label('coachKpiLeagueGroup', 'League'),
+        });
+        for (const lg of LEAGUES) {
+            const opt = _el('option', {
+                value: lg,
+                text: label('coachKpiLeague' + (lg === 'all' ? 'All' : lg), LEAGUE_LABELS[lg]),
+            });
+            if (state.league === lg) opt.setAttribute('selected', 'selected');
+            leagueSelect.appendChild(opt);
+        }
+        leagueSelect.value = state.league;
+        leagueSelect.addEventListener && leagueSelect.addEventListener('change', (e) => {
+            const value = (e && e.target && e.target.value) || leagueSelect.value;
+            const next = normalizeFilters({ ...state, league: value });
+            if (onChange) onChange(next);
+        });
+        root.appendChild(leagueSelect);
+
+        const branchSelect = _el('select', {
+            className: 'kpi-filter-branch',
+            'aria-label': label('coachKpiBranchGroup', 'Branch'),
+        });
+        const allOpt = _el('option', {
+            value: 'all',
+            text: label('coachKpiBranchAll', 'All branches'),
+        });
+        if (state.branchId === 'all') allOpt.setAttribute('selected', 'selected');
+        branchSelect.appendChild(allOpt);
+        for (const b of branchOptions) {
+            const opt = _el('option', { value: b.id, text: b.name || b.id });
+            if (state.branchId === b.id) opt.setAttribute('selected', 'selected');
+            branchSelect.appendChild(opt);
+        }
+        branchSelect.value = state.branchId;
+        branchSelect.addEventListener && branchSelect.addEventListener('change', (e) => {
+            const value = (e && e.target && e.target.value) || branchSelect.value;
+            const next = normalizeFilters({ ...state, branchId: value });
+            if (onChange) onChange(next);
+        });
+        root.appendChild(branchSelect);
+
+        container.appendChild(root);
+        return root;
+    }
+
+    /**
      * Entry point — load and render the dashboard for the given role + view.
      * Caller supplies the container set and an optional override `opts`
      * (fetch, config, window preset, branch / coach selection).
@@ -393,6 +533,11 @@
     const api = {
         TIME_WINDOWS,
         DEFAULT_WINDOW,
+        LEAGUES,
+        DEFAULT_LEAGUE,
+        DEFAULT_BRANCH,
+        WINDOW_LABELS,
+        LEAGUE_LABELS,
         SCORE_THRESHOLDS,
         EMPTY_STATE_MESSAGE,
         resolveTimeWindow,
@@ -402,6 +547,8 @@
         sortLeaderboard,
         filterLeaderboardByBranch,
         aggregateSchoolHero,
+        defaultFilterState,
+        normalizeFilters,
         buildKpiQuery,
         callKpiEndpoint,
         isKpiEmpty,
@@ -410,6 +557,7 @@
         renderEmptyState,
         renderSchoolHero,
         renderLeaderboard,
+        renderFilters,
     };
 
     if (typeof window !== 'undefined') {

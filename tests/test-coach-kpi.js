@@ -35,14 +35,19 @@ console.log('\n=== smoke: API surface ==========================================
 const apiNames = [
     'resolveTimeWindow', 'scoreColor', 'formatScore', 'formatHeroValue',
     'sortLeaderboard', 'filterLeaderboardByBranch', 'aggregateSchoolHero',
+    'defaultFilterState', 'normalizeFilters',
     'buildKpiQuery', 'callKpiEndpoint', 'isKpiEmpty', 'fetchView',
     'loadDashboard', 'renderEmptyState', 'renderSchoolHero', 'renderLeaderboard',
+    'renderFilters',
 ];
 for (const name of apiNames) {
     assert(typeof kpi[name] === 'function', `${name} exported`);
 }
 assertEqual(kpi.TIME_WINDOWS, ['30d', '90d', 'ytd', 'all'], 'TIME_WINDOWS exported');
 assertEqual(kpi.DEFAULT_WINDOW, '90d', 'DEFAULT_WINDOW = 90d');
+assertEqual(kpi.LEAGUES, ['all', 'A', 'B', 'C'], 'LEAGUES exported');
+assertEqual(kpi.DEFAULT_LEAGUE, 'all', 'DEFAULT_LEAGUE = all');
+assertEqual(kpi.DEFAULT_BRANCH, 'all', 'DEFAULT_BRANCH = all');
 assertEqual(kpi.SCORE_THRESHOLDS, { red: 40, amber: 70 }, 'SCORE_THRESHOLDS exported');
 
 console.log('\n=== resolveTimeWindow =================================================\n');
@@ -255,11 +260,19 @@ function makeMockEl(tag) {
         dataset: {},
         className: '',
         textContent: '',
+        value: '',
         _innerHTML: '',
+        _listeners: {},
         get innerHTML() { return this._innerHTML; },
         set innerHTML(v) { this._innerHTML = v; if (v === '') this.children = []; },
         appendChild(child) { this.children.push(child); return child; },
         setAttribute(name, value) { this.attributes[name] = value; },
+        addEventListener(name, fn) {
+            (this._listeners[name] = this._listeners[name] || []).push(fn);
+        },
+        dispatch(name, event) {
+            for (const fn of (this._listeners[name] || [])) fn(event);
+        },
     };
 }
 global.document = { createElement: (tag) => makeMockEl(tag) };
@@ -357,6 +370,170 @@ console.log('\n=== renderLeaderboard falls back to empty state =================
         'table carries the .kpi-leaderboard class for styling hooks');
     assert(!/\bempty-state\b/.test(root.className),
         'table is not flagged as empty when rows are present');
+})();
+
+console.log('\n=== defaultFilterState / normalizeFilters =============================\n');
+assertEqual(kpi.defaultFilterState(),
+    { window: '90d', league: 'all', branchId: 'all' },
+    'default: 90d window, all leagues, all branches');
+assertEqual(kpi.defaultFilterState(ADMIN),
+    { window: '90d', league: 'all', branchId: 'all' },
+    'roleInfo passed through: admin → same defaults (transparency model)');
+assertEqual(kpi.defaultFilterState(COACH),
+    { window: '90d', league: 'all', branchId: 'all' },
+    'roleInfo passed through: coach → same defaults');
+
+assertEqual(kpi.normalizeFilters({ window: '30d', league: 'A', branchId: 'b-1' }),
+    { window: '30d', league: 'A', branchId: 'b-1' },
+    'normalizeFilters: valid input passes through unchanged');
+assertEqual(kpi.normalizeFilters({ window: 'bogus', league: 'D', branchId: '' }),
+    { window: '90d', league: 'all', branchId: 'all' },
+    'normalizeFilters: bogus values fall back to defaults');
+assertEqual(kpi.normalizeFilters(null),
+    { window: '90d', league: 'all', branchId: 'all' },
+    'normalizeFilters(null) → defaults (no crash)');
+assertEqual(kpi.normalizeFilters({}),
+    { window: '90d', league: 'all', branchId: 'all' },
+    'normalizeFilters({}) → defaults');
+assertEqual(kpi.normalizeFilters({ window: 'ytd' }),
+    { window: 'ytd', league: 'all', branchId: 'all' },
+    'normalizeFilters: partial update keeps requested field, defaults the rest');
+assertEqual(kpi.normalizeFilters({ branchId: 123 }),
+    { window: '90d', league: 'all', branchId: 'all' },
+    'normalizeFilters: non-string branchId rejected');
+
+console.log('\n=== renderFilters (DOM stub) ==========================================\n');
+(function testRenderFiltersDefaults() {
+    const c = makeMockEl('div');
+    const root = kpi.renderFilters(c, undefined, {});
+    assertEqual(c.children.length, 1, 'mounts a single root');
+    assert(/\bkpi-filters\b/.test(root.className), 'root carries .kpi-filters');
+    // [windowGroup, leagueSelect, branchSelect]
+    assertEqual(root.children.length, 3, 'renders three controls (window/league/branch)');
+
+    const windowGroup = root.children[0];
+    assert(/\bkpi-filter-window\b/.test(windowGroup.className),
+        'window group carries .kpi-filter-window');
+    assertEqual(windowGroup.children.length, 4,
+        'four pill buttons (30d / 90d / ytd / all)');
+    const pressed = windowGroup.children.filter(b => b.attributes['aria-pressed'] === 'true');
+    assertEqual(pressed.length, 1, 'exactly one pill is pressed by default');
+    assertEqual(pressed[0].dataset.window, '90d',
+        'default pressed pill is the 90d window (PRD default)');
+
+    const leagueSelect = root.children[1];
+    assertEqual(leagueSelect.tagName, 'select', 'league control is a <select>');
+    assertEqual(leagueSelect.value, 'all', 'league defaults to "all"');
+    assertEqual(leagueSelect.children.length, 4, 'league has all/A/B/C options');
+
+    const branchSelect = root.children[2];
+    assertEqual(branchSelect.tagName, 'select', 'branch control is a <select>');
+    assertEqual(branchSelect.value, 'all', 'branch defaults to "all"');
+    assertEqual(branchSelect.children.length, 1,
+        'branch select offers only "All branches" when no branches passed');
+})();
+
+(function testRenderFiltersWithBranches() {
+    const c = makeMockEl('div');
+    const root = kpi.renderFilters(c, { window: '30d', league: 'B', branchId: 'b-2' }, {
+        branches: [{ id: 'b-1', name: 'Nish' }, { id: 'b-2', name: 'Debut' }],
+    });
+    const windowGroup = root.children[0];
+    const pressed = windowGroup.children.filter(b => b.attributes['aria-pressed'] === 'true');
+    assertEqual(pressed[0].dataset.window, '30d', 'current window: 30d highlighted');
+
+    const leagueSelect = root.children[1];
+    assertEqual(leagueSelect.value, 'B', 'current league: B selected');
+
+    const branchSelect = root.children[2];
+    assertEqual(branchSelect.value, 'b-2', 'current branch: b-2 selected');
+    assertEqual(branchSelect.children.length, 3,
+        '"All branches" + two branch options');
+})();
+
+(function testRenderFiltersOnChange() {
+    const c = makeMockEl('div');
+    const events = [];
+    const root = kpi.renderFilters(c, { window: '90d', league: 'all', branchId: 'all' }, {
+        branches: [{ id: 'b-1', name: 'Nish' }],
+        onChange: (next) => events.push(next),
+    });
+
+    // Click the 30d pill.
+    const pills = root.children[0].children;
+    const pill30d = pills.find(p => p.dataset.window === '30d');
+    pill30d.dispatch('click');
+    assertEqual(events[events.length - 1],
+        { window: '30d', league: 'all', branchId: 'all' },
+        'window pill click fires onChange with updated state');
+
+    // Clicking the already-active pill should NOT re-fire onChange.
+    const before = events.length;
+    const pill90d = pills.find(p => p.dataset.window === '90d');
+    pill90d.dispatch('click');
+    // Active pill is still 30d (state is not mutated client-side until parent re-renders),
+    // so 90d click *is* a change — verify it fires.
+    assertEqual(events.length, before + 1,
+        'clicking a different pill fires onChange (current state still 90d in initial render)');
+
+    // Change the league select.
+    const leagueSelect = root.children[1];
+    leagueSelect.value = 'A';
+    leagueSelect.dispatch('change', { target: { value: 'A' } });
+    assertEqual(events[events.length - 1].league, 'A',
+        'league select change fires onChange with new league');
+    assertEqual(events[events.length - 1].window, '90d',
+        'league change preserves window (parent owns state, child returns full snapshot)');
+
+    // Change the branch select.
+    const branchSelect = root.children[2];
+    branchSelect.value = 'b-1';
+    branchSelect.dispatch('change', { target: { value: 'b-1' } });
+    assertEqual(events[events.length - 1].branchId, 'b-1',
+        'branch select change fires onChange with new branchId');
+})();
+
+(function testRenderFiltersOnChangeOmittedNoCrash() {
+    // No onChange provided — events fire harmlessly.
+    const c = makeMockEl('div');
+    const root = kpi.renderFilters(c, undefined, {});
+    const pill = root.children[0].children[0];
+    pill.dispatch('click');
+    assert(true, 'no onChange supplied → click does not throw');
+})();
+
+(function testRenderFiltersNormalizesBogusInput() {
+    const c = makeMockEl('div');
+    const root = kpi.renderFilters(c, { window: 'xss', league: 'evil', branchId: '' }, {});
+    const pressed = root.children[0].children.filter(b => b.attributes['aria-pressed'] === 'true');
+    assertEqual(pressed[0].dataset.window, '90d',
+        'bogus window falls back to 90d default');
+    assertEqual(root.children[1].value, 'all', 'bogus league falls back to all');
+    assertEqual(root.children[2].value, 'all', 'empty branchId falls back to all');
+})();
+
+(function testRenderFiltersNoContainer() {
+    // Must not throw — render fns are call-time safe.
+    const result = kpi.renderFilters(null, undefined, {});
+    assertEqual(result, null, 'null container → null return');
+})();
+
+(function testRenderFiltersI18n() {
+    const c = makeMockEl('div');
+    const translations = {
+        coachKpiTimeWindow30d: '30 дней',
+        coachKpiLeagueAll: 'Все лиги',
+        coachKpiBranchAll: 'Все филиалы',
+    };
+    const t = (key, fallback) => translations[key] || fallback;
+    const root = kpi.renderFilters(c, undefined, { t: t });
+    const pill30d = root.children[0].children.find(p => p.dataset.window === '30d');
+    assertEqual(pill30d.textContent, '30 дней',
+        'i18n: time-window labels resolved via t()');
+    assertEqual(root.children[1].children[0].textContent, 'Все лиги',
+        'i18n: league "all" option resolved via t()');
+    assertEqual(root.children[2].children[0].textContent, 'Все филиалы',
+        'i18n: branch "all" option resolved via t()');
 })();
 
 console.log('\n=== buildKpiQuery =====================================================\n');
