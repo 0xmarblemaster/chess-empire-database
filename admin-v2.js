@@ -92,6 +92,7 @@ function updateMenuVisibility() {
     const menuAttendance = document.getElementById('menuAttendance');
 
     const menuTournaments = document.getElementById('menuTournaments');
+    const menuCoachPerformance = document.getElementById('menuCoachPerformance');
 
     // Admins see everything
     if (userRole.role === 'admin') {
@@ -102,6 +103,7 @@ function updateMenuVisibility() {
         if (menuDataManagement) menuDataManagement.style.display = 'flex';
         if (menuAttendance) menuAttendance.style.display = 'flex';
         if (menuTournaments) menuTournaments.style.display = 'flex';
+        if (menuCoachPerformance) menuCoachPerformance.style.display = 'flex';
         if (managementSectionTitle) managementSectionTitle.style.display = 'block';
 
         // Analytics - Grant access to specific admin emails
@@ -192,6 +194,13 @@ function updateMenuVisibility() {
             menuTournaments.style.display = 'flex';
             hasAnyManagementAccess = true;
         }
+    }
+
+    // Coach Performance — admins (handled above) and coaches can view
+    // (PRD_COACH_KPI.md §6: coaches see branch + coach views scoped to themselves).
+    if (menuCoachPerformance && userRole.role === 'coach') {
+        menuCoachPerformance.style.display = 'flex';
+        hasAnyManagementAccess = true;
     }
 
     // Show/hide Management section title based on whether user has any management access
@@ -10076,6 +10085,21 @@ let caInitialized = false;
 
 function showCoachActivity() {
     showSection('coachActivity');
+}
+
+// Coach Performance dashboard — section + render wiring lands in Phase 2
+// (PRD_COACH_KPI.md). For now this stub keeps the nav item clickable and
+// surfaces a toast so admins know the feature is coming.
+function showCoachPerformance() {
+    if (typeof showToast === 'function') {
+        showToast(
+            (typeof t === 'function' ? t('admin.sidebar.coachPerformance') : 'Coach Performance')
+                + ' — coming soon',
+            'info'
+        );
+    } else {
+        console.log('Coach Performance — coming soon');
+    }
 }
 
 async function initCoachActivity() {
