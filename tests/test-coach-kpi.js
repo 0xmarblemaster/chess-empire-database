@@ -35,8 +35,8 @@ console.log('\n=== smoke: API surface ==========================================
 const apiNames = [
     'resolveTimeWindow', 'scoreColor', 'formatScore', 'formatHeroValue',
     'sortLeaderboard', 'filterLeaderboardByBranch', 'aggregateSchoolHero',
-    'buildKpiQuery', 'callKpiEndpoint', 'fetchView', 'loadDashboard',
-    'renderSchoolHero', 'renderLeaderboard',
+    'buildKpiQuery', 'callKpiEndpoint', 'isKpiEmpty', 'fetchView',
+    'loadDashboard', 'renderEmptyState', 'renderSchoolHero', 'renderLeaderboard',
 ];
 for (const name of apiNames) {
     assert(typeof kpi[name] === 'function', `${name} exported`);
@@ -221,6 +221,143 @@ assertEqual(
     kpi.aggregateSchoolHero([{ active_students_count: 'oops' }]).active_students_count,
     0,
     'non-numeric column treated as 0 (never NaN)');
+
+console.log('\n=== isKpiEmpty (Phase 2 migrations-not-applied predicate) =============\n');
+// Phase 2: migrations 036/037/038 may not be live yet, so the edge function
+// can come back null, 4xx (`success:false`), or an empty payload. The
+// predicate must catch all three so the renderer can fall back to the
+// friendly "apply migrations" card.
+assertEqual(kpi.isKpiEmpty(null),                                       true,  'null → empty');
+assertEqual(kpi.isKpiEmpty(undefined),                                  true,  'undefined → empty');
+assertEqual(kpi.isKpiEmpty('not an object'),                            true,  'non-object → empty');
+assertEqual(kpi.isKpiEmpty({ success: false, error: 'HTTP 404' }),      true,  '4xx envelope → empty');
+assertEqual(kpi.isKpiEmpty({ success: false, error: 'HTTP 500' }),      true,  '5xx envelope → empty');
+assertEqual(kpi.isKpiEmpty({ success: false, error: 'fetch unavailable' }), true, 'transport-error envelope → empty');
+assertEqual(kpi.isKpiEmpty({ success: true,  data: null }),             true,  'success + null data → empty');
+assertEqual(kpi.isKpiEmpty({ success: true,  data: undefined }),        true,  'success + undefined data → empty');
+assertEqual(kpi.isKpiEmpty({ success: true,  data: [] }),               true,  'success + empty array → empty');
+assertEqual(kpi.isKpiEmpty({ success: true,  data: {} }),               true,  'success + empty object → empty');
+assertEqual(kpi.isKpiEmpty({ success: true,  data: [{ coach_id: 'x' }] }),       false, 'success + rows → not empty');
+assertEqual(kpi.isKpiEmpty({ success: true,  data: { active_students_count: 0 } }), false,
+    'success + zeroed hero object → not empty (zero is a real value, not absence)');
+
+console.log('\n=== renderEmptyState (DOM stub) =======================================\n');
+// Minimal DOM stub — only the surface the renderer touches:
+// createElement, appendChild, className, textContent, dataset, setAttribute,
+// and innerHTML="" (resets children). Setting it as a global late is fine
+// because every render fn does its `typeof document === 'undefined'` check
+// at call time, not at module load.
+function makeMockEl(tag) {
+    return {
+        tagName: tag,
+        children: [],
+        attributes: {},
+        dataset: {},
+        className: '',
+        textContent: '',
+        _innerHTML: '',
+        get innerHTML() { return this._innerHTML; },
+        set innerHTML(v) { this._innerHTML = v; if (v === '') this.children = []; },
+        appendChild(child) { this.children.push(child); return child; },
+        setAttribute(name, value) { this.attributes[name] = value; },
+    };
+}
+global.document = { createElement: (tag) => makeMockEl(tag) };
+
+(function testRenderEmptyState() {
+    const c = makeMockEl('div');
+    kpi.renderEmptyState(c);
+    assertEqual(c.children.length, 1, 'renderEmptyState mounts exactly one card');
+    const card = c.children[0];
+    assert(/\bstat-card\b/.test(card.className),
+        'empty card carries .stat-card (reuses existing dashboard styling)');
+    assert(/\bempty-state\b/.test(card.className),
+        'empty card carries .empty-state modifier');
+    assertEqual(card.attributes.role, 'status',
+        'empty card has role="status" for assistive tech');
+    const label = card.children[0];
+    assert(label && /Coach KPI data not yet available/.test(label.textContent),
+        'empty card shows the migrations-not-applied lead text');
+    assert(/036\/037\/038/.test(label.textContent),
+        'empty card names migrations 036/037/038 so on-call knows which to apply');
+})();
+
+(function testRenderEmptyStateCustomMessage() {
+    const c = makeMockEl('div');
+    kpi.renderEmptyState(c, 'No tournaments in this window.');
+    assertEqual(c.children[0].children[0].textContent,
+        'No tournaments in this window.',
+        'custom message overrides the default migration string');
+})();
+
+(function testRenderEmptyStateNoContainer() {
+    // Must not throw when container is missing — render fns are call-time safe.
+    kpi.renderEmptyState(null);
+    kpi.renderEmptyState(undefined);
+    assert(true, 'renderEmptyState tolerates null/undefined container');
+})();
+
+(function testRenderEmptyStateConstantExported() {
+    assert(typeof kpi.EMPTY_STATE_MESSAGE === 'string'
+        && /036\/037\/038/.test(kpi.EMPTY_STATE_MESSAGE),
+        'EMPTY_STATE_MESSAGE exported so other modules can reuse the same copy');
+})();
+
+console.log('\n=== renderSchoolHero falls back to empty state ========================\n');
+(function testHeroEmptyCases() {
+    for (const [label, summary] of [['null', null], ['undefined', undefined], ['empty object', {}]]) {
+        const c = makeMockEl('div');
+        kpi.renderSchoolHero(c, summary);
+        assertEqual(c.children.length, 1,
+            `renderSchoolHero(${label}) collapses to a single empty card`);
+        assert(/\bempty-state\b/.test(c.children[0].className),
+            `renderSchoolHero(${label}) renders the empty-state card`);
+    }
+})();
+
+(function testHeroNonEmpty() {
+    const c = makeMockEl('div');
+    kpi.renderSchoolHero(c, {
+        active_students_count: 12,
+        total_tournaments: 4,
+        top3_count: 2,
+        promotions_count: 1,
+        new_razryads_count: 0,
+        participation_pct: 75.5,
+    });
+    assertEqual(c.children.length, 6,
+        'renderSchoolHero(data) builds the six PRD §5 hero cards');
+    assert(c.children.every(card => !/\bempty-state\b/.test(card.className)),
+        'no card carries the empty-state class when data is present');
+})();
+
+console.log('\n=== renderLeaderboard falls back to empty state =======================\n');
+(function testLeaderboardEmptyCases() {
+    for (const [label, rows] of [['null', null], ['undefined', undefined], ['empty array', []], ['non-array', 'oops']]) {
+        const c = makeMockEl('div');
+        kpi.renderLeaderboard(c, rows);
+        assertEqual(c.children.length, 1,
+            `renderLeaderboard(${label}) collapses to a single card`);
+        assert(/\bempty-state\b/.test(c.children[0].className),
+            `renderLeaderboard(${label}) renders the empty-state card (not an empty <table>)`);
+    }
+})();
+
+(function testLeaderboardNonEmpty() {
+    const c = makeMockEl('div');
+    kpi.renderLeaderboard(c, [
+        { coach_id: 'a', coach_name: 'Alice', composite_score: 55 },
+        { coach_id: 'b', coach_name: 'Bob',   composite_score: 78 },
+    ]);
+    assertEqual(c.children.length, 1,
+        'renderLeaderboard(rows) mounts one root element (the table)');
+    const root = c.children[0];
+    assertEqual(root.tagName, 'table', 'root is a <table>');
+    assert(/\bkpi-leaderboard\b/.test(root.className),
+        'table carries the .kpi-leaderboard class for styling hooks');
+    assert(!/\bempty-state\b/.test(root.className),
+        'table is not flagged as empty when rows are present');
+})();
 
 console.log('\n=== buildKpiQuery =====================================================\n');
 const BQ_ADMIN_SCHOOL = kpi.buildKpiQuery(ADMIN, 'school', { now: NOW });

@@ -27,6 +27,8 @@
     const DEFAULT_WINDOW = '90d';
     const SCORE_THRESHOLDS = Object.freeze({ red: 40, amber: 70 });
     const ALL_TIME_START = '2000-01-01';
+    const EMPTY_STATE_MESSAGE =
+        'Coach KPI data not yet available — apply migrations 036/037/038 on Supabase to enable.';
 
     function pad2(n) { return String(n).padStart(2, '0'); }
     function ymd(date) {
@@ -235,6 +237,23 @@
     }
 
     /**
+     * Detect when an edge-function result has no data to render — covers the
+     * Phase 2 "migrations 036/037/038 not yet applied" case where the call
+     * can come back null, 4xx (`success:false`), or a success envelope with
+     * empty data. Renderers use this to fall back to `renderEmptyState`.
+     */
+    function isKpiEmpty(result) {
+        if (result === null || result === undefined) return true;
+        if (typeof result !== 'object') return true;
+        if (result.success === false) return true;
+        const data = result.data;
+        if (data === null || data === undefined) return true;
+        if (Array.isArray(data)) return data.length === 0;
+        if (typeof data === 'object') return Object.keys(data).length === 0;
+        return false;
+    }
+
+    /**
      * Fetch the data backing a single view. Returns null when the user is
      * not allowed, otherwise the parsed edge-function response.
      */
@@ -263,12 +282,36 @@
     }
 
     /**
+     * Render the friendly empty card used when the edge function returns
+     * null / 4xx / empty data (Phase 2 migrations not yet applied). Reuses
+     * the `.stat-card` styling already in the dashboard and adds an
+     * `.empty-state` modifier for callers that want to target it in CSS.
+     */
+    function renderEmptyState(container, message) {
+        if (typeof document === 'undefined' || !container) return;
+        const text = (typeof message === 'string' && message.length > 0)
+            ? message
+            : EMPTY_STATE_MESSAGE;
+        container.innerHTML = '';
+        container.appendChild(_el('div', {
+            className: 'stat-card empty-state kpi-empty-state',
+            role: 'status',
+        }, [
+            _el('div', { className: 'stat-card-label', text: text }),
+        ]));
+    }
+
+    /**
      * Build the six hero stat cards from a school summary. Pure DOM, no
      * data fetching. Returns the container element.
      */
     function renderSchoolHero(container, summary) {
         if (typeof document === 'undefined' || !container) return;
-        const s = summary || {};
+        if (!summary || typeof summary !== 'object' || Object.keys(summary).length === 0) {
+            renderEmptyState(container);
+            return;
+        }
+        const s = summary;
         const cards = [
             ['Active students',  formatHeroValue(s.active_students_count)],
             ['Tournaments',      formatHeroValue(s.total_tournaments)],
@@ -288,11 +331,16 @@
 
     /**
      * Render the coach leaderboard table. Sorts and color-codes the
-     * composite score column. Empty list shows an inline empty-state row.
+     * composite score column. Empty / non-array `rows` falls through to
+     * `renderEmptyState` so callers don't need a separate branch.
      */
     function renderLeaderboard(container, rows, opts) {
         if (typeof document === 'undefined' || !container) return;
         const o = opts || {};
+        if (!Array.isArray(rows) || rows.length === 0) {
+            renderEmptyState(container);
+            return;
+        }
         const sorted = sortLeaderboard(rows, o.sortKey, o.direction);
         container.innerHTML = '';
         const table = _el('table', { className: 'kpi-leaderboard' });
@@ -309,24 +357,18 @@
             ]),
         ]);
         const tbody = _el('tbody');
-        if (sorted.length === 0) {
-            tbody.appendChild(_el('tr', null, [
-                _el('td', { className: 'kpi-empty', colspan: '8', text: 'No data for this window.' }),
+        for (const row of sorted) {
+            const color = scoreColor(row.composite_score);
+            tbody.appendChild(_el('tr', { dataset: { coachId: row.coach_id || '' } }, [
+                _el('td', { text: row.coach_name || '—' }),
+                _el('td', { text: formatHeroValue(row.active_students_count) }),
+                _el('td', { text: formatHeroValue(row.total_tournaments) }),
+                _el('td', { text: formatHeroValue(row.top3_count) }),
+                _el('td', { text: formatHeroValue(row.total_rating_gained, { signed: true }) }),
+                _el('td', { text: formatHeroValue(row.promotions_count) }),
+                _el('td', { text: formatHeroValue(row.new_razryads_count) }),
+                _el('td', { className: `kpi-score kpi-score-${color}`, text: formatScore(row.composite_score) }),
             ]));
-        } else {
-            for (const row of sorted) {
-                const color = scoreColor(row.composite_score);
-                tbody.appendChild(_el('tr', { dataset: { coachId: row.coach_id || '' } }, [
-                    _el('td', { text: row.coach_name || '—' }),
-                    _el('td', { text: formatHeroValue(row.active_students_count) }),
-                    _el('td', { text: formatHeroValue(row.total_tournaments) }),
-                    _el('td', { text: formatHeroValue(row.top3_count) }),
-                    _el('td', { text: formatHeroValue(row.total_rating_gained, { signed: true }) }),
-                    _el('td', { text: formatHeroValue(row.promotions_count) }),
-                    _el('td', { text: formatHeroValue(row.new_razryads_count) }),
-                    _el('td', { className: `kpi-score kpi-score-${color}`, text: formatScore(row.composite_score) }),
-                ]));
-            }
         }
         table.appendChild(thead);
         table.appendChild(tbody);
@@ -352,6 +394,7 @@
         TIME_WINDOWS,
         DEFAULT_WINDOW,
         SCORE_THRESHOLDS,
+        EMPTY_STATE_MESSAGE,
         resolveTimeWindow,
         scoreColor,
         formatScore,
@@ -361,8 +404,10 @@
         aggregateSchoolHero,
         buildKpiQuery,
         callKpiEndpoint,
+        isKpiEmpty,
         fetchView,
         loadDashboard,
+        renderEmptyState,
         renderSchoolHero,
         renderLeaderboard,
     };
