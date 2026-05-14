@@ -48,6 +48,7 @@ const apiNames = [
     'coachAllowedCoachIds', 'filterBranchesForRole', 'filterCoachesForRole',
     'resolveSelectedBranch', 'resolveSelectedCoach', 'canAccessCoach',
     'canAccessBranch', 'kpiQueryScope',
+    'canViewCoachKpi', 'getInitialBranchScope', 'getInitialCoachScope',
 ];
 for (const name of apiNames) {
     assert(typeof lock[name] === 'function', `${name} exported`);
@@ -314,6 +315,30 @@ assertEqual(lock.kpiQueryScope(ANON, 'coach', { coachId: 'anything' }), null,
     'anon + coach → null');
 assertEqual(lock.kpiQueryScope(ADMIN, 'bogus', {}), null,
     'unknown view → null');
+
+console.log('\n=== canViewCoachKpi (Phase 2 dashboard gate) ==========================\n');
+assertEqual(lock.canViewCoachKpi(ADMIN), true,  'admin → can view dashboard');
+assertEqual(lock.canViewCoachKpi(COACH), true,  'coach (coachId set) → can view dashboard');
+assertEqual(lock.canViewCoachKpi({ isAdmin: false, isCoach: true }), true,
+    'explicit isCoach flag → can view dashboard');
+assertEqual(lock.canViewCoachKpi(ANON),  false, 'anon → blocked');
+assertEqual(lock.canViewCoachKpi(null),  false, 'null roleInfo → blocked');
+assertEqual(lock.canViewCoachKpi(undefined), false, 'undefined roleInfo → blocked');
+assertEqual(lock.canViewCoachKpi({}),    false, 'empty roleInfo → blocked');
+assertEqual(lock.canViewCoachKpi({ isAdmin: false, isCoach: false, coachId: null }),
+    false, 'viewer-like role (no admin, no coach) → blocked');
+
+console.log('\n=== getInitialBranchScope (transparency model) ========================\n');
+assertEqual(lock.getInitialBranchScope(ADMIN), 'all',  'admin → \'all\'');
+assertEqual(lock.getInitialBranchScope(COACH), 'all',  'coach → \'all\'');
+assertEqual(lock.getInitialBranchScope(ANON),  'all',  'anon → \'all\' (gated by canViewCoachKpi)');
+assertEqual(lock.getInitialBranchScope(null),  'all',  'null → \'all\'');
+
+console.log('\n=== getInitialCoachScope (transparency model) =========================\n');
+assertEqual(lock.getInitialCoachScope(ADMIN), 'all',  'admin → \'all\'');
+assertEqual(lock.getInitialCoachScope(COACH), 'all',  'coach → \'all\'');
+assertEqual(lock.getInitialCoachScope(ANON),  'all',  'anon → \'all\' (gated by canViewCoachKpi)');
+assertEqual(lock.getInitialCoachScope(null),  'all',  'null → \'all\'');
 
 console.log('\n=== end-to-end scenarios ==============================================\n');
 

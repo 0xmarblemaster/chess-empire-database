@@ -258,6 +258,39 @@
         return null;
     }
 
+    /**
+     * Phase 2 dashboard gate — true when the user is allowed to open the
+     * Coach Performance section at all. Per the Phase 2 transparency model,
+     * both admins and coaches can view; anyone else cannot.
+     *
+     * Coach detection accepts either an explicit `isCoach` flag or the
+     * `coachId` field that `auth-helpers.getRoleInfo` actually returns.
+     */
+    function canViewCoachKpi(roleInfo) {
+        if (!roleInfo) return false;
+        if (roleInfo.isAdmin === true) return true;
+        if (roleInfo.isCoach === true) return true;
+        if (roleInfo.coachId) return true;
+        return false;
+    }
+
+    /**
+     * Initial branch-filter value for the dashboard. Phase 2 uses a
+     * transparency model: every viewer (admin or coach) lands on `'all'`
+     * and may narrow down from there.
+     */
+    function getInitialBranchScope(_roleInfo) {
+        return 'all';
+    }
+
+    /**
+     * Initial coach-filter value for the dashboard. Same transparency model:
+     * every viewer starts at `'all'`.
+     */
+    function getInitialCoachScope(_roleInfo) {
+        return 'all';
+    }
+
     const api = {
         VIEWS,
         isCoachLocked,
@@ -276,6 +309,9 @@
         canAccessCoach,
         canAccessBranch,
         kpiQueryScope,
+        canViewCoachKpi,
+        getInitialBranchScope,
+        getInitialCoachScope,
     };
 
     if (typeof window !== 'undefined') {
