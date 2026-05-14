@@ -90,9 +90,26 @@ assert(/const\s+menuCoachPerformance\s*=\s*document\.getElementById\(['"]menuCoa
     .test(ADMIN_JS),
     'updateMenuVisibility() looks up menuCoachPerformance element');
 assert(/menuCoachPerformance\.style\.display\s*=\s*['"]flex['"]/.test(ADMIN_JS),
-    'admin branch shows menuCoachPerformance (display: flex)');
+    'menuCoachPerformance is shown via display: flex');
 assert(/userRole\.role\s*===\s*['"]coach['"]/.test(ADMIN_JS),
     'coach role visibility check exists (PRD §6: coaches see branch + coach views)');
+
+// PRD §6 — the policy decision lives in coach-kpi-role-lock.canViewCoachKpi,
+// not in an inline `role === 'coach'` check. The wiring delegates to that helper.
+assert(/window\.coachKpiRoleLock[^\n]*canViewCoachKpi/.test(ADMIN_JS),
+    'updateMenuVisibility() calls window.coachKpiRoleLock.canViewCoachKpi');
+assert(/canViewCoachKpi\s*\(\s*kpiRoleInfo\s*\)/.test(ADMIN_JS),
+    'canViewCoachKpi is invoked with a roleInfo argument');
+// The roleInfo passed in must carry isAdmin + isCoach (the two shapes
+// canViewCoachKpi inspects when no coachId is available client-side).
+assert(/isAdmin\s*:\s*userRole\.role\s*===\s*['"]admin['"]/.test(ADMIN_JS),
+    'roleInfo.isAdmin is derived from userRole.role === "admin"');
+assert(/isCoach\s*:\s*userRole\.role\s*===\s*['"]coach['"]/.test(ADMIN_JS),
+    'roleInfo.isCoach is derived from userRole.role === "coach"');
+// The display flip must be gated by the canViewCoachKpi result.
+assert(/menuCoachPerformance\s*&&\s*canViewKpi[\s\S]*?menuCoachPerformance\.style\.display\s*=\s*['"]flex['"]/
+    .test(ADMIN_JS),
+    'menuCoachPerformance display flip is gated by canViewKpi');
 
 console.log('\n=== click handler stub exists ========================================\n');
 

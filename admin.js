@@ -91,6 +91,21 @@ function updateMenuVisibility() {
     // Get attendance menu item
     const menuAttendance = document.getElementById('menuAttendance');
 
+    const menuCoachPerformance = document.getElementById('menuCoachPerformance');
+
+    // Coach Performance — PRD §6 transparency: admins and coaches can view.
+    // Policy lives in coach-kpi-role-lock.canViewCoachKpi.
+    const kpiRoleInfo = {
+        isAdmin: userRole.role === 'admin',
+        isCoach: userRole.role === 'coach',
+        coachId: userRole.coachId || null
+    };
+    const canViewKpi = !!(window.coachKpiRoleLock
+        && window.coachKpiRoleLock.canViewCoachKpi(kpiRoleInfo));
+    if (menuCoachPerformance && canViewKpi) {
+        menuCoachPerformance.style.display = 'flex';
+    }
+
     // Admins see everything
     if (userRole.role === 'admin') {
         if (menuRatings) menuRatings.style.display = 'flex';
@@ -181,6 +196,12 @@ function updateMenuVisibility() {
             menuAttendance.style.display = 'flex';
             hasAnyManagementAccess = true;
         }
+    }
+
+    // Coach Performance counts toward Management section title visibility
+    // when the canViewCoachKpi gate (above) showed the nav item.
+    if (menuCoachPerformance && canViewKpi) {
+        hasAnyManagementAccess = true;
     }
 
     // Show/hide Management section title based on whether user has any management access
