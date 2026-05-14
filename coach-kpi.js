@@ -126,6 +126,46 @@
         return String(value);
     }
 
+    // PRD-named aliases for the 5 pure helpers spelled out in §Task 3. The
+    // existing `scoreColor` / `formatHeroValue` cover the same logic with a
+    // broader signature; these expose the simpler, name-stable surface the PRD
+    // promises to UI code and tests.
+    function computeScoreBadgeColor(score) {
+        return scoreColor(score);
+    }
+
+    function formatPercent(num) {
+        if (typeof num !== 'number' || !Number.isFinite(num)) return '—';
+        return `${Math.round(num)}%`;
+    }
+
+    function formatRatingDelta(num) {
+        if (typeof num !== 'number' || !Number.isFinite(num)) return '—';
+        const r = Math.round(num);
+        if (r > 0) return `+${r}`;
+        return String(r);
+    }
+
+    // Inactivity rule (PRD §5 "Inactive student" insight): a student with no
+    // tournament in the last 90 days is inactive. Missing / invalid date →
+    // inactive (we cannot prove activity). `asOfDate` is injectable for tests.
+    const INACTIVE_THRESHOLD_DAYS = 90;
+    function isStudentInactive(lastTournamentDate, asOfDate) {
+        if (lastTournamentDate === null || lastTournamentDate === undefined || lastTournamentDate === '') {
+            return true;
+        }
+        const last = (lastTournamentDate instanceof Date)
+            ? lastTournamentDate
+            : new Date(lastTournamentDate);
+        const lastMs = last.getTime();
+        if (!Number.isFinite(lastMs)) return true;
+        const asOfMs = (asOfDate === undefined || asOfDate === null)
+            ? Date.now()
+            : (asOfDate instanceof Date ? asOfDate.getTime() : Number(asOfDate));
+        if (!Number.isFinite(asOfMs)) return true;
+        return (asOfMs - lastMs) > INACTIVE_THRESHOLD_DAYS * 86400000;
+    }
+
     /**
      * Stable sort of a coach leaderboard. Numeric columns sort descending by
      * default (more is better); `coach_name` and `branches` sort ascending.
@@ -773,8 +813,12 @@
         LEAGUE_COLORS,
         resolveTimeWindow,
         scoreColor,
+        computeScoreBadgeColor,
         formatScore,
         formatHeroValue,
+        formatPercent,
+        formatRatingDelta,
+        isStudentInactive,
         sortLeaderboard,
         filterLeaderboardByBranch,
         aggregateSchoolHero,
