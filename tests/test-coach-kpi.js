@@ -296,6 +296,56 @@ assertEqual(
     null,
     'locked coach + out-of-scope branch → null');
 
+console.log('\n=== buildKpiQuery filters (league + branch) ============================\n');
+// League filter: passes through for every view when non-empty / non-'all'.
+assertEqual(
+    kpi.buildKpiQuery(ADMIN, 'school', { league: 'A', now: NOW }).league,
+    'A', 'school + league=A → league:"A" added to query');
+assertEqual(
+    kpi.buildKpiQuery(ADMIN, 'coach', { coachId: 'coach-uuid-2', league: 'B', now: NOW }).league,
+    'B', 'coach + league=B → league:"B" added to query');
+assertEqual(
+    kpi.buildKpiQuery(ADMIN, 'branch', { branchName: 'Debut', branchId: 'b-id', league: 'C', now: NOW }).league,
+    'C', 'branch + league=C → league:"C" added to query');
+assert(
+    !('league' in kpi.buildKpiQuery(ADMIN, 'school', { league: 'all', now: NOW })),
+    'league=all → omitted from query (no filter)');
+assert(
+    !('league' in kpi.buildKpiQuery(ADMIN, 'school', { league: '', now: NOW })),
+    'league="" → omitted from query');
+assert(
+    !('league' in kpi.buildKpiQuery(ADMIN, 'school', { now: NOW })),
+    'league undefined → omitted from query');
+
+// Branch filter: now flows through for every view (not just branch view) so
+// the dashboard's branch picker reaches the edge function consistently.
+assertEqual(
+    kpi.buildKpiQuery(ADMIN, 'school', { branchId: 'b-school', now: NOW }).branch_id,
+    'b-school', 'school + branchId → branch_id propagated');
+assertEqual(
+    kpi.buildKpiQuery(ADMIN, 'coach', { coachId: 'coach-uuid-2', branchId: 'b-coach', now: NOW }).branch_id,
+    'b-coach', 'coach + branchId → branch_id propagated');
+assert(
+    !('branch_id' in kpi.buildKpiQuery(ADMIN, 'school', { branchId: 'all', now: NOW })),
+    'branchId=all → branch_id omitted (no filter)');
+
+// All filters combined on a leaderboard call.
+const BQ_FULL = kpi.buildKpiQuery(ADMIN, 'branch', {
+    branchName: 'Debut',
+    branchId: 'branch-id-debut',
+    league: 'A',
+    window: '30d',
+    now: NOW,
+});
+assertEqual(BQ_FULL, {
+    action: 'coach_leaderboard',
+    branchName: 'Debut',
+    window_start: '2026-04-15',
+    window_end: '2026-05-14',
+    branch_id: 'branch-id-debut',
+    league: 'A',
+}, 'all filters combined: action + time window + branch + league');
+
 console.log('\n=== callKpiEndpoint (fetch wrapper) ===================================\n');
 async function runFetchTests() {
     // Happy path: success body comes back from the stub.
@@ -401,6 +451,45 @@ async function runFetchTests() {
     });
     assert(/coachId=coach-uuid-1/.test(coachUrl),
         'locked coach + stray coachId → forced to self in actual URL');
+
+    // League + branch filters surface in the actual URL for every action.
+    let leaderboardUrl = '';
+    await kpi.fetchView(ADMIN, 'branch', {
+        branchName: 'Debut', branchId: 'b-debut', league: 'A', window: '30d', now: NOW,
+    }, {
+        fetch: (u) => { leaderboardUrl = u; return Promise.resolve({ ok: true, status: 200, json: () => Promise.resolve({ success: true, data: [] }) }); },
+        config: { url: 'https://x', apiKey: 'k' },
+    });
+    assert(/action=coach_leaderboard/.test(leaderboardUrl),
+        'branch view fetch issues coach_leaderboard action');
+    assert(/branch_id=b-debut/.test(leaderboardUrl),
+        'branch view fetch includes branch_id in URL');
+    assert(/league=A/.test(leaderboardUrl),
+        'branch view fetch includes league filter in URL');
+    assert(/window_start=2026-04-15/.test(leaderboardUrl),
+        'branch view fetch includes resolved window_start (30d preset)');
+
+    // league=all is treated as "no filter" and stays out of the URL.
+    let unfilteredUrl = '';
+    await kpi.fetchView(ADMIN, 'school', { league: 'all', branchId: 'all', now: NOW }, {
+        fetch: (u) => { unfilteredUrl = u; return Promise.resolve({ ok: true, status: 200, json: () => Promise.resolve({ success: true }) }); },
+        config: { url: 'https://x', apiKey: 'k' },
+    });
+    assert(!/league=/.test(unfilteredUrl), 'league=all stays out of the URL');
+    assert(!/branch_id=/.test(unfilteredUrl), 'branchId=all stays out of the URL');
+    assert(/action=school_kpi_summary/.test(unfilteredUrl),
+        'school view fetch issues school_kpi_summary action');
+
+    // Coach view with league filter still issues coach_kpi_summary and carries the filter.
+    let coachSummaryUrl = '';
+    await kpi.fetchView(ADMIN, 'coach', { coachId: 'coach-uuid-2', league: 'B', now: NOW }, {
+        fetch: (u) => { coachSummaryUrl = u; return Promise.resolve({ ok: true, status: 200, json: () => Promise.resolve({ success: true }) }); },
+        config: { url: 'https://x', apiKey: 'k' },
+    });
+    assert(/action=coach_kpi_summary/.test(coachSummaryUrl),
+        'coach view fetch issues coach_kpi_summary action');
+    assert(/league=B/.test(coachSummaryUrl),
+        'coach view fetch carries league filter');
 
     console.log('\n=== loadDashboard (gate + fetch) ====================================\n');
     const dashAdmin = await kpi.loadDashboard(ADMIN, 'school', { now: NOW }, {

@@ -172,11 +172,20 @@
     /**
      * Build the canonical edge-function query string for the requested view.
      * Combines `roleLock.kpiQueryScope` (auth gate) with the resolved time
-     * window. Returns null when the user is not allowed to issue the call.
+     * window and the dashboard's league / branch filters. Returns null when
+     * the user is not allowed to issue the call.
+     *
+     * Filter params:
+     *   - window  → preset id resolved to window_start / window_end
+     *   - league  → 'A' | 'B' | 'C' (omitted when 'all' / falsy)
+     *   - branchId → uuid (omitted when 'all' / falsy). Passes through for
+     *                every view so the dashboard's branch picker applies
+     *                consistently; the edge function reads it only where
+     *                relevant (e.g. coach_leaderboard).
      *
      * @param {object} roleInfo
      * @param {'school'|'branch'|'coach'} view
-     * @param {object} params { branchName?, branchId?, coachId?, coaches?, window?, now? }
+     * @param {object} params { branchName?, branchId?, coachId?, coaches?, window?, league?, now? }
      */
     function buildKpiQuery(roleInfo, view, params) {
         if (!roleLock) return null;
@@ -185,7 +194,8 @@
         if (!scope) return null;
         const win = resolveTimeWindow(p.window, p.now);
         const query = { ...scope, window_start: win.start, window_end: win.end };
-        if (view === 'branch' && p.branchId) query.branch_id = p.branchId;
+        if (p.branchId && p.branchId !== 'all') query.branch_id = p.branchId;
+        if (p.league && p.league !== 'all') query.league = p.league;
         return query;
     }
 
