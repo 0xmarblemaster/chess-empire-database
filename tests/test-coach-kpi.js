@@ -845,6 +845,21 @@ assertEqual(kpi.aggregateRazryadFromStudents(null),
     { KMS: 0, '1st': 0, '2nd': 0, '3rd': 0, '4th': 0, None: 0 },
     'null input → zeroed slots');
 
+// Regression: the DB CHECK constraint stores razryad lowercase
+// ('none', '4th', '3rd', '2nd', '1st', 'kms' — see migrations/update_razryad_constraint.sql).
+// The bucketing must match the actual storage so a kms student doesn't get
+// silently dropped into "None" on the doughnut.
+assertEqual(kpi.aggregateRazryadFromStudents([
+    { razryad: 'kms' },
+    { razryad: 'KMS' },
+    { razryad: '1st' },
+    { razryad: '2nd' },
+    { razryad: '3rd' },
+    { razryad: '4th' },
+    { razryad: 'none' },
+]), { KMS: 2, '1st': 1, '2nd': 1, '3rd': 1, '4th': 1, None: 1 },
+    'DB-style lowercase razryads bucket correctly (kms → KMS, none → None)');
+
 console.log('\n=== chart renderers (PRD §5: school 2 charts, coach 3 charts) =========\n');
 // Capture Chart.js constructor calls without pulling the real lib in.
 const chartCalls = [];

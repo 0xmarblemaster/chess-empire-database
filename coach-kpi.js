@@ -476,15 +476,17 @@
      * fed from `coach_kpi_summary.data.students` directly. Unknown / null
      * razryads roll into the `None` slot — the doughnut never silently drops
      * a student. Accepts the legacy `'1' / '2' / '3' / '4'` and modern
-     * `'1st' / ...` spellings.
+     * `'1st' / ...` spellings, and is case-insensitive (DB stores lowercase
+     * 'kms' / 'none' per migrations/update_razryad_constraint.sql).
      */
     function aggregateRazryadFromStudents(students) {
         const out = { KMS: 0, '1st': 0, '2nd': 0, '3rd': 0, '4th': 0, None: 0 };
         if (!Array.isArray(students)) return out;
         for (const s of students) {
             if (!s || typeof s !== 'object') continue;
-            const r = s.razryad;
-            if (r === 'KMS') out.KMS++;
+            const raw = s.razryad;
+            const r = (typeof raw === 'string') ? raw.toLowerCase() : raw;
+            if (r === 'kms') out.KMS++;
             else if (r === '1st' || r === '1') out['1st']++;
             else if (r === '2nd' || r === '2') out['2nd']++;
             else if (r === '3rd' || r === '3') out['3rd']++;
