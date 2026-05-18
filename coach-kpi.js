@@ -799,6 +799,126 @@
         return result;
     }
 
+    /**
+     * Phase 2 leaderboard table — columns per COACH_KPI_PHASE2_SPEC.md §4:
+     *   rank, coach name, branch, active students, tournament entries,
+     *   avg rating delta, top-3 finishes, promotions, razryads earned,
+     *   composite score.
+     *
+     * Sorted by composite_score desc with tie-break on participation_rate
+     * desc (spec §1 / §4). Equal-score ties render at the same rank with the
+     * next rank skipped — "D-style behavior".
+     */
+    function renderPhase2Leaderboard(container, rows, opts) {
+        if (typeof document === 'undefined' || !container) return;
+        const o = opts || {};
+        if (!Array.isArray(rows) || rows.length === 0) {
+            renderEmptyState(container, o.emptyMessage || 'No data yet for this window.');
+            return;
+        }
+        const t = typeof o.t === 'function' ? o.t : null;
+        const label = (key, fb) => (t ? t(key, fb) : fb);
+
+        // Composite-score-desc primary, participation_rate-desc tie-break.
+        const sorted = rows.slice().sort((a, b) => {
+            const ac = Number(a.composite_score) || 0;
+            const bc = Number(b.composite_score) || 0;
+            if (bc !== ac) return bc - ac;
+            const ap = Number(a.participation_rate) || 0;
+            const bp = Number(b.participation_rate) || 0;
+            return bp - ap;
+        });
+
+        // D-style rank assignment: same composite + same participation_rate → same rank.
+        const ranks = [];
+        for (let i = 0; i < sorted.length; i++) {
+            if (i > 0) {
+                const prev = sorted[i - 1];
+                const cur = sorted[i];
+                if (Number(prev.composite_score) === Number(cur.composite_score)
+                    && Number(prev.participation_rate) === Number(cur.participation_rate)) {
+                    ranks.push(ranks[i - 1]);
+                    continue;
+                }
+            }
+            ranks.push(i + 1);
+        }
+
+        container.innerHTML = '';
+        const table = _el('table', { className: 'kpi-leaderboard kpi-leaderboard-v2' });
+        const thead = _el('thead', null, [
+            _el('tr', null, [
+                _el('th', { text: label('admin.coachKpi.rank', '#') }),
+                _el('th', { text: label('admin.coachKpi.colCoach', 'Coach') }),
+                _el('th', { text: label('admin.coachKpi.colBranch', 'Branch') }),
+                _el('th', { text: label('admin.coachKpi.colActive', 'Active students') }),
+                _el('th', { text: label('admin.coachKpi.colEntries', 'Tournament entries') }),
+                _el('th', { text: label('admin.coachKpi.colAvgDelta', 'Avg rating delta') }),
+                _el('th', { text: label('admin.coachKpi.colTop3', 'Top-3 finishes') }),
+                _el('th', { text: label('admin.coachKpi.colPromotions', 'Promotions') }),
+                _el('th', { text: label('admin.coachKpi.colRazryads', 'Razryads earned') }),
+                _el('th', { text: label('admin.coachKpi.colScore', 'Score') }),
+            ]),
+        ]);
+        const tbody = _el('tbody');
+        sorted.forEach((row, i) => {
+            const color = scoreColor(row.composite_score);
+            const branches = Array.isArray(row.branches) ? row.branches.join(', ') : (row.branch || '—');
+            tbody.appendChild(_el('tr', { dataset: { coachId: row.coach_id || '' } }, [
+                _el('td', { text: String(ranks[i]) }),
+                _el('td', { text: row.coach_name || '—' }),
+                _el('td', { text: branches || '—' }),
+                _el('td', { text: formatHeroValue(row.active_students_count) }),
+                _el('td', { text: formatHeroValue(row.tournament_entries) }),
+                _el('td', { text: formatRatingDelta(row.avg_rating_delta) }),
+                _el('td', { text: formatHeroValue(row.top3_count) }),
+                _el('td', { text: formatHeroValue(row.promotions_count) }),
+                _el('td', { text: formatHeroValue(row.new_razryads_count) }),
+                _el('td', { className: `kpi-score kpi-score-${color}`, text: formatScore(row.composite_score) }),
+            ]));
+        });
+        table.appendChild(thead);
+        table.appendChild(tbody);
+        container.appendChild(table);
+    }
+
+    /**
+     * Render the "Upload tournament" launcher button. Clicking it opens
+     * the coach-kpi-upload modal in a host container.
+     */
+    function renderUploadLauncher(container, opts) {
+        if (typeof document === 'undefined' || !container) return null;
+        const o = opts || {};
+        const t = typeof o.t === 'function' ? o.t : null;
+        const label = (key, fb) => (t ? t(key, fb) : fb);
+
+        container.innerHTML = '';
+        const btn = _el('button', {
+            type: 'button',
+            className: 'btn btn-primary kpi-upload-launcher',
+            text: label('admin.coachKpi.uploadButton', 'Upload tournament'),
+        });
+        btn.addEventListener('click', () => {
+            if (typeof o.onOpen === 'function') o.onOpen();
+        });
+        container.appendChild(btn);
+        return btn;
+    }
+
+    /**
+     * Build the canonical current-month window per spec §4 ("default = current
+     * calendar month"). `now` is injectable for tests.
+     */
+    function currentMonthWindow(now) {
+        const today = now instanceof Date ? new Date(now.getTime()) : new Date();
+        const year = today.getUTCFullYear();
+        const month = today.getUTCMonth();
+        const start = `${year}-${pad2(month + 1)}-01`;
+        const lastDay = new Date(Date.UTC(year, month + 1, 0)).getUTCDate();
+        const end = `${year}-${pad2(month + 1)}-${pad2(lastDay)}`;
+        return { start, end, preset: 'current_month' };
+    }
+
     const api = {
         TIME_WINDOWS,
         DEFAULT_WINDOW,
@@ -840,6 +960,9 @@
         renderTournamentsByLeagueStackedBar,
         renderTournamentsByLeagueBar,
         renderAvgPlaceTrendLine,
+        renderPhase2Leaderboard,
+        renderUploadLauncher,
+        currentMonthWindow,
     };
 
     if (typeof window !== 'undefined') {

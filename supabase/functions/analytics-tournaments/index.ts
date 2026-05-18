@@ -96,6 +96,49 @@ export function calcCompositeScore(m: CompositeInput): number {
   return Math.round(score * 10) / 10
 }
 
+// =================================================================
+// Phase 2 (COACH_KPI_PHASE2_SPEC.md §1) — the locked formula reads from
+// the Phase 2 tournament_results / tournaments_uploads tables. Each
+// sub-metric is clamped 0–1, multiplied by its weight, summed × 100.
+// =================================================================
+export interface Phase2SubRates {
+  participation_rate: number     // 0..1+ (can exceed 1.0, that's intended)
+  normalized_avg_rating_delta: number  // 0..1
+  top3_finish_rate: number       // 0..1
+  promotion_rate: number         // 0..1
+  razryad_earned_rate: number    // 0..1
+}
+
+export function clamp01(n: number): number {
+  if (!Number.isFinite(n)) return 0
+  if (n < 0) return 0
+  if (n > 1) return 1
+  return n
+}
+
+export function calcPhase2CompositeScore(r: Phase2SubRates): number {
+  const score =
+    clamp01(r.participation_rate)         * COACH_SCORE_WEIGHTS.participation +
+    clamp01(r.normalized_avg_rating_delta) * COACH_SCORE_WEIGHTS.rating_delta +
+    clamp01(r.top3_finish_rate)           * COACH_SCORE_WEIGHTS.top3 +
+    clamp01(r.promotion_rate)             * COACH_SCORE_WEIGHTS.promotion +
+    clamp01(r.razryad_earned_rate)        * COACH_SCORE_WEIGHTS.razryad
+  return Math.round(score * 100 * 10) / 10
+}
+
+// Seed rating assigned to a brand-new student at their first rated game,
+// keyed by tournament kind (COACH_KPI_PHASE2_SPEC.md §2 + "New-student
+// starting ratings"). Returns null for unknown kinds.
+export function seedRatingForKind(kind: string): number | null {
+  switch (kind) {
+    case 'league_c':  return 150
+    case 'league_b':  return 450
+    case 'razryad_4': return 300
+    case 'razryad_3': return 550
+    default: return null
+  }
+}
+
 function validateWindow(start: string | null, end: string | null): string | null {
   if (!start) return 'window_start required (ISO date, e.g. 2026-01-01)'
   if (!end) return 'window_end required (ISO date, e.g. 2026-12-31)'
@@ -277,6 +320,9 @@ serve(async (req) => {
     }
 
     if (action === 'coach_leaderboard') {
+      // Phase 2 (COACH_KPI_PHASE2_SPEC.md §7): read from tournament_results +
+      // tournaments_uploads; apply the locked formula in §1; tie-break by
+      // participation_rate (§4).
       const windowStart = p('window_start')
       const windowEnd = p('window_end')
       const branchId = p('branch_id') // optional
@@ -331,20 +377,34 @@ serve(async (req) => {
       }
       const allStudentIds = [...coachByStudent.keys()]
 
-      // 3. Tournament participations in window.
-      let participations: any[] = []
-      if (allStudentIds.length > 0) {
-        const { data: parts, error: pErr } = await supabase
-          .from('tournament_participants')
-          .select('student_id, place, rating_delta, tournament:tournaments!inner(id, tournament_date)')
+      // 3. Tournaments + per-student results in window.
+      const { data: uploadsInWindow, error: upErr } = await supabase
+        .from('tournaments_uploads')
+        .select('id, kind, tournament_date')
+        .gte('tournament_date', windowStart)
+        .lte('tournament_date', windowEnd)
+      if (upErr) throw upErr
+      const uploads = uploadsInWindow || []
+      const uploadIds = uploads.map((u: any) => u.id)
+      const uploadById = new Map<string, any>()
+      for (const u of uploads) uploadById.set((u as any).id, u)
+      const totalUploadsInWindow = uploads.length
+      const razryadUploadIds = new Set(
+        uploads.filter((u: any) => u.kind === 'razryad_3' || u.kind === 'razryad_4').map((u: any) => u.id)
+      )
+
+      let results: any[] = []
+      if (uploadIds.length > 0 && allStudentIds.length > 0) {
+        const { data: rs, error: rsErr } = await supabase
+          .from('tournament_results')
+          .select('upload_id, student_id, rank, score, games_played, rating_before, rating_delta, earned_razryad')
+          .in('upload_id', uploadIds)
           .in('student_id', allStudentIds)
-          .gte('tournament.tournament_date', windowStart)
-          .lte('tournament.tournament_date', windowEnd)
-        if (pErr) throw pErr
-        participations = (parts || []).filter((r: any) => r.tournament)
+        if (rsErr) throw rsErr
+        results = rs || []
       }
 
-      // 4. League promotions in window.
+      // 4. League promotions in window (existing 038 trigger).
       let promotions: any[] = []
       if (allStudentIds.length > 0) {
         const { data: ev, error: evErr } = await supabase
@@ -358,74 +418,109 @@ serve(async (req) => {
         promotions = ev || []
       }
 
-      // 5. New razryads in window.
-      let razryadEvents: any[] = []
-      if (allStudentIds.length > 0) {
-        const { data: rz, error: rzErr } = await supabase
-          .from('razryad_history')
-          .select('student_id, new_razryad, changed_at')
-          .in('student_id', allStudentIds)
-          .gte('changed_at', windowStart)
-          .lte('changed_at', `${windowEnd}T23:59:59.999Z`)
-        if (rzErr) throw rzErr
-        // Only count transitions INTO a real razryad (not 'none').
-        razryadEvents = (rz || []).filter((r: any) => r.new_razryad && r.new_razryad !== 'none')
-      }
-
-      // 6. Roll up per coach.
-      const rows = (coaches || []).map((coach: any) => {
+      // 5. School-wide max abs avg-delta across coaches (denominator for
+      // the normalized_avg_rating_delta sub-metric). First, compute per-coach
+      // raw avg rating delta from the in-window results.
+      const rawByCoach = (coaches || []).map((coach: any) => {
         const myStudentIds = new Set(studentIdsByCoach.get(coach.id) || [])
-        const myParts = participations.filter((p: any) => myStudentIds.has(p.student_id))
+        const myResults = results.filter((r: any) => myStudentIds.has(r.student_id))
         const myProms = promotions.filter((p: any) => myStudentIds.has(p.student_id))
-        const myRaz   = razryadEvents.filter((r: any) => myStudentIds.has(r.student_id))
 
-        const tournamentIds = new Set<string>()
-        const participantStudentIds = new Set<string>()
-        const places: number[] = []
-        const deltas: number[] = []
-        let top1 = 0
-        let top3 = 0
-        for (const r of myParts) {
-          tournamentIds.add(r.tournament.id)
-          participantStudentIds.add(r.student_id)
-          if (Number.isFinite(r.place)) {
-            places.push(r.place)
-            if (r.place === 1) top1++
-            if (r.place <= 3) top3++
+        // Sum rating_delta per student in window; only count students with ≥1
+        // rated game (games_played >= 1) — matches the participation rule.
+        const deltaByStudent = new Map<string, number>()
+        const internalEntries: any[] = []
+        const playedEntries: any[] = []
+        const razryadParticipants = new Set<string>()
+        const razryadEarners = new Set<string>()
+        let top3Count = 0
+
+        for (const r of myResults) {
+          const u = uploadById.get(r.upload_id)
+          if (!u) continue
+          if (r.games_played >= 1) {
+            playedEntries.push(r)
+            const cur = deltaByStudent.get(r.student_id) || 0
+            deltaByStudent.set(r.student_id, cur + (Number(r.rating_delta) || 0))
+            internalEntries.push(r)
+            if (Number.isFinite(r.rank) && r.rank <= 3) top3Count++
           }
-          if (Number.isFinite(r.rating_delta)) deltas.push(r.rating_delta)
+          if (razryadUploadIds.has(r.upload_id) && r.games_played >= 1) {
+            razryadParticipants.add(r.student_id)
+            if (r.earned_razryad) razryadEarners.add(r.student_id)
+          }
         }
 
-        const activeStudentsCount = myStudentIds.size
-        const totalResults = myParts.length
-        const avgDelta = deltas.length ? deltas.reduce((a, b) => a + b, 0) / deltas.length : 0
-        const totalRatingGained = deltas.reduce((a, b) => a + b, 0)
+        const deltaValues = [...deltaByStudent.values()]
+        const avgDelta = deltaValues.length ? deltaValues.reduce((a, b) => a + b, 0) / deltaValues.length : 0
+        const totalRatingGained = deltaValues.reduce((a, b) => a + b, 0)
 
-        const composite = calcCompositeScore({
-          active_students_count: activeStudentsCount,
-          participants_count: participantStudentIds.size,
-          total_results: totalResults,
-          top3_count: top3,
-          avg_rating_delta: avgDelta,
-          promotions_count: myProms.length,
-          new_razryads_count: myRaz.length,
+        return {
+          coach,
+          activeStudentsCount: myStudentIds.size,
+          totalUploadsInWindow,
+          participationNumerator: playedEntries.length,
+          internalEntries: internalEntries.length,
+          top3Count,
+          avgDelta,
+          totalRatingGained,
+          promotionsCount: myProms.length,
+          razryadParticipants: razryadParticipants.size,
+          razryadEarners: razryadEarners.size,
+        }
+      })
+
+      const maxAbsAvgDelta = rawByCoach.reduce(
+        (m, r) => Math.max(m, Math.abs(r.avgDelta)),
+        0
+      )
+
+      // 6. Build rows with composite score + sub-metric rates.
+      const rows = rawByCoach.map((r) => {
+        const denom = r.activeStudentsCount * r.totalUploadsInWindow
+        const participation_rate = denom > 0 ? r.participationNumerator / denom : 0
+        const normalized_avg_rating_delta = maxAbsAvgDelta > 0
+          ? Math.max(0, r.avgDelta) / maxAbsAvgDelta
+          : 0
+        const top3_finish_rate = r.internalEntries > 0
+          ? r.top3Count / r.internalEntries
+          : 0
+        const promotion_rate = r.activeStudentsCount > 0
+          ? r.promotionsCount / r.activeStudentsCount
+          : 0
+        const razryad_earned_rate = r.razryadParticipants > 0
+          ? r.razryadEarners / r.razryadParticipants
+          : 0
+
+        const composite = calcPhase2CompositeScore({
+          participation_rate,
+          normalized_avg_rating_delta,
+          top3_finish_rate,
+          promotion_rate,
+          razryad_earned_rate,
         })
 
         return {
-          coach_id: coach.id,
-          coach_name: `${coach.first_name} ${coach.last_name}`.trim(),
-          branches: branchesByCoach.get(coach.id) || [],
-          active_students_count: activeStudentsCount,
-          total_tournaments: tournamentIds.size,
-          avg_place: places.length ? Math.round((places.reduce((a, b) => a + b, 0) / places.length) * 100) / 100 : null,
-          top1_count: top1,
-          top3_count: top3,
-          total_rating_gained: totalRatingGained,
-          promotions_count: myProms.length,
-          new_razryads_count: myRaz.length,
+          coach_id: r.coach.id,
+          coach_name: `${r.coach.first_name} ${r.coach.last_name}`.trim(),
+          branches: branchesByCoach.get(r.coach.id) || [],
+          active_students_count: r.activeStudentsCount,
+          total_tournaments: r.totalUploadsInWindow,
+          tournament_entries: r.participationNumerator,
+          avg_rating_delta: Math.round(r.avgDelta * 10) / 10,
+          top3_count: r.top3Count,
+          total_rating_gained: r.totalRatingGained,
+          promotions_count: r.promotionsCount,
+          new_razryads_count: r.razryadEarners,
+          razryad_participants: r.razryadParticipants,
+          participation_rate: Math.round(participation_rate * 1000) / 1000,
           composite_score: composite,
         }
-      }).sort((a, b) => b.composite_score - a.composite_score)
+      }).sort((a, b) => {
+        // Primary: composite_score desc. Tie-break: participation_rate desc.
+        if (b.composite_score !== a.composite_score) return b.composite_score - a.composite_score
+        return b.participation_rate - a.participation_rate
+      })
 
       return json({
         success: true,
