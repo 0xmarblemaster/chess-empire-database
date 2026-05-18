@@ -1380,6 +1380,9 @@
                 <!-- Filter bar (time window / league / branch) — populated by coach-kpi.js renderFilters() -->
                 <div id="coach-kpi-filters" class="kpi-filters-host"></div>
 
+                <!-- Upload launcher — populated by coach-kpi.js renderUploadLauncher() when coach-kpi-upload.js is loaded -->
+                <div id="coach-kpi-upload-host" class="kpi-upload-host"></div>
+
                 <!-- School-wide view (admin only) -->
                 <div id="coach-kpi-school-view" class="kpi-subview is-active" role="tabpanel" aria-labelledby="kpi-tab-school">
                     <div class="stats-grid" id="coach-kpi-school-hero"></div>
@@ -2446,6 +2449,7 @@
     <script src="constants.js?v=1771237740"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script src="coach-kpi-role-lock.js"></script>
+    <script src="coach-kpi-upload.js"></script>
     <script src="coach-kpi.js"></script>
     <!-- SheetJS for Excel parsing/export -->
     <script src="https://cdn.sheetjs.com/xlsx-0.20.0/package/dist/xlsx.full.min.js"></script>

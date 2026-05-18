@@ -30,11 +30,13 @@ console.log('\n=== script tags present =========================================
 const idxChartJs       = HTML.indexOf('cdn.jsdelivr.net/npm/chart.js');
 const idxAttendance    = HTML.indexOf('attendance-role-lock.js');
 const idxKpiRoleLock   = HTML.indexOf('coach-kpi-role-lock.js');
+const idxKpiUpload     = HTML.search(/src="coach-kpi-upload\.js"/);
 const idxKpi           = HTML.search(/src="coach-kpi\.js"/);
 
 assert(idxChartJs     > 0, 'Chart.js script tag present');
 assert(idxAttendance  > 0, 'attendance-role-lock.js script tag present');
 assert(idxKpiRoleLock > 0, 'coach-kpi-role-lock.js script tag present');
+assert(idxKpiUpload   > 0, 'coach-kpi-upload.js script tag present');
 assert(idxKpi         > 0, 'coach-kpi.js script tag present');
 
 console.log('\n=== load order — KPI scripts come AFTER chart.js + role lock =========\n');
@@ -52,12 +54,20 @@ console.log('\n=== role lock loads before main KPI module ======================
 
 assert(idxKpiRoleLock < idxKpi,
     'coach-kpi-role-lock.js loads BEFORE coach-kpi.js (lock defines policy used by KPI)');
+assert(idxKpiRoleLock < idxKpiUpload,
+    'coach-kpi-upload.js loads AFTER coach-kpi-role-lock.js');
+assert(idxKpiUpload < idxKpi,
+    'coach-kpi-upload.js loads BEFORE coach-kpi.js (so initCoachKpi sees window.coachKpiUpload)');
 
 console.log('\n=== script tags are well-formed (no malformed src) ===================\n');
 
 const roleLockTagMatch = HTML.match(/<script\s+src="coach-kpi-role-lock\.js"[^>]*>\s*<\/script>/);
 assert(roleLockTagMatch !== null,
     'coach-kpi-role-lock.js is a properly closed <script src="..."></script> tag');
+
+const uploadTagMatch = HTML.match(/<script\s+src="coach-kpi-upload\.js"[^>]*>\s*<\/script>/);
+assert(uploadTagMatch !== null,
+    'coach-kpi-upload.js is a properly closed <script src="..."></script> tag');
 
 const kpiTagMatch = HTML.match(/<script\s+src="coach-kpi\.js"[^>]*>\s*<\/script>/);
 assert(kpiTagMatch !== null,
@@ -67,6 +77,8 @@ console.log('\n=== script files actually exist on disk =========================
 
 assert(fs.existsSync(path.join(ROOT, 'coach-kpi-role-lock.js')),
     'coach-kpi-role-lock.js file exists at repo root');
+assert(fs.existsSync(path.join(ROOT, 'coach-kpi-upload.js')),
+    'coach-kpi-upload.js file exists at repo root');
 assert(fs.existsSync(path.join(ROOT, 'coach-kpi.js')),
     'coach-kpi.js file exists at repo root');
 
@@ -77,6 +89,8 @@ function count(s, re) {
 }
 assert(count(HTML, /src="coach-kpi-role-lock\.js"/g) === 1,
     'coach-kpi-role-lock.js script tag appears exactly once');
+assert(count(HTML, /src="coach-kpi-upload\.js"/g) === 1,
+    'coach-kpi-upload.js script tag appears exactly once');
 assert(count(HTML, /src="coach-kpi\.js"/g) === 1,
     'coach-kpi.js script tag appears exactly once');
 

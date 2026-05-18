@@ -906,6 +906,48 @@
     }
 
     /**
+     * Thin DOM orchestrator wired from `showCoachPerformance` in admin(-v2).js.
+     * Renders the filter bar, leaderboard, and (when coach-kpi-upload.js is
+     * present) the upload launcher button into their known host containers.
+     *
+     * Gated by `roleLock.canViewCoachKpi(roleInfo)` — anyone the role lock
+     * refuses gets a no-op. Renderers are individually safe with a missing
+     * container, so a partially-scaffolded DOM does not throw.
+     *
+     * `_supabaseClient` is accepted to match the call signature in admin-v2.js
+     * (`window.initCoachKpi(roleInfo, window.supabaseClient)`); data fetching
+     * still goes through coach-kpi.js's own `callKpiEndpoint`.
+     */
+    function initCoachKpi(roleInfo, _supabaseClient) {
+        if (typeof document === 'undefined') return;
+        if (!roleLock || !roleLock.canViewCoachKpi(roleInfo)) return;
+
+        const filtersHost = document.getElementById('coach-kpi-filters');
+        if (filtersHost) {
+            renderFilters(filtersHost, defaultFilterState(roleInfo), {});
+        }
+
+        const leaderboardHost = document.getElementById('coach-kpi-school-leaderboard');
+        if (leaderboardHost) {
+            renderLeaderboard(leaderboardHost, []);
+        }
+
+        if (typeof window !== 'undefined' && window.coachKpiUpload) {
+            const uploadHost = document.getElementById('coach-kpi-upload-host');
+            if (uploadHost) {
+                renderUploadLauncher(uploadHost, {
+                    onOpen: () => {
+                        if (window.coachKpiUpload
+                            && typeof window.coachKpiUpload.renderUploadModal === 'function') {
+                            window.coachKpiUpload.renderUploadModal(uploadHost, {});
+                        }
+                    },
+                });
+            }
+        }
+    }
+
+    /**
      * Build the canonical current-month window per spec §4 ("default = current
      * calendar month"). `now` is injectable for tests.
      */
@@ -963,10 +1005,12 @@
         renderPhase2Leaderboard,
         renderUploadLauncher,
         currentMonthWindow,
+        initCoachKpi,
     };
 
     if (typeof window !== 'undefined') {
         window.coachKpi = api;
+        window.initCoachKpi = initCoachKpi;
     }
     if (typeof module !== 'undefined' && module.exports) {
         module.exports = api;
