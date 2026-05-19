@@ -33,6 +33,7 @@ const ROOT = path.resolve(__dirname, '..');
 const ADMIN_HTML = fs.readFileSync(path.join(ROOT, 'admin.html'), 'utf8');
 const ADMIN_V2_HTML = fs.readFileSync(path.join(ROOT, 'admin-v2.html'), 'utf8');
 const ADMIN_JS = fs.readFileSync(path.join(ROOT, 'admin.js'), 'utf8');
+const ADMIN_V2_JS = fs.readFileSync(path.join(ROOT, 'admin-v2.js'), 'utf8');
 
 console.log('\n=== More menu button present in admin.html ===========================\n');
 
@@ -117,6 +118,43 @@ assert(/\.mobile-nav-item\[data-section=['"]settings['"]\]/.test(fnBody),
     'showCoachPerformance re-activates the data-section="settings" (More) tab');
 assert(/updateMobileHeaderTitle\(\s*['"]coachKpi['"]\s*\)/.test(fnBody),
     'showCoachPerformance updates the mobile header title via updateMobileHeaderTitle("coachKpi")');
+
+console.log('\n=== role-gating wired in admin-v2.js =================================\n');
+
+assert(/document\.getElementById\(['"]moreMenuCoachKpi['"]\)/.test(ADMIN_V2_JS),
+    'admin-v2.js: updateMenuVisibility looks up #moreMenuCoachKpi');
+assert(/moreMenuCoachKpi\s*&&\s*canViewKpi[\s\S]{0,80}?moreMenuCoachKpi\.style\.display\s*=\s*['"]flex['"]/
+    .test(ADMIN_V2_JS),
+    'admin-v2.js: #moreMenuCoachKpi display flip is gated by canViewKpi');
+
+console.log('\n=== admin-v2.js mobileSectionTitles + moreSubSections updated ========\n');
+
+assert(/coachKpi\s*:\s*['"]admin\.sidebar\.coachPerformance['"]/.test(ADMIN_V2_JS),
+    'admin-v2.js: mobileSectionTitles maps coachKpi → admin.sidebar.coachPerformance');
+
+const v2MoreSubMatch = ADMIN_V2_JS.match(/const\s+moreSubSections\s*=\s*\[([^\]]+)\]/);
+assert(v2MoreSubMatch !== null, 'admin-v2.js: moreSubSections array defined');
+const v2MoreSubBody = v2MoreSubMatch ? v2MoreSubMatch[1] : '';
+assert(/['"]coachKpi['"]/.test(v2MoreSubBody),
+    'admin-v2.js: moreSubSections whitelist contains "coachKpi"');
+
+console.log('\n=== admin-v2.js showCoachPerformance() mobile state handling ========\n');
+
+const v2FnMatch = ADMIN_V2_JS.match(
+    /function\s+showCoachPerformance\s*\([^)]*\)\s*\{[\s\S]*?\n\}/
+);
+assert(v2FnMatch !== null, 'admin-v2.js: showCoachPerformance function found');
+const v2FnBody = v2FnMatch ? v2FnMatch[0] : '';
+
+assert(/function\s+showCoachPerformance\s*\(\s*event\s*\)/.test(v2FnBody),
+    'admin-v2.js: showCoachPerformance accepts an event parameter');
+assert(/document\.querySelectorAll\(['"]\.mobile-nav-item['"]\)[\s\S]{0,80}?classList\.remove\(['"]active['"]\)/
+    .test(v2FnBody),
+    'admin-v2.js: showCoachPerformance clears .mobile-nav-item.active classes');
+assert(/\.mobile-nav-item\[data-section=['"]settings['"]\]/.test(v2FnBody),
+    'admin-v2.js: showCoachPerformance re-activates the data-section="settings" tab');
+assert(/updateMobileHeaderTitle\(\s*['"]coachKpi['"]\s*\)/.test(v2FnBody),
+    'admin-v2.js: showCoachPerformance updates the mobile header title via updateMobileHeaderTitle("coachKpi")');
 
 console.log(`\n--- ${passed} passed, ${failed} failed ---\n`);
 if (failed > 0) process.exit(1);

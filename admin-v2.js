@@ -106,6 +106,10 @@ function updateMenuVisibility() {
     if (menuCoachPerformance && canViewKpi) {
         menuCoachPerformance.style.display = 'flex';
     }
+    const moreMenuCoachKpi = document.getElementById('moreMenuCoachKpi');
+    if (moreMenuCoachKpi && canViewKpi) {
+        moreMenuCoachKpi.style.display = 'flex';
+    }
 
     // Admins see everything
     if (userRole.role === 'admin') {
@@ -1071,7 +1075,7 @@ function refreshCoachesListView() {
 
 // Update mobile bottom navigation active state
 function updateMobileBottomNav(activeSection) {
-    const moreSubSections = ['userActivity', 'statusHistory', 'sessions', 'ratings', 'coachActivity', 'moreMenu'];
+    const moreSubSections = ['userActivity', 'statusHistory', 'sessions', 'ratings', 'coachActivity', 'coachKpi', 'moreMenu'];
     const effectiveSection = moreSubSections.includes(activeSection) ? 'settings' : activeSection;
     
     const mobileNavItems = document.querySelectorAll('.mobile-nav-item');
@@ -2905,7 +2909,8 @@ const mobileSectionTitles = {
     statusHistory: 'admin.statusHistory.title',
     sessions: 'admin.sessions.title',
     ratings: 'admin.ratings.title',
-    coachActivity: 'admin.coachActivity.title'
+    coachActivity: 'admin.coachActivity.title',
+    coachKpi: 'admin.sidebar.coachPerformance'
 };
 
 // Show mobile section (called from bottom nav)
@@ -2946,7 +2951,7 @@ function showMobileSection(section, event) {
     showSection(section);
 
     // For sub-sections of More, keep More tab highlighted
-    const moreSubSections = ['userActivity', 'statusHistory', 'sessions', 'ratings', 'coachActivity', 'moreMenu', 'settings'];
+    const moreSubSections = ['userActivity', 'statusHistory', 'sessions', 'ratings', 'coachActivity', 'coachKpi', 'moreMenu', 'settings'];
     if (moreSubSections.includes(section)) {
         const moreBtn = document.querySelector('.mobile-nav-item[data-section="settings"]');
         if (moreBtn) {
@@ -10100,7 +10105,11 @@ function showCoachActivity() {
 
 // Coach Performance dashboard — toggles the .content-section.hidden contract
 // for #section-coach-kpi and hands off rendering to window.initCoachKpi.
-function showCoachPerformance() {
+function showCoachPerformance(event) {
+    if (event && typeof event.preventDefault === 'function') {
+        event.preventDefault();
+    }
+
     document.querySelectorAll('.content-section').forEach(s => {
         s.classList.remove('active');
     });
@@ -10114,6 +10123,15 @@ function showCoachPerformance() {
     document.querySelectorAll('.nav-item').forEach(item => item.classList.remove('active'));
     const menuItem = document.getElementById('menuCoachPerformance');
     if (menuItem) menuItem.classList.add('active');
+
+    // Keep the mobile "More" tab highlighted when entering from the More menu.
+    document.querySelectorAll('.mobile-nav-item').forEach(i => i.classList.remove('active'));
+    const moreBtn = document.querySelector('.mobile-nav-item[data-section="settings"]');
+    if (moreBtn) moreBtn.classList.add('active');
+
+    if (typeof updateMobileHeaderTitle === 'function') {
+        updateMobileHeaderTitle('coachKpi');
+    }
 
     history.pushState({ section: 'coach-kpi' }, '', '#coach-kpi');
 
