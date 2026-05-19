@@ -568,8 +568,15 @@
     function renderUploadModal(container, opts) {
         if (typeof document === 'undefined' || !container) return null;
         const o = opts || {};
-        const t = typeof o.t === 'function' ? o.t : null;
-        const label = (key, fb) => (t ? t(key, fb) : fb);
+        const defaultT = (key, fb) => {
+            if (typeof window !== 'undefined' && window.i18n && typeof window.i18n.t === 'function') {
+                const v = window.i18n.t(key);
+                if (v && v !== key && typeof v === 'string') return v;
+            }
+            return fb;
+        };
+        const t = typeof o.t === 'function' ? o.t : defaultT;
+        const label = (key, fb) => t(key, fb);
         const students = Array.isArray(o.students) ? o.students : [];
 
         container.innerHTML = '';

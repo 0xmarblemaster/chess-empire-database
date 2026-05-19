@@ -421,20 +421,23 @@
      * Build the six hero stat cards from a school summary. Pure DOM, no
      * data fetching. Returns the container element.
      */
-    function renderSchoolHero(container, summary) {
+    function renderSchoolHero(container, summary, opts) {
         if (typeof document === 'undefined' || !container) return;
+        const o = opts || {};
+        const t = typeof o.t === 'function' ? o.t : null;
+        const label = (key, fb) => (t ? t(key, fb) : fb);
         if (!summary || typeof summary !== 'object' || Object.keys(summary).length === 0) {
-            renderEmptyState(container);
+            renderEmptyState(container, undefined, { t });
             return;
         }
         const s = summary;
         const cards = [
-            ['Active students',  formatHeroValue(s.active_students_count)],
-            ['Tournaments',      formatHeroValue(s.total_tournaments)],
-            ['Top-3 finishes',   formatHeroValue(s.top3_count)],
-            ['Promotions',       formatHeroValue(s.promotions_count)],
-            ['New razryads',     formatHeroValue(s.new_razryads_count)],
-            ['Participation',    formatHeroValue(s.participation_pct, { percent: true })],
+            [label('coachKpiActiveStudents',  'Active students'),  formatHeroValue(s.active_students_count)],
+            [label('coachKpiTournamentsYtd',  'Tournaments'),      formatHeroValue(s.total_tournaments)],
+            [label('coachKpiTop3',            'Top-3 finishes'),   formatHeroValue(s.top3_count)],
+            [label('coachKpiPromotions',      'Promotions'),       formatHeroValue(s.promotions_count)],
+            [label('coachKpiNewRazryads',     'New razryads'),     formatHeroValue(s.new_razryads_count)],
+            [label('coachKpiParticipation',   'Participation'),    formatHeroValue(s.participation_pct, { percent: true })],
         ];
         container.innerHTML = '';
         for (const [label, value] of cards) {
@@ -453,8 +456,10 @@
     function renderLeaderboard(container, rows, opts) {
         if (typeof document === 'undefined' || !container) return;
         const o = opts || {};
+        const t = typeof o.t === 'function' ? o.t : null;
+        const label = (key, fb) => (t ? t(key, fb) : fb);
         if (!Array.isArray(rows) || rows.length === 0) {
-            renderEmptyState(container);
+            renderEmptyState(container, undefined, { t });
             return;
         }
         const sorted = sortLeaderboard(rows, o.sortKey, o.direction);
@@ -462,14 +467,14 @@
         const table = _el('table', { className: 'kpi-leaderboard' });
         const thead = _el('thead', null, [
             _el('tr', null, [
-                _el('th', { text: 'Coach' }),
-                _el('th', { text: 'Active' }),
-                _el('th', { text: 'Tournaments' }),
-                _el('th', { text: 'Top-3' }),
-                _el('th', { text: 'Rating gained' }),
-                _el('th', { text: 'Promotions' }),
-                _el('th', { text: 'Razryads' }),
-                _el('th', { text: 'Score' }),
+                _el('th', { text: label('coachKpiColCoach', 'Coach') }),
+                _el('th', { text: label('coachKpiColActive', 'Active') }),
+                _el('th', { text: label('coachKpiColTournaments', 'Tournaments') }),
+                _el('th', { text: label('coachKpiColTop3', 'Top-3') }),
+                _el('th', { text: label('coachKpiColRatingGained', 'Rating gained') }),
+                _el('th', { text: label('coachKpiColPromotions', 'Promotions') }),
+                _el('th', { text: label('coachKpiColRazryads', 'Razryads') }),
+                _el('th', { text: label('coachKpiColScore', 'Score') }),
             ]),
         ]);
         const tbody = _el('tbody');
@@ -550,12 +555,15 @@
      */
     function renderRazryadDoughnut(container, counts, opts) {
         if (typeof document === 'undefined' || !container) return null;
-        if (_allZero(counts)) { renderEmptyState(container); return null; }
-        const ChartCtor = _resolveChartCtor();
-        if (!ChartCtor) { renderEmptyState(container, 'Chart.js not loaded'); return null; }
         const o = opts || {};
         const t = typeof o.t === 'function' ? o.t : null;
         const label = (key, fb) => (t ? t(key, fb) : fb);
+        if (_allZero(counts)) { renderEmptyState(container, undefined, { t }); return null; }
+        const ChartCtor = _resolveChartCtor();
+        if (!ChartCtor) {
+            renderEmptyState(container, label('coachKpiChartUnavailable', 'Chart.js not loaded'), { t });
+            return null;
+        }
         const canvas = _mountCanvas(container);
         const labels = RAZRYAD_ORDER.map(k => label('coachKpiRazryad' + k, k));
         const data = RAZRYAD_ORDER.map(k => Number(counts && counts[k]) || 0);
@@ -588,13 +596,16 @@
      */
     function renderTournamentsByLeagueStackedBar(container, byBranch, opts) {
         if (typeof document === 'undefined' || !container) return null;
-        const list = Array.isArray(byBranch) ? byBranch.filter(Boolean) : [];
-        if (list.length === 0) { renderEmptyState(container); return null; }
-        const ChartCtor = _resolveChartCtor();
-        if (!ChartCtor) { renderEmptyState(container, 'Chart.js not loaded'); return null; }
         const o = opts || {};
         const t = typeof o.t === 'function' ? o.t : null;
         const label = (key, fb) => (t ? t(key, fb) : fb);
+        const list = Array.isArray(byBranch) ? byBranch.filter(Boolean) : [];
+        if (list.length === 0) { renderEmptyState(container, undefined, { t }); return null; }
+        const ChartCtor = _resolveChartCtor();
+        if (!ChartCtor) {
+            renderEmptyState(container, label('coachKpiChartUnavailable', 'Chart.js not loaded'), { t });
+            return null;
+        }
         const canvas = _mountCanvas(container);
         const labels = list.map(b => b.branch_name || b.branchName || b.name || '—');
         const datasets = LEAGUE_PLOT_ORDER.map(lg => ({
@@ -629,12 +640,15 @@
      */
     function renderTournamentsByLeagueBar(container, counts, opts) {
         if (typeof document === 'undefined' || !container) return null;
-        if (_allZero(counts)) { renderEmptyState(container); return null; }
-        const ChartCtor = _resolveChartCtor();
-        if (!ChartCtor) { renderEmptyState(container, 'Chart.js not loaded'); return null; }
         const o = opts || {};
         const t = typeof o.t === 'function' ? o.t : null;
         const label = (key, fb) => (t ? t(key, fb) : fb);
+        if (_allZero(counts)) { renderEmptyState(container, undefined, { t }); return null; }
+        const ChartCtor = _resolveChartCtor();
+        if (!ChartCtor) {
+            renderEmptyState(container, label('coachKpiChartUnavailable', 'Chart.js not loaded'), { t });
+            return null;
+        }
         const canvas = _mountCanvas(container);
         const labels = LEAGUE_PLOT_ORDER.map(lg => label('coachKpiLeague' + lg, LEAGUE_LABELS[lg]));
         const data = LEAGUE_PLOT_ORDER.map(lg => Number(counts && counts[lg]) || 0);
@@ -668,13 +682,16 @@
      */
     function renderAvgPlaceTrendLine(container, points, opts) {
         if (typeof document === 'undefined' || !container) return null;
-        const list = Array.isArray(points) ? points.filter(Boolean) : [];
-        if (list.length === 0) { renderEmptyState(container); return null; }
-        const ChartCtor = _resolveChartCtor();
-        if (!ChartCtor) { renderEmptyState(container, 'Chart.js not loaded'); return null; }
         const o = opts || {};
         const t = typeof o.t === 'function' ? o.t : null;
         const label = (key, fb) => (t ? t(key, fb) : fb);
+        const list = Array.isArray(points) ? points.filter(Boolean) : [];
+        if (list.length === 0) { renderEmptyState(container, undefined, { t }); return null; }
+        const ChartCtor = _resolveChartCtor();
+        if (!ChartCtor) {
+            renderEmptyState(container, label('coachKpiChartUnavailable', 'Chart.js not loaded'), { t });
+            return null;
+        }
         const canvas = _mountCanvas(container);
         const labels = list.map(p => p.month || p.label || '');
         const data = list.map(p => {
@@ -853,12 +870,13 @@
     function renderPhase2Leaderboard(container, rows, opts) {
         if (typeof document === 'undefined' || !container) return;
         const o = opts || {};
-        if (!Array.isArray(rows) || rows.length === 0) {
-            renderEmptyState(container, o.emptyMessage || 'No data yet for this window.');
-            return;
-        }
         const t = typeof o.t === 'function' ? o.t : null;
         const label = (key, fb) => (t ? t(key, fb) : fb);
+        if (!Array.isArray(rows) || rows.length === 0) {
+            const msg = o.emptyMessage || label('coachKpiNoDataYet', 'No data yet for this window.');
+            renderEmptyState(container, msg, { t });
+            return;
+        }
 
         // Composite-score-desc primary, participation_rate-desc tie-break.
         const sorted = rows.slice().sort((a, b) => {
@@ -963,24 +981,33 @@
         if (typeof document === 'undefined') return;
         if (!roleLock || !roleLock.canViewCoachKpi(roleInfo)) return;
 
+        const t = (key, fb) => {
+            if (typeof window !== 'undefined' && window.i18n && typeof window.i18n.t === 'function') {
+                const v = window.i18n.t(key);
+                if (v && v !== key && typeof v === 'string') return v;
+            }
+            return fb;
+        };
+
         const filtersHost = document.getElementById('coach-kpi-filters');
         if (filtersHost) {
-            renderFilters(filtersHost, defaultFilterState(roleInfo), {});
+            renderFilters(filtersHost, defaultFilterState(roleInfo), { t });
         }
 
         const leaderboardHost = document.getElementById('coach-kpi-school-leaderboard');
         if (leaderboardHost) {
-            renderLeaderboard(leaderboardHost, []);
+            renderLeaderboard(leaderboardHost, [], { t });
         }
 
         if (typeof window !== 'undefined' && window.coachKpiUpload) {
             const uploadHost = document.getElementById('coach-kpi-upload-host');
             if (uploadHost) {
                 renderUploadLauncher(uploadHost, {
+                    t,
                     onOpen: () => {
                         if (window.coachKpiUpload
                             && typeof window.coachKpiUpload.renderUploadModal === 'function') {
-                            window.coachKpiUpload.renderUploadModal(uploadHost, {});
+                            window.coachKpiUpload.renderUploadModal(uploadHost, { t });
                         }
                     },
                 });
