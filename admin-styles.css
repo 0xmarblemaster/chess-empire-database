@@ -5202,6 +5202,197 @@ tr[data-student-id] {
     margin-bottom: 1.25rem;
 }
 
+/* ============================================================
+   Coach KPI — Upload modal
+   Polishes the modal rendered by coach-kpi-upload.js so it matches
+   the dashboard design language (white card, amber accents). The
+   .btn-primary rule below uses !important to defeat a blue
+   background that bleeds in from a higher-specificity rule.
+   ============================================================ */
+
+#section-coach-kpi .kpi-upload-modal {
+    background: #ffffff;
+    border: 1px solid #e2e8f0;
+    border-radius: 1rem;
+    padding: 1.75rem;
+    box-shadow: 0 1px 3px rgba(15, 23, 42, 0.04);
+    max-width: 640px;
+    margin: 0 auto;
+}
+
+#section-coach-kpi .kpi-upload-title {
+    margin: 0 0 1.5rem 0;
+    font-size: 1.25rem;
+    font-weight: 700;
+    color: #0f172a;
+    font-family: 'Outfit', sans-serif;
+}
+
+#section-coach-kpi .kpi-upload-row {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+    margin-bottom: 1.25rem;
+}
+
+#section-coach-kpi .kpi-upload-row > label {
+    font-size: 0.6875rem;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: #64748b;
+}
+
+#section-coach-kpi .kpi-upload-kind,
+#section-coach-kpi .kpi-upload-date {
+    padding: 0.625rem 0.875rem;
+    border: 1px solid #e2e8f0;
+    border-radius: 0.5rem;
+    font-size: 0.9375rem;
+    color: #1e293b;
+    background: #ffffff;
+    cursor: pointer;
+    transition: border-color 0.2s, box-shadow 0.2s;
+    width: 100%;
+}
+
+#section-coach-kpi .kpi-upload-kind:hover,
+#section-coach-kpi .kpi-upload-date:hover {
+    border-color: #cbd5e1;
+}
+
+#section-coach-kpi .kpi-upload-kind:focus,
+#section-coach-kpi .kpi-upload-date:focus {
+    outline: none;
+    border-color: #d97706;
+    box-shadow: 0 0 0 3px rgb(217 119 6 / 0.1);
+}
+
+#section-coach-kpi .kpi-upload-file {
+    font-size: 0.875rem;
+    color: #475569;
+}
+
+#section-coach-kpi .kpi-upload-file::file-selector-button {
+    padding: 0.5rem 1rem;
+    margin-right: 0.75rem;
+    background: #ffffff;
+    color: #475569;
+    border: 1.5px solid #e2e8f0;
+    border-radius: 0.5rem;
+    font-weight: 600;
+    font-size: 0.875rem;
+    cursor: pointer;
+    transition: background 0.2s, border-color 0.2s, color 0.2s;
+}
+
+#section-coach-kpi .kpi-upload-file::file-selector-button:hover {
+    background: #f8fafc;
+    border-color: #cbd5e1;
+    color: #1e293b;
+}
+
+#section-coach-kpi .kpi-upload-preview {
+    margin-top: 0.5rem;
+}
+
+#section-coach-kpi .kpi-upload-stats {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.75rem;
+    padding: 1rem;
+    background: #f8fafc;
+    border: 1px solid #e2e8f0;
+    border-radius: 0.625rem;
+    margin-bottom: 1rem;
+}
+
+#section-coach-kpi .kpi-upload-stats > span {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.375rem;
+    font-size: 0.875rem;
+    font-weight: 600;
+    padding: 0.25rem 0.625rem;
+    border-radius: 999px;
+    background: #ffffff;
+    border: 1px solid #e2e8f0;
+}
+
+#section-coach-kpi .kpi-upload-stats .stat-matched {
+    color: #16a34a;
+    border-color: #bbf7d0;
+    background: #f0fdf4;
+}
+
+#section-coach-kpi .kpi-upload-stats .stat-ambiguous {
+    color: #d97706;
+    border-color: #fde68a;
+    background: #fffbeb;
+}
+
+#section-coach-kpi .kpi-upload-stats .stat-unmatched {
+    color: #dc2626;
+    border-color: #fecaca;
+    background: #fef2f2;
+}
+
+#section-coach-kpi .kpi-upload-error {
+    padding: 0.75rem 1rem;
+    background: #fef2f2;
+    border: 1px solid #fecaca;
+    border-radius: 0.5rem;
+    color: #b91c1c;
+    font-size: 0.875rem;
+    margin-bottom: 0.75rem;
+}
+
+#section-coach-kpi .kpi-upload-buttons {
+    display: flex;
+    justify-content: flex-end;
+    gap: 0.75rem;
+    padding-top: 1.25rem;
+    margin-top: 1.25rem;
+    border-top: 1px solid #e2e8f0;
+}
+
+#section-coach-kpi .kpi-upload-buttons .btn-primary {
+    background: linear-gradient(135deg, #d97706 0%, #f59e0b 100%) !important;
+    color: #ffffff !important;
+    border: none !important;
+    box-shadow: 0 4px 6px -1px rgb(217 119 6 / 0.3);
+}
+
+#section-coach-kpi .kpi-upload-buttons .btn-primary:hover:not(:disabled) {
+    transform: translateY(-1px);
+    box-shadow: 0 10px 15px -3px rgb(217 119 6 / 0.4);
+}
+
+#section-coach-kpi .kpi-upload-buttons .btn-primary:disabled {
+    opacity: 0.55;
+    cursor: not-allowed;
+    box-shadow: none;
+}
+
+@media (max-width: 768px) {
+    #section-coach-kpi .kpi-upload-modal {
+        padding: 1.25rem;
+    }
+    #section-coach-kpi .kpi-upload-row {
+        width: 100%;
+    }
+    #section-coach-kpi .kpi-upload-buttons {
+        flex-direction: column-reverse;
+        align-items: stretch;
+    }
+    #section-coach-kpi .kpi-upload-buttons .btn,
+    #section-coach-kpi .kpi-upload-buttons .btn-primary,
+    #section-coach-kpi .kpi-upload-buttons .btn-secondary {
+        width: 100%;
+        justify-content: center;
+    }
+}
+
 #section-coach-kpi .kpi-empty-state {
     display: flex;
     flex-direction: column;
