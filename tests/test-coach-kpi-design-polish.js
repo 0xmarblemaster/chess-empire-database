@@ -124,8 +124,11 @@ console.log('\n=== renderFilters mounts the segmented window control ===========
         '.kpi-filter-window carries role="tablist"');
 
     const pills = findAllByClass(container, 'kpi-filter-pill');
-    assert(pills.length === 4,
-        'renderFilters mounts one .kpi-filter-pill per preset (30d / 90d / ytd / all)');
+    assert(pills.length === 3,
+        'renderFilters mounts one .kpi-filter-pill per preset (30d / 90d / ytd — All time dropped)');
+    const pillWindows = pills.map(p => p.dataset && p.dataset.window);
+    assert(!pillWindows.includes('all'),
+        'no pill exposes data-window="all" (All time is no longer offered)');
 
     const active = findAllByClass(container, 'is-active');
     assert(active.length === 1,

@@ -71,7 +71,7 @@ const REQUIRED_KEYS = [
     'coachKpiTimeWindow30d',
     'coachKpiTimeWindow90d',
     'coachKpiTimeWindowYtd',
-    'coachKpiTimeWindowAll',
+    // coachKpiTimeWindowAll intentionally absent — All time was dropped Phase 2.
     'coachKpiLeagueAll',
     'coachKpiLeagueA',
     'coachKpiLeagueB',

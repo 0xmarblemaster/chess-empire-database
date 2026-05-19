@@ -43,7 +43,7 @@ const apiNames = [
 for (const name of apiNames) {
     assert(typeof kpi[name] === 'function', `${name} exported`);
 }
-assertEqual(kpi.TIME_WINDOWS, ['30d', '90d', 'ytd', 'all'], 'TIME_WINDOWS exported');
+assertEqual(kpi.TIME_WINDOWS, ['30d', '90d', 'ytd'], 'TIME_WINDOWS exported (no "all" — dropped Phase 2)');
 assertEqual(kpi.DEFAULT_WINDOW, '90d', 'DEFAULT_WINDOW = 90d');
 assertEqual(kpi.LEAGUES, ['all', 'A', 'B', 'C'], 'LEAGUES exported');
 assertEqual(kpi.DEFAULT_LEAGUE, 'all', 'DEFAULT_LEAGUE = all');
@@ -63,9 +63,8 @@ assertEqual(kpi.resolveTimeWindow('90d', NOW),
 assertEqual(kpi.resolveTimeWindow('ytd', NOW),
     { start: '2026-01-01', end: '2026-05-14', days: 134, preset: 'ytd' },
     'ytd: Jan 1 of current year through today');
-assertEqual(kpi.resolveTimeWindow('all', NOW),
-    { start: '2000-01-01', end: '2026-05-14', days: null, preset: 'all' },
-    'all: fixed epoch start, today end, no days');
+assertEqual(kpi.resolveTimeWindow('all', NOW).preset, '90d',
+    'unsupported "all" preset → falls back to 90d default (All time was dropped Phase 2)');
 assertEqual(kpi.resolveTimeWindow(undefined, NOW).preset, '90d',
     'undefined preset → default 90d');
 assertEqual(kpi.resolveTimeWindow('bogus', NOW).preset, '90d',
@@ -469,8 +468,11 @@ function _branchSelect(root) {
     const windowGroup = _windowGroup(root);
     assert(windowGroup && /\bkpi-filter-window\b/.test(windowGroup.className),
         'window group carries .kpi-filter-window');
-    assertEqual(windowGroup.children.length, 4,
-        'four pill buttons (30d / 90d / ytd / all)');
+    assertEqual(windowGroup.children.length, 3,
+        'three pill buttons (30d / 90d / ytd — All time dropped Phase 2)');
+    const pillWindows = windowGroup.children.map(b => b.dataset.window);
+    assert(!pillWindows.includes('all'),
+        'no pill carries data-window="all" (All time is no longer offered)');
     const pressed = windowGroup.children.filter(b => b.attributes['aria-pressed'] === 'true');
     assertEqual(pressed.length, 1, 'exactly one pill is pressed by default');
     assertEqual(pressed[0].dataset.window, '90d',
@@ -605,8 +607,8 @@ assertEqual(
     'admin + school + 30d → window narrows to 30 days');
 assertEqual(
     kpi.buildKpiQuery(ADMIN, 'school', { window: 'all', now: NOW }).window_start,
-    '2000-01-01',
-    'admin + school + all → epoch start');
+    '2026-02-14',
+    'admin + school + "all" → falls back to 90d (All time dropped Phase 2)');
 
 const BQ_BRANCH = kpi.buildKpiQuery(ADMIN, 'branch', {
     branchName: 'Debut',

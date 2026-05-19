@@ -23,13 +23,15 @@
         ? require('./coach-kpi-role-lock.js')
         : (typeof window !== 'undefined' ? window.coachKpiRoleLock : null);
 
-    const TIME_WINDOWS = Object.freeze(['30d', '90d', 'ytd', 'all']);
+    // PRD originally listed an "all-time" preset, but it was never tuned for
+    // the leaderboard math and was dropped from the UI (spec §4 default =
+    // current calendar month, with 30d/90d/ytd as the user-facing presets).
+    const TIME_WINDOWS = Object.freeze(['30d', '90d', 'ytd']);
     const DEFAULT_WINDOW = '90d';
     const LEAGUES = Object.freeze(['all', 'A', 'B', 'C']);
     const DEFAULT_LEAGUE = 'all';
     const DEFAULT_BRANCH = 'all';
     const SCORE_THRESHOLDS = Object.freeze({ red: 40, amber: 70 });
-    const ALL_TIME_START = '2000-01-01';
     const EMPTY_STATE_MESSAGE =
         'Coach KPI data not yet available — apply migrations 036/037/038 on Supabase to enable.';
 
@@ -37,7 +39,6 @@
         '30d': '30 days',
         '90d': '90 days',
         'ytd': 'YTD',
-        'all': 'All time',
     });
     const LEAGUE_LABELS = Object.freeze({
         all: 'All leagues',
@@ -69,7 +70,6 @@
      * ISO `YYYY-MM-DD`. `now` is injectable for tests.
      *   - 30d / 90d  → last N days inclusive
      *   - ytd        → Jan 1 of current year through today
-     *   - all        → 2000-01-01 through today
      * Unknown preset falls back to the default window.
      */
     function resolveTimeWindow(preset, now) {
@@ -81,9 +81,6 @@
             const startMs = Date.UTC(today.getUTCFullYear(), 0, 1);
             const days = Math.floor((today.getTime() - startMs) / 86400000) + 1;
             return { start, end, days, preset: chosen };
-        }
-        if (chosen === 'all') {
-            return { start: ALL_TIME_START, end, days: null, preset: chosen };
         }
         const days = chosen === '30d' ? 30 : 90;
         const startDate = new Date(today.getTime() - (days - 1) * 86400000);
@@ -361,6 +358,104 @@
 
     // -------- DOM rendering (only runs in the browser) ---------------------
 
+    // ---- Re-render-on-language-change cache --------------------------------
+    //
+    // _el-based renderers paint via DOM text nodes — they carry no data-i18n
+    // attributes, so i18n.js's applyTranslations() can not retranslate them
+    // when the user flips EN ↔ RU. We compensate by remembering the last
+    // (container, args) tuple per renderer and replaying it on the
+    // `languageChanged` / `languagechange` event with a fresh `t` adapter.
+    const _renderCache = [];
+
+    function _rememberRender(name, container, args) {
+        if (!container) return;
+        for (let i = _renderCache.length - 1; i >= 0; i--) {
+            if (_renderCache[i].container === container) _renderCache.splice(i, 1);
+        }
+        _renderCache.push({ name, container, args });
+    }
+
+    function _makeTAdapter() {
+        return (key, fb) => {
+            if (typeof window !== 'undefined' && window.i18n && typeof window.i18n.t === 'function') {
+                const v = window.i18n.t(key);
+                if (v && v !== key && typeof v === 'string') return v;
+            }
+            return fb;
+        };
+    }
+
+    function _rerenderAll() {
+        const t = _makeTAdapter();
+        const snapshot = _renderCache.slice();
+        for (const entry of snapshot) {
+            const fn = api[entry.name];
+            if (typeof fn !== 'function') continue;
+            const next = entry.args.slice();
+            const lastIdx = next.length - 1;
+            const lastOpts = lastIdx >= 0 ? next[lastIdx] : null;
+            if (lastOpts && typeof lastOpts === 'object' && !Array.isArray(lastOpts)) {
+                next[lastIdx] = Object.assign({}, lastOpts, { t });
+            } else {
+                next.push({ t });
+            }
+            try { fn(entry.container, ...next); } catch (_) { /* one bad renderer must not break the rest */ }
+        }
+    }
+
+    function subscribeLanguageEvents() {
+        if (typeof window === 'undefined') return;
+        if (window.__kpiLangSubscribed) return;
+        // i18n.js installs window.i18n right at the end of its IIFE, but it
+        // dispatches `languagechange` from the very first setLanguage() call.
+        // If we attach listeners before window.i18n exists, the _makeTAdapter
+        // closure still works (it re-reads window.i18n on every call), but
+        // defending against the race is cheap — poll briefly so the production
+        // dropdown is wired even when coach-kpi.js loads first.
+        if (typeof window.i18n === 'undefined' || !window.i18n) {
+            if (window.__kpiLangPending) return;
+            window.__kpiLangPending = true;
+            let tries = 0;
+            const poll = () => {
+                if (typeof window === 'undefined') return;
+                if (window.i18n) {
+                    window.__kpiLangPending = false;
+                    subscribeLanguageEvents();
+                    return;
+                }
+                if (++tries >= 50) {
+                    // i18n never loaded — wire listeners anyway so manual
+                    // events still fire the re-render path; no-op until i18n
+                    // arrives.
+                    window.__kpiLangPending = false;
+                    _attachLanguageListeners();
+                    return;
+                }
+                if (typeof setTimeout === 'function') setTimeout(poll, 100);
+            };
+            if (typeof setTimeout === 'function') setTimeout(poll, 0);
+            else _attachLanguageListeners();
+            return;
+        }
+        _attachLanguageListeners();
+    }
+
+    function _attachLanguageListeners() {
+        if (typeof window === 'undefined') return;
+        if (window.__kpiLangSubscribed) return;
+        window.__kpiLangSubscribed = true;
+        const handler = () => _rerenderAll();
+        if (typeof window.addEventListener === 'function') {
+            // Task contract: window.languageChanged. Also wire the legacy
+            // document.languagechange the existing i18n.js dispatches so the
+            // production dropdown re-renders the dashboard without extra plumbing.
+            window.addEventListener('languageChanged', handler);
+        }
+        if (typeof document !== 'undefined' && typeof document.addEventListener === 'function') {
+            document.addEventListener('languagechange', handler);
+        }
+    }
+
     function _el(tag, props, children) {
         const node = document.createElement(tag);
         if (props) {
@@ -415,6 +510,13 @@
             _el('p', { className: 'kpi-empty-helper', text: helperText }),
         ]);
         container.appendChild(card);
+        // Cache as renderEmptyState so a directly-mounted empty card retranslates
+        // on language change. When called from an outer renderer (renderSchoolHero,
+        // renderRazryadDoughnut, …), the outer's _rememberRender call lands AFTER
+        // this one and wins — so on re-render the outer renderer fires with fresh
+        // i18n and re-resolves any pre-resolved fallback messages (e.g. the
+        // localized "Chart.js not loaded" string).
+        _rememberRender('renderEmptyState', container, [message, o]);
     }
 
     /**
@@ -428,6 +530,7 @@
         const label = (key, fb) => (t ? t(key, fb) : fb);
         if (!summary || typeof summary !== 'object' || Object.keys(summary).length === 0) {
             renderEmptyState(container, undefined, { t });
+            _rememberRender('renderSchoolHero', container, [summary, o]);
             return;
         }
         const s = summary;
@@ -446,6 +549,7 @@
                 _el('div', { className: 'stat-card-label', text: label }),
             ]));
         }
+        _rememberRender('renderSchoolHero', container, [summary, o]);
     }
 
     /**
@@ -460,6 +564,7 @@
         const label = (key, fb) => (t ? t(key, fb) : fb);
         if (!Array.isArray(rows) || rows.length === 0) {
             renderEmptyState(container, undefined, { t });
+            _rememberRender('renderLeaderboard', container, [rows, o]);
             return;
         }
         const sorted = sortLeaderboard(rows, o.sortKey, o.direction);
@@ -494,6 +599,7 @@
         table.appendChild(thead);
         table.appendChild(tbody);
         container.appendChild(table);
+        _rememberRender('renderLeaderboard', container, [rows, o]);
     }
 
     /**
@@ -558,16 +664,21 @@
         const o = opts || {};
         const t = typeof o.t === 'function' ? o.t : null;
         const label = (key, fb) => (t ? t(key, fb) : fb);
-        if (_allZero(counts)) { renderEmptyState(container, undefined, { t }); return null; }
+        if (_allZero(counts)) {
+            renderEmptyState(container, undefined, { t });
+            _rememberRender('renderRazryadDoughnut', container, [counts, o]);
+            return null;
+        }
         const ChartCtor = _resolveChartCtor();
         if (!ChartCtor) {
             renderEmptyState(container, label('coachKpiChartUnavailable', 'Chart.js not loaded'), { t });
+            _rememberRender('renderRazryadDoughnut', container, [counts, o]);
             return null;
         }
         const canvas = _mountCanvas(container);
         const labels = RAZRYAD_ORDER.map(k => label('coachKpiRazryad' + k, k));
         const data = RAZRYAD_ORDER.map(k => Number(counts && counts[k]) || 0);
-        return new ChartCtor(canvas, {
+        const inst = new ChartCtor(canvas, {
             type: 'doughnut',
             data: {
                 labels,
@@ -585,6 +696,8 @@
                 },
             },
         });
+        _rememberRender('renderRazryadDoughnut', container, [counts, o]);
+        return inst;
     }
 
     /**
@@ -600,10 +713,15 @@
         const t = typeof o.t === 'function' ? o.t : null;
         const label = (key, fb) => (t ? t(key, fb) : fb);
         const list = Array.isArray(byBranch) ? byBranch.filter(Boolean) : [];
-        if (list.length === 0) { renderEmptyState(container, undefined, { t }); return null; }
+        if (list.length === 0) {
+            renderEmptyState(container, undefined, { t });
+            _rememberRender('renderTournamentsByLeagueStackedBar', container, [byBranch, o]);
+            return null;
+        }
         const ChartCtor = _resolveChartCtor();
         if (!ChartCtor) {
             renderEmptyState(container, label('coachKpiChartUnavailable', 'Chart.js not loaded'), { t });
+            _rememberRender('renderTournamentsByLeagueStackedBar', container, [byBranch, o]);
             return null;
         }
         const canvas = _mountCanvas(container);
@@ -617,7 +735,7 @@
             backgroundColor: LEAGUE_COLORS[lg],
             borderWidth: 0,
         }));
-        return new ChartCtor(canvas, {
+        const inst = new ChartCtor(canvas, {
             type: 'bar',
             data: { labels, datasets },
             options: {
@@ -632,6 +750,8 @@
                 },
             },
         });
+        _rememberRender('renderTournamentsByLeagueStackedBar', container, [byBranch, o]);
+        return inst;
     }
 
     /**
@@ -643,17 +763,22 @@
         const o = opts || {};
         const t = typeof o.t === 'function' ? o.t : null;
         const label = (key, fb) => (t ? t(key, fb) : fb);
-        if (_allZero(counts)) { renderEmptyState(container, undefined, { t }); return null; }
+        if (_allZero(counts)) {
+            renderEmptyState(container, undefined, { t });
+            _rememberRender('renderTournamentsByLeagueBar', container, [counts, o]);
+            return null;
+        }
         const ChartCtor = _resolveChartCtor();
         if (!ChartCtor) {
             renderEmptyState(container, label('coachKpiChartUnavailable', 'Chart.js not loaded'), { t });
+            _rememberRender('renderTournamentsByLeagueBar', container, [counts, o]);
             return null;
         }
         const canvas = _mountCanvas(container);
         const labels = LEAGUE_PLOT_ORDER.map(lg => label('coachKpiLeague' + lg, LEAGUE_LABELS[lg]));
         const data = LEAGUE_PLOT_ORDER.map(lg => Number(counts && counts[lg]) || 0);
         const colors = LEAGUE_PLOT_ORDER.map(lg => LEAGUE_COLORS[lg]);
-        return new ChartCtor(canvas, {
+        const inst = new ChartCtor(canvas, {
             type: 'bar',
             data: {
                 labels,
@@ -672,6 +797,8 @@
                 scales: { y: { beginAtZero: true, ticks: { precision: 0 } } },
             },
         });
+        _rememberRender('renderTournamentsByLeagueBar', container, [counts, o]);
+        return inst;
     }
 
     /**
@@ -686,10 +813,15 @@
         const t = typeof o.t === 'function' ? o.t : null;
         const label = (key, fb) => (t ? t(key, fb) : fb);
         const list = Array.isArray(points) ? points.filter(Boolean) : [];
-        if (list.length === 0) { renderEmptyState(container, undefined, { t }); return null; }
+        if (list.length === 0) {
+            renderEmptyState(container, undefined, { t });
+            _rememberRender('renderAvgPlaceTrendLine', container, [points, o]);
+            return null;
+        }
         const ChartCtor = _resolveChartCtor();
         if (!ChartCtor) {
             renderEmptyState(container, label('coachKpiChartUnavailable', 'Chart.js not loaded'), { t });
+            _rememberRender('renderAvgPlaceTrendLine', container, [points, o]);
             return null;
         }
         const canvas = _mountCanvas(container);
@@ -698,7 +830,7 @@
             const v = (p.avg_place !== undefined ? p.avg_place : p.avgPlace);
             return Number.isFinite(v) ? v : null;
         });
-        return new ChartCtor(canvas, {
+        const inst = new ChartCtor(canvas, {
             type: 'line',
             data: {
                 labels,
@@ -722,6 +854,8 @@
                 },
             },
         });
+        _rememberRender('renderAvgPlaceTrendLine', container, [points, o]);
+        return inst;
     }
 
     /**
@@ -756,7 +890,7 @@
             role: 'tablist',
             'aria-label': label('coachKpiTimeWindowGroup', 'Time window'),
         });
-        const WINDOW_I18N = { '30d': '30d', '90d': '90d', 'ytd': 'Ytd', 'all': 'All' };
+        const WINDOW_I18N = { '30d': '30d', '90d': '90d', 'ytd': 'Ytd' };
         for (const w of TIME_WINDOWS) {
             const i18nKey = 'coachKpiTimeWindow' + WINDOW_I18N[w];
             const btn = _el('button', {
@@ -839,6 +973,7 @@
         root.appendChild(branchField);
 
         container.appendChild(root);
+        _rememberRender('renderFilters', container, [current, o]);
         return root;
     }
 
@@ -875,6 +1010,7 @@
         if (!Array.isArray(rows) || rows.length === 0) {
             const msg = o.emptyMessage || label('coachKpiNoDataYet', 'No data yet for this window.');
             renderEmptyState(container, msg, { t });
+            _rememberRender('renderPhase2Leaderboard', container, [rows, o]);
             return;
         }
 
@@ -939,6 +1075,7 @@
         table.appendChild(thead);
         table.appendChild(tbody);
         container.appendChild(table);
+        _rememberRender('renderPhase2Leaderboard', container, [rows, o]);
     }
 
     /**
@@ -961,6 +1098,7 @@
             if (typeof o.onOpen === 'function') o.onOpen();
         });
         container.appendChild(btn);
+        _rememberRender('renderUploadLauncher', container, [o]);
         return btn;
     }
 
@@ -1013,6 +1151,11 @@
                 });
             }
         }
+
+        // Subscribe AFTER first paint so the cache is non-empty by the time
+        // the user can flip languages. Idempotent via the __kpiLangSubscribed
+        // flag inside subscribeLanguageEvents.
+        subscribeLanguageEvents();
     }
 
     /**
@@ -1074,6 +1217,7 @@
         renderUploadLauncher,
         currentMonthWindow,
         initCoachKpi,
+        subscribeLanguageEvents,
     };
 
     if (typeof window !== 'undefined') {

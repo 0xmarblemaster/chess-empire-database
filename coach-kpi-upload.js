@@ -546,6 +546,71 @@
 
     // ----- DOM rendering (browser only) ---------------------------------------
 
+    // ---- Re-render-on-language-change cache --------------------------------
+    //
+    // renderUploadModal paints via DOM text nodes (no data-i18n attributes) so
+    // i18n.js's applyTranslations() can not retranslate it. We remember the
+    // last (container, opts) pair the modal mounted into and replay the render
+    // on the `languageChanged` / `languagechange` event with a fresh adapter.
+    let _uploadRenderEntry = null;
+
+    function _rememberUploadRender(container, opts) {
+        if (!container) return;
+        _uploadRenderEntry = { container, opts: opts || {} };
+    }
+
+    function _rerenderUploadModal() {
+        const entry = _uploadRenderEntry;
+        if (!entry || !entry.container) return;
+        try { renderUploadModal(entry.container, entry.opts); }
+        catch (_) { /* a bad re-render must not break the rest of the page */ }
+    }
+
+    function subscribeUploadLanguageEvents() {
+        if (typeof window === 'undefined') return;
+        if (window.__kpiUploadLangSubscribed) return;
+        // Defer until window.i18n is ready so the very first re-render sees the
+        // production translator (matches the race-fix in coach-kpi.js). The
+        // _uploadRenderEntry is set independently of subscription, so a modal
+        // that mounts before the listener fires is still covered once it does.
+        if (typeof window.i18n === 'undefined' || !window.i18n) {
+            if (window.__kpiUploadLangPending) return;
+            window.__kpiUploadLangPending = true;
+            let tries = 0;
+            const poll = () => {
+                if (typeof window === 'undefined') return;
+                if (window.i18n) {
+                    window.__kpiUploadLangPending = false;
+                    subscribeUploadLanguageEvents();
+                    return;
+                }
+                if (++tries >= 50) {
+                    window.__kpiUploadLangPending = false;
+                    _attachUploadLanguageListeners();
+                    return;
+                }
+                if (typeof setTimeout === 'function') setTimeout(poll, 100);
+            };
+            if (typeof setTimeout === 'function') setTimeout(poll, 0);
+            else _attachUploadLanguageListeners();
+            return;
+        }
+        _attachUploadLanguageListeners();
+    }
+
+    function _attachUploadLanguageListeners() {
+        if (typeof window === 'undefined') return;
+        if (window.__kpiUploadLangSubscribed) return;
+        window.__kpiUploadLangSubscribed = true;
+        const handler = () => _rerenderUploadModal();
+        if (typeof window.addEventListener === 'function') {
+            window.addEventListener('languageChanged', handler);
+        }
+        if (typeof document !== 'undefined' && typeof document.addEventListener === 'function') {
+            document.addEventListener('languagechange', handler);
+        }
+    }
+
     function _el(tag, props, children) {
         const node = document.createElement(tag);
         if (props) {
@@ -719,6 +784,8 @@
         });
 
         container.appendChild(modal);
+        _rememberUploadRender(container, o);
+        subscribeUploadLanguageEvents();
         return modal;
     }
 
@@ -736,6 +803,7 @@
         commitTournamentUpload,
         fuzzyMatchStudent,
         renderUploadModal,
+        subscribeLanguageEvents: subscribeUploadLanguageEvents,
     };
 
     if (typeof window !== 'undefined') {
