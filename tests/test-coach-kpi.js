@@ -277,6 +277,18 @@ function makeMockEl(tag) {
 }
 global.document = { createElement: (tag) => makeMockEl(tag) };
 
+function _findHelper(card) {
+    // The empty-state card mounts [icon-wrapper, title, helper-paragraph];
+    // walk the tree to find the .kpi-empty-helper child for back-compat tests.
+    if (!card || !Array.isArray(card.children)) return null;
+    for (const c of card.children) {
+        if (c && typeof c.className === 'string' && /\bkpi-empty-helper\b/.test(c.className)) {
+            return c;
+        }
+    }
+    return null;
+}
+
 (function testRenderEmptyState() {
     const c = makeMockEl('div');
     kpi.renderEmptyState(c);
@@ -286,19 +298,22 @@ global.document = { createElement: (tag) => makeMockEl(tag) };
         'empty card carries .stat-card (reuses existing dashboard styling)');
     assert(/\bempty-state\b/.test(card.className),
         'empty card carries .empty-state modifier');
+    assert(/\bkpi-empty-state\b/.test(card.className),
+        'empty card carries .kpi-empty-state for the polished design');
     assertEqual(card.attributes.role, 'status',
         'empty card has role="status" for assistive tech');
-    const label = card.children[0];
-    assert(label && /Coach KPI data not yet available/.test(label.textContent),
-        'empty card shows the migrations-not-applied lead text');
-    assert(/036\/037\/038/.test(label.textContent),
+    const helper = _findHelper(card);
+    assert(helper && /Coach KPI data not yet available/.test(helper.textContent),
+        'empty card shows the migrations-not-applied helper text');
+    assert(helper && /036\/037\/038/.test(helper.textContent),
         'empty card names migrations 036/037/038 so on-call knows which to apply');
 })();
 
 (function testRenderEmptyStateCustomMessage() {
     const c = makeMockEl('div');
     kpi.renderEmptyState(c, 'No tournaments in this window.');
-    assertEqual(c.children[0].children[0].textContent,
+    const helper = _findHelper(c.children[0]);
+    assertEqual(helper && helper.textContent,
         'No tournaments in this window.',
         'custom message overrides the default migration string');
 })();
@@ -403,16 +418,56 @@ assertEqual(kpi.normalizeFilters({ branchId: 123 }),
     'normalizeFilters: non-string branchId rejected');
 
 console.log('\n=== renderFilters (DOM stub) ==========================================\n');
+
+// Each .kpi-filters root now mounts three .filter-group wrappers (one per
+// control). These helpers pull the actual control out of its wrapper so the
+// assertions below stay readable.
+function _windowGroup(root) {
+    for (const g of root.children) {
+        for (const c of g.children) {
+            if (c && typeof c.className === 'string' && /\bkpi-filter-window\b/.test(c.className)) {
+                return c;
+            }
+        }
+    }
+    return null;
+}
+function _leagueSelect(root) {
+    for (const g of root.children) {
+        for (const c of g.children) {
+            if (c && typeof c.className === 'string' && /\bkpi-filter-league\b/.test(c.className)) {
+                return c;
+            }
+        }
+    }
+    return null;
+}
+function _branchSelect(root) {
+    for (const g of root.children) {
+        for (const c of g.children) {
+            if (c && typeof c.className === 'string' && /\bkpi-filter-branch\b/.test(c.className)) {
+                return c;
+            }
+        }
+    }
+    return null;
+}
+
 (function testRenderFiltersDefaults() {
     const c = makeMockEl('div');
     const root = kpi.renderFilters(c, undefined, {});
     assertEqual(c.children.length, 1, 'mounts a single root');
     assert(/\bkpi-filters\b/.test(root.className), 'root carries .kpi-filters');
-    // [windowGroup, leagueSelect, branchSelect]
-    assertEqual(root.children.length, 3, 'renders three controls (window/league/branch)');
+    // root.children now holds 3 .filter-group wrappers (window / league / branch).
+    assertEqual(root.children.length, 3,
+        'renders three .filter-group wrappers (window / league / branch)');
+    for (const g of root.children) {
+        assert(/\bfilter-group\b/.test(g.className),
+            'each top-level child is a .filter-group wrapper');
+    }
 
-    const windowGroup = root.children[0];
-    assert(/\bkpi-filter-window\b/.test(windowGroup.className),
+    const windowGroup = _windowGroup(root);
+    assert(windowGroup && /\bkpi-filter-window\b/.test(windowGroup.className),
         'window group carries .kpi-filter-window');
     assertEqual(windowGroup.children.length, 4,
         'four pill buttons (30d / 90d / ytd / all)');
@@ -421,12 +476,12 @@ console.log('\n=== renderFilters (DOM stub) ====================================
     assertEqual(pressed[0].dataset.window, '90d',
         'default pressed pill is the 90d window (PRD default)');
 
-    const leagueSelect = root.children[1];
+    const leagueSelect = _leagueSelect(root);
     assertEqual(leagueSelect.tagName, 'select', 'league control is a <select>');
     assertEqual(leagueSelect.value, 'all', 'league defaults to "all"');
     assertEqual(leagueSelect.children.length, 4, 'league has all/A/B/C options');
 
-    const branchSelect = root.children[2];
+    const branchSelect = _branchSelect(root);
     assertEqual(branchSelect.tagName, 'select', 'branch control is a <select>');
     assertEqual(branchSelect.value, 'all', 'branch defaults to "all"');
     assertEqual(branchSelect.children.length, 1,
@@ -438,14 +493,14 @@ console.log('\n=== renderFilters (DOM stub) ====================================
     const root = kpi.renderFilters(c, { window: '30d', league: 'B', branchId: 'b-2' }, {
         branches: [{ id: 'b-1', name: 'Nish' }, { id: 'b-2', name: 'Debut' }],
     });
-    const windowGroup = root.children[0];
+    const windowGroup = _windowGroup(root);
     const pressed = windowGroup.children.filter(b => b.attributes['aria-pressed'] === 'true');
     assertEqual(pressed[0].dataset.window, '30d', 'current window: 30d highlighted');
 
-    const leagueSelect = root.children[1];
+    const leagueSelect = _leagueSelect(root);
     assertEqual(leagueSelect.value, 'B', 'current league: B selected');
 
-    const branchSelect = root.children[2];
+    const branchSelect = _branchSelect(root);
     assertEqual(branchSelect.value, 'b-2', 'current branch: b-2 selected');
     assertEqual(branchSelect.children.length, 3,
         '"All branches" + two branch options');
@@ -460,7 +515,7 @@ console.log('\n=== renderFilters (DOM stub) ====================================
     });
 
     // Click the 30d pill.
-    const pills = root.children[0].children;
+    const pills = _windowGroup(root).children;
     const pill30d = pills.find(p => p.dataset.window === '30d');
     pill30d.dispatch('click');
     assertEqual(events[events.length - 1],
@@ -477,7 +532,7 @@ console.log('\n=== renderFilters (DOM stub) ====================================
         'clicking a different pill fires onChange (current state still 90d in initial render)');
 
     // Change the league select.
-    const leagueSelect = root.children[1];
+    const leagueSelect = _leagueSelect(root);
     leagueSelect.value = 'A';
     leagueSelect.dispatch('change', { target: { value: 'A' } });
     assertEqual(events[events.length - 1].league, 'A',
@@ -486,7 +541,7 @@ console.log('\n=== renderFilters (DOM stub) ====================================
         'league change preserves window (parent owns state, child returns full snapshot)');
 
     // Change the branch select.
-    const branchSelect = root.children[2];
+    const branchSelect = _branchSelect(root);
     branchSelect.value = 'b-1';
     branchSelect.dispatch('change', { target: { value: 'b-1' } });
     assertEqual(events[events.length - 1].branchId, 'b-1',
@@ -497,7 +552,7 @@ console.log('\n=== renderFilters (DOM stub) ====================================
     // No onChange provided — events fire harmlessly.
     const c = makeMockEl('div');
     const root = kpi.renderFilters(c, undefined, {});
-    const pill = root.children[0].children[0];
+    const pill = _windowGroup(root).children[0];
     pill.dispatch('click');
     assert(true, 'no onChange supplied → click does not throw');
 })();
@@ -505,11 +560,11 @@ console.log('\n=== renderFilters (DOM stub) ====================================
 (function testRenderFiltersNormalizesBogusInput() {
     const c = makeMockEl('div');
     const root = kpi.renderFilters(c, { window: 'xss', league: 'evil', branchId: '' }, {});
-    const pressed = root.children[0].children.filter(b => b.attributes['aria-pressed'] === 'true');
+    const pressed = _windowGroup(root).children.filter(b => b.attributes['aria-pressed'] === 'true');
     assertEqual(pressed[0].dataset.window, '90d',
         'bogus window falls back to 90d default');
-    assertEqual(root.children[1].value, 'all', 'bogus league falls back to all');
-    assertEqual(root.children[2].value, 'all', 'empty branchId falls back to all');
+    assertEqual(_leagueSelect(root).value, 'all', 'bogus league falls back to all');
+    assertEqual(_branchSelect(root).value, 'all', 'empty branchId falls back to all');
 })();
 
 (function testRenderFiltersNoContainer() {
@@ -527,12 +582,12 @@ console.log('\n=== renderFilters (DOM stub) ====================================
     };
     const t = (key, fallback) => translations[key] || fallback;
     const root = kpi.renderFilters(c, undefined, { t: t });
-    const pill30d = root.children[0].children.find(p => p.dataset.window === '30d');
+    const pill30d = _windowGroup(root).children.find(p => p.dataset.window === '30d');
     assertEqual(pill30d.textContent, '30 дней',
         'i18n: time-window labels resolved via t()');
-    assertEqual(root.children[1].children[0].textContent, 'Все лиги',
+    assertEqual(_leagueSelect(root).children[0].textContent, 'Все лиги',
         'i18n: league "all" option resolved via t()');
-    assertEqual(root.children[2].children[0].textContent, 'Все филиалы',
+    assertEqual(_branchSelect(root).children[0].textContent, 'Все филиалы',
         'i18n: branch "all" option resolved via t()');
 })();
 

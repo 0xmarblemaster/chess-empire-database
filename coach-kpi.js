@@ -379,22 +379,42 @@
 
     /**
      * Render the friendly empty card used when the edge function returns
-     * null / 4xx / empty data (Phase 2 migrations not yet applied). Reuses
-     * the `.stat-card` styling already in the dashboard and adds an
-     * `.empty-state` modifier for callers that want to target it in CSS.
+     * null / 4xx / empty data (Phase 2 migrations not yet applied). Mounts
+     * a centered card with a lucide icon, title, and helper paragraph so it
+     * reads as a deliberate empty state instead of a broken table.
+     *
+     * `opts.t(key, fallback)` is an optional i18n lookup; `opts.title` and
+     * `opts.helper` override the resolved strings. The legacy `message`
+     * positional arg keeps working — when passed a string we use it as the
+     * helper text so existing callers (`renderRazryadDoughnut`, etc.) still
+     * surface their custom message ("Chart.js not loaded", etc.).
      */
-    function renderEmptyState(container, message) {
+    function renderEmptyState(container, message, opts) {
         if (typeof document === 'undefined' || !container) return;
-        const text = (typeof message === 'string' && message.length > 0)
+        const o = opts || {};
+        const t = typeof o.t === 'function' ? o.t : null;
+        const label = (key, fb) => (t ? t(key, fb) : fb);
+        const helperText = (typeof message === 'string' && message.length > 0)
             ? message
-            : EMPTY_STATE_MESSAGE;
+            : (typeof o.helper === 'string' && o.helper.length > 0
+                ? o.helper
+                : label('coachKpiEmptyState', EMPTY_STATE_MESSAGE));
+        const titleText = (typeof o.title === 'string' && o.title.length > 0)
+            ? o.title
+            : label('coachKpiEmptyTitle', 'No data yet');
+
         container.innerHTML = '';
-        container.appendChild(_el('div', {
+        const card = _el('div', {
             className: 'stat-card empty-state kpi-empty-state',
             role: 'status',
         }, [
-            _el('div', { className: 'stat-card-label', text: text }),
-        ]));
+            _el('div', { className: 'kpi-empty-icon' }, [
+                _el('i', { 'data-lucide': 'bar-chart-3' }),
+            ]),
+            _el('div', { className: 'kpi-empty-title stat-card-label', text: titleText }),
+            _el('p', { className: 'kpi-empty-helper', text: helperText }),
+        ]);
+        container.appendChild(card);
     }
 
     /**
@@ -735,7 +755,14 @@
             });
             windowGroup.appendChild(btn);
         }
-        root.appendChild(windowGroup);
+        const windowField = _el('div', { className: 'filter-group' }, [
+            _el('label', {
+                className: 'filter-label',
+                text: label('coachKpiWindowGroup', 'Time window'),
+            }),
+            windowGroup,
+        ]);
+        root.appendChild(windowField);
 
         const leagueSelect = _el('select', {
             className: 'kpi-filter-league',
@@ -755,7 +782,14 @@
             const next = normalizeFilters({ ...state, league: value });
             if (onChange) onChange(next);
         });
-        root.appendChild(leagueSelect);
+        const leagueField = _el('div', { className: 'filter-group' }, [
+            _el('label', {
+                className: 'filter-label',
+                text: label('coachKpiLeagueGroup', 'League'),
+            }),
+            leagueSelect,
+        ]);
+        root.appendChild(leagueField);
 
         const branchSelect = _el('select', {
             className: 'kpi-filter-branch',
@@ -778,7 +812,14 @@
             const next = normalizeFilters({ ...state, branchId: value });
             if (onChange) onChange(next);
         });
-        root.appendChild(branchSelect);
+        const branchField = _el('div', { className: 'filter-group' }, [
+            _el('label', {
+                className: 'filter-label',
+                text: label('coachKpiBranchGroup', 'Branch'),
+            }),
+            branchSelect,
+        ]);
+        root.appendChild(branchField);
 
         container.appendChild(root);
         return root;
