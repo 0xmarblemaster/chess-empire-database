@@ -990,10 +990,11 @@ const supabaseData = {
      * tournament_results tables do not exist — the caller surfaces it as a
      * modal toast.
      */
-    async addTournamentUpload(header, rows) {
+    async addTournamentUpload(header, rows, onProgress) {
         if (!header || !header.kind || !header.tournament_date) {
             throw new Error('addTournamentUpload requires header.kind and header.tournament_date');
         }
+        const reportProgress = typeof onProgress === 'function' ? onProgress : null;
         const ROUNDS_BY_KIND = { league_c: 6, league_b: 6, razryad_4: 10, razryad_3: 9 };
         const payload = {
             kind: header.kind,
@@ -1020,9 +1021,15 @@ const supabaseData = {
         }
 
         const upload_id = uploadRow.id;
+        const allRows = Array.isArray(rows) ? rows : [];
+        const total = allRows.length;
         let inserted = 0;
-        for (const r of rows || []) {
-            if (!r || !r.studentId) continue;
+        for (let i = 0; i < allRows.length; i++) {
+            const r = allRows[i];
+            if (!r || !r.studentId) {
+                if (reportProgress) reportProgress(i + 1, total, 'import');
+                continue;
+            }
             const resultRow = {
                 upload_id,
                 student_id: r.studentId,
@@ -1037,7 +1044,10 @@ const supabaseData = {
                 .from('tournament_results')
                 .insert(resultRow);
             if (resErr) {
-                if (resErr.code === '23505') continue; // unique violation = already inserted
+                if (resErr.code === '23505') {
+                    if (reportProgress) reportProgress(i + 1, total, 'import');
+                    continue; // unique violation = already inserted
+                }
                 if (resErr.code === '42P01' || resErr.code === 'PGRST205') {
                     throw new Error('Tournament tables not initialized — apply migration 039 (tournaments_uploads / tournament_results) in Supabase.');
                 }
@@ -1060,6 +1070,7 @@ const supabaseData = {
             }
 
             inserted++;
+            if (reportProgress) reportProgress(i + 1, total, 'import');
         }
 
         return { upload_id, inserted };

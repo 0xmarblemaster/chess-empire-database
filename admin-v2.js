@@ -4779,6 +4779,23 @@ async function commitTournamentUpload(kind) {
     if (cancelBtn) cancelBtn.disabled = true;
     importBtn.innerHTML = '<i data-lucide="loader" class="spin" style="width: 18px; height: 18px;"></i> Importing...';
 
+    const progressContainer = document.getElementById('importProgressContainer');
+    const progressBar = document.getElementById('importProgressBar');
+    const progressPercent = document.getElementById('importProgressPercent');
+    const progressCount = document.getElementById('importProgressCount');
+    const progressStatus = document.getElementById('importProgressStatus');
+    const progressText = document.getElementById('importProgressText');
+
+    if (progressContainer) {
+        progressContainer.style.display = 'block';
+        progressBar.style.background = '';
+        progressBar.style.width = '0%';
+        progressPercent.textContent = '0%';
+        progressCount.textContent = `0 / ${csvParsedData.length}`;
+        progressStatus.textContent = t('admin.ratings.processing') || 'Processing...';
+        progressText.textContent = t('admin.ratings.importingTournament') || 'Importing tournament results...';
+    }
+
     try {
         const dateEl = document.getElementById('csvTournamentDate');
         const roundsEl = document.getElementById('csvTournamentRounds');
@@ -4789,13 +4806,29 @@ async function commitTournamentUpload(kind) {
 
         if (!tournament_date) {
             showToast(t('admin.imports.dateRequired') || 'Tournament date is required', 'error');
+            if (progressContainer) progressContainer.style.display = 'none';
             return;
         }
 
         // Materialize any __pendingStudent rows into real students before the
         // tournament upload. Per-row failures are skipped, not fatal.
+        const pendingIndices = [];
+        for (let i = 0; i < csvParsedData.length; i++) {
+            if (csvParsedData[i].__pendingStudent) pendingIndices.push(i);
+        }
+        const pendingTotal = pendingIndices.length;
         let newStudentFailures = 0;
         const finalRows = [];
+
+        if (pendingTotal > 0 && progressContainer) {
+            progressText.textContent = t('admin.ratings.creatingNewStudents') || 'Creating new students...';
+            progressBar.style.width = '0%';
+            progressPercent.textContent = '0%';
+            progressCount.textContent = `0 / ${pendingTotal}`;
+            progressStatus.textContent = '';
+        }
+
+        let pendingDone = 0;
         for (const item of csvParsedData) {
             if (item.__pendingStudent) {
                 try {
@@ -4812,7 +4845,23 @@ async function commitTournamentUpload(kind) {
                 } catch (err) {
                     console.error(`Failed to create new student "${item.studentName}":`, err);
                     newStudentFailures++;
+                    pendingDone++;
+                    if (progressContainer && pendingTotal > 0) {
+                        const pct = Math.round((pendingDone / pendingTotal) * 100);
+                        progressBar.style.width = `${pct}%`;
+                        progressPercent.textContent = `${pct}%`;
+                        progressCount.textContent = `${pendingDone} / ${pendingTotal}`;
+                        progressStatus.textContent = `✗ ${newStudentFailures}`;
+                    }
                     continue;
+                }
+                pendingDone++;
+                if (progressContainer && pendingTotal > 0) {
+                    const pct = Math.round((pendingDone / pendingTotal) * 100);
+                    progressBar.style.width = `${pct}%`;
+                    progressPercent.textContent = `${pct}%`;
+                    progressCount.textContent = `${pendingDone} / ${pendingTotal}`;
+                    progressStatus.textContent = newStudentFailures > 0 ? `✗ ${newStudentFailures}` : '';
                 }
             }
             if (item.studentId) finalRows.push(item);
@@ -4821,8 +4870,29 @@ async function commitTournamentUpload(kind) {
             showToast(`${newStudentFailures} new student(s) could not be created`, 'error');
         }
 
+        if (progressContainer) {
+            progressText.textContent = t('admin.ratings.importingTournament') || 'Importing tournament results...';
+            progressBar.style.width = '0%';
+            progressPercent.textContent = '0%';
+            progressCount.textContent = `0 / ${finalRows.length}`;
+            progressStatus.textContent = t('admin.ratings.processing') || 'Processing...';
+        }
+
         const header = { kind, tournament_date, rounds, source_filename };
-        const result = await window.supabaseData.addTournamentUpload(header, finalRows);
+        const result = await window.supabaseData.addTournamentUpload(header, finalRows, (done, total) => {
+            if (!progressContainer || !total) return;
+            const pct = Math.round((done / total) * 100);
+            progressBar.style.width = `${pct}%`;
+            progressPercent.textContent = `${pct}%`;
+            progressCount.textContent = `${done} / ${total}`;
+        });
+
+        if (progressContainer) {
+            progressBar.style.background = 'linear-gradient(90deg, #10b981, #059669)';
+            progressText.textContent = t('admin.ratings.importComplete') || 'Import complete!';
+            const insertedCount = (result && typeof result.inserted === 'number') ? result.inserted : finalRows.length;
+            progressStatus.textContent = `✓ ${insertedCount} imported`;
+        }
 
         showToast(t('admin.coachKpi.uploadSuccess') || 'Upload committed — leaderboard refreshed', 'success');
         if (typeof window.dispatchEvent === 'function') {
@@ -4832,12 +4902,16 @@ async function commitTournamentUpload(kind) {
         setTimeout(() => {
             closeCSVImportModal();
             loadRatingsData();
-        }, 1200);
+        }, 1500);
 
     } catch (error) {
         console.error('Tournament upload failed:', error);
         const msg = (error && error.message) || t('admin.coachKpi.uploadError') || 'Could not upload tournament';
         showToast(msg, 'error');
+        if (progressContainer) {
+            progressBar.style.background = '#ef4444';
+            progressText.textContent = t('admin.ratings.importFailed') || 'Import failed!';
+        }
     } finally {
         importBtn.disabled = false;
         if (cancelBtn) cancelBtn.disabled = false;
