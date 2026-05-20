@@ -987,7 +987,17 @@ const translations = {
         "coachKpiBiggestClimber": "Biggest climber",
         "admin.coachKpi.viewSchool": "School",
         "admin.coachKpi.viewBranch": "Branch",
-        "admin.coachKpi.viewCoach": "Coach"
+        "admin.coachKpi.viewCoach": "Coach",
+        "admin.coachKpi.kind.league_c": "League C",
+        "admin.coachKpi.kind.league_b": "League B",
+        "admin.coachKpi.kind.razryad_3": "3rd razryad qualification",
+        "admin.coachKpi.kind.razryad_4": "4th razryad qualification",
+        "admin.imports.button": "Import data",
+        "admin.imports.kindLabel": "Import type",
+        "admin.imports.kindRating": "Ratings (CSV/Excel)",
+        "admin.imports.tournamentDate": "Tournament date",
+        "admin.imports.tournamentRounds": "Rounds",
+        "admin.imports.sourceFile": "Source file"
     },
     kk: {
         "common.brand": "Chess Empire",
@@ -1904,7 +1914,17 @@ const translations = {
         "coach.invalidScore": "Жарамды ұпай енгізіңіз (0-100)",
         "admin.coachKpi.viewSchool": "Мектеп",
         "admin.coachKpi.viewBranch": "Бөлімше",
-        "admin.coachKpi.viewCoach": "Жаттықтырушы"
+        "admin.coachKpi.viewCoach": "Жаттықтырушы",
+        "admin.coachKpi.kind.league_c": "C Лигасы",
+        "admin.coachKpi.kind.league_b": "B Лигасы",
+        "admin.coachKpi.kind.razryad_3": "3-разряд квалификациясы",
+        "admin.coachKpi.kind.razryad_4": "4-разряд квалификациясы",
+        "admin.imports.button": "Деректерді импорттау",
+        "admin.imports.kindLabel": "Импорт түрі",
+        "admin.imports.kindRating": "Рейтингтер (CSV/Excel)",
+        "admin.imports.tournamentDate": "Турнир күні",
+        "admin.imports.tournamentRounds": "Турлар",
+        "admin.imports.sourceFile": "Бастапқы файл"
     },
     ru: {
         // Common
@@ -2876,7 +2896,17 @@ const translations = {
         "coachKpiBiggestClimber": "Наибольший прогресс",
         "admin.coachKpi.viewSchool": "Школа",
         "admin.coachKpi.viewBranch": "Филиал",
-        "admin.coachKpi.viewCoach": "Тренер"
+        "admin.coachKpi.viewCoach": "Тренер",
+        "admin.coachKpi.kind.league_c": "Лига C",
+        "admin.coachKpi.kind.league_b": "Лига B",
+        "admin.coachKpi.kind.razryad_3": "Квалификация 3-го разряда",
+        "admin.coachKpi.kind.razryad_4": "Квалификация 4-го разряда",
+        "admin.imports.button": "Импорт данных",
+        "admin.imports.kindLabel": "Тип импорта",
+        "admin.imports.kindRating": "Рейтинги (CSV/Excel)",
+        "admin.imports.tournamentDate": "Дата турнира",
+        "admin.imports.tournamentRounds": "Туры",
+        "admin.imports.sourceFile": "Исходный файл"
     }
 };
 
