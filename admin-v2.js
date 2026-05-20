@@ -3235,6 +3235,9 @@ function processMatchedRows(rows, opts) {
                 const label = getStudentDisambiguationLabel(c);
                 options += `<option value="${c.id}">${label}</option>`;
             }
+            options += `<option value="" disabled>─────</option>`;
+            options += `<option value="__skip__">${t('admin.uploads.skipRow')}</option>`;
+            options += `<option value="__new__">${t('admin.uploads.createNewStudent')}</option>`;
             const colspan = columns.length;
             const datasetRow = isTournament
                 ? `data-row-rank="${row.rank ?? ''}" data-row-score="${row.score ?? ''}" data-row-games="${row.games_played ?? ''}" data-row-delta="${row.rating_delta ?? 0}" data-row-rating-before="${row.rating_before ?? ''}" data-row-avg-opp="${row.avg_opp_rating ?? ''}"`
@@ -3252,6 +3255,7 @@ function processMatchedRows(rows, opts) {
                             style="width: 100%; padding: 0.375rem 0.5rem; border: 1px solid #f97316; border-radius: 0.375rem; font-size: 0.8rem; background: white;">
                             ${options}
                         </select>
+                        <div id="new-student-form-${rowIndex}" class="new-student-form" data-row-index="${rowIndex}" style="display:none;"></div>
                     </td>
                 </tr>`;
         } else if (!isTournament && (isNaN(row.rating) || row.rating < 0 || row.rating > 3000)) {
@@ -3341,11 +3345,203 @@ function updateAmbiguousCounter(count) {
     }
 }
 
+// Split a raw "Surname Firstname" string per Russian Фамилия Имя convention:
+// first token → last name, remaining tokens → first name.
+function parseNamePrefill(rawName) {
+    const parts = String(rawName || '').trim().split(/\s+/).filter(Boolean);
+    if (parts.length === 0) return { lastName: '', firstName: '' };
+    if (parts.length === 1) return { lastName: parts[0], firstName: '' };
+    return { lastName: parts[0], firstName: parts.slice(1).join(' ') };
+}
+
+// Build the inline "create new student" sub-form. `rowIndex` ties it to the
+// rating-CSV preview row that owns it. Branch is required; coach is optional
+// and filtered to the chosen branch.
+function renderNewStudentFormHtml(rowIndex, rawName) {
+    const prefill = parseNamePrefill(rawName);
+    const branches = (window.branches || []);
+    const branchOptions = [`<option value="">— ${t('admin.uploads.selectBranch')} —</option>`]
+        .concat(branches.map(b => `<option value="${b.id}">${_escapeHtml(b.name)}</option>`))
+        .join('');
+    return `
+        <div style="margin-top:0.5rem; padding:0.5rem; background:#fff; border:1px dashed #f97316; border-radius:0.375rem;">
+            <div style="display:grid; grid-template-columns:repeat(2,1fr); gap:0.5rem; margin-bottom:0.5rem;">
+                <input type="text" class="new-student-firstname" placeholder="${t('admin.uploads.firstNameLabel')}" value="${_escapeHtml(prefill.firstName)}" style="padding:0.25rem 0.5rem; border:1px solid #cbd5e1; border-radius:0.375rem; font-size:0.85rem;">
+                <input type="text" class="new-student-lastname" placeholder="${t('admin.uploads.lastNameLabel')}" value="${_escapeHtml(prefill.lastName)}" style="padding:0.25rem 0.5rem; border:1px solid #cbd5e1; border-radius:0.375rem; font-size:0.85rem;">
+                <select class="new-student-branch" onchange="onNewStudentBranchChange(this, ${rowIndex})" style="padding:0.25rem 0.5rem; border:1px solid #cbd5e1; border-radius:0.375rem; font-size:0.85rem;">${branchOptions}</select>
+                <select class="new-student-coach" disabled style="padding:0.25rem 0.5rem; border:1px solid #cbd5e1; border-radius:0.375rem; font-size:0.85rem;">
+                    <option value="">${t('admin.uploads.coachOptional')}</option>
+                </select>
+            </div>
+            <div style="display:flex; align-items:center; gap:0.5rem;">
+                <button type="button" class="new-student-confirm" onclick="confirmNewStudentRow(this, ${rowIndex})" disabled
+                    style="padding:0.25rem 0.75rem; background:#10b981; color:#fff; border:none; border-radius:0.375rem; font-size:0.8rem; cursor:pointer; opacity:0.5;">
+                    ${t('admin.uploads.confirmNewStudent')}
+                </button>
+                <span class="new-student-msg" style="color:#dc2626; font-size:0.75rem;"></span>
+            </div>
+        </div>`;
+}
+
+// Filter the coach <select> in a new-student form to the branch the admin
+// picked. Empty branch ⇒ coach disabled. Also flips the Confirm button.
+function onNewStudentBranchChange(branchSel, rowIndex) {
+    const form = branchSel.closest('.new-student-form') || document.getElementById(`new-student-form-${rowIndex}`);
+    if (!form) return;
+    const coachSel = form.querySelector('.new-student-coach');
+    const confirmBtn = form.querySelector('.new-student-confirm');
+    const branchId = branchSel.value;
+    if (!branchId) {
+        coachSel.disabled = true;
+        coachSel.innerHTML = `<option value="">${t('admin.uploads.coachOptional')}</option>`;
+        if (confirmBtn) { confirmBtn.disabled = true; confirmBtn.style.opacity = '0.5'; }
+        return;
+    }
+    const coaches = (window.coaches || []).filter(c => {
+        if (Array.isArray(c.branchIds) && c.branchIds.length) return c.branchIds.some(id => String(id) === String(branchId));
+        return String(c.branchId || '') === String(branchId);
+    });
+    let opts = `<option value="">${t('admin.uploads.coachOptional')}</option>`;
+    for (const c of coaches) {
+        const label = c.fullName || `${c.firstName || ''} ${c.lastName || ''}`.trim();
+        opts += `<option value="${c.id}">${_escapeHtml(label)}</option>`;
+    }
+    coachSel.innerHTML = opts;
+    coachSel.disabled = false;
+    if (confirmBtn) { confirmBtn.disabled = false; confirmBtn.style.opacity = '1'; }
+}
+
+// Confirm a new-student row in the rating CSV preview. Pushes a
+// __pendingStudent-flagged entry into csvParsedData so the commit step inserts
+// the student first, then the rating row.
+function confirmNewStudentRow(btn, rowIndex) {
+    const form = btn.closest('.new-student-form') || document.getElementById(`new-student-form-${rowIndex}`);
+    if (!form) return;
+    const firstName = form.querySelector('.new-student-firstname').value.trim();
+    const lastName  = form.querySelector('.new-student-lastname').value.trim();
+    const branchSel = form.querySelector('.new-student-branch');
+    const coachSel  = form.querySelector('.new-student-coach');
+    const msg = form.querySelector('.new-student-msg');
+    if (!branchSel.value) {
+        if (msg) msg.textContent = t('admin.uploads.branchRequired');
+        return;
+    }
+    if (!firstName && !lastName) {
+        if (msg) msg.textContent = t('admin.uploads.firstNameLabel');
+        return;
+    }
+    if (msg) msg.textContent = '';
+
+    // Find the ambiguous-row select that lives next to this form.
+    const cell = form.closest('td');
+    const selectEl = cell ? cell.querySelector('.ambiguous-select') : null;
+    if (!selectEl) return;
+
+    const rowName = selectEl.dataset.rowName;
+    const rowKind = selectEl.dataset.rowKind || 'rating';
+    const rowDate = selectEl.dataset.rowDate;
+    const pending = {
+        firstName,
+        lastName,
+        branchId: branchSel.value,
+        coachId: coachSel.value || null,
+        rawName: rowName,
+    };
+
+    if (rowKind === 'rating') {
+        const rowRating = parseInt(selectEl.dataset.rowRating);
+        csvParsedData.push({
+            __pendingStudent: pending,
+            studentId: null,
+            studentName: rowName,
+            matchedName: `${firstName} ${lastName}`.trim(),
+            rating: rowRating,
+            date: rowDate,
+        });
+    } else {
+        const intOrNull = (v) => { if (v === undefined || v === null || v === '') return null; const n = parseInt(v, 10); return Number.isFinite(n) ? n : null; };
+        const numOrNull = (v) => { if (v === undefined || v === null || v === '') return null; const n = Number(v); return Number.isFinite(n) ? n : null; };
+        csvParsedData.push({
+            __pendingStudent: pending,
+            studentId: null,
+            studentName: rowName,
+            matchedName: `${firstName} ${lastName}`.trim(),
+            rank:           intOrNull(selectEl.dataset.rowRank),
+            score:          numOrNull(selectEl.dataset.rowScore),
+            games_played:   intOrNull(selectEl.dataset.rowGames),
+            avg_opp_rating: intOrNull(selectEl.dataset.rowAvgOpp),
+            rating_before:  intOrNull(selectEl.dataset.rowRatingBefore),
+            rating_delta:   intOrNull(selectEl.dataset.rowDelta) || 0,
+        });
+    }
+
+    // Mark resolved visually + lock the inputs.
+    form.querySelectorAll('input, select, button').forEach(el => { el.disabled = true; });
+    selectEl.disabled = true;
+    const tr = selectEl.closest('tr');
+    if (tr) tr.style.background = '#f0fdf4';
+    const statusRow = tr?.previousElementSibling;
+    if (statusRow) {
+        const statusCell = statusRow.querySelector('td:last-child');
+        if (statusCell) {
+            statusCell.style.color = '#10b981';
+            statusCell.innerHTML = `<span style="font-weight: 600;">✓</span> ${t('admin.uploads.newStudentReady')} → ${firstName} ${lastName}`;
+        }
+    }
+    csvAmbiguousCount--;
+    updateAmbiguousCounter(csvAmbiguousCount);
+    const validCountEl = document.getElementById('csvValidCount');
+    if (validCountEl) validCountEl.textContent = parseInt(validCountEl.textContent) + 1;
+    const importBtn = document.getElementById('importCSVBtn');
+    if (importBtn && csvAmbiguousCount <= 0) importBtn.disabled = csvParsedData.length === 0;
+}
+
+// Mark the row as skipped: no commit row, no valid-count bump, but it stops
+// blocking the import button.
+function skipAmbiguousRow(selectEl) {
+    selectEl.disabled = true;
+    const tr = selectEl.closest('tr');
+    if (tr) { tr.style.background = '#f8fafc'; tr.style.opacity = '0.6'; }
+    const statusRow = tr?.previousElementSibling;
+    if (statusRow) {
+        statusRow.style.opacity = '0.6';
+        const statusCell = statusRow.querySelector('td:last-child');
+        if (statusCell) {
+            statusCell.style.color = '#94a3b8';
+            statusCell.innerHTML = `<span style="font-weight: 600;">⊘</span> ${t('admin.uploads.skipped')}`;
+        }
+    }
+    csvAmbiguousCount--;
+    updateAmbiguousCounter(csvAmbiguousCount);
+    const importBtn = document.getElementById('importCSVBtn');
+    if (importBtn && csvAmbiguousCount <= 0) importBtn.disabled = csvParsedData.length === 0;
+}
+
 // Handle disambiguation dropdown selection
 function resolveAmbiguousRow(selectEl) {
-    const studentId = selectEl.value;
-    if (!studentId) return;
+    const value = selectEl.value;
+    if (!value) return;
 
+    const rowIndex = selectEl.dataset.rowIndex;
+    const formEl = rowIndex !== undefined ? document.getElementById(`new-student-form-${rowIndex}`) : null;
+
+    if (value === '__skip__') {
+        if (formEl) formEl.style.display = 'none';
+        skipAmbiguousRow(selectEl);
+        return;
+    }
+
+    if (value === '__new__') {
+        if (formEl) {
+            formEl.innerHTML = renderNewStudentFormHtml(rowIndex, selectEl.dataset.rowName);
+            formEl.style.display = 'block';
+        }
+        return;
+    }
+
+    if (formEl) formEl.style.display = 'none';
+
+    const studentId = value;
     const rowName = selectEl.dataset.rowName;
     const rowKind = selectEl.dataset.rowKind || 'rating';
     const rowDate = selectEl.dataset.rowDate;
@@ -3384,6 +3580,19 @@ function resolveAmbiguousRow(selectEl) {
             rating_before:  intOrNull(selectEl.dataset.rowRatingBefore),
             rating_delta:   intOrNull(selectEl.dataset.rowDelta) || 0,
         });
+    }
+
+    // Fire-and-forget alias insert: admin just told us this raw name maps to
+    // this student, so future imports can short-circuit the fuzzy match. Never
+    // let an alias failure block the commit.
+    if (window.supabaseData && typeof window.supabaseData.addStudentNameAlias === 'function') {
+        try {
+            const alias = String(rowName || '').trim().toLowerCase();
+            if (alias) {
+                Promise.resolve(window.supabaseData.addStudentNameAlias(student.id, alias))
+                    .catch(err => console.warn('alias insert failed (non-fatal):', err));
+            }
+        } catch (err) { console.warn('alias insert threw (non-fatal):', err); }
     }
 
     // Mark this row as resolved visually
@@ -4486,6 +4695,31 @@ async function commitRatingUpload() {
         for (let i = 0; i < csvParsedData.length; i++) {
             const item = csvParsedData[i];
             try {
+                // New-student row: insert the student first, then use the new id.
+                if (item.__pendingStudent) {
+                    try {
+                        const created = await window.supabaseData.addStudent({
+                            firstName: item.__pendingStudent.firstName,
+                            lastName: item.__pendingStudent.lastName,
+                            branchId: item.__pendingStudent.branchId,
+                            coachId: item.__pendingStudent.coachId,
+                            status: 'active',
+                        });
+                        item.studentId = created.id;
+                        if (Array.isArray(window.students)) window.students.push(created);
+                    } catch (err) {
+                        console.error(`Failed to create new student "${item.studentName}":`, err);
+                        errorCount++;
+                        const progress = Math.round(((i + 1) / total) * 100);
+                        if (progressContainer) {
+                            progressBar.style.width = `${progress}%`;
+                            progressPercent.textContent = `${progress}%`;
+                            progressCount.textContent = `${i + 1} / ${total}`;
+                            progressStatus.textContent = `✓ ${successCount} | ✗ ${errorCount}`;
+                        }
+                        continue;
+                    }
+                }
                 if (window.supabaseData && typeof window.supabaseData.addStudentRating === 'function') {
                     await window.supabaseData.addStudentRating(item.studentId, item.rating, 'csv_import');
                     successCount++;
@@ -4558,8 +4792,37 @@ async function commitTournamentUpload(kind) {
             return;
         }
 
+        // Materialize any __pendingStudent rows into real students before the
+        // tournament upload. Per-row failures are skipped, not fatal.
+        let newStudentFailures = 0;
+        const finalRows = [];
+        for (const item of csvParsedData) {
+            if (item.__pendingStudent) {
+                try {
+                    const created = await window.supabaseData.addStudent({
+                        firstName: item.__pendingStudent.firstName,
+                        lastName: item.__pendingStudent.lastName,
+                        branchId: item.__pendingStudent.branchId,
+                        coachId: item.__pendingStudent.coachId,
+                        status: 'active',
+                    });
+                    item.studentId = created.id;
+                    if (Array.isArray(window.students)) window.students.push(created);
+                    delete item.__pendingStudent;
+                } catch (err) {
+                    console.error(`Failed to create new student "${item.studentName}":`, err);
+                    newStudentFailures++;
+                    continue;
+                }
+            }
+            if (item.studentId) finalRows.push(item);
+        }
+        if (newStudentFailures > 0) {
+            showToast(`${newStudentFailures} new student(s) could not be created`, 'error');
+        }
+
         const header = { kind, tournament_date, rounds, source_filename };
-        const result = await window.supabaseData.addTournamentUpload(header, csvParsedData);
+        const result = await window.supabaseData.addTournamentUpload(header, finalRows);
 
         showToast(t('admin.coachKpi.uploadSuccess') || 'Upload committed — leaderboard refreshed', 'success');
         if (typeof window.dispatchEvent === 'function') {
@@ -10816,27 +11079,153 @@ function _renderAmbiguousRow(entry, idx, item, kind, itemIdx) {
     }).join('');
 
     const skipSel = resolved === 'skip' ? 'selected' : '';
-    const statusIcon = resolved
-        ? (resolved === 'skip' ? '⊘' : '✓')
-        : (kind === 'ambiguous' ? '?' : '✗');
-    const statusColor = resolved
-        ? (resolved === 'skip' ? '#94a3b8' : '#059669')
-        : (kind === 'ambiguous' ? '#d97706' : '#dc2626');
+    const newSel = (resolved === '__new_pending__' || resolved === '__new_ready__') ? 'selected' : '';
+    const isNewPending = resolved === '__new_pending__';
+    const isNewReady = resolved === '__new_ready__';
+
+    const statusIcon = isNewReady ? '✓'
+        : isNewPending ? '+'
+        : resolved
+            ? (resolved === 'skip' ? '⊘' : '✓')
+            : (kind === 'ambiguous' ? '?' : '✗');
+    const statusColor = isNewReady ? '#059669'
+        : isNewPending ? '#d97706'
+        : resolved
+            ? (resolved === 'skip' ? '#94a3b8' : '#059669')
+            : (kind === 'ambiguous' ? '#d97706' : '#dc2626');
+
+    let extraHtml = '';
+    if (isNewPending) {
+        const pending = entry.pendingStudents && entry.pendingStudents.get(raw);
+        extraHtml = _renderTournamentNewStudentForm(idx, kind, itemIdx, raw, pending);
+    } else if (isNewReady) {
+        const p = entry.pendingStudents && entry.pendingStudents.get(raw);
+        if (p) {
+            extraHtml = `<div style="margin-top:0.5rem; padding:0.5rem; background:#f0fdf4; border:1px solid #10b981; border-radius:0.375rem; font-size:0.8rem; color:#065f46;">✓ ${_escapeHtml((p.firstName + ' ' + p.lastName).trim())} — ${_escapeHtml(t('admin.uploads.newStudentReady'))}</div>`;
+        }
+    }
 
     return `
         <tr data-raw="${_escapeHtml(raw)}">
-            <td style="padding: 0.375rem 0.5rem; color: ${statusColor}; width: 1.5rem;">${statusIcon}</td>
-            <td style="padding: 0.375rem 0.5rem; white-space: nowrap;">${_escapeHtml(raw)}</td>
+            <td style="padding: 0.375rem 0.5rem; color: ${statusColor}; width: 1.5rem; vertical-align: top;">${statusIcon}</td>
+            <td style="padding: 0.375rem 0.5rem; white-space: nowrap; vertical-align: top;">${_escapeHtml(raw)}</td>
             <td style="padding: 0.375rem 0.5rem;">
                 <select class="form-input" style="padding: 0.25rem 0.5rem; font-size: 0.875rem;"
                         onchange="resolveTournamentName(${idx}, '${kind}', ${itemIdx}, this.value)">
                     <option value="">— ${t('admin.tournaments.resolve')} —</option>
                     ${options}
-                    <option value="skip" ${skipSel}>${t('admin.tournaments.skip')}</option>
-                    <option value="" disabled>${t('admin.tournaments.createNew')}</option>
+                    <option value="" disabled>─────</option>
+                    <option value="skip" ${skipSel}>${t('admin.uploads.skipRow')}</option>
+                    <option value="__new__" ${newSel}>${t('admin.uploads.createNewStudent')}</option>
                 </select>
+                ${extraHtml}
             </td>
         </tr>`;
+}
+
+// Render the inline "create new student" form for a tournament preview row.
+// Re-rendered from state each time renderTournamentPreviews() runs, so values
+// must round-trip through entry.pendingStudents.
+function _renderTournamentNewStudentForm(idx, kind, itemIdx, rawName, pending) {
+    const prefill = pending || parseNamePrefill(rawName);
+    const branches = (window.branches || []);
+    const branchOptions = [`<option value="">— ${_escapeHtml(t('admin.uploads.selectBranch'))} —</option>`]
+        .concat(branches.map(b => {
+            const sel = String(prefill.branchId || '') === String(b.id) ? 'selected' : '';
+            return `<option value="${_escapeHtml(b.id)}" ${sel}>${_escapeHtml(b.name)}</option>`;
+        }))
+        .join('');
+    let coachOptions = `<option value="">${_escapeHtml(t('admin.uploads.coachOptional'))}</option>`;
+    let coachDisabled = 'disabled';
+    if (prefill.branchId) {
+        coachDisabled = '';
+        const coaches = (window.coaches || []).filter(c => {
+            if (Array.isArray(c.branchIds) && c.branchIds.length) return c.branchIds.some(id => String(id) === String(prefill.branchId));
+            return String(c.branchId || '') === String(prefill.branchId);
+        });
+        for (const c of coaches) {
+            const label = c.fullName || `${c.firstName || ''} ${c.lastName || ''}`.trim();
+            const sel = String(prefill.coachId || '') === String(c.id) ? 'selected' : '';
+            coachOptions += `<option value="${_escapeHtml(c.id)}" ${sel}>${_escapeHtml(label)}</option>`;
+        }
+    }
+    const confirmDisabled = prefill.branchId ? '' : 'disabled';
+    const confirmOpacity = prefill.branchId ? '1' : '0.5';
+    return `
+        <div class="new-student-form-t" data-idx="${idx}" data-kind="${kind}" data-item-idx="${itemIdx}" style="margin-top:0.5rem; padding:0.5rem; background:#fff; border:1px dashed #f97316; border-radius:0.375rem;">
+            <div style="display:grid; grid-template-columns:repeat(2,1fr); gap:0.5rem; margin-bottom:0.5rem;">
+                <input type="text" class="t-new-firstname" placeholder="${_escapeHtml(t('admin.uploads.firstNameLabel'))}" value="${_escapeHtml(prefill.firstName || '')}" style="padding:0.25rem 0.5rem; border:1px solid #cbd5e1; border-radius:0.375rem; font-size:0.85rem;">
+                <input type="text" class="t-new-lastname" placeholder="${_escapeHtml(t('admin.uploads.lastNameLabel'))}" value="${_escapeHtml(prefill.lastName || '')}" style="padding:0.25rem 0.5rem; border:1px solid #cbd5e1; border-radius:0.375rem; font-size:0.85rem;">
+                <select class="t-new-branch" onchange="onTournamentNewBranchChange(this)" style="padding:0.25rem 0.5rem; border:1px solid #cbd5e1; border-radius:0.375rem; font-size:0.85rem;">${branchOptions}</select>
+                <select class="t-new-coach" ${coachDisabled} style="padding:0.25rem 0.5rem; border:1px solid #cbd5e1; border-radius:0.375rem; font-size:0.85rem;">${coachOptions}</select>
+            </div>
+            <div style="display:flex; align-items:center; gap:0.5rem;">
+                <button type="button" class="t-new-confirm" onclick="confirmTournamentNewStudent(${idx}, '${kind}', ${itemIdx})" ${confirmDisabled}
+                    style="padding:0.25rem 0.75rem; background:#10b981; color:#fff; border:none; border-radius:0.375rem; font-size:0.8rem; cursor:pointer; opacity:${confirmOpacity};">
+                    ${_escapeHtml(t('admin.uploads.confirmNewStudent'))}
+                </button>
+                <span class="t-new-msg" style="color:#dc2626; font-size:0.75rem;"></span>
+            </div>
+        </div>`;
+}
+
+function onTournamentNewBranchChange(branchSel) {
+    const form = branchSel.closest('.new-student-form-t');
+    if (!form) return;
+    const coachSel = form.querySelector('.t-new-coach');
+    const confirmBtn = form.querySelector('.t-new-confirm');
+    const branchId = branchSel.value;
+    if (!branchId) {
+        coachSel.disabled = true;
+        coachSel.innerHTML = `<option value="">${_escapeHtml(t('admin.uploads.coachOptional'))}</option>`;
+        if (confirmBtn) { confirmBtn.disabled = true; confirmBtn.style.opacity = '0.5'; }
+        return;
+    }
+    const coaches = (window.coaches || []).filter(c => {
+        if (Array.isArray(c.branchIds) && c.branchIds.length) return c.branchIds.some(id => String(id) === String(branchId));
+        return String(c.branchId || '') === String(branchId);
+    });
+    let opts = `<option value="">${_escapeHtml(t('admin.uploads.coachOptional'))}</option>`;
+    for (const c of coaches) {
+        const label = c.fullName || `${c.firstName || ''} ${c.lastName || ''}`.trim();
+        opts += `<option value="${_escapeHtml(c.id)}">${_escapeHtml(label)}</option>`;
+    }
+    coachSel.innerHTML = opts;
+    coachSel.disabled = false;
+    if (confirmBtn) { confirmBtn.disabled = false; confirmBtn.style.opacity = '1'; }
+}
+
+function confirmTournamentNewStudent(idx, kind, itemIdx) {
+    const entry = tournamentImportState[idx];
+    if (!entry) return;
+    const bucket = kind === 'ambiguous' ? entry.matchResult.ambiguous : entry.matchResult.unmatched;
+    const item = bucket[itemIdx];
+    if (!item) return;
+    const rawName = item.participant.raw_name;
+    const card = document.querySelector(`.new-student-form-t[data-idx="${idx}"][data-kind="${kind}"][data-item-idx="${itemIdx}"]`);
+    if (!card) return;
+    const firstName = card.querySelector('.t-new-firstname').value.trim();
+    const lastName  = card.querySelector('.t-new-lastname').value.trim();
+    const branchSel = card.querySelector('.t-new-branch');
+    const coachSel  = card.querySelector('.t-new-coach');
+    const msg       = card.querySelector('.t-new-msg');
+    if (!branchSel.value) {
+        if (msg) msg.textContent = t('admin.uploads.branchRequired');
+        return;
+    }
+    if (!firstName && !lastName) {
+        if (msg) msg.textContent = t('admin.uploads.firstNameLabel');
+        return;
+    }
+    if (!entry.pendingStudents) entry.pendingStudents = new Map();
+    entry.pendingStudents.set(rawName, {
+        firstName,
+        lastName,
+        branchId: branchSel.value,
+        coachId: coachSel.value || null,
+    });
+    entry.resolutions.set(rawName, '__new_ready__');
+    renderTournamentPreviews();
 }
 
 function resolveTournamentName(idx, kind, itemIdx, value) {
@@ -10846,10 +11235,27 @@ function resolveTournamentName(idx, kind, itemIdx, value) {
     const item = bucket[itemIdx];
     if (!item) return;
     const rawName = item.participant.raw_name;
+    if (!entry.pendingStudents) entry.pendingStudents = new Map();
     if (value === '') {
         entry.resolutions.delete(rawName);
+        entry.pendingStudents.delete(rawName);
+    } else if (value === '__new__') {
+        entry.resolutions.set(rawName, '__new_pending__');
+        if (!entry.pendingStudents.has(rawName)) {
+            entry.pendingStudents.set(rawName, parseNamePrefill(rawName));
+        }
     } else {
         entry.resolutions.set(rawName, value);
+        // Fire-and-forget alias insert when an existing student is picked.
+        if (value !== 'skip' && window.supabaseData && typeof window.supabaseData.addStudentNameAlias === 'function') {
+            try {
+                const alias = String(rawName || '').trim().toLowerCase();
+                if (alias) {
+                    Promise.resolve(window.supabaseData.addStudentNameAlias(value, alias))
+                        .catch(err => console.warn('alias insert failed (non-fatal):', err));
+                }
+            } catch (err) { console.warn('alias insert threw (non-fatal):', err); }
+        }
     }
     renderTournamentPreviews();
 }
@@ -10864,10 +11270,12 @@ function _allEntriesResolved() {
         if (entry.error) continue;
         const m = entry.matchResult;
         for (const a of m.ambiguous) {
-            if (!entry.resolutions.has(a.participant.raw_name)) return false;
+            const v = entry.resolutions.get(a.participant.raw_name);
+            if (!v || v === '__new_pending__') return false;
         }
         for (const u of m.unmatched) {
-            if (!entry.resolutions.has(u.participant.raw_name)) return false;
+            const v = entry.resolutions.get(u.participant.raw_name);
+            if (!v || v === '__new_pending__') return false;
         }
     }
     return tournamentImportState.some(e => !e.error);
@@ -10889,8 +11297,14 @@ function _buildResolvedParticipants(entry) {
     // Ambiguous + unmatched (with resolutions)
     const allUnresolved = [...entry.matchResult.ambiguous, ...entry.matchResult.unmatched];
     for (const item of allUnresolved) {
-        const choice = entry.resolutions.get(item.participant.raw_name);
-        if (!choice || choice === 'skip') continue;
+        const rawName = item.participant.raw_name;
+        const choice = entry.resolutions.get(rawName);
+        if (!choice || choice === 'skip' || choice === '__new_pending__') continue;
+        if (choice === '__new_ready__') {
+            const p = entry.pendingStudents && entry.pendingStudents.get(rawName);
+            if (p) resolved.push({ participant: item.participant, __pendingStudent: p });
+            continue;
+        }
         const student = studentsById.get(String(choice));
         if (student) resolved.push({ participant: item.participant, student });
     }
@@ -10908,15 +11322,41 @@ async function importAllTournaments() {
     if (statusEl) statusEl.textContent = t('admin.tournaments.importing');
 
     const results = [];
+    let newStudentFailures = 0;
     for (const entry of tournamentImportState) {
         if (entry.error) continue;
         try {
             const resolvedParts = _buildResolvedParticipants(entry);
-            const r = await window.tournamentsData.importTournament(entry.parsed, resolvedParts);
+            // Materialize any __pendingStudent rows into real students first so
+            // the tournament insert has a real student_id. A per-row failure
+            // here drops just that row, never the whole batch.
+            for (const part of resolvedParts) {
+                if (!part.__pendingStudent) continue;
+                try {
+                    const created = await window.supabaseData.addStudent({
+                        firstName: part.__pendingStudent.firstName,
+                        lastName: part.__pendingStudent.lastName,
+                        branchId: part.__pendingStudent.branchId,
+                        coachId: part.__pendingStudent.coachId,
+                        status: 'active',
+                    });
+                    part.student = created;
+                    if (Array.isArray(window.students)) window.students.push(created);
+                } catch (err) {
+                    console.error('Failed to create new student for tournament row:', err);
+                    newStudentFailures++;
+                }
+                delete part.__pendingStudent;
+            }
+            const finalParts = resolvedParts.filter(p => p.student);
+            const r = await window.tournamentsData.importTournament(entry.parsed, finalParts);
             results.push({ ok: true, file: entry.file.name, ...r });
         } catch (err) {
             results.push({ ok: false, file: entry.file.name, error: err.message || String(err) });
         }
+    }
+    if (newStudentFailures > 0) {
+        showToast(`${newStudentFailures} new student(s) could not be created`, 'error');
     }
 
     const totalInserted = results.filter(r => r.ok).reduce((a, r) => a + (r.inserted || 0), 0);
