@@ -104,6 +104,24 @@
         if (fuzzy60.length === 1) return { matched: true, student: fuzzy60[0], confidence: 60 };
         if (fuzzy60.length > 1) return { matched: true, student: fuzzy60[0], confidence: 60, ambiguous: true, candidates: fuzzy60 };
 
+        // 50% fallback: exact surname token match, first name differs.
+        // Forced ambiguous so admin verifies via the dropdown picker.
+        const surnameOnly = [];
+        for (const s of students) {
+            const ln = nfc(s.lastName || '').toLowerCase();
+            if (!ln) continue;
+            if (parts.some(p => p === ln)) surnameOnly.push(s);
+        }
+        if (surnameOnly.length >= 1) {
+            return {
+                matched: true,
+                student: surnameOnly[0],
+                confidence: 50,
+                ambiguous: true,
+                candidates: surnameOnly,
+            };
+        }
+
         return { matched: false, student: null, confidence: 0 };
     }
 
