@@ -219,6 +219,32 @@ const TRANSLATIONS = {
         'admin.coachKpi.uploadCommit': 'Подтвердить загрузку',
         'common.cancel': 'Отмена',
     },
+    kk: {
+        coachKpiActiveStudents: 'Белсенді оқушылар',
+        coachKpiTournamentsYtd: 'Жыл басынан бергі турнирлер',
+        coachKpiTop3: 'Топ-3 орын',
+        coachKpiPromotions: 'Деңгей көтерілуі',
+        coachKpiNewRazryads: 'Жаңа разрядтар',
+        coachKpiParticipation: 'Қатысу',
+        coachKpiWindowGroup: 'Кезең',
+        coachKpiLeagueGroup: 'Лига',
+        coachKpiBranchGroup: 'Бөлімше',
+        coachKpiBranchAll: 'Барлық бөлімшелер',
+        coachKpiColCoach: 'Жаттықтырушы',
+        coachKpiColActive: 'Белсенді',
+        coachKpiColTournaments: 'Турнирлер',
+        coachKpiColTop3: 'Топ-3',
+        coachKpiColRatingGained: 'Рейтинг өсімі',
+        coachKpiColPromotions: 'Көтерілулер',
+        coachKpiColRazryads: 'Разрядтар',
+        coachKpiColScore: 'Ұпай',
+        'admin.coachKpi.uploadTitle': 'Турнирді жүктеу',
+        'admin.coachKpi.uploadKind': 'Турнир түрі',
+        'admin.coachKpi.uploadFile': 'Swiss-Manager экспорты',
+        'admin.coachKpi.uploadDate': 'Турнир күні',
+        'admin.coachKpi.uploadCommit': 'Жүктеуді растау',
+        'common.cancel': 'Бас тарту',
+    },
 };
 
 function makeMutableI18n(initialLang) {
@@ -579,6 +605,152 @@ console.log('\n=== upload defaults opts.t to window.i18n when not provided =====
     const title = findByClass(container, 'kpi-upload-title');
     assert(title && title.textContent === 'Загрузка турнира',
         'opts.t omitted → modal still localizes via window.i18n');
+})();
+
+console.log('\n=== language event re-renders into Kazakh =============================\n');
+(function testLanguageEventRerenderKK() {
+    const win = makeWindow();
+    const i18nStub = makeMutableI18n('en');
+    win.i18n = i18nStub.i18n;
+    const dom = makeDom([]);
+    const kpi = loadKpi({ window: win, document: dom });
+
+    const heroHost = makeMockEl('div');
+    const lbHost = makeMockEl('div');
+    const filtersHost = makeMockEl('div');
+    const adapter = (key, fb) => {
+        const v = win.i18n.t(key);
+        return v && v !== key ? v : fb;
+    };
+    kpi.renderSchoolHero(heroHost, {
+        active_students_count: 1, total_tournaments: 1, top3_count: 1,
+        promotions_count: 1, new_razryads_count: 1, participation_pct: 50,
+    }, { t: adapter });
+    kpi.renderLeaderboard(lbHost, [{
+        coach_id: 'c1', coach_name: 'X', composite_score: 50,
+    }], { t: adapter });
+    kpi.renderFilters(filtersHost, undefined, { t: adapter });
+
+    kpi.subscribeLanguageEvents();
+
+    // Flip EN → KK and re-fire the event.
+    i18nStub.state.lang = 'kk';
+    for (const fn of (win._listeners['languageChanged'] || [])) fn({ type: 'languageChanged' });
+
+    const heroLabels = findAllByClass(heroHost, 'stat-card-label').map(n => n.textContent);
+    const lbHeaders = findAllByTag(lbHost, 'th').map(n => n.textContent);
+    const filterLabels = findAllByClass(filtersHost, 'filter-label').map(n => n.textContent);
+
+    assert(heroLabels.includes('Белсенді оқушылар'),
+        'hero re-rendered with Kazakh "Белсенді оқушылар"');
+    assert(lbHeaders.includes('Жаттықтырушы'),
+        'leaderboard header re-rendered with Kazakh "Жаттықтырушы"');
+    assert(filterLabels.includes('Кезең'),
+        'filter label re-rendered with Kazakh "Кезең"');
+
+    // Flip KK → RU and re-fire the event.
+    i18nStub.state.lang = 'ru';
+    for (const fn of (win._listeners['languageChanged'] || [])) fn({ type: 'languageChanged' });
+
+    const heroLabelsRu = findAllByClass(heroHost, 'stat-card-label').map(n => n.textContent);
+    assert(heroLabelsRu.includes('Активные ученики'),
+        'after KK → RU: hero re-rendered with Russian "Активные ученики"');
+    assert(!heroLabelsRu.includes('Белсенді оқушылар'),
+        'after KK → RU: stale Kazakh labels are gone');
+})();
+
+console.log('\n=== regression guard: real window.i18n.t resolves Coach KPI keys ======\n');
+(function testRealI18nResolvesCoachKpiKeys() {
+    // Load the production i18n.js with a minimal browser-like shim so we can
+    // call window.i18n.t directly. This guards against the original bug where
+    // Coach KPI keys lived only in the legacy outer dict — window.i18n.t (the
+    // active inner tree) would then return the literal key string for every
+    // Coach KPI lookup, and the dashboard rendered fully English regardless
+    // of language. If any of these assertions fail, keys have landed in the
+    // wrong tree again.
+    const storage = {};
+    const prevWindow = global.window;
+    const prevDocument = global.document;
+    const prevLocalStorage = global.localStorage;
+    const prevNavigator = global.navigator;
+    const prevCustomEvent = global.CustomEvent;
+    const prevDocumentCtor = global.Document;
+
+    global.localStorage = {
+        getItem(k) { return Object.prototype.hasOwnProperty.call(storage, k) ? storage[k] : null; },
+        setItem(k, v) { storage[k] = String(v); },
+        removeItem(k) { delete storage[k]; },
+    };
+    global.navigator = { language: 'en' };
+    global.Document = function Document() {};
+    const docListeners = {};
+    const docStub = Object.create(global.Document.prototype);
+    Object.assign(docStub, {
+        documentElement: { setAttribute() {} },
+        addEventListener(name, fn) { (docListeners[name] = docListeners[name] || []).push(fn); },
+        dispatchEvent(event) {
+            for (const fn of (docListeners[event.type] || [])) fn(event);
+        },
+        querySelectorAll() { return []; },
+        querySelector() { return null; },
+    });
+    global.document = docStub;
+    global.window = global;
+    global.CustomEvent = function CustomEvent(type, init) {
+        this.type = type;
+        this.detail = init && init.detail;
+    };
+
+    const path = require('path');
+    const modulePath = require.resolve(path.join(__dirname, '..', 'i18n.js'));
+    delete require.cache[modulePath];
+    require(modulePath);
+
+    assert(global.window.i18n && typeof global.window.i18n.t === 'function',
+        'i18n.js exposes window.i18n.t after load');
+
+    // Coach KPI keys MUST NOT return the literal key string — they must
+    // resolve to actual translated copy from the active tree.
+    const enWindow = global.window.i18n.t('coachKpiTimeWindow30d');
+    assert(enWindow !== 'coachKpiTimeWindow30d',
+        'window.i18n.t("coachKpiTimeWindow30d") does NOT return the literal key (English)');
+    assert(enWindow === '30 days',
+        'window.i18n.t("coachKpiTimeWindow30d") === "30 days" in English');
+
+    const enUpload = global.window.i18n.t('admin.coachKpi.uploadTitle');
+    assert(enUpload !== 'admin.coachKpi.uploadTitle',
+        'window.i18n.t("admin.coachKpi.uploadTitle") does NOT return the literal key');
+    assert(enUpload === 'Upload tournament',
+        'window.i18n.t("admin.coachKpi.uploadTitle") === "Upload tournament" in English');
+
+    // Flip to Russian via the active tree's setLanguage.
+    global.window.i18n.setLanguage('ru', { silent: true });
+    const ruWindow = global.window.i18n.t('coachKpiTimeWindow30d');
+    assert(ruWindow === '30 дней',
+        'window.i18n.t("coachKpiTimeWindow30d") === "30 дней" in Russian');
+    const ruUpload = global.window.i18n.t('admin.coachKpi.uploadTitle');
+    assert(ruUpload === 'Загрузка турнира',
+        'window.i18n.t("admin.coachKpi.uploadTitle") === "Загрузка турнира" in Russian');
+
+    // Flip to Kazakh — the new locale added in this commit.
+    global.window.i18n.setLanguage('kk', { silent: true });
+    const kkWindow = global.window.i18n.t('coachKpiTimeWindow30d');
+    assert(kkWindow !== 'coachKpiTimeWindow30d',
+        'window.i18n.t("coachKpiTimeWindow30d") does NOT return literal key in Kazakh');
+    assert(kkWindow === '30 күн',
+        'window.i18n.t("coachKpiTimeWindow30d") === "30 күн" in Kazakh');
+    const kkUpload = global.window.i18n.t('admin.coachKpi.uploadTitle');
+    assert(kkUpload === 'Турнирді жүктеу',
+        'window.i18n.t("admin.coachKpi.uploadTitle") === "Турнирді жүктеу" in Kazakh');
+
+    // Restore globals so later test files start clean.
+    delete require.cache[modulePath];
+    if (prevWindow === undefined) delete global.window; else global.window = prevWindow;
+    if (prevDocument === undefined) delete global.document; else global.document = prevDocument;
+    if (prevLocalStorage === undefined) delete global.localStorage; else global.localStorage = prevLocalStorage;
+    if (prevNavigator === undefined) delete global.navigator; else global.navigator = prevNavigator;
+    if (prevCustomEvent === undefined) delete global.CustomEvent; else global.CustomEvent = prevCustomEvent;
+    if (prevDocumentCtor === undefined) delete global.Document; else global.Document = prevDocumentCtor;
 })();
 
 console.log(`\n--- ${passed} passed, ${failed} failed ---\n`);

@@ -32,22 +32,31 @@ function assertEqual(actual, expected, msg) {
 const ROOT = path.resolve(__dirname, '..');
 const I18N_SRC = fs.readFileSync(path.join(ROOT, 'i18n.js'), 'utf8');
 
-// Carve out just the `en:` and `ru:` blocks so we can run assertions per
-// locale without picking up matches from the other locale.
+// Carve out the `en:` and `ru:` blocks so we can run assertions per locale
+// without picking up matches from the other locale. i18n.js has TWO
+// translations objects (legacy flat-key dict + active nested tree) — we
+// concatenate every match per locale so a key defined in either block
+// satisfies the contract.
 function sliceLocale(src, locale) {
-    const start = src.search(new RegExp(`\\n\\s+${locale}:\\s*\\{`));
-    if (start < 0) return '';
-    let depth = 0;
-    let i = src.indexOf('{', start);
-    const begin = i;
-    for (; i < src.length; i++) {
-        if (src[i] === '{') depth++;
-        else if (src[i] === '}') {
-            depth--;
-            if (depth === 0) return src.slice(begin, i + 1);
+    const re = new RegExp(`\\n\\s+${locale}:\\s*\\{`, 'g');
+    let combined = '';
+    let m;
+    while ((m = re.exec(src)) !== null) {
+        let depth = 0;
+        let i = src.indexOf('{', m.index);
+        const begin = i;
+        for (; i < src.length; i++) {
+            if (src[i] === '{') depth++;
+            else if (src[i] === '}') {
+                depth--;
+                if (depth === 0) {
+                    combined += src.slice(begin, i + 1);
+                    break;
+                }
+            }
         }
     }
-    return '';
+    return combined;
 }
 
 const EN_BLOCK = sliceLocale(I18N_SRC, 'en');
@@ -107,9 +116,16 @@ const REQUIRED_KEYS = [
 ];
 
 function valueFor(block, key) {
-    const re = new RegExp(`"${key}"\\s*:\\s*"((?:[^"\\\\]|\\\\.)*)"`);
+    // Legacy outer dict uses double-quoted string keys/values; the active
+    // inner tree uses unquoted JS identifier keys with single-quoted values.
+    // Accept either form so the same set of REQUIRED_KEYS works against both.
+    const escapedKey = key.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const re = new RegExp(
+        `(?:"${escapedKey}"|\\b${escapedKey})\\s*:\\s*(?:"((?:[^"\\\\]|\\\\.)*)"|'((?:[^'\\\\]|\\\\.)*)')`
+    );
     const m = block.match(re);
-    return m ? m[1] : null;
+    if (!m) return null;
+    return m[1] !== undefined ? m[1] : m[2];
 }
 
 console.log('\n=== every required key exists in `en` and `ru` ========================\n');
