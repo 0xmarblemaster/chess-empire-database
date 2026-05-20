@@ -984,7 +984,10 @@ const translations = {
         "coachKpiTimeWindowAll": "All time",
         "coachKpiInactiveStudent": "Inactive student",
         "coachKpiTopPerformer": "Top performer",
-        "coachKpiBiggestClimber": "Biggest climber"
+        "coachKpiBiggestClimber": "Biggest climber",
+        "admin.coachKpi.viewSchool": "School",
+        "admin.coachKpi.viewBranch": "Branch",
+        "admin.coachKpi.viewCoach": "Coach"
     },
     kk: {
         "common.brand": "Chess Empire",
@@ -1898,7 +1901,10 @@ const translations = {
         "coach.botRemoved": "{{name}} жеңілген боттардан алынды",
         "coach.scoreAdded": "{{score}} ұпай сәтті қосылды",
         "coach.updateFailed": "Жаңарту сәтсіз аяқталды",
-        "coach.invalidScore": "Жарамды ұпай енгізіңіз (0-100)"
+        "coach.invalidScore": "Жарамды ұпай енгізіңіз (0-100)",
+        "admin.coachKpi.viewSchool": "Мектеп",
+        "admin.coachKpi.viewBranch": "Бөлімше",
+        "admin.coachKpi.viewCoach": "Жаттықтырушы"
     },
     ru: {
         // Common
@@ -2867,7 +2873,10 @@ const translations = {
         "coachKpiTimeWindowAll": "За всё время",
         "coachKpiInactiveStudent": "Неактивный ученик",
         "coachKpiTopPerformer": "Лучший результат",
-        "coachKpiBiggestClimber": "Наибольший прогресс"
+        "coachKpiBiggestClimber": "Наибольший прогресс",
+        "admin.coachKpi.viewSchool": "Школа",
+        "admin.coachKpi.viewBranch": "Филиал",
+        "admin.coachKpi.viewCoach": "Тренер"
     }
 };
 
