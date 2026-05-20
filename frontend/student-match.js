@@ -104,13 +104,22 @@
         if (fuzzy60.length === 1) return { matched: true, student: fuzzy60[0], confidence: 60 };
         if (fuzzy60.length > 1) return { matched: true, student: fuzzy60[0], confidence: 60, ambiguous: true, candidates: fuzzy60 };
 
-        // 50% fallback: exact surname token match, first name differs.
+        // 50% fallback: exact surname-like token match in EITHER column.
+        // Real-world data sometimes has first_name / last_name swapped at entry
+        // time (e.g. "Ochkin Dany" stored as firstName=Ochkin, lastName=Dany),
+        // so we accept a hit on either column. Token must be ≥5 chars so short
+        // common first names ("Ivan", "Anna") don't trigger a noisy dropdown.
         // Forced ambiguous so admin verifies via the dropdown picker.
+        const MIN_SURNAME_LEN = 5;
         const surnameOnly = [];
         for (const s of students) {
-            const ln = nfc(s.lastName || '').toLowerCase();
-            if (!ln) continue;
-            if (parts.some(p => p === ln)) surnameOnly.push(s);
+            const fn = nfc(s.firstName || '').toLowerCase();
+            const ln = nfc(s.lastName  || '').toLowerCase();
+            const hit = parts.some(p =>
+                p.length >= MIN_SURNAME_LEN &&
+                ((ln && p === ln) || (fn && p === fn))
+            );
+            if (hit) surnameOnly.push(s);
         }
         if (surnameOnly.length >= 1) {
             return {
