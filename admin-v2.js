@@ -4332,6 +4332,7 @@ async function previewRatingFile(event) {
     const file = event.target.files[0];
     if (!file) return;
 
+    window.csvImportFile = file;
     document.getElementById('csvFileName').textContent = file.name;
 
     if (csvImportKind && csvImportKind !== 'rating') {
@@ -4692,56 +4693,62 @@ async function commitRatingUpload() {
         let errorCount = 0;
         const total = csvParsedData.length;
 
+        // First pass: materialize any __pendingStudent rows so every item has a real studentId.
         for (let i = 0; i < csvParsedData.length; i++) {
             const item = csvParsedData[i];
-            try {
-                // New-student row: insert the student first, then use the new id.
-                if (item.__pendingStudent) {
-                    try {
-                        const created = await window.supabaseData.addStudent({
-                            firstName: item.__pendingStudent.firstName,
-                            lastName: item.__pendingStudent.lastName,
-                            branchId: item.__pendingStudent.branchId,
-                            coachId: item.__pendingStudent.coachId,
-                            status: 'active',
-                        });
-                        item.studentId = created.id;
-                        if (Array.isArray(window.students)) window.students.push(created);
-                    } catch (err) {
-                        console.error(`Failed to create new student "${item.studentName}":`, err);
-                        errorCount++;
-                        const progress = Math.round(((i + 1) / total) * 100);
-                        if (progressContainer) {
-                            progressBar.style.width = `${progress}%`;
-                            progressPercent.textContent = `${progress}%`;
-                            progressCount.textContent = `${i + 1} / ${total}`;
-                            progressStatus.textContent = `✓ ${successCount} | ✗ ${errorCount}`;
-                        }
-                        continue;
-                    }
-                }
-                if (window.supabaseData && typeof window.supabaseData.addStudentRating === 'function') {
-                    await window.supabaseData.addStudentRating(item.studentId, item.rating, 'csv_import');
-                    successCount++;
-                } else {
+            if (item.__pendingStudent) {
+                try {
+                    const created = await window.supabaseData.addStudent({
+                        firstName: item.__pendingStudent.firstName,
+                        lastName: item.__pendingStudent.lastName,
+                        branchId: item.__pendingStudent.branchId,
+                        coachId: item.__pendingStudent.coachId,
+                        status: 'active',
+                    });
+                    item.studentId = created.id;
+                    if (Array.isArray(window.students)) window.students.push(created);
+                    delete item.__pendingStudent;
+                } catch (err) {
+                    console.error(`Failed to create new student "${item.studentName}":`, err);
                     errorCount++;
                 }
-            } catch (e) {
-                console.error(`Error importing rating for ${item.studentName}:`, e);
-                errorCount++;
             }
-
             const progress = Math.round(((i + 1) / total) * 100);
             if (progressContainer) {
                 progressBar.style.width = `${progress}%`;
                 progressPercent.textContent = `${progress}%`;
                 progressCount.textContent = `${i + 1} / ${total}`;
-                progressStatus.textContent = `✓ ${successCount} | ✗ ${errorCount}`;
+                progressStatus.textContent = errorCount > 0 ? `✗ ${errorCount}` : '';
             }
         }
 
+        // Build the bulk payload from rows that resolved to a studentId.
+        const ratingsToImport = csvParsedData
+            .filter(item => item.studentId && item.rating)
+            .map(item => ({
+                studentId: item.studentId,
+                rating: item.rating,
+                ratingDate: item.ratingDate || null,
+                source: 'csv_import',
+            }));
+
+        const sourceFilename =
+            (window.csvImportFile && window.csvImportFile.name) ||
+            (document.getElementById('csvFileName')?.textContent || '').trim() ||
+            null;
+
+        const result = ratingsToImport.length > 0 && window.supabaseData
+            && typeof window.supabaseData.importStudentRatings === 'function'
+            ? await window.supabaseData.importStudentRatings(ratingsToImport, sourceFilename)
+            : { inserted: 0 };
+
+        successCount = (result && typeof result.inserted === 'number') ? result.inserted : ratingsToImport.length;
+
         if (progressContainer) {
             progressBar.style.background = 'linear-gradient(90deg, #10b981, #059669)';
+            progressBar.style.width = '100%';
+            progressPercent.textContent = '100%';
+            progressCount.textContent = `${total} / ${total}`;
             progressText.textContent = t('admin.ratings.importComplete') || 'Import complete!';
             progressStatus.textContent = `✓ ${successCount} imported | ✗ ${errorCount} failed`;
         }
@@ -4918,6 +4925,278 @@ async function commitTournamentUpload(kind) {
         importBtn.innerHTML = `<i data-lucide="upload" style="width: 18px; height: 18px;"></i> ${t('admin.ratings.import')}`;
         lucide.createIcons();
     }
+}
+
+// =============================================================
+// Upload History tab (Ratings Management)
+// =============================================================
+const UPLOAD_HISTORY_CACHE_TTL_MS = 60 * 1000;
+let _uploadHistoryCache = null;     // { rows, uploadersById, fetchedAt }
+let _uploadHistoryActiveDetailId = null;
+
+function switchRatingsView(view) {
+    const main = document.getElementById('ratingsViewMain');
+    const uploads = document.getElementById('ratingsViewUploads');
+    if (!main || !uploads) return;
+
+    if (view === 'uploads') {
+        main.style.display = 'none';
+        uploads.style.display = '';
+        loadUploadHistory();
+    } else {
+        main.style.display = '';
+        uploads.style.display = 'none';
+    }
+
+    document.querySelectorAll('#ratingsSection .kpi-view-btn[data-ratings-view]').forEach(btn => {
+        const isActive = btn.getAttribute('data-ratings-view') === view;
+        btn.classList.toggle('is-active', isActive);
+        btn.setAttribute('aria-selected', isActive ? 'true' : 'false');
+    });
+
+    if (typeof lucide !== 'undefined') lucide.createIcons();
+}
+
+async function loadUploadHistory(forceRefresh = false) {
+    const tbody = document.getElementById('uploadHistoryTableBody');
+    if (!tbody) return;
+
+    const now = Date.now();
+    if (!forceRefresh && _uploadHistoryCache && (now - _uploadHistoryCache.fetchedAt) < UPLOAD_HISTORY_CACHE_TTL_MS) {
+        renderUploadHistory();
+        return;
+    }
+
+    tbody.innerHTML = '<tr><td colspan="8" style="text-align: center; padding: 2rem; color: #94a3b8;">Loading…</td></tr>';
+
+    try {
+        const { data: rows, error } = await window.supabaseClient
+            .from('unified_uploads')
+            .select('*')
+            .order('uploaded_at', { ascending: false })
+            .limit(200);
+
+        if (error) {
+            const msg = (error.message || '').toLowerCase();
+            if (error.code === '42P01' || error.code === 'PGRST205' || msg.includes('does not exist') || msg.includes('not found')) {
+                tbody.innerHTML = `<tr><td colspan="8" style="text-align: center; padding: 2rem; color: #b45309;">unified_uploads view missing — apply migration 041_upload_history.sql in Supabase.</td></tr>`;
+                return;
+            }
+            throw error;
+        }
+
+        const uploaderIds = Array.from(new Set((rows || []).map(r => r.uploaded_by).filter(Boolean)));
+        let uploadersById = {};
+        if (uploaderIds.length > 0) {
+            const { data: users, error: usersErr } = await window.supabaseClient
+                .from('users')
+                .select('id,email')
+                .in('id', uploaderIds);
+            if (!usersErr && Array.isArray(users)) {
+                for (const u of users) uploadersById[u.id] = u.email;
+            }
+        }
+
+        _uploadHistoryCache = { rows: rows || [], uploadersById, fetchedAt: Date.now() };
+        renderUploadHistory();
+    } catch (err) {
+        console.error('loadUploadHistory failed:', err);
+        tbody.innerHTML = `<tr><td colspan="8" style="text-align: center; padding: 2rem; color: #ef4444;">Failed to load: ${err && err.message ? err.message : 'unknown error'}</td></tr>`;
+    }
+}
+
+function renderUploadHistory() {
+    const tbody = document.getElementById('uploadHistoryTableBody');
+    if (!tbody || !_uploadHistoryCache) return;
+
+    const filterEl = document.getElementById('uploadHistoryFilter');
+    const filter = filterEl ? filterEl.value : 'all';
+    const rows = _uploadHistoryCache.rows.filter(r => filter === 'all' || r.type === filter);
+
+    if (rows.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="8" style="text-align: center; padding: 2rem; color: #94a3b8;">No uploads yet</td></tr>';
+        if (typeof lucide !== 'undefined') lucide.createIcons();
+        return;
+    }
+
+    const unknownUser = t('admin.ratings.unknownUser') || 'Unknown';
+    const openLabel = t('admin.ratings.openBatch') || 'Open';
+
+    tbody.innerHTML = rows.map((r, idx) => {
+        const docName = escapeHtml(r.source_filename || (r.label || '—'));
+        const typeBadge = r.type === 'tournament'
+            ? `<span class="status-badge active" style="background:#dbeafe;color:#1d4ed8;">${escapeHtml(r.label || 'tournament')}</span>`
+            : `<span class="status-badge active" style="background:#fef3c7;color:#92400e;">rating_csv</span>`;
+        const effDate = r.effective_date ? formatUploadDate(r.effective_date) : '—';
+        const uploadedAt = r.uploaded_at ? formatUploadDateTime(r.uploaded_at) : '—';
+        const uploader = r.uploaded_by
+            ? escapeHtml(_uploadHistoryCache.uploadersById[r.uploaded_by] || r.uploaded_by.slice(0, 8) + '…')
+            : `<span style="color:#94a3b8;">${escapeHtml(unknownUser)}</span>`;
+        const rowCount = (r.row_count !== null && r.row_count !== undefined) ? r.row_count : '—';
+        return `
+            <tr>
+                <td>${idx + 1}</td>
+                <td style="font-weight: 500;">${docName}</td>
+                <td>${typeBadge}</td>
+                <td>${effDate}</td>
+                <td>${uploader}</td>
+                <td>${uploadedAt}</td>
+                <td>${rowCount}</td>
+                <td>
+                    <button class="btn btn-secondary upload-history-open-btn" style="padding: 0.35rem 0.75rem; font-size: 0.85rem;"
+                            data-upload-id="${escapeHtml(r.id)}"
+                            data-upload-type="${escapeHtml(r.type)}"
+                            data-upload-label="${escapeHtml(r.source_filename || r.label || '')}">
+                        <i data-lucide="external-link" style="width: 14px; height: 14px;"></i>
+                        <span>${escapeHtml(openLabel)}</span>
+                    </button>
+                </td>
+            </tr>
+        `;
+    }).join('');
+
+    tbody.querySelectorAll('.upload-history-open-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+            openUploadDetail(
+                btn.getAttribute('data-upload-id'),
+                btn.getAttribute('data-upload-type'),
+                btn.getAttribute('data-upload-label')
+            );
+        });
+    });
+
+    if (typeof lucide !== 'undefined') lucide.createIcons();
+}
+
+function formatUploadDate(d) {
+    try {
+        return new Date(d).toLocaleDateString();
+    } catch (_) { return String(d); }
+}
+function formatUploadDateTime(d) {
+    try {
+        const dt = new Date(d);
+        return dt.toLocaleString();
+    } catch (_) { return String(d); }
+}
+
+function escapeHtml(s) {
+    if (s === null || s === undefined) return '';
+    return String(s)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+}
+
+async function openUploadDetail(uploadId, type, label) {
+    _uploadHistoryActiveDetailId = uploadId;
+    const modal = document.getElementById('uploadDetailModal');
+    const tbody = document.getElementById('uploadDetailTbody');
+    const thead = document.getElementById('uploadDetailThead');
+    const titleEl = document.getElementById('uploadDetailTitle');
+    const metaEl = document.getElementById('uploadDetailMeta');
+    if (!modal || !tbody || !thead) return;
+
+    titleEl.textContent = label || (type === 'tournament' ? 'Tournament upload' : 'Rating CSV');
+    metaEl.textContent = `ID: ${uploadId}`;
+    thead.innerHTML = '';
+    tbody.innerHTML = '<tr><td style="text-align: center; padding: 2rem; color: #94a3b8;">Loading…</td></tr>';
+    modal.classList.add('active');
+
+    try {
+        const studentNameById = buildStudentNameLookup();
+
+        if (type === 'tournament') {
+            const { data, error } = await window.supabaseClient
+                .from('tournament_results')
+                .select('rank,score,games_played,rating_before,rating_delta,avg_opp_rating,earned_razryad,student_id')
+                .eq('upload_id', uploadId)
+                .order('rank', { ascending: true });
+            if (error) throw error;
+
+            thead.innerHTML = `
+                <tr>
+                    <th>#</th>
+                    <th>Student</th>
+                    <th>Score</th>
+                    <th>Games</th>
+                    <th>Rating before</th>
+                    <th>Δ</th>
+                    <th>Avg opp</th>
+                    <th>Razryad</th>
+                </tr>`;
+            if (!data || data.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="8" style="text-align: center; padding: 2rem; color: #94a3b8;">No rows</td></tr>';
+            } else {
+                tbody.innerHTML = data.map(r => `
+                    <tr>
+                        <td>${r.rank ?? '—'}</td>
+                        <td>${escapeHtml(studentNameById[r.student_id] || r.student_id.slice(0, 8) + '…')}</td>
+                        <td>${r.score ?? '—'}</td>
+                        <td>${r.games_played ?? '—'}</td>
+                        <td>${r.rating_before ?? '—'}</td>
+                        <td>${r.rating_delta > 0 ? '+' : ''}${r.rating_delta ?? '—'}</td>
+                        <td>${r.avg_opp_rating ?? '—'}</td>
+                        <td>${escapeHtml(r.earned_razryad || '—')}</td>
+                    </tr>
+                `).join('');
+            }
+        } else {
+            const { data, error } = await window.supabaseClient
+                .from('student_ratings')
+                .select('student_id,rating,rating_date,source')
+                .eq('upload_id', uploadId)
+                .order('rating', { ascending: false });
+            if (error) throw error;
+
+            thead.innerHTML = `
+                <tr>
+                    <th>#</th>
+                    <th>Student</th>
+                    <th>Rating</th>
+                    <th>Date</th>
+                    <th>Source</th>
+                </tr>`;
+            if (!data || data.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="5" style="text-align: center; padding: 2rem; color: #94a3b8;">No rows</td></tr>';
+            } else {
+                tbody.innerHTML = data.map((r, i) => `
+                    <tr>
+                        <td>${i + 1}</td>
+                        <td>${escapeHtml(studentNameById[r.student_id] || r.student_id.slice(0, 8) + '…')}</td>
+                        <td>${r.rating ?? '—'}</td>
+                        <td>${r.rating_date ? formatUploadDate(r.rating_date) : '—'}</td>
+                        <td>${escapeHtml(r.source || '—')}</td>
+                    </tr>
+                `).join('');
+            }
+        }
+    } catch (err) {
+        console.error('openUploadDetail failed:', err);
+        tbody.innerHTML = `<tr><td colspan="8" style="text-align: center; padding: 2rem; color: #ef4444;">Failed to load: ${escapeHtml(err && err.message ? err.message : 'unknown error')}</td></tr>`;
+    }
+
+    if (typeof lucide !== 'undefined') lucide.createIcons();
+}
+
+function closeUploadDetailModal() {
+    const modal = document.getElementById('uploadDetailModal');
+    if (modal) modal.classList.remove('active');
+    _uploadHistoryActiveDetailId = null;
+}
+
+function buildStudentNameLookup() {
+    const map = {};
+    if (Array.isArray(window.students)) {
+        for (const s of window.students) {
+            const first = s.firstName || s.first_name || '';
+            const last  = s.lastName  || s.last_name  || '';
+            map[s.id] = `${last} ${first}`.trim() || s.name || s.id;
+        }
+    }
+    return map;
 }
 
 // Show unmatched students modal

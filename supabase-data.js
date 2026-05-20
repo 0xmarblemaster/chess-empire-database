@@ -996,11 +996,19 @@ const supabaseData = {
         }
         const reportProgress = typeof onProgress === 'function' ? onProgress : null;
         const ROUNDS_BY_KIND = { league_c: 6, league_b: 6, razryad_4: 10, razryad_3: 9 };
+
+        let uploadedBy = null;
+        try {
+            const { data: { user } } = await window.supabaseClient.auth.getUser();
+            uploadedBy = user?.id || null;
+        } catch (_) { /* anonymous fallback */ }
+
         const payload = {
             kind: header.kind,
             tournament_date: header.tournament_date,
             rounds: header.rounds || ROUNDS_BY_KIND[header.kind] || null,
             source_filename: header.source_filename || null,
+            uploaded_by: uploadedBy,
         };
 
         const { data: uploadRow, error: uploadErr } = await window.supabaseClient
@@ -1220,8 +1228,13 @@ const supabaseData = {
 
     // Bulk import ratings (from CSV)
     async bulkImportRatings(ratingsArray) {
-        // ratingsArray: [{studentId, rating, ratingDate?, source?}]
-        const insertData = ratingsArray.map(r => ({
+        // Back-compat shim; new callers should use importStudentRatings.
+        return this.importStudentRatings(ratingsArray);
+    },
+
+    async importStudentRatings(ratingsArray, sourceFilename) {
+        // ratingsArray: [{studentId, rating, ratingDate?, source?, notes?}]
+        const insertData = (Array.isArray(ratingsArray) ? ratingsArray : []).map(r => ({
             student_id: r.studentId,
             rating: r.rating,
             rating_date: r.ratingDate || new Date().toISOString().split('T')[0],
@@ -1229,17 +1242,78 @@ const supabaseData = {
             notes: r.notes || ''
         }));
 
+        if (insertData.length === 0) {
+            return { upload_id: null, inserted: 0, count: 0 };
+        }
+
+        // Create a rating_uploads header row so this batch shows up in the
+        // Upload History tab. If the table is missing (migration 041 not
+        // applied) we log + continue with no upload_id rather than blocking.
+        let upload_id = null;
+        try {
+            let uploadedBy = null;
+            try {
+                const { data: { user } } = await window.supabaseClient.auth.getUser();
+                uploadedBy = user?.id || null;
+            } catch (_) { /* anonymous fallback */ }
+
+            const headerPayload = {
+                source_filename: sourceFilename || null,
+                rating_date: insertData[0].rating_date,
+                row_count: insertData.length,
+                uploaded_by: uploadedBy,
+            };
+
+            const { data: uploadRow, error: uploadErr } = await window.supabaseClient
+                .from('rating_uploads')
+                .insert(headerPayload)
+                .select()
+                .single();
+
+            if (uploadErr) {
+                const code = uploadErr.code;
+                const msg = (uploadErr.message || '').toLowerCase();
+                if (code === '42P01' || code === 'PGRST205' || msg.includes('does not exist') || msg.includes('not found')) {
+                    console.warn('rating_uploads table missing — apply migration 041 for upload history.');
+                } else {
+                    console.error('rating_uploads insert failed:', uploadErr);
+                }
+            } else if (uploadRow && uploadRow.id) {
+                upload_id = uploadRow.id;
+            }
+        } catch (err) {
+            console.error('Could not create rating_uploads header:', err);
+        }
+
+        if (upload_id) {
+            for (const row of insertData) row.upload_id = upload_id;
+        }
+
         const { data, error } = await window.supabaseClient
             .from('student_ratings')
-            .insert(insertData)
+            .upsert(insertData, { onConflict: 'student_id,rating_date' })
             .select();
 
         if (error) {
-            console.error('Error bulk importing ratings:', error);
+            // If upload_id column is missing (migration 041 not applied), retry without it.
+            const msg = (error.message || '').toLowerCase();
+            if (upload_id && (msg.includes('upload_id') || error.code === 'PGRST204')) {
+                for (const row of insertData) delete row.upload_id;
+                const retry = await window.supabaseClient
+                    .from('student_ratings')
+                    .upsert(insertData, { onConflict: 'student_id,rating_date' })
+                    .select();
+                if (retry.error) {
+                    console.error('Error importing student ratings (retry):', retry.error);
+                    throw retry.error;
+                }
+                return { upload_id: null, inserted: retry.data.length, count: retry.data.length };
+            }
+            console.error('Error importing student ratings:', error);
             throw error;
         }
 
-        return data.length;
+        return { upload_id, inserted: data.length, count: data.length };
     },
 
     // Delete a rating entry

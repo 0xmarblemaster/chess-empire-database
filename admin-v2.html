@@ -618,6 +618,10 @@
                 <div class="header">
                     <h1 class="header-title" data-i18n="admin.ratings.title">Ratings Management</h1>
                     <div class="header-actions">
+                        <div class="kpi-view-switcher" role="tablist" aria-label="Ratings view">
+                            <button type="button" class="kpi-view-btn is-active" data-ratings-view="main" role="tab" aria-selected="true" onclick="switchRatingsView('main')" data-i18n="admin.ratings.viewMain">Ratings</button>
+                            <button type="button" class="kpi-view-btn" data-ratings-view="uploads" role="tab" aria-selected="false" onclick="switchRatingsView('uploads')" data-i18n="admin.ratings.viewUploads">Upload History</button>
+                        </div>
                         <button class="btn btn-secondary" onclick="openCSVImportModal()">
                             <i data-lucide="upload" style="width: 18px; height: 18px;"></i>
                             <span data-i18n="admin.imports.button">Import data</span>
@@ -625,6 +629,7 @@
                     </div>
                 </div>
 
+                <div id="ratingsViewMain">
                 <!-- Ratings Stats -->
                 <div class="stats-grid">
                     <div class="stat-card">
@@ -749,6 +754,53 @@
                         </table>
                     </div>
                 </div>
+                </div>
+                <!-- End ratingsViewMain -->
+
+                <!-- Upload History Sub-view -->
+                <div id="ratingsViewUploads" style="display: none;">
+                    <div class="branch-card" style="margin-bottom: 1.5rem;">
+                        <div class="card-header-inline">
+                            <h2 class="card-title-inline">
+                                <i data-lucide="history" style="width: 20px; height: 20px;"></i>
+                                <span data-i18n="admin.ratings.historyTitle">Upload History</span>
+                            </h2>
+                            <div style="display: flex; align-items: center; gap: 0.75rem;">
+                                <select id="uploadHistoryFilter" class="form-input" style="width: auto; min-width: 200px;" onchange="renderUploadHistory()">
+                                    <option value="all" data-i18n="admin.ratings.filterAll">All</option>
+                                    <option value="tournament" data-i18n="admin.ratings.filterTournament">Tournaments</option>
+                                    <option value="rating" data-i18n="admin.ratings.filterRating">Rating CSVs</option>
+                                </select>
+                                <button type="button" class="btn btn-secondary" onclick="loadUploadHistory(true)" title="Refresh">
+                                    <i data-lucide="refresh-cw" style="width: 16px; height: 16px;"></i>
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="table-container">
+                        <div class="table-wrapper">
+                            <table>
+                                <thead>
+                                    <tr>
+                                        <th style="width: 50px;">#</th>
+                                        <th data-i18n="admin.ratings.colDocument">Document</th>
+                                        <th data-i18n="admin.ratings.colType">Type</th>
+                                        <th data-i18n="admin.ratings.colEffectiveDate">Effective Date</th>
+                                        <th data-i18n="admin.ratings.colUploadedBy">Uploaded By</th>
+                                        <th data-i18n="admin.ratings.colUploadedAt">Uploaded At</th>
+                                        <th data-i18n="admin.ratings.colRows">Rows</th>
+                                        <th data-i18n="admin.ratings.colActions">Actions</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="uploadHistoryTableBody">
+                                    <tr><td colspan="8" style="text-align: center; padding: 2rem; color: #94a3b8;">Loading…</td></tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+                <!-- End ratingsViewUploads -->
             </div>
             <!-- End Ratings Section -->
 
@@ -2147,6 +2199,30 @@
                     <i data-lucide="upload" style="width: 18px; height: 18px;"></i>
                     <span data-i18n="admin.ratings.import">Import</span>
                 </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Upload Detail Modal -->
+    <div id="uploadDetailModal" class="modal">
+        <div class="modal-overlay" onclick="closeUploadDetailModal()"></div>
+        <div class="modal-content" style="max-width: 900px;">
+            <div class="modal-header">
+                <h2 class="modal-title" id="uploadDetailTitle">Upload</h2>
+                <button class="modal-close" onclick="closeUploadDetailModal()">
+                    <i data-lucide="x" style="width: 24px; height: 24px;"></i>
+                </button>
+            </div>
+            <div class="modal-body" style="max-height: 70vh; overflow: auto;">
+                <div id="uploadDetailMeta" style="margin-bottom: 1rem; color: #475569; font-size: 0.875rem;"></div>
+                <div class="table-container" style="margin-top: 0.5rem;">
+                    <div class="table-wrapper">
+                        <table>
+                            <thead id="uploadDetailThead"></thead>
+                            <tbody id="uploadDetailTbody"></tbody>
+                        </table>
+                    </div>
+                </div>
             </div>
         </div>
     </div>
