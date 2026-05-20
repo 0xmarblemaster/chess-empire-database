@@ -1047,14 +1047,17 @@ const supabaseData = {
             // Mirror the new rating into student_ratings so the rest of the app
             // (rating history, league transitions in 038) sees it.
             const rating_after = (r.rating_before || 0) + (r.rating_delta || 0);
-            await window.supabaseClient
+            const { error: ratingErr } = await window.supabaseClient
                 .from('student_ratings')
                 .upsert({
                     student_id: r.studentId,
                     rating: rating_after,
                     rating_date: header.tournament_date,
                     source: 'tournament',
-                });
+                }, { onConflict: 'student_id,rating_date' });
+            if (ratingErr) {
+                console.error('student_ratings upsert failed for', r.studentId, ratingErr);
+            }
 
             inserted++;
         }
