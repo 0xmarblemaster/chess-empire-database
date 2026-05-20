@@ -3127,136 +3127,19 @@ window.addEventListener('resize', function() {
 let csvParsedData = null;
 let unmatchedStudentsData = [];
 let csvAmbiguousCount = 0;
+// Current import kind — 'rating' or one of TOURNAMENT_KINDS (league_c/league_b/razryad_4/razryad_3).
+let csvImportKind = 'rating';
+// Parsed tournament-kind payload (header + rows) — null for rating kind.
+let csvTournamentParsed = null;
 
-// Fuzzy name matching function for Excel/CSV import
-function fuzzyMatchStudent(excelName, students) {
-    if (!excelName || !students || students.length === 0) {
-        return { matched: false, student: null, confidence: 0 };
+// Thin wrapper around the shared frontend/student-match.js module. Kept as a
+// function so legacy call sites (`fuzzyMatchStudent(...)`) keep working.
+function fuzzyMatchStudent(name, students) {
+    if (typeof window !== 'undefined' && window.studentMatch && typeof window.studentMatch.fuzzyMatchStudent === 'function') {
+        return window.studentMatch.fuzzyMatchStudent(name, students);
     }
-
-    const normalizedExcel = excelName.trim().toLowerCase();
-    const parts = normalizedExcel.split(/\s+/).filter(p => p.length > 0);
-
-    // Try exact match first (lastName firstName or firstName lastName)
-    const exactMatches = [];
-    for (const student of students) {
-        const firstName = (student.firstName || '').toLowerCase();
-        const lastName = (student.lastName || '').toLowerCase();
-        const fullName1 = `${lastName} ${firstName}`;
-        const fullName2 = `${firstName} ${lastName}`;
-
-        if (normalizedExcel === fullName1 || normalizedExcel === fullName2) {
-            exactMatches.push(student);
-        }
-    }
-
-    if (exactMatches.length === 1) {
-        return { matched: true, student: exactMatches[0], confidence: 100 };
-    }
-    if (exactMatches.length > 1) {
-        return { matched: true, student: exactMatches[0], confidence: 100, ambiguous: true, candidates: exactMatches };
-    }
-
-    // Try partial match with improved validation (80% confidence)
-    // Configuration constants
-    const MIN_SUBSTRING_LENGTH = 4;        // Prevent "ali" (3 chars) matches
-    const MIN_TOKEN_SIMILARITY = 0.75;     // 75% for spelling variations
-    const MIN_WHOLE_NAME_SIMILARITY = 0.80; // 80% overall similarity
-
-    const fuzzyMatches80 = [];
-    for (const student of students) {
-        const firstName = (student.firstName || '').toLowerCase();
-        const lastName = (student.lastName || '').toLowerCase();
-        const studentParts = [firstName, lastName];
-
-        let matchedTokens = 0;
-
-        // Check each CSV name part against student name parts
-        for (const part of parts) {
-            let tokenMatched = false;
-
-            for (const sp of studentParts) {
-                if (!sp || sp.length === 0) continue;
-
-                // Case 1: Exact token match
-                if (part === sp) {
-                    tokenMatched = true;
-                    break;
-                }
-
-                // Case 2: Substring match WITH length threshold
-                if (part.length >= MIN_SUBSTRING_LENGTH && sp.includes(part)) {
-                    tokenMatched = true;
-                    break;
-                } else if (sp.length >= MIN_SUBSTRING_LENGTH && part.includes(sp)) {
-                    tokenMatched = true;
-                    break;
-                }
-
-                // Case 3: Levenshtein similarity for spelling variations
-                const distance = levenshteinDistance(part, sp);
-                const maxLen = Math.max(part.length, sp.length);
-                const similarity = (maxLen - distance) / maxLen;
-
-                if (similarity >= MIN_TOKEN_SIMILARITY && maxLen >= MIN_SUBSTRING_LENGTH) {
-                    tokenMatched = true;
-                    break;
-                }
-            }
-
-            if (tokenMatched) matchedTokens++;
-        }
-
-        // Require ALL tokens matched + whole-name validation
-        if (matchedTokens === parts.length && parts.length >= 2) {
-            // Final validation: Check whole-name similarity
-            const fullName1 = `${firstName} ${lastName}`;
-            const fullName2 = `${lastName} ${firstName}`;
-
-            const dist1 = levenshteinDistance(normalizedExcel, fullName1);
-            const dist2 = levenshteinDistance(normalizedExcel, fullName2);
-            const minDist = Math.min(dist1, dist2);
-            const maxLen = Math.max(normalizedExcel.length, fullName1.length);
-            const wholeSimilarity = (maxLen - minDist) / maxLen;
-
-            // Accept only if overall similarity is high
-            if (wholeSimilarity >= MIN_WHOLE_NAME_SIMILARITY) {
-                fuzzyMatches80.push(student);
-            }
-        }
-    }
-
-    if (fuzzyMatches80.length === 1) {
-        return { matched: true, student: fuzzyMatches80[0], confidence: 80 };
-    }
-    if (fuzzyMatches80.length > 1) {
-        return { matched: true, student: fuzzyMatches80[0], confidence: 80, ambiguous: true, candidates: fuzzyMatches80 };
-    }
-
-    // Try matching with slight variations (first or last name matches exactly)
-    const fuzzyMatches60 = [];
-    for (const student of students) {
-        const firstName = (student.firstName || '').toLowerCase();
-        const lastName = (student.lastName || '').toLowerCase();
-
-        if (parts.some(p => p === firstName) || parts.some(p => p === lastName)) {
-            // Check if other parts are similar
-            const otherParts = parts.filter(p => p !== firstName && p !== lastName);
-            if (otherParts.length === 0 || otherParts.some(p =>
-                firstName.includes(p) || lastName.includes(p) || p.includes(firstName) || p.includes(lastName)
-            )) {
-                fuzzyMatches60.push(student);
-            }
-        }
-    }
-
-    if (fuzzyMatches60.length === 1) {
-        return { matched: true, student: fuzzyMatches60[0], confidence: 60 };
-    }
-    if (fuzzyMatches60.length > 1) {
-        return { matched: true, student: fuzzyMatches60[0], confidence: 60, ambiguous: true, candidates: fuzzyMatches60 };
-    }
-
+    // Defensive fallback — module load failed. Treat as no-match so the user
+    // sees an unmatched-row error rather than a silent crash.
     return { matched: false, student: null, confidence: 0 };
 }
 
@@ -3277,8 +3160,41 @@ function getStudentDisambiguationLabel(student) {
     return parts.join(' | ');
 }
 
-// Process matched rows — shared by both CSV parsing paths
-function processMatchedRows(rows) {
+// Column configs per kind. Tournament rows render Rank|Name|Score|Games|ΔRating|Status,
+// rating rows stay Name|Rating|Date|Status.
+const CSV_PREVIEW_COLUMNS = {
+    rating: ['name', 'rating', 'date', 'status'],
+    tournament: ['rank', 'name', 'score', 'games', 'delta', 'status'],
+};
+
+function cellHtml(column, row, today) {
+    const td = (v) => `<td style="padding: 0.5rem; border-bottom: 1px solid #f1f5f9;">${v}</td>`;
+    switch (column) {
+        case 'name':   return td(row.name);
+        case 'rating': return td(row.rating === undefined || row.rating === null ? '-' : row.rating);
+        case 'date':   return td(today);
+        case 'rank':   return td(row.rank ?? '-');
+        case 'score':  return td(row.score ?? '-');
+        case 'games':  return td(row.games_played ?? '-');
+        case 'delta':  return td(formatRatingDeltaSigned(row.rating_delta));
+        default:       return '';
+    }
+}
+
+function formatRatingDeltaSigned(n) {
+    if (n === null || n === undefined) return '-';
+    if (n > 0) return `+${n}`;
+    return String(n);
+}
+
+// Process matched rows — shared by both CSV parsing paths. `opts.kind` selects
+// the column layout: 'rating' for the legacy ratings CSV, anything else for
+// tournament rows (which also carry rank / score / games / delta).
+function processMatchedRows(rows, opts) {
+    opts = opts || {};
+    const isTournament = opts.kind && opts.kind !== 'rating';
+    const columns = isTournament ? CSV_PREVIEW_COLUMNS.tournament : CSV_PREVIEW_COLUMNS.rating;
+
     const parsedData = [];
     const unmatched = [];
     let validCount = 0;
@@ -3307,7 +3223,6 @@ function processMatchedRows(rows) {
             errorCount++;
             unmatched.push({ rowNum: row.rowNum, name: row.name, rating: row.rating });
         } else if (matchResult.ambiguous) {
-            // Multiple students with same name — needs disambiguation
             statusText = t('admin.ratings.ambiguousMatch');
             statusColor = '#f97316';
             statusIcon = '⚠';
@@ -3320,13 +3235,18 @@ function processMatchedRows(rows) {
                 const label = getStudentDisambiguationLabel(c);
                 options += `<option value="${c.id}">${label}</option>`;
             }
+            const colspan = columns.length;
+            const datasetRow = isTournament
+                ? `data-row-rank="${row.rank ?? ''}" data-row-score="${row.score ?? ''}" data-row-games="${row.games_played ?? ''}" data-row-delta="${row.rating_delta ?? 0}" data-row-rating-before="${row.rating_before ?? ''}" data-row-avg-opp="${row.avg_opp_rating ?? ''}"`
+                : `data-row-rating="${row.rating}"`;
             extraHtml = `
                 <tr data-ambiguous-row="${rowIndex}">
-                    <td colspan="4" style="padding: 0.25rem 0.5rem 0.5rem; border-bottom: 1px solid #f1f5f9; background: #fff7ed;">
+                    <td colspan="${colspan}" style="padding: 0.25rem 0.5rem 0.5rem; border-bottom: 1px solid #f1f5f9; background: #fff7ed;">
                         <select id="${selectId}" class="ambiguous-select"
                             data-row-index="${rowIndex}"
                             data-row-name="${row.name}"
-                            data-row-rating="${row.rating}"
+                            data-row-kind="${opts.kind || 'rating'}"
+                            ${datasetRow}
                             data-row-date="${today}"
                             onchange="resolveAmbiguousRow(this)"
                             style="width: 100%; padding: 0.375rem 0.5rem; border: 1px solid #f97316; border-radius: 0.375rem; font-size: 0.8rem; background: white;">
@@ -3334,7 +3254,7 @@ function processMatchedRows(rows) {
                         </select>
                     </td>
                 </tr>`;
-        } else if (isNaN(row.rating) || row.rating < 0 || row.rating > 3000) {
+        } else if (!isTournament && (isNaN(row.rating) || row.rating < 0 || row.rating > 3000)) {
             statusText = t('admin.ratings.invalidRating');
             statusColor = '#f59e0b';
             statusIcon = '⚠';
@@ -3346,30 +3266,57 @@ function processMatchedRows(rows) {
                 statusColor = '#22c55e';
             }
             validCount++;
-            parsedData.push({
-                studentId: matchResult.student.id,
-                studentName: row.name,
-                matchedName: `${matchResult.student.firstName} ${matchResult.student.lastName}`,
-                rating: row.rating,
-                date: today
-            });
+            if (isTournament) {
+                parsedData.push({
+                    studentId: matchResult.student.id,
+                    studentName: row.name,
+                    matchedName: `${matchResult.student.firstName} ${matchResult.student.lastName}`,
+                    rank: row.rank,
+                    score: row.score,
+                    games_played: row.games_played,
+                    avg_opp_rating: row.avg_opp_rating,
+                    rating_before: row.rating_before,
+                    rating_delta: row.rating_delta,
+                });
+            } else {
+                parsedData.push({
+                    studentId: matchResult.student.id,
+                    studentName: row.name,
+                    matchedName: `${matchResult.student.firstName} ${matchResult.student.lastName}`,
+                    rating: row.rating,
+                    date: today
+                });
+            }
         }
 
-        previewRows.push(`
-            <tr>
-                <td style="padding: 0.5rem; border-bottom: 1px solid #f1f5f9;">${row.name}</td>
-                <td style="padding: 0.5rem; border-bottom: 1px solid #f1f5f9;">${row.rating || '-'}</td>
-                <td style="padding: 0.5rem; border-bottom: 1px solid #f1f5f9;">${today}</td>
-                <td style="padding: 0.5rem; border-bottom: 1px solid #f1f5f9; color: ${statusColor};">
-                    <span style="font-weight: 600;">${statusIcon}</span> ${statusText}
-                </td>
-            </tr>`);
+        const cells = columns.map(col => {
+            if (col === 'status') {
+                return `<td style="padding: 0.5rem; border-bottom: 1px solid #f1f5f9; color: ${statusColor};"><span style="font-weight: 600;">${statusIcon}</span> ${statusText}</td>`;
+            }
+            return cellHtml(col, row, today);
+        }).join('');
+        previewRows.push(`<tr>${cells}</tr>`);
         if (extraHtml) previewRows.push(extraHtml);
 
         rowIndex++;
     }
 
     return { csvParsedData: parsedData, unmatchedStudentsData: unmatched, previewRows, validCount, warningCount, errorCount, ambiguousCount };
+}
+
+function csvPreviewHeaderHtml(kind) {
+    const columns = (kind && kind !== 'rating') ? CSV_PREVIEW_COLUMNS.tournament : CSV_PREVIEW_COLUMNS.rating;
+    const labels = {
+        name:   t('admin.ratings.colName')   !== 'admin.ratings.colName'   ? t('admin.ratings.colName')   : 'Student',
+        rating: t('admin.ratings.colRating') !== 'admin.ratings.colRating' ? t('admin.ratings.colRating') : 'Rating',
+        date:   t('admin.ratings.colDate')   !== 'admin.ratings.colDate'   ? t('admin.ratings.colDate')   : 'Date',
+        status: t('admin.ratings.colStatus') !== 'admin.ratings.colStatus' ? t('admin.ratings.colStatus') : 'Status',
+        rank:   t('admin.coachKpi.rank'),
+        score:  t('admin.coachKpi.colScore'),
+        games:  t('admin.ratings.colGames')  !== 'admin.ratings.colGames'  ? t('admin.ratings.colGames')  : 'Games',
+        delta:  t('admin.ratings.colDelta')  !== 'admin.ratings.colDelta'  ? t('admin.ratings.colDelta')  : 'ΔRating',
+    };
+    return columns.map(c => `<th style="padding: 0.5rem; text-align: left;">${labels[c] || c}</th>`).join('');
 }
 
 // Update the ambiguous counter display
@@ -3400,20 +3347,44 @@ function resolveAmbiguousRow(selectEl) {
     if (!studentId) return;
 
     const rowName = selectEl.dataset.rowName;
-    const rowRating = parseInt(selectEl.dataset.rowRating);
+    const rowKind = selectEl.dataset.rowKind || 'rating';
     const rowDate = selectEl.dataset.rowDate;
 
     const student = window.students.find(s => String(s.id) === String(studentId));
     if (!student) return;
 
-    // Add to csvParsedData
-    csvParsedData.push({
-        studentId: student.id,
-        studentName: rowName,
-        matchedName: `${student.firstName} ${student.lastName}`,
-        rating: rowRating,
-        date: rowDate
-    });
+    if (rowKind === 'rating') {
+        const rowRating = parseInt(selectEl.dataset.rowRating);
+        csvParsedData.push({
+            studentId: student.id,
+            studentName: rowName,
+            matchedName: `${student.firstName} ${student.lastName}`,
+            rating: rowRating,
+            date: rowDate
+        });
+    } else {
+        const intOrNull = (v) => {
+            if (v === undefined || v === null || v === '') return null;
+            const n = parseInt(v, 10);
+            return Number.isFinite(n) ? n : null;
+        };
+        const numOrNull = (v) => {
+            if (v === undefined || v === null || v === '') return null;
+            const n = Number(v);
+            return Number.isFinite(n) ? n : null;
+        };
+        csvParsedData.push({
+            studentId: student.id,
+            studentName: rowName,
+            matchedName: `${student.firstName} ${student.lastName}`,
+            rank:           intOrNull(selectEl.dataset.rowRank),
+            score:          numOrNull(selectEl.dataset.rowScore),
+            games_played:   intOrNull(selectEl.dataset.rowGames),
+            avg_opp_rating: intOrNull(selectEl.dataset.rowAvgOpp),
+            rating_before:  intOrNull(selectEl.dataset.rowRatingBefore),
+            rating_delta:   intOrNull(selectEl.dataset.rowDelta) || 0,
+        });
+    }
 
     // Mark this row as resolved visually
     const tr = selectEl.closest('tr');
@@ -4090,10 +4061,23 @@ function openCSVImportModal() {
         modal.classList.add('active');
         // Reset state
         csvParsedData = null;
+        csvTournamentParsed = null;
+        csvImportKind = 'rating';
+        const kindSelect = document.getElementById('csvUploadKind');
+        if (kindSelect) kindSelect.value = 'rating';
         document.getElementById('csvFileInput').value = '';
         document.getElementById('csvFileName').textContent = 'No file selected';
         document.getElementById('csvPreviewSection').style.display = 'none';
         document.getElementById('importCSVBtn').disabled = true;
+        // Reset tournament meta visibility / values.
+        const meta = document.getElementById('csvTournamentMeta');
+        if (meta) meta.style.display = 'none';
+        const dateEl = document.getElementById('csvTournamentDate');
+        if (dateEl) dateEl.value = '';
+        const roundsEl = document.getElementById('csvTournamentRounds');
+        if (roundsEl) roundsEl.value = '';
+        const srcEl = document.getElementById('csvSourceFilename');
+        if (srcEl) srcEl.value = '';
     }
     lucide.createIcons();
 }
@@ -4106,27 +4090,60 @@ function closeCSVImportModal() {
     }
 }
 
-// Preview Rating file (Excel or CSV)
+// Kind selector handler — toggles the tournament meta row and seeds rounds
+// from ROUNDS_BY_KIND. Wired from admin-v2.html csvImportModal.
+function onCsvUploadKindChange() {
+    const kindSelect = document.getElementById('csvUploadKind');
+    if (!kindSelect) return;
+    csvImportKind = kindSelect.value || 'rating';
+
+    const meta = document.getElementById('csvTournamentMeta');
+    const ratingHelp = document.getElementById('csvRatingHelp');
+    const isTournament = csvImportKind !== 'rating';
+    if (meta) meta.style.display = isTournament ? '' : 'none';
+    if (ratingHelp) ratingHelp.style.display = isTournament ? 'none' : '';
+
+    if (isTournament) {
+        const roundsByKind = (window.tournamentParse && window.tournamentParse.ROUNDS_BY_KIND) || {};
+        const roundsEl = document.getElementById('csvTournamentRounds');
+        if (roundsEl && roundsByKind[csvImportKind]) roundsEl.value = roundsByKind[csvImportKind];
+    }
+
+    // Reset preview + parsed state when kind changes mid-modal — old preview
+    // is meaningless under the new schema.
+    csvParsedData = null;
+    csvTournamentParsed = null;
+    document.getElementById('csvPreviewSection').style.display = 'none';
+    document.getElementById('importCSVBtn').disabled = true;
+}
+
+// Dispatch the file picker between the rating CSV path and the tournament
+// Swiss-Manager path based on the selected kind.
 async function previewRatingFile(event) {
     const file = event.target.files[0];
     if (!file) return;
 
     document.getElementById('csvFileName').textContent = file.name;
 
+    if (csvImportKind && csvImportKind !== 'rating') {
+        return previewTournamentFile(file, csvImportKind);
+    }
+    return previewRatingCsvFile(file);
+}
+
+// Rating-CSV preview path — formerly the body of previewRatingFile().
+async function previewRatingCsvFile(file) {
     try {
         const fileExt = file.name.split('.').pop().toLowerCase();
         let rows = [];
 
         if (fileExt === 'xlsx' || fileExt === 'xls') {
-            // Parse Excel file using SheetJS
             const data = await file.arrayBuffer();
             const workbook = XLSX.read(data, { type: 'array' });
             const sheetName = workbook.SheetNames[0];
             const worksheet = workbook.Sheets[sheetName];
             const jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1 });
 
-            // Excel format: Column A = Name, Column B = Rating
-            // Skip header row (row 0)
             for (let i = 1; i < jsonData.length; i++) {
                 const row = jsonData[i];
                 if (row && row[0]) {
@@ -4138,7 +4155,6 @@ async function previewRatingFile(event) {
                 }
             }
         } else {
-            // Parse CSV file
             const text = await file.text();
             const lines = text.split('\n').filter(line => line.trim());
 
@@ -4147,7 +4163,6 @@ async function previewRatingFile(event) {
                 return;
             }
 
-            // Parse header
             const headers = lines[0].split(',').map(h => h.trim().toLowerCase());
             const nameIndex = headers.findIndex(h => h === 'student_name' || h === 'name');
             const firstNameIndex = headers.findIndex(h => h === 'first_name' || h === 'firstname');
@@ -4158,7 +4173,6 @@ async function previewRatingFile(event) {
                 showToast(t('admin.ratings.csvMissingRating'), 'error');
                 return;
             }
-
             if (nameIndex === -1 && (firstNameIndex === -1 || lastNameIndex === -1)) {
                 showToast(t('admin.ratings.csvMissingName'), 'error');
                 return;
@@ -4167,11 +4181,8 @@ async function previewRatingFile(event) {
             for (let i = 1; i < lines.length; i++) {
                 const values = lines[i].split(',').map(v => v.trim());
                 let studentName;
-                if (nameIndex !== -1) {
-                    studentName = values[nameIndex];
-                } else {
-                    studentName = `${values[firstNameIndex]} ${values[lastNameIndex]}`;
-                }
+                if (nameIndex !== -1) studentName = values[nameIndex];
+                else studentName = `${values[firstNameIndex]} ${values[lastNameIndex]}`;
                 rows.push({
                     name: studentName,
                     rating: parseInt(values[ratingIndex]) || 0,
@@ -4185,29 +4196,76 @@ async function previewRatingFile(event) {
             return;
         }
 
-        // Process rows with fuzzy matching
-        const result = processMatchedRows(rows);
-        csvParsedData = result.csvParsedData;
-        unmatchedStudentsData = result.unmatchedStudentsData;
-        csvAmbiguousCount = result.ambiguousCount;
-
-        // Update preview
-        document.getElementById('csvPreviewBody').innerHTML = result.previewRows.join('');
-        document.getElementById('csvValidCount').textContent = result.validCount;
-        document.getElementById('csvWarningCount').textContent = result.warningCount;
-        document.getElementById('csvErrorCount').textContent = result.errorCount;
-        document.getElementById('csvPreviewSection').style.display = 'block';
-
-        // Show ambiguous count if any
-        updateAmbiguousCounter(result.ambiguousCount);
-
-        // Enable import button only if valid data AND no unresolved ambiguous rows
-        document.getElementById('importCSVBtn').disabled = result.validCount === 0 || result.ambiguousCount > 0;
-
+        renderCsvPreview(rows, 'rating');
     } catch (error) {
         console.error('Error parsing file:', error);
         showToast(t('admin.ratings.csvParseError'), 'error');
     }
+}
+
+// Tournament-kind preview path — Swiss-Manager .xlsx / .html / .xls export.
+async function previewTournamentFile(file, kind) {
+    const parse = window.tournamentParse;
+    if (!parse) {
+        showToast(t('admin.ratings.csvParseError'), 'error');
+        return;
+    }
+    try {
+        const text = await parse.extractText(file, typeof XLSX !== 'undefined' ? XLSX : null);
+        const parsed = parse.parseTournamentExport(text, { kind, filename: file.name });
+        csvTournamentParsed = parsed;
+
+        const dateEl = document.getElementById('csvTournamentDate');
+        const roundsEl = document.getElementById('csvTournamentRounds');
+        const srcEl = document.getElementById('csvSourceFilename');
+        if (dateEl && parsed.tournament_date) dateEl.value = parsed.tournament_date;
+        if (roundsEl && parsed.rounds) roundsEl.value = parsed.rounds;
+        if (srcEl) srcEl.value = parsed.source_filename || file.name;
+
+        const validation = parse.validateParsedUpload(parsed);
+        // Eligible rows feed the existing matched-row renderer. We map the
+        // upload row shape into the {name, rowNum, ...} the renderer expects.
+        const rows = validation.eligibleRows.map((r, i) => Object.assign({}, r, {
+            name: r.raw_name,
+            rowNum: i + 1,
+        }));
+
+        if (rows.length === 0) {
+            showToast(t('admin.ratings.csvEmpty'), 'error');
+            return;
+        }
+
+        renderCsvPreview(rows, kind);
+    } catch (error) {
+        console.error('Error parsing tournament file:', error);
+        showToast(t('admin.ratings.csvParseError'), 'error');
+    }
+}
+
+// Shared preview renderer — populates the modal preview table from the matched
+// rows. Caller passes the kind so the right column layout is used.
+function renderCsvPreview(rows, kind) {
+    const result = processMatchedRows(rows, { kind });
+    csvParsedData = result.csvParsedData;
+    unmatchedStudentsData = result.unmatchedStudentsData;
+    csvAmbiguousCount = result.ambiguousCount;
+
+    // Repaint the preview table headers to match the kind.
+    const previewSection = document.getElementById('csvPreviewSection');
+    if (previewSection) {
+        const thead = previewSection.querySelector('thead tr');
+        if (thead) thead.innerHTML = csvPreviewHeaderHtml(kind);
+    }
+
+    document.getElementById('csvPreviewBody').innerHTML = result.previewRows.join('');
+    document.getElementById('csvValidCount').textContent = result.validCount;
+    document.getElementById('csvWarningCount').textContent = result.warningCount;
+    document.getElementById('csvErrorCount').textContent = result.errorCount;
+    document.getElementById('csvPreviewSection').style.display = 'block';
+
+    updateAmbiguousCounter(result.ambiguousCount);
+
+    document.getElementById('importCSVBtn').disabled = result.validCount === 0 || result.ambiguousCount > 0;
 }
 
 // Legacy function name for backward compatibility
@@ -4292,25 +4350,8 @@ async function processRatingFile(file, fileName = null) {
             return false;
         }
 
-        // Process rows with fuzzy matching
-        const result = processMatchedRows(rows);
-        csvParsedData = result.csvParsedData;
-        unmatchedStudentsData = result.unmatchedStudentsData;
-        csvAmbiguousCount = result.ambiguousCount;
-
-        // Update preview
-        document.getElementById('csvPreviewBody').innerHTML = result.previewRows.join('');
-        document.getElementById('csvValidCount').textContent = result.validCount;
-        document.getElementById('csvWarningCount').textContent = result.warningCount;
-        document.getElementById('csvErrorCount').textContent = result.errorCount;
-        document.getElementById('csvPreviewSection').style.display = 'block';
-
-        // Show ambiguous count if any
-        updateAmbiguousCounter(result.ambiguousCount);
-
-        // Enable import button only if valid data AND no unresolved ambiguous rows
-        document.getElementById('importCSVBtn').disabled = result.validCount === 0 || result.ambiguousCount > 0;
-
+        // Google Sheets path is rating-only — pass the rating kind explicitly.
+        renderCsvPreview(rows, 'rating');
         return true;
 
     } catch (error) {
@@ -4402,25 +4443,25 @@ async function loadGoogleSheet() {
     }
 }
 
-// Import CSV/Excel ratings
+// Import CSV/Excel ratings or tournament results. Dispatches by csvImportKind.
 async function importCSVRatings() {
-    console.log('=== IMPORT RATINGS START ===');
-    console.log('csvParsedData:', csvParsedData);
-    console.log('csvParsedData length:', csvParsedData ? csvParsedData.length : 'null');
-
     if (!csvParsedData || csvParsedData.length === 0) {
-        console.error('NO VALID DATA TO IMPORT');
         showToast(t('admin.ratings.noValidData'), 'error');
         return;
     }
+    if (csvImportKind && csvImportKind !== 'rating') {
+        return commitTournamentUpload(csvImportKind);
+    }
+    return commitRatingUpload();
+}
 
+async function commitRatingUpload() {
     const importBtn = document.getElementById('importCSVBtn');
     const cancelBtn = document.querySelector('#csvImportModal .btn-secondary');
     importBtn.disabled = true;
     if (cancelBtn) cancelBtn.disabled = true;
     importBtn.innerHTML = '<i data-lucide="loader" class="spin" style="width: 18px; height: 18px;"></i> Importing...';
 
-    // Show progress indicator
     const progressContainer = document.getElementById('importProgressContainer');
     const progressBar = document.getElementById('importProgressBar');
     const progressPercent = document.getElementById('importProgressPercent');
@@ -4437,9 +4478,6 @@ async function importCSVRatings() {
         progressText.textContent = t('admin.ratings.importingRatings') || 'Importing ratings...';
     }
 
-    console.log('supabaseData available:', !!window.supabaseData);
-    console.log('addStudentRating function:', typeof window.supabaseData?.addStudentRating);
-
     try {
         let successCount = 0;
         let errorCount = 0;
@@ -4448,22 +4486,17 @@ async function importCSVRatings() {
         for (let i = 0; i < csvParsedData.length; i++) {
             const item = csvParsedData[i];
             try {
-                console.log(`[${i+1}/${csvParsedData.length}] Importing: ${item.studentName}, ID: ${item.studentId}, Rating: ${item.rating}`);
-
                 if (window.supabaseData && typeof window.supabaseData.addStudentRating === 'function') {
-                    const result = await window.supabaseData.addStudentRating(item.studentId, item.rating, 'csv_import');
-                    console.log(`[${i+1}] SUCCESS:`, result);
+                    await window.supabaseData.addStudentRating(item.studentId, item.rating, 'csv_import');
                     successCount++;
                 } else {
-                    console.error(`[${i+1}] supabaseData.addStudentRating not available!`);
                     errorCount++;
                 }
             } catch (e) {
-                console.error(`[${i+1}] ERROR importing rating for ${item.studentName}:`, e);
+                console.error(`Error importing rating for ${item.studentName}:`, e);
                 errorCount++;
             }
 
-            // Update progress indicator
             const progress = Math.round(((i + 1) / total) * 100);
             if (progressContainer) {
                 progressBar.style.width = `${progress}%`;
@@ -4471,47 +4504,77 @@ async function importCSVRatings() {
                 progressCount.textContent = `${i + 1} / ${total}`;
                 progressStatus.textContent = `✓ ${successCount} | ✗ ${errorCount}`;
             }
-
-            // Log progress every 50 items
-            if ((i + 1) % 50 === 0) {
-                console.log(`Progress: ${i+1}/${csvParsedData.length} (${successCount} success, ${errorCount} errors)`);
-            }
         }
 
-        console.log('=== IMPORT COMPLETE ===');
-        console.log(`Total: ${successCount} success, ${errorCount} errors`);
-
-        // Update progress to complete state
         if (progressContainer) {
             progressBar.style.background = 'linear-gradient(90deg, #10b981, #059669)';
             progressText.textContent = t('admin.ratings.importComplete') || 'Import complete!';
             progressStatus.textContent = `✓ ${successCount} imported | ✗ ${errorCount} failed`;
         }
 
-        // Show success message with summary
         const unmatchedCount = unmatchedStudentsData.length;
         showToast(t('admin.ratings.importSummary', { matched: successCount, unmatched: unmatchedCount }), 'success');
 
-        // Delay closing to show completion status
         setTimeout(() => {
             closeCSVImportModal();
             loadRatingsData();
-
-            // Show unmatched students popup if there are any
-            if (unmatchedStudentsData.length > 0) {
-                showUnmatchedStudentsModal();
-            }
+            if (unmatchedStudentsData.length > 0) showUnmatchedStudentsModal();
         }, 1500);
 
     } catch (error) {
         console.error('=== IMPORT FAILED ===', error);
         showToast(t('admin.ratings.importError'), 'error');
-
-        // Update progress to error state
         if (progressContainer) {
             progressBar.style.background = '#ef4444';
             progressText.textContent = t('admin.ratings.importFailed') || 'Import failed!';
         }
+    } finally {
+        importBtn.disabled = false;
+        if (cancelBtn) cancelBtn.disabled = false;
+        importBtn.innerHTML = `<i data-lucide="upload" style="width: 18px; height: 18px;"></i> ${t('admin.ratings.import')}`;
+        lucide.createIcons();
+    }
+}
+
+// Commit a tournament-kind upload: header (kind/date/rounds/source) +
+// per-student result rows. Backed by supabaseData.addTournamentUpload.
+async function commitTournamentUpload(kind) {
+    const importBtn = document.getElementById('importCSVBtn');
+    const cancelBtn = document.querySelector('#csvImportModal .btn-secondary');
+    importBtn.disabled = true;
+    if (cancelBtn) cancelBtn.disabled = true;
+    importBtn.innerHTML = '<i data-lucide="loader" class="spin" style="width: 18px; height: 18px;"></i> Importing...';
+
+    try {
+        const dateEl = document.getElementById('csvTournamentDate');
+        const roundsEl = document.getElementById('csvTournamentRounds');
+        const srcEl = document.getElementById('csvSourceFilename');
+        const tournament_date = (dateEl && dateEl.value) ? dateEl.value : (csvTournamentParsed && csvTournamentParsed.tournament_date) || null;
+        const rounds = roundsEl && roundsEl.value ? parseInt(roundsEl.value, 10) : (csvTournamentParsed && csvTournamentParsed.rounds) || null;
+        const source_filename = srcEl && srcEl.value ? srcEl.value : (csvTournamentParsed && csvTournamentParsed.source_filename) || null;
+
+        if (!tournament_date) {
+            showToast(t('admin.imports.dateRequired') || 'Tournament date is required', 'error');
+            return;
+        }
+
+        const header = { kind, tournament_date, rounds, source_filename };
+        const result = await window.supabaseData.addTournamentUpload(header, csvParsedData);
+
+        showToast(t('admin.coachKpi.uploadSuccess') || 'Upload committed — leaderboard refreshed', 'success');
+        if (typeof window.dispatchEvent === 'function') {
+            window.dispatchEvent(new CustomEvent('coachKpiUploadCommitted', { detail: { kind, upload_id: result && result.upload_id } }));
+        }
+
+        setTimeout(() => {
+            closeCSVImportModal();
+            loadRatingsData();
+        }, 1200);
+
+    } catch (error) {
+        console.error('Tournament upload failed:', error);
+        const msg = (error && error.message) || t('admin.coachKpi.uploadError') || 'Could not upload tournament';
+        showToast(msg, 'error');
     } finally {
         importBtn.disabled = false;
         if (cancelBtn) cancelBtn.disabled = false;

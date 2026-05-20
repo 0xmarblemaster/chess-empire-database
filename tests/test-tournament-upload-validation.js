@@ -1,18 +1,20 @@
 /**
- * Tests for coach-kpi-upload.js validateParsedUpload + buildMatchPreview.
+ * Tests for frontend/tournament-parse.js validateParsedUpload.
  *
  * Covers the gating rules from COACH_KPI_PHASE2_SPEC.md §3 step 6:
  *   - registered + 0 games rows are excluded from eligible set
  *   - kind <-> rounds enforcement
  *   - missing date is an error (admin must enter manually)
- *   - commit button stays disabled until 0 ambiguous + 0 unmatched
+ *
+ * Commit gating + matching now lives in the merged Rating Management modal
+ * path; see tests/test-csv-upload-merged.js for end-to-end commit behavior.
  *
  * Run: node tests/test-tournament-upload-validation.js
  */
 
 'use strict';
 
-const upload = require('../coach-kpi-upload.js');
+const upload = require('../frontend/tournament-parse.js');
 
 let passed = 0;
 let failed = 0;
@@ -77,37 +79,6 @@ console.log('\n=== validateParsedUpload: 0-games rows excluded =================
     assertEqual(out.excludedRows.length, 1, '1 excluded row (games_played = 0)');
     assertEqual(out.excludedRows[0].reason, 'registered_zero_games',
         'exclusion reason = registered_zero_games');
-}
-
-console.log('\n=== buildMatchPreview: commit gating ==================================\n');
-const STUDENTS = [
-    { id: 's1', firstName: 'Иван',  lastName: 'Иванов' },
-    { id: 's2', firstName: 'Пётр',  lastName: 'Петров' },
-    { id: 's3', firstName: 'Арман', lastName: 'Кулов'  },
-    // Duplicate name to trigger an ambiguous match.
-    { id: 's4', firstName: 'Иван',  lastName: 'Иванов' },
-];
-{
-    const out = upload.buildMatchPreview([
-        { rank: 1, raw_name: 'Кулов Арман', rating_before: 500, score: 4, games_played: 5, rating_delta: 10 },
-    ], STUDENTS);
-    assertEqual(out.counts.matched, 1, '1 matched');
-    assertEqual(out.counts.ambiguous, 0, '0 ambiguous');
-    assertEqual(out.counts.unmatched, 0, '0 unmatched');
-    assert(out.commitEnabled, 'commit enabled when all rows matched');
-}
-{
-    const out = upload.buildMatchPreview([
-        { rank: 1, raw_name: 'Иванов Иван', rating_before: 500, score: 4, games_played: 5, rating_delta: 10 },
-        { rank: 2, raw_name: 'Неизвестный Игрок', rating_before: 400, score: 2, games_played: 4, rating_delta: 0 },
-    ], STUDENTS);
-    assertEqual(out.counts.ambiguous, 1, '1 ambiguous match (Иванов Иван x2)');
-    assertEqual(out.counts.unmatched, 1, '1 unmatched (Неизвестный Игрок)');
-    assert(!out.commitEnabled, 'commit DISABLED while ambiguous/unmatched present');
-}
-{
-    const out = upload.buildMatchPreview([], STUDENTS);
-    assert(!out.commitEnabled, 'empty eligible rows → commit disabled');
 }
 
 console.log(`\n--- ${passed} passed, ${failed} failed ---\n`);

@@ -13,7 +13,7 @@
 
 'use strict';
 
-const upload = require('../coach-kpi-upload.js');
+const upload = require('../frontend/tournament-parse.js');
 
 let passed = 0;
 let failed = 0;

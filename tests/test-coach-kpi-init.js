@@ -6,8 +6,8 @@
  *   1. Refuse callers the role lock rejects (canViewCoachKpi gate).
  *   2. Render filters into #coach-kpi-filters.
  *   3. Render the leaderboard into #coach-kpi-school-leaderboard.
- *   4. Render the upload launcher into #coach-kpi-upload-host — but only
- *      when window.coachKpiUpload has been loaded.
+ *   4. Subscribe to the coachKpiUploadCommitted window event so the merged
+ *      Rating Management upload modal can trigger a leaderboard refresh.
  *   5. Be installed as window.initCoachKpi so the admin handlers find it.
  *
  * Run: node tests/test-coach-kpi-init.js
@@ -95,7 +95,7 @@ console.log('\n=== smoke: initCoachKpi exported and installed on window ========
 
 console.log('\n=== happy path: admin → filters + leaderboard rendered ===============\n');
 (function testAdminRendersFiltersAndLeaderboard() {
-    const dom = makeDom(['coach-kpi-filters', 'coach-kpi-school-leaderboard', 'coach-kpi-upload-host']);
+    const dom = makeDom(['coach-kpi-filters', 'coach-kpi-school-leaderboard']);
     const win = {};
     const mod = loadModule({ document: dom, window: win });
 
@@ -114,49 +114,9 @@ console.log('\n=== happy path: admin → filters + leaderboard rendered ========
         'leaderboard renders the empty-state card when no rows passed');
 })();
 
-console.log('\n=== upload launcher only when window.coachKpiUpload is present ========\n');
-(function testNoUploadWhenUploadModuleMissing() {
-    const dom = makeDom(['coach-kpi-filters', 'coach-kpi-school-leaderboard', 'coach-kpi-upload-host']);
-    const win = {}; // no coachKpiUpload
-    const mod = loadModule({ document: dom, window: win });
-
-    mod.initCoachKpi({ isAdmin: true });
-
-    const uploadHost = dom.elements['coach-kpi-upload-host'];
-    assert(uploadHost.children.length === 0,
-        'upload host stays empty when window.coachKpiUpload is not loaded');
-})();
-
-(function testUploadLauncherRendersWhenModulePresent() {
-    const dom = makeDom(['coach-kpi-filters', 'coach-kpi-school-leaderboard', 'coach-kpi-upload-host']);
-    let modalCalls = 0;
-    const win = {
-        coachKpiUpload: {
-            renderUploadModal(container) {
-                modalCalls++;
-                container.appendChild(makeMockEl('div'));
-            },
-        },
-    };
-    const mod = loadModule({ document: dom, window: win });
-
-    mod.initCoachKpi({ isAdmin: true });
-
-    const uploadHost = dom.elements['coach-kpi-upload-host'];
-    assert(uploadHost.children.length === 1,
-        'upload host gains the launcher button when coachKpiUpload is loaded');
-    const btn = uploadHost.children[0];
-    assert(/\bkpi-upload-launcher\b/.test(btn.className),
-        'launcher button carries .kpi-upload-launcher class');
-
-    btn.dispatch('click');
-    assert(modalCalls === 1,
-        'clicking the launcher invokes coachKpiUpload.renderUploadModal');
-})();
-
 console.log('\n=== role gate: canViewCoachKpi must let the caller through ===========\n');
 (function testAnonRejected() {
-    const dom = makeDom(['coach-kpi-filters', 'coach-kpi-school-leaderboard', 'coach-kpi-upload-host']);
+    const dom = makeDom(['coach-kpi-filters', 'coach-kpi-school-leaderboard']);
     const mod = loadModule({ document: dom, window: {} });
 
     mod.initCoachKpi(null);
@@ -167,17 +127,34 @@ console.log('\n=== role gate: canViewCoachKpi must let the caller through ======
         'no roleInfo / not-allowed → filters host left untouched');
     assert(dom.elements['coach-kpi-school-leaderboard'].children.length === 0,
         'no roleInfo / not-allowed → leaderboard host left untouched');
-    assert(dom.elements['coach-kpi-upload-host'].children.length === 0,
-        'no roleInfo / not-allowed → upload host left untouched');
 })();
 
 (function testCoachAllowed() {
-    const dom = makeDom(['coach-kpi-filters', 'coach-kpi-school-leaderboard', 'coach-kpi-upload-host']);
+    const dom = makeDom(['coach-kpi-filters', 'coach-kpi-school-leaderboard']);
     const mod = loadModule({ document: dom, window: {} });
 
     mod.initCoachKpi({ isAdmin: false, isCoach: true, coachId: 'c-1' });
     assert(dom.elements['coach-kpi-filters'].children.length === 1,
         'locked coach passes canViewCoachKpi gate (filters rendered)');
+})();
+
+console.log('\n=== coachKpiUploadCommitted listener attached =========================\n');
+(function testUploadCommittedListener() {
+    const dom = makeDom(['coach-kpi-filters', 'coach-kpi-school-leaderboard']);
+    const winListeners = {};
+    const win = {
+        addEventListener(name, fn) { (winListeners[name] = winListeners[name] || []).push(fn); },
+    };
+    const mod = loadModule({ document: dom, window: win });
+    mod.initCoachKpi({ isAdmin: true });
+
+    assert(Array.isArray(winListeners['coachKpiUploadCommitted']) && winListeners['coachKpiUploadCommitted'].length >= 1,
+        'window listener for coachKpiUploadCommitted is attached after initCoachKpi');
+
+    // Re-entry must NOT double-subscribe.
+    mod.initCoachKpi({ isAdmin: true });
+    assert(winListeners['coachKpiUploadCommitted'].length === 1,
+        'coachKpiUploadCommitted listener attaches exactly once even after re-init');
 })();
 
 console.log('\n=== robust to a partially-scaffolded DOM ==============================\n');

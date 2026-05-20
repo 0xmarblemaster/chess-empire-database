@@ -976,6 +976,92 @@ const supabaseData = {
         }
     },
 
+    /**
+     * Commit a Swiss-Manager tournament upload: header row in tournaments_uploads
+     * + per-student rows in tournament_results + a mirrored student_ratings
+     * upsert per row. Idempotent on tournament_results unique violations so
+     * re-running the same upload does not error.
+     *
+     *   header: { kind, tournament_date, rounds, source_filename }
+     *   rows:   [{ studentId, rank, score, games_played, avg_opp_rating,
+     *              rating_before, rating_delta }, ...]
+     *
+     * Throws an Error with a clean message when the tournaments_uploads /
+     * tournament_results tables do not exist — the caller surfaces it as a
+     * modal toast.
+     */
+    async addTournamentUpload(header, rows) {
+        if (!header || !header.kind || !header.tournament_date) {
+            throw new Error('addTournamentUpload requires header.kind and header.tournament_date');
+        }
+        const ROUNDS_BY_KIND = { league_c: 6, league_b: 6, razryad_4: 10, razryad_3: 9 };
+        const payload = {
+            kind: header.kind,
+            tournament_date: header.tournament_date,
+            rounds: header.rounds || ROUNDS_BY_KIND[header.kind] || null,
+            source_filename: header.source_filename || null,
+        };
+
+        const { data: uploadRow, error: uploadErr } = await window.supabaseClient
+            .from('tournaments_uploads')
+            .insert(payload)
+            .select()
+            .single();
+
+        if (uploadErr) {
+            const code = uploadErr.code;
+            const msg  = (uploadErr.message || '').toLowerCase();
+            // PostgREST returns 42P01 (undefined_table) or PGRST205 when the
+            // table is missing. Surface a clean message so the admin knows.
+            if (code === '42P01' || code === 'PGRST205' || msg.includes('does not exist') || msg.includes('not found')) {
+                throw new Error('Tournament tables not initialized — apply migration 039 (tournaments_uploads / tournament_results) in Supabase.');
+            }
+            throw uploadErr;
+        }
+
+        const upload_id = uploadRow.id;
+        let inserted = 0;
+        for (const r of rows || []) {
+            if (!r || !r.studentId) continue;
+            const resultRow = {
+                upload_id,
+                student_id: r.studentId,
+                rank: r.rank,
+                score: r.score,
+                games_played: r.games_played,
+                avg_opp_rating: r.avg_opp_rating,
+                rating_before: r.rating_before,
+                rating_delta: r.rating_delta || 0,
+            };
+            const { error: resErr } = await window.supabaseClient
+                .from('tournament_results')
+                .insert(resultRow);
+            if (resErr) {
+                if (resErr.code === '23505') continue; // unique violation = already inserted
+                if (resErr.code === '42P01' || resErr.code === 'PGRST205') {
+                    throw new Error('Tournament tables not initialized — apply migration 039 (tournaments_uploads / tournament_results) in Supabase.');
+                }
+                throw resErr;
+            }
+
+            // Mirror the new rating into student_ratings so the rest of the app
+            // (rating history, league transitions in 038) sees it.
+            const rating_after = (r.rating_before || 0) + (r.rating_delta || 0);
+            await window.supabaseClient
+                .from('student_ratings')
+                .upsert({
+                    student_id: r.studentId,
+                    rating: rating_after,
+                    rating_date: header.tournament_date,
+                    source: 'tournament',
+                });
+
+            inserted++;
+        }
+
+        return { upload_id, inserted };
+    },
+
     // Add or update a rating entry for a student (upsert - one rating per student per day)
     async addStudentRating(studentId, rating, source = 'manual', notes = '') {
         const today = new Date().toISOString().split('T')[0]; // YYYY-MM-DD format

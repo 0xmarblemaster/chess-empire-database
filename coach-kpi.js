@@ -1079,33 +1079,10 @@
     }
 
     /**
-     * Render the "Upload tournament" launcher button. Clicking it opens
-     * the coach-kpi-upload modal in a host container.
-     */
-    function renderUploadLauncher(container, opts) {
-        if (typeof document === 'undefined' || !container) return null;
-        const o = opts || {};
-        const t = typeof o.t === 'function' ? o.t : null;
-        const label = (key, fb) => (t ? t(key, fb) : fb);
-
-        container.innerHTML = '';
-        const btn = _el('button', {
-            type: 'button',
-            className: 'btn btn-primary kpi-upload-launcher',
-            text: label('admin.coachKpi.uploadButton', 'Upload tournament'),
-        });
-        btn.addEventListener('click', () => {
-            if (typeof o.onOpen === 'function') o.onOpen();
-        });
-        container.appendChild(btn);
-        _rememberRender('renderUploadLauncher', container, [o]);
-        return btn;
-    }
-
-    /**
      * Thin DOM orchestrator wired from `showCoachPerformance` in admin(-v2).js.
-     * Renders the filter bar, leaderboard, and (when coach-kpi-upload.js is
-     * present) the upload launcher button into their known host containers.
+     * Renders the filter bar and leaderboard into their known host containers.
+     * Upload UI lives in the Rating Management modal — see admin-v2.html
+     * #csvImportModal and admin-v2.js commitTournamentUpload().
      *
      * Gated by `roleLock.canViewCoachKpi(roleInfo)` — anyone the role lock
      * refuses gets a no-op. Renderers are individually safe with a missing
@@ -1137,25 +1114,40 @@
             renderLeaderboard(leaderboardHost, [], { t });
         }
 
-        if (typeof window !== 'undefined' && window.coachKpiUpload) {
-            const uploadHost = document.getElementById('coach-kpi-upload-host');
-            if (uploadHost) {
-                renderUploadLauncher(uploadHost, {
-                    t,
-                    onOpen: () => {
-                        if (window.coachKpiUpload
-                            && typeof window.coachKpiUpload.renderUploadModal === 'function') {
-                            window.coachKpiUpload.renderUploadModal(uploadHost, { t });
-                        }
-                    },
-                });
-            }
-        }
-
         // Subscribe AFTER first paint so the cache is non-empty by the time
         // the user can flip languages. Idempotent via the __kpiLangSubscribed
         // flag inside subscribeLanguageEvents.
         subscribeLanguageEvents();
+
+        // After a successful upload from the merged Rating Management modal,
+        // the leaderboard must refresh. The commit path dispatches a
+        // coachKpiUploadCommitted window event — listen once.
+        _subscribeUploadCommittedOnce(roleInfo);
+    }
+
+    function _subscribeUploadCommittedOnce(roleInfo) {
+        if (typeof window === 'undefined' || typeof window.addEventListener !== 'function') return;
+        if (window.__kpiUploadCommittedSubscribed) return;
+        window.__kpiUploadCommittedSubscribed = true;
+        window.addEventListener('coachKpiUploadCommitted', () => {
+            // Best-effort refresh of the school leaderboard from coach_kpi_view.
+            // Errors are swallowed so a bad fetch can't break the close path.
+            try {
+                const adapter = (key, fb) => {
+                    if (typeof window !== 'undefined' && window.i18n && typeof window.i18n.t === 'function') {
+                        const v = window.i18n.t(key);
+                        if (v && v !== key && typeof v === 'string') return v;
+                    }
+                    return fb;
+                };
+                Promise.resolve(loadDashboard(roleInfo, 'coach_kpi_view', null, {})).then((result) => {
+                    const host = document.getElementById('coach-kpi-school-leaderboard');
+                    if (!host) return;
+                    const rows = result && result.data && Array.isArray(result.data.rows) ? result.data.rows : [];
+                    renderLeaderboard(host, rows, { t: adapter });
+                }).catch(() => { /* silent */ });
+            } catch (_) { /* silent */ }
+        });
     }
 
     /**
@@ -1214,7 +1206,6 @@
         renderTournamentsByLeagueBar,
         renderAvgPlaceTrendLine,
         renderPhase2Leaderboard,
-        renderUploadLauncher,
         currentMonthWindow,
         initCoachKpi,
         subscribeLanguageEvents,

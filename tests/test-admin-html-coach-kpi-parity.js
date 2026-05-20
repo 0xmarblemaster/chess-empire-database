@@ -99,17 +99,22 @@ assert(count(HTML, 'id="coach-kpi-coach-view"')  === 1, '#coach-kpi-coach-view d
 // ── Script tags ──────────────────────────────────────────────────────────────
 console.log('\n=== script tags present ==============================================\n');
 
-const idxChartJs     = HTML.indexOf('cdn.jsdelivr.net/npm/chart.js');
-const idxAttendance  = HTML.indexOf('attendance-role-lock.js');
-const idxKpiRoleLock = HTML.indexOf('coach-kpi-role-lock.js');
-const idxKpiUpload   = HTML.search(/src="coach-kpi-upload\.js"/);
-const idxKpi         = HTML.search(/src="coach-kpi\.js"/);
+const idxChartJs       = HTML.indexOf('cdn.jsdelivr.net/npm/chart.js');
+const idxAttendance    = HTML.indexOf('attendance-role-lock.js');
+const idxKpiRoleLock   = HTML.indexOf('coach-kpi-role-lock.js');
+const idxStudentMatch  = HTML.search(/src="frontend\/student-match\.js"/);
+const idxTournamentP   = HTML.search(/src="frontend\/tournament-parse\.js"/);
+const idxKpi           = HTML.search(/src="coach-kpi\.js"/);
 
-assert(idxChartJs     > 0, 'Chart.js script tag present');
-assert(idxAttendance  > 0, 'attendance-role-lock.js script tag present');
-assert(idxKpiRoleLock > 0, 'coach-kpi-role-lock.js script tag present');
-assert(idxKpiUpload   > 0, 'coach-kpi-upload.js script tag present');
-assert(idxKpi         > 0, 'coach-kpi.js script tag present');
+assert(idxChartJs      > 0, 'Chart.js script tag present');
+assert(idxAttendance   > 0, 'attendance-role-lock.js script tag present');
+assert(idxKpiRoleLock  > 0, 'coach-kpi-role-lock.js script tag present');
+assert(idxStudentMatch > 0, 'frontend/student-match.js script tag present');
+assert(idxTournamentP  > 0, 'frontend/tournament-parse.js script tag present');
+assert(idxKpi          > 0, 'coach-kpi.js script tag present');
+
+assert(HTML.search(/src="coach-kpi-upload\.js"/) === -1,
+    'legacy coach-kpi-upload.js script tag is no longer present in admin.html');
 
 console.log('\n=== load order — KPI scripts come AFTER chart.js + role lock =========\n');
 
@@ -119,17 +124,19 @@ assert(idxChartJs    < idxKpi,         'coach-kpi.js loads AFTER Chart.js (rende
 assert(idxAttendance < idxKpi,         'coach-kpi.js loads AFTER attendance-role-lock.js');
 assert(idxKpiRoleLock < idxKpi,
     'coach-kpi-role-lock.js loads BEFORE coach-kpi.js (lock defines policy used by KPI)');
-assert(idxKpiRoleLock < idxKpiUpload,
-    'coach-kpi-upload.js loads AFTER coach-kpi-role-lock.js');
-assert(idxKpiUpload < idxKpi,
-    'coach-kpi-upload.js loads BEFORE coach-kpi.js (so initCoachKpi sees window.coachKpiUpload)');
+assert(idxStudentMatch < idxKpi,
+    'frontend/student-match.js loads BEFORE coach-kpi.js');
+assert(idxTournamentP  < idxKpi,
+    'frontend/tournament-parse.js loads BEFORE coach-kpi.js');
 
 console.log('\n=== script tags are well-formed ======================================\n');
 
 assert(/<script\s+src="coach-kpi-role-lock\.js"[^>]*>\s*<\/script>/.test(HTML),
     'coach-kpi-role-lock.js is a properly closed <script> tag');
-assert(/<script\s+src="coach-kpi-upload\.js"[^>]*>\s*<\/script>/.test(HTML),
-    'coach-kpi-upload.js is a properly closed <script> tag');
+assert(/<script\s+src="frontend\/student-match\.js"[^>]*>\s*<\/script>/.test(HTML),
+    'frontend/student-match.js is a properly closed <script> tag');
+assert(/<script\s+src="frontend\/tournament-parse\.js"[^>]*>\s*<\/script>/.test(HTML),
+    'frontend/tournament-parse.js is a properly closed <script> tag');
 assert(/<script\s+src="coach-kpi\.js"[^>]*>\s*<\/script>/.test(HTML),
     'coach-kpi.js is a properly closed <script> tag');
 
@@ -138,8 +145,10 @@ console.log('\n=== each script tag appears exactly once ========================
 function countRe(s, re) { return (s.match(re) || []).length; }
 assert(countRe(HTML, /src="coach-kpi-role-lock\.js"/g) === 1,
     'coach-kpi-role-lock.js script tag appears exactly once');
-assert(countRe(HTML, /src="coach-kpi-upload\.js"/g) === 1,
-    'coach-kpi-upload.js script tag appears exactly once');
+assert(countRe(HTML, /src="frontend\/student-match\.js"/g) === 1,
+    'frontend/student-match.js script tag appears exactly once');
+assert(countRe(HTML, /src="frontend\/tournament-parse\.js"/g) === 1,
+    'frontend/tournament-parse.js script tag appears exactly once');
 assert(countRe(HTML, /src="coach-kpi\.js"/g) === 1,
     'coach-kpi.js script tag appears exactly once');
 

@@ -616,7 +616,7 @@
                     <div class="header-actions">
                         <button class="btn btn-secondary" onclick="openCSVImportModal()">
                             <i data-lucide="upload" style="width: 18px; height: 18px;"></i>
-                            <span data-i18n="admin.ratings.importCSV">Import CSV</span>
+                            <span data-i18n="admin.imports.button">Import data</span>
                         </button>
                     </div>
                 </div>
@@ -1380,9 +1380,6 @@
                 <!-- Filter bar (time window / league / branch) — populated by coach-kpi.js renderFilters() -->
                 <div id="coach-kpi-filters" class="kpi-filters-host"></div>
 
-                <!-- Upload launcher — populated by coach-kpi.js renderUploadLauncher() when coach-kpi-upload.js is loaded -->
-                <div id="coach-kpi-upload-host" class="kpi-upload-host"></div>
-
                 <!-- School-wide view (admin only) -->
                 <div id="coach-kpi-school-view" class="kpi-subview is-active" role="tabpanel" aria-labelledby="kpi-tab-school">
                     <div class="stats-grid" id="coach-kpi-school-hero"></div>
@@ -2045,6 +2042,17 @@
 
             <div class="modal-body">
                 <div class="form-section">
+                    <label class="form-label" data-i18n="admin.imports.kindLabel">Import type</label>
+                    <select id="csvUploadKind" class="form-input" onchange="onCsvUploadKindChange()">
+                        <option value="rating" data-i18n="admin.imports.kindRating">Ratings (CSV/Excel)</option>
+                        <option value="league_c" data-i18n="admin.coachKpi.kind.league_c">League C</option>
+                        <option value="league_b" data-i18n="admin.coachKpi.kind.league_b">League B</option>
+                        <option value="razryad_4" data-i18n="admin.coachKpi.kind.razryad_4">4th razryad qualification</option>
+                        <option value="razryad_3" data-i18n="admin.coachKpi.kind.razryad_3">3rd razryad qualification</option>
+                    </select>
+                </div>
+
+                <div class="form-section" id="csvRatingHelp">
                     <h3 class="form-section-title" data-i18n="admin.ratings.fileFormat">Supported Formats</h3>
                     <p style="color: #64748b; font-size: 0.875rem; margin-bottom: 1rem;" data-i18n="admin.ratings.fileFormatHint">
                         Excel (.xlsx, .xls) or CSV with columns: Name (LastName FirstName), Rating
@@ -2064,9 +2072,26 @@
                                 <i data-lucide="upload" style="width: 18px; height: 18px;"></i>
                                 <span data-i18n="admin.ratings.chooseFile">Choose Excel/CSV File</span>
                             </label>
-                            <input type="file" id="csvFileInput" accept=".xlsx,.xls,.csv" style="display: none;" onchange="previewRatingFile(event)">
+                            <input type="file" id="csvFileInput" accept=".xlsx,.xls,.csv,.html,.htm,.txt" style="display: none;" onchange="previewRatingFile(event)">
                             <p class="upload-hint" id="csvFileName" style="text-align: center;" data-i18n="admin.ratings.noFileSelected">No file selected</p>
                         </div>
+                    </div>
+                </div>
+
+                <div class="form-section" id="csvTournamentMeta" style="display: none;">
+                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.75rem; margin-bottom: 0.75rem;">
+                        <div>
+                            <label class="form-label" data-i18n="admin.imports.tournamentDate">Tournament date</label>
+                            <input type="date" id="csvTournamentDate" class="form-input">
+                        </div>
+                        <div>
+                            <label class="form-label" data-i18n="admin.imports.tournamentRounds">Rounds</label>
+                            <input type="number" id="csvTournamentRounds" class="form-input" min="1" max="20">
+                        </div>
+                    </div>
+                    <div>
+                        <label class="form-label" data-i18n="admin.imports.sourceFile">Source file</label>
+                        <input type="text" id="csvSourceFilename" class="form-input" readonly>
                     </div>
                 </div>
 
@@ -2458,7 +2483,8 @@
     <script src="constants.js?v=1771237740"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script src="coach-kpi-role-lock.js"></script>
-    <script src="coach-kpi-upload.js"></script>
+    <script src="frontend/student-match.js"></script>
+    <script src="frontend/tournament-parse.js"></script>
     <script src="coach-kpi.js"></script>
     <!-- SheetJS for Excel parsing/export -->
     <script src="https://cdn.sheetjs.com/xlsx-0.20.0/package/dist/xlsx.full.min.js"></script>

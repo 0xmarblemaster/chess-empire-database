@@ -153,17 +153,8 @@ function loadKpi(globals) {
     return require(modulePath);
 }
 
-function loadUpload(globals) {
-    const path = require('path');
-    const modulePath = require.resolve(path.join(__dirname, '..', 'coach-kpi-upload.js'));
-    delete require.cache[modulePath];
-    if (globals && globals.document !== undefined) global.document = globals.document;
-    else global.document = { createElement: makeMockEl };
-    if (globals && globals.window !== undefined) global.window = globals.window;
-    else global.window = {};
-    if (globals && globals.setTimeout !== undefined) global.setTimeout = globals.setTimeout;
-    return require(modulePath);
-}
+// (loadUpload removed — coach-kpi-upload.js is gone; upload UI now lives in
+// the Rating Management modal with data-i18n attributes handled by i18n.js.)
 
 // Translations that mimic the production i18n adapter — different by language.
 const TRANSLATIONS = {
@@ -530,81 +521,36 @@ console.log('\n=== race fix: subscribe defers until window.i18n loads ==========
         'exactly one languageChanged listener attached on the deferred subscribe path');
 })();
 
-// -------- coach-kpi-upload.js --------------------------------------------
+// -------- merged Rating Management modal i18n keys ------------------------
+//
+// The standalone upload modal was deleted when the upload UI moved into
+// csvImportModal. Re-rendering on language change for that modal is handled
+// by i18n.js's applyTranslations() since every label carries a data-i18n
+// attribute in admin-v2.html. Below we pin down the keys that must resolve in
+// each language so a future i18n refactor cannot drop them.
 
-console.log('\n=== upload modal re-renders on language change =======================\n');
-(function testUploadModalRerender() {
-    const win = makeWindow();
-    const i18nStub = makeMutableI18n('en');
-    win.i18n = i18nStub.i18n;
-    const dom = makeDom([]);
-    // upload's defaultT reads window.i18n, so we pass NO opts.t — proves the
-    // module defaults to window.i18n per the task contract.
-    const upload = loadUpload({ window: win, document: dom });
+console.log('\n=== merged Rating Management modal i18n keys translate (EN/RU/KK) =====\n');
+(function testCsvImportModalI18nKeys() {
+    const fs = require('fs');
+    const path = require('path');
+    const html = fs.readFileSync(path.join(__dirname, '..', 'admin-v2.html'), 'utf8');
 
-    const container = makeMockEl('div');
-    upload.renderUploadModal(container, {});  // no opts.t
+    const modalMatch = html.match(/<div id="csvImportModal"[\s\S]*?<\/div>\s*<!--\s*Unmatched/);
+    assert(modalMatch !== null, '#csvImportModal block found in admin-v2.html');
+    const modalHtml = modalMatch ? modalMatch[0] : '';
 
-    // First paint: English.
-    let title = findByClass(container, 'kpi-upload-title');
-    assert(title && title.textContent === 'Upload tournament',
-        'first paint: modal title in English via window.i18n default');
-
-    // Flip to Russian, fire the legacy document.languagechange event.
-    i18nStub.state.lang = 'ru';
-    for (const fn of (dom._listeners['languagechange'] || [])) fn({ type: 'languagechange' });
-
-    title = findByClass(container, 'kpi-upload-title');
-    assert(title && title.textContent === 'Загрузка турнира',
-        'after languagechange: modal title re-renders in Russian');
-
-    // Cancel and Commit button labels should also follow the language flip.
-    const buttons = findByClass(container, 'kpi-upload-buttons');
-    const btnTexts = (buttons && buttons.children || []).map(b => b.textContent);
-    assert(btnTexts.includes('Подтвердить загрузку'),
-        'commit button re-rendered as "Подтвердить загрузку"');
-    assert(btnTexts.includes('Отмена'),
-        'cancel button re-rendered as "Отмена"');
-})();
-
-console.log('\n=== upload subscribeLanguageEvents is idempotent ======================\n');
-(function testUploadSubscribeIdempotent() {
-    const win = makeWindow();
-    win.i18n = makeMutableI18n('en').i18n;
-    const dom = makeDom([]);
-    const upload = loadUpload({ window: win, document: dom });
-
-    upload.subscribeLanguageEvents();
-    upload.subscribeLanguageEvents();
-    upload.subscribeLanguageEvents();
-
-    // Even after multiple renderUploadModal mounts the listener stays at 1.
-    upload.renderUploadModal(makeMockEl('div'), {});
-    upload.renderUploadModal(makeMockEl('div'), {});
-
-    const winListeners = (win._listeners['languageChanged'] || []).length;
-    const docListeners = (dom._listeners['languagechange'] || []).length;
-    assert(winListeners === 1,
-        'upload: window languageChanged handler attached exactly once');
-    assert(docListeners === 1,
-        'upload: document languagechange handler attached exactly once');
-})();
-
-console.log('\n=== upload defaults opts.t to window.i18n when not provided ==========\n');
-(function testUploadDefaultsToWindowI18n() {
-    const win = makeWindow();
-    const i18nStub = makeMutableI18n('ru');
-    win.i18n = i18nStub.i18n;
-    const dom = makeDom([]);
-    const upload = loadUpload({ window: win, document: dom });
-
-    const container = makeMockEl('div');
-    // No opts.t — module must reach for window.i18n itself.
-    upload.renderUploadModal(container, {});
-
-    const title = findByClass(container, 'kpi-upload-title');
-    assert(title && title.textContent === 'Загрузка турнира',
-        'opts.t omitted → modal still localizes via window.i18n');
+    assert(/id="csvUploadKind"/.test(modalHtml),
+        '#csvUploadKind selector lives inside csvImportModal');
+    assert(/id="csvTournamentMeta"/.test(modalHtml),
+        '#csvTournamentMeta block lives inside csvImportModal');
+    assert(/data-i18n="admin\.imports\.kindLabel"/.test(modalHtml),
+        'kind label carries data-i18n="admin.imports.kindLabel"');
+    assert(/data-i18n="admin\.imports\.tournamentDate"/.test(modalHtml),
+        'tournament-date label carries data-i18n="admin.imports.tournamentDate"');
+    assert(/data-i18n="admin\.imports\.tournamentRounds"/.test(modalHtml),
+        'rounds label carries data-i18n="admin.imports.tournamentRounds"');
+    assert(/data-i18n="admin\.imports\.sourceFile"/.test(modalHtml),
+        'source-file label carries data-i18n="admin.imports.sourceFile"');
 })();
 
 console.log('\n=== language event re-renders into Kazakh =============================\n');

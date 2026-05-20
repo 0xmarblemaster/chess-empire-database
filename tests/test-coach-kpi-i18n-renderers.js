@@ -82,16 +82,8 @@ function loadKpi(globals) {
     return require(modulePath);
 }
 
-function loadUpload(globals) {
-    const path = require('path');
-    const modulePath = require.resolve(path.join(__dirname, '..', 'coach-kpi-upload.js'));
-    delete require.cache[modulePath];
-    if (globals && globals.document !== undefined) global.document = globals.document;
-    else global.document = { createElement: makeMockEl };
-    if (globals && globals.window !== undefined) global.window = globals.window;
-    else global.window = {};
-    return require(modulePath);
-}
+// (Upload modal loader removed — the standalone upload module was deleted when
+// the upload UI moved into the Rating Management modal in admin-v2.html.)
 
 function findByClass(root, token) {
     if (!root) return null;
@@ -336,79 +328,6 @@ console.log('\n=== initCoachKpi builds a window.i18n adapter and threads it thro
     const labels = findAllByClass(dom.elements['coach-kpi-filters'], 'filter-label').map(n => n.textContent);
     assert(labels.includes('Time window'),
         'filter label falls back to English "Time window" when window.i18n is absent');
-})();
-
-console.log('\n=== renderUploadModal localizes every visible label ====================\n');
-(function testUploadModal() {
-    const upload = loadUpload({});
-    const container = makeContainer();
-    upload.renderUploadModal(container, { t: ruT });
-
-    const title = findByClass(container, 'kpi-upload-title');
-    assert(title && title.textContent === 'Загрузка турнира',
-        'modal title resolves via admin.coachKpi.uploadTitle');
-
-    const rowLabels = [];
-    const rows = findAllByClass(container, 'kpi-upload-row');
-    for (const row of rows) {
-        for (const child of row.children) {
-            if (child.tagName === 'label') rowLabels.push(child.textContent);
-        }
-    }
-    assert(rowLabels.includes('Тип турнира'),
-        'kind row label resolves via admin.coachKpi.uploadKind');
-    assert(rowLabels.includes('Экспорт Swiss-Manager'),
-        'file row label resolves via admin.coachKpi.uploadFile');
-    assert(rowLabels.includes('Дата турнира'),
-        'date row label resolves via admin.coachKpi.uploadDate');
-
-    const buttons = findByClass(container, 'kpi-upload-buttons');
-    const btnTexts = (buttons && buttons.children || []).map(b => b.textContent);
-    assert(btnTexts.includes('Отмена'),
-        'cancel button resolves via common.cancel');
-    assert(btnTexts.includes('Подтвердить загрузку'),
-        'commit button resolves via admin.coachKpi.uploadCommit');
-})();
-
-console.log('\n=== renderUploadModal defaults to window.i18n when opts.t is missing ===\n');
-(function testUploadModalDefaultsToWindowI18n() {
-    const win = {
-        i18n: {
-            t(key) {
-                return Object.prototype.hasOwnProperty.call(RU, key) ? RU[key] : key;
-            },
-        },
-    };
-    const upload = loadUpload({ window: win });
-    const container = makeContainer();
-    upload.renderUploadModal(container, {}); // no opts.t — should fall back to window.i18n
-
-    const title = findByClass(container, 'kpi-upload-title');
-    assert(title && title.textContent === 'Загрузка турнира',
-        'modal title resolves from window.i18n when caller omits opts.t');
-
-    const buttons = findByClass(container, 'kpi-upload-buttons');
-    const btnTexts = (buttons && buttons.children || []).map(b => b.textContent);
-    assert(btnTexts.includes('Подтвердить загрузку'),
-        'commit button resolves from window.i18n when caller omits opts.t');
-})();
-
-(function testUploadModalEnglishFallback() {
-    // Neither opts.t nor window.i18n — every visible string is the English
-    // fallback the renderer passes as the second arg to label(...).
-    const upload = loadUpload({ window: {} });
-    const container = makeContainer();
-    upload.renderUploadModal(container, {});
-
-    const title = findByClass(container, 'kpi-upload-title');
-    assert(title && title.textContent === 'Upload tournament',
-        'modal title falls back to English "Upload tournament"');
-    const buttons = findByClass(container, 'kpi-upload-buttons');
-    const btnTexts = (buttons && buttons.children || []).map(b => b.textContent);
-    assert(btnTexts.includes('Cancel'),
-        'cancel button falls back to English "Cancel"');
-    assert(btnTexts.includes('Commit upload'),
-        'commit button falls back to English "Commit upload"');
 })();
 
 console.log(`\n--- ${passed} passed, ${failed} failed ---\n`);

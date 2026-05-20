@@ -3306,6 +3306,14 @@ window.translateStatus = translateStatus;
                     viewSchool: 'School',
                     viewBranch: 'Branch',
                     viewCoach: 'Coach'
+                },
+                imports: {
+                    button: 'Import data',
+                    kindLabel: 'Import type',
+                    kindRating: 'Ratings (CSV/Excel)',
+                    tournamentDate: 'Tournament date',
+                    tournamentRounds: 'Rounds',
+                    sourceFile: 'Source file'
                 }
             },
             alerts: {
@@ -3603,6 +3611,14 @@ window.translateStatus = translateStatus;
                     viewSchool: 'Школа',
                     viewBranch: 'Филиал',
                     viewCoach: 'Тренер'
+                },
+                imports: {
+                    button: 'Импорт данных',
+                    kindLabel: 'Тип импорта',
+                    kindRating: 'Рейтинги (CSV/Excel)',
+                    tournamentDate: 'Дата турнира',
+                    tournamentRounds: 'Туры',
+                    sourceFile: 'Исходный файл'
                 }
             },
             alerts: {
@@ -3727,6 +3743,14 @@ window.translateStatus = translateStatus;
                     viewSchool: 'Мектеп',
                     viewBranch: 'Бөлімше',
                     viewCoach: 'Жаттықтырушы'
+                },
+                imports: {
+                    button: 'Деректерді импорттау',
+                    kindLabel: 'Импорт түрі',
+                    kindRating: 'Рейтингтер (CSV/Excel)',
+                    tournamentDate: 'Турнир күні',
+                    tournamentRounds: 'Турлар',
+                    sourceFile: 'Бастапқы файл'
                 }
             },
             coachKpiTimeWindow30d: '30 күн',
