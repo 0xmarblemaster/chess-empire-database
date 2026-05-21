@@ -11,11 +11,11 @@
   "rewrites": [
     {
       "source": "/admin",
-      "destination": "/admin-v2.html"
+      "destination": "/admin-v2"
     },
     {
       "source": "/admin.html",
-      "destination": "/admin-v2.html"
+      "destination": "/admin-v2"
     }
   ],
   "redirects": [
