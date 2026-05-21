@@ -12,6 +12,10 @@
     {
       "source": "/admin",
       "destination": "/admin-v2.html"
+    },
+    {
+      "source": "/admin.html",
+      "destination": "/admin-v2.html"
     }
   ],
   "redirects": [

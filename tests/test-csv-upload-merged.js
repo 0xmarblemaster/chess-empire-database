@@ -211,7 +211,7 @@ async function run() {
             'window.coachKpiUpload?.renderUploadModal is undefined (old broken path gone)');
 
         const v2 = fs.readFileSync(path.join(ROOT, 'admin-v2.html'), 'utf8');
-        const v1 = fs.readFileSync(path.join(ROOT, 'admin.html'), 'utf8');
+        const v1 = fs.readFileSync(path.join(ROOT, 'legacy-admin.html'), 'utf8');
         assert(v2.indexOf('src="coach-kpi-upload.js"') === -1,
             'admin-v2.html no longer references coach-kpi-upload.js');
         assert(v1.indexOf('src="coach-kpi-upload.js"') === -1,

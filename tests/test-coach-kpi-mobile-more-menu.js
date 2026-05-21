@@ -30,7 +30,7 @@ function assert(cond, msg) {
 }
 
 const ROOT = path.resolve(__dirname, '..');
-const ADMIN_HTML = fs.readFileSync(path.join(ROOT, 'admin.html'), 'utf8');
+const ADMIN_HTML = fs.readFileSync(path.join(ROOT, 'legacy-admin.html'), 'utf8');
 const ADMIN_V2_HTML = fs.readFileSync(path.join(ROOT, 'admin-v2.html'), 'utf8');
 const ADMIN_JS = fs.readFileSync(path.join(ROOT, 'admin.js'), 'utf8');
 const ADMIN_V2_JS = fs.readFileSync(path.join(ROOT, 'admin-v2.js'), 'utf8');

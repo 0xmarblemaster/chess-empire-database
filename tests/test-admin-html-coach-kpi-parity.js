@@ -21,7 +21,7 @@ function assert(cond, msg) {
 }
 
 const ROOT = path.resolve(__dirname, '..');
-const HTML = fs.readFileSync(path.join(ROOT, 'admin.html'), 'utf8');
+const HTML = fs.readFileSync(path.join(ROOT, 'legacy-admin.html'), 'utf8');
 
 // ── Nav item ─────────────────────────────────────────────────────────────────
 console.log('\n=== nav item present in admin.html ===================================\n');
