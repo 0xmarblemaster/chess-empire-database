@@ -3730,7 +3730,52 @@ function showRatingsManagement(updateHash = true) {
         dateInput.value = new Date().toISOString().split('T')[0];
     }
 
+    _wireRatingsUploadDropZone();
+
     lucide.createIcons();
+}
+
+function _wireRatingsUploadDropZone() {
+    if (window.__ratingsDropZoneWired) return;
+    const dz = document.getElementById('ratingsUploadDropZone');
+    if (!dz) return;
+
+    const setHover = (on) => {
+        dz.style.borderColor = on ? '#3b82f6' : '#cbd5e1';
+        dz.style.background = on ? '#eff6ff' : '';
+    };
+
+    dz.addEventListener('click', () => openCSVImportModal());
+
+    ['dragenter', 'dragover'].forEach(ev => {
+        dz.addEventListener(ev, (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            setHover(true);
+        });
+    });
+
+    dz.addEventListener('dragleave', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        setHover(false);
+    });
+
+    dz.addEventListener('drop', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        setHover(false);
+        const files = e.dataTransfer && e.dataTransfer.files;
+        if (!files || files.length === 0) return;
+        openCSVImportModal();
+        const input = document.getElementById('csvFileInput');
+        if (input) {
+            input.files = files;
+            input.dispatchEvent(new Event('change', { bubbles: true }));
+        }
+    });
+
+    window.__ratingsDropZoneWired = true;
 }
 
 // Load ratings data and populate table
