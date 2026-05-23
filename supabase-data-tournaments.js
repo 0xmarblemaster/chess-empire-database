@@ -788,7 +788,7 @@
             try {
                 const resp = await fetchFn(endpoint, {
                     method: 'GET',
-                    headers: { 'x-api-key': apiKey, 'Content-Type': 'application/json' },
+                    headers: { 'x-api-key': apiKey, 'Authorization': `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
                 });
                 if (!resp || !resp.ok) continue;
                 const body = await resp.json();
