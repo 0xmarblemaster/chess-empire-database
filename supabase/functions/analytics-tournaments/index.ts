@@ -662,6 +662,10 @@ serve(async (req) => {
     }
 
     if (action === 'school_kpi_summary') {
+      // Phase 2 (COACH_KPI_PHASE2_SPEC.md §7): read from tournaments_uploads +
+      // tournament_results, matching the source the coach_leaderboard action
+      // already uses. The legacy tournament_participants / tournaments path
+      // was retired with migrations 036/037/038.
       const windowStart = p('window_start')
       const windowEnd = p('window_end')
       const validationError = validateWindow(windowStart, windowEnd)
@@ -673,19 +677,33 @@ serve(async (req) => {
       const studentIds = (students || []).map((s: any) => s.id)
       const activeCount = studentIds.length
 
-      let parts: any[] = []
-      let proms: any[] = []
-      let razs: any[] = []
-      if (studentIds.length > 0) {
-        const { data: partsData, error: pErr } = await supabase
-          .from('tournament_participants')
-          .select('student_id, place, rating_delta, tournament:tournaments!inner(id, tournament_date)')
-          .in('student_id', studentIds)
-          .gte('tournament.tournament_date', windowStart)
-          .lte('tournament.tournament_date', windowEnd)
-        if (pErr) throw pErr
-        parts = (partsData || []).filter((r: any) => r.tournament)
+      // Tournaments uploaded in the window — drives total_tournaments and
+      // razryad-earning eligibility (razryad_3 / razryad_4 uploads only).
+      const { data: uploadsInWindow, error: upErr } = await supabase
+        .from('tournaments_uploads')
+        .select('id, kind, tournament_date')
+        .gte('tournament_date', windowStart)
+        .lte('tournament_date', windowEnd)
+      if (upErr) throw upErr
+      const uploads = uploadsInWindow || []
+      const uploadIds = uploads.map((u: any) => u.id)
+      const razryadUploadIds = new Set(
+        uploads.filter((u: any) => u.kind === 'razryad_3' || u.kind === 'razryad_4').map((u: any) => u.id)
+      )
 
+      let results: any[] = []
+      if (uploadIds.length > 0 && studentIds.length > 0) {
+        const { data: rs, error: rsErr } = await supabase
+          .from('tournament_results')
+          .select('upload_id, student_id, rank, score, games_played, rating_before, rating_delta, earned_razryad')
+          .in('upload_id', uploadIds)
+          .in('student_id', studentIds)
+        if (rsErr) throw rsErr
+        results = rs || []
+      }
+
+      let proms: any[] = []
+      if (studentIds.length > 0) {
         const { data: ev, error: evErr } = await supabase
           .from('student_league_events')
           .select('student_id, event_type, occurred_at')
@@ -695,31 +713,33 @@ serve(async (req) => {
           .lte('occurred_at', `${windowEnd}T23:59:59.999Z`)
         if (evErr) throw evErr
         proms = ev || []
-
-        const { data: rz, error: rzErr } = await supabase
-          .from('razryad_history')
-          .select('student_id, new_razryad, changed_at')
-          .in('student_id', studentIds)
-          .gte('changed_at', windowStart)
-          .lte('changed_at', `${windowEnd}T23:59:59.999Z`)
-        if (rzErr) throw rzErr
-        razs = (rz || []).filter((r: any) => r.new_razryad && r.new_razryad !== 'none')
       }
 
-      const tournamentIds = new Set<string>()
+      // Aggregate the Phase 2 results just like coach_leaderboard does:
+      //   - participants = students with games_played >= 1 in window
+      //   - top3 = results with rank <= 3 (rated games only)
+      //   - razryads earned = distinct students with earned_razryad on a
+      //                       razryad_3/razryad_4 upload
       const participantStudentIds = new Set<string>()
-      let top3 = 0
+      const razryadEarners = new Set<string>()
       let top1 = 0
+      let top3 = 0
       let totalDelta = 0
-      const deltaCount = parts.reduce((a, r) => a + (Number.isFinite(r.rating_delta) ? 1 : 0), 0)
-      for (const r of parts) {
-        tournamentIds.add(r.tournament.id)
+      let deltaCount = 0
+      for (const r of results) {
+        if ((Number(r.games_played) || 0) < 1) continue
         participantStudentIds.add(r.student_id)
-        if (Number.isFinite(r.place)) {
-          if (r.place === 1) top1++
-          if (r.place <= 3) top3++
+        if (Number.isFinite(r.rank)) {
+          if (r.rank === 1) top1++
+          if (r.rank <= 3) top3++
         }
-        if (Number.isFinite(r.rating_delta)) totalDelta += r.rating_delta
+        if (Number.isFinite(r.rating_delta)) {
+          totalDelta += Number(r.rating_delta)
+          deltaCount++
+        }
+        if (razryadUploadIds.has(r.upload_id) && r.earned_razryad) {
+          razryadEarners.add(r.student_id)
+        }
       }
 
       return json({
@@ -729,14 +749,14 @@ serve(async (req) => {
           active_students_count: activeCount,
           participants_count: participantStudentIds.size,
           participation_pct: activeCount > 0 ? Math.round((participantStudentIds.size / activeCount) * 1000) / 10 : 0,
-          total_tournaments: tournamentIds.size,
-          total_results: parts.length,
+          total_tournaments: uploads.length,
+          total_results: results.length,
           top1_count: top1,
           top3_count: top3,
-          total_rating_gained: totalDelta,
+          total_rating_gained: Math.round(totalDelta * 10) / 10,
           avg_rating_delta: deltaCount > 0 ? Math.round((totalDelta / deltaCount) * 100) / 100 : 0,
           promotions_count: proms.length,
-          new_razryads_count: razs.length,
+          new_razryads_count: razryadEarners.size,
         },
       })
     }

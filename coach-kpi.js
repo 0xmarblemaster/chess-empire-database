@@ -1079,8 +1079,122 @@
     }
 
     /**
+     * Resolve the initial view the dashboard should open on, given the role.
+     *   - Admin → 'school'
+     *   - Locked coach → 'coach'
+     *   - Anyone else → null (caller should not render)
+     */
+    function _initialView(roleInfo) {
+        if (roleLock && typeof roleLock.defaultView === 'function') {
+            return roleLock.defaultView(roleInfo);
+        }
+        if (roleInfo && roleInfo.isAdmin === true) return 'school';
+        if (roleInfo && roleInfo.coachId) return 'coach';
+        return null;
+    }
+
+    /**
+     * Fetch the data backing the school overview. The legacy
+     * `school_kpi_summary` endpoint still reads the pre-Phase 2 tables in
+     * some deployments, so we drive the school view from `coach_leaderboard`
+     * directly (the same Phase 2 source the per-coach leaderboard uses).
+     * Returns the parsed edge-function response, or null when the user is
+     * not allowed.
+     */
+    async function _fetchSchoolLeaderboard(roleInfo, params, opts) {
+        if (!roleLock || !roleLock.canViewCoachKpi(roleInfo)) return null;
+        if (!roleLock.canAccessView(roleInfo, 'school')) return null;
+        const p = params || {};
+        const win = resolveTimeWindow(p.window, p.now);
+        const query = {
+            action: 'coach_leaderboard',
+            window_start: win.start,
+            window_end: win.end,
+        };
+        if (p.branchId && p.branchId !== 'all') query.branch_id = p.branchId;
+        if (p.league && p.league !== 'all') query.league = p.league;
+        return callKpiEndpoint(query, opts);
+    }
+
+    /**
+     * Render the resolved dashboard payload into the school/coach host
+     * containers. Pure DOM — fetching is the caller's job.
+     *
+     * For the school view, `result.data` is the `coach_leaderboard` rows; the
+     * hero is rolled up via `aggregateSchoolHero` and the leaderboard rows
+     * are rendered as-is.
+     *
+     * For the coach view, `result.data` is the `coach_kpi_summary` payload
+     * `{ coach, hero, students }`; the hero comes from `result.data.hero`.
+     */
+    function _renderDashboard(view, result, t) {
+        if (typeof document === 'undefined') return;
+        const opts = { t };
+        if (view === 'school') {
+            const rows = (result && result.success && Array.isArray(result.data)) ? result.data : [];
+            const heroHost = document.getElementById('coach-kpi-school-hero');
+            if (heroHost) {
+                if (rows.length === 0) {
+                    renderEmptyState(heroHost, undefined, opts);
+                } else {
+                    renderSchoolHero(heroHost, aggregateSchoolHero(rows), opts);
+                }
+            }
+            const lbHost = document.getElementById('coach-kpi-school-leaderboard');
+            if (lbHost) renderLeaderboard(lbHost, rows, opts);
+            return;
+        }
+        if (view === 'coach') {
+            const data = (result && result.success && result.data) ? result.data : null;
+            const heroHost = document.getElementById('coach-kpi-coach-hero');
+            if (heroHost) {
+                if (!data || !data.hero) renderEmptyState(heroHost, undefined, opts);
+                else renderSchoolHero(heroHost, data.hero, opts);
+            }
+            const studentsHost = document.getElementById('coach-kpi-coach-students');
+            if (studentsHost) {
+                const students = (data && Array.isArray(data.students)) ? data.students : [];
+                if (students.length === 0) renderEmptyState(studentsHost, undefined, opts);
+                else renderLeaderboard(studentsHost, students, opts);
+            }
+            const razryadHost = document.getElementById('coach-kpi-coach-razryad-chart');
+            if (razryadHost) {
+                const counts = aggregateRazryadFromStudents(data && data.students);
+                renderRazryadDoughnut(razryadHost, counts, opts);
+            }
+            return;
+        }
+    }
+
+    /**
+     * Issue the right fetch for the given view (`school` uses
+     * coach_leaderboard, all others go through `loadDashboard`).
+     */
+    function _fetchForView(roleInfo, view, state, opts) {
+        if (view === 'school') return _fetchSchoolLeaderboard(roleInfo, state, opts);
+        return loadDashboard(roleInfo, view, state, opts);
+    }
+
+    /**
+     * Light debounce helper — coalesces rapid invocations into one trailing
+     * call after `ms` of quiet time. Used so the branch picker doesn't fire
+     * a fetch per keystroke when the user types a UUID directly.
+     */
+    function _debounce(fn, ms) {
+        let timer = null;
+        const set = (typeof setTimeout === 'function') ? setTimeout : null;
+        const clr = (typeof clearTimeout === 'function') ? clearTimeout : null;
+        if (!set) return fn;
+        return function (...args) {
+            if (timer && clr) clr(timer);
+            timer = set(() => { timer = null; fn.apply(this, args); }, ms);
+        };
+    }
+
+    /**
      * Thin DOM orchestrator wired from `showCoachPerformance` in admin(-v2).js.
-     * Renders the filter bar and leaderboard into their known host containers.
+     * Renders the filter bar + initial view payload (hero, leaderboard, charts)
+     * into their known host containers, and re-fetches on filter change.
      * Upload UI lives in the Rating Management modal — see admin-v2.html
      * #csvImportModal and admin-v2.js commitTournamentUpload().
      *
@@ -1104,9 +1218,29 @@
             return fb;
         };
 
+        const view = _initialView(roleInfo);
+        let state = defaultFilterState(roleInfo);
+
+        const refresh = () => {
+            Promise.resolve(_fetchForView(roleInfo, view, state, {}))
+                .then((result) => { _renderDashboard(view, result, t); })
+                .catch(() => { /* silent */ });
+        };
+
+        // Debounce so the branch picker's keystroke handler in the filter
+        // bar does not fire a fetch per keystroke (the <select> change event
+        // is normally one shot, but a few callers wire <input> typing).
+        const debouncedRefresh = _debounce(refresh, 250);
+
         const filtersHost = document.getElementById('coach-kpi-filters');
         if (filtersHost) {
-            renderFilters(filtersHost, defaultFilterState(roleInfo), { t });
+            renderFilters(filtersHost, state, {
+                t,
+                onChange: (next) => {
+                    state = normalizeFilters(next);
+                    debouncedRefresh();
+                },
+            });
         }
 
         const leaderboardHost = document.getElementById('coach-kpi-school-leaderboard');
@@ -1122,16 +1256,20 @@
         // After a successful upload from the merged Rating Management modal,
         // the leaderboard must refresh. The commit path dispatches a
         // coachKpiUploadCommitted window event — listen once.
-        _subscribeUploadCommittedOnce(roleInfo);
+        _subscribeUploadCommittedOnce(roleInfo, view, () => state);
+
+        // Fire the initial fetch + render after wiring listeners so the
+        // hero/leaderboard/charts are populated by first paint.
+        if (view) refresh();
     }
 
-    function _subscribeUploadCommittedOnce(roleInfo) {
+    function _subscribeUploadCommittedOnce(roleInfo, view, getState) {
         if (typeof window === 'undefined' || typeof window.addEventListener !== 'function') return;
         if (window.__kpiUploadCommittedSubscribed) return;
         window.__kpiUploadCommittedSubscribed = true;
         window.addEventListener('coachKpiUploadCommitted', () => {
-            // Best-effort refresh of the school leaderboard from coach_kpi_view.
-            // Errors are swallowed so a bad fetch can't break the close path.
+            // Best-effort refresh of the current view after an upload. Errors
+            // are swallowed so a bad fetch can't break the close path.
             try {
                 const adapter = (key, fb) => {
                     if (typeof window !== 'undefined' && window.i18n && typeof window.i18n.t === 'function') {
@@ -1140,12 +1278,10 @@
                     }
                     return fb;
                 };
-                Promise.resolve(loadDashboard(roleInfo, 'coach_kpi_view', null, {})).then((result) => {
-                    const host = document.getElementById('coach-kpi-school-leaderboard');
-                    if (!host) return;
-                    const rows = result && result.data && Array.isArray(result.data.rows) ? result.data.rows : [];
-                    renderLeaderboard(host, rows, { t: adapter });
-                }).catch(() => { /* silent */ });
+                const state = (typeof getState === 'function') ? getState() : defaultFilterState(roleInfo);
+                Promise.resolve(_fetchForView(roleInfo, view, state, {}))
+                    .then((result) => { _renderDashboard(view, result, adapter); })
+                    .catch(() => { /* silent */ });
             } catch (_) { /* silent */ }
         });
     }
@@ -1197,6 +1333,10 @@
         isKpiEmpty,
         fetchView,
         loadDashboard,
+        _fetchSchoolLeaderboard,
+        _renderDashboard,
+        _fetchForView,
+        _initialView,
         renderEmptyState,
         renderSchoolHero,
         renderLeaderboard,
