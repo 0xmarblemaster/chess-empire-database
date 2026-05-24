@@ -3303,7 +3303,9 @@ function csvPreviewHeaderHtml(kind) {
         date:   t('admin.ratings.colDate')   !== 'admin.ratings.colDate'   ? t('admin.ratings.colDate')   : 'Date',
         status: t('admin.ratings.colStatus') !== 'admin.ratings.colStatus' ? t('admin.ratings.colStatus') : 'Status',
         rank:   t('admin.coachKpi.rank'),
-        score:  t('admin.coachKpi.colScore'),
+        // Tournament-points column in the CSV preview — distinct from the
+        // retired Coach KPI composite score, so use a local label.
+        score:  t('admin.ratings.colScore') !== 'admin.ratings.colScore' ? t('admin.ratings.colScore') : 'Score',
         games:  t('admin.ratings.colGames')  !== 'admin.ratings.colGames'  ? t('admin.ratings.colGames')  : 'Games',
         delta:  t('admin.ratings.colDelta')  !== 'admin.ratings.colDelta'  ? t('admin.ratings.colDelta')  : 'ΔRating',
     };

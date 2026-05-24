@@ -3428,7 +3428,6 @@ window.translateStatus = translateStatus;
                     colTop3: 'Top-3 finishes',
                     colPromotions: 'Promotions',
                     colRazryads: 'Razryads earned',
-                    colScore: 'Score',
                     viewSchool: 'School',
                     viewBranch: 'Branch',
                     viewCoach: 'Coach'
@@ -3518,7 +3517,6 @@ window.translateStatus = translateStatus;
             coachKpiColRatingGained: 'Rating gained',
             coachKpiColPromotions: 'Promotions',
             coachKpiColRazryads: 'Razryads',
-            coachKpiColScore: 'Score',
             coachKpiRazryadKMS: 'KMS',
             coachKpiRazryad1st: '1st',
             coachKpiRazryad2nd: '2nd',
@@ -3735,7 +3733,6 @@ window.translateStatus = translateStatus;
                     colTop3: 'Топ-3 места',
                     colPromotions: 'Повышения лиги',
                     colRazryads: 'Полученные разряды',
-                    colScore: 'Балл',
                     viewSchool: 'Школа',
                     viewBranch: 'Филиал',
                     viewCoach: 'Тренер'
@@ -3825,7 +3822,6 @@ window.translateStatus = translateStatus;
             coachKpiColRatingGained: 'Прирост рейтинга',
             coachKpiColPromotions: 'Повышения',
             coachKpiColRazryads: 'Разряды',
-            coachKpiColScore: 'Балл',
             coachKpiRazryadKMS: 'КМС',
             coachKpiRazryad1st: '1-й разряд',
             coachKpiRazryad2nd: '2-й разряд',
@@ -3869,7 +3865,6 @@ window.translateStatus = translateStatus;
                     colTop3: 'Топ-3 орын',
                     colPromotions: 'Лига көтерілуі',
                     colRazryads: 'Алынған разрядтар',
-                    colScore: 'Ұпай',
                     viewSchool: 'Мектеп',
                     viewBranch: 'Бөлімше',
                     viewCoach: 'Жаттықтырушы'
@@ -3910,7 +3905,6 @@ window.translateStatus = translateStatus;
             coachKpiColRatingGained: 'Рейтинг өсімі',
             coachKpiColPromotions: 'Көтерілулер',
             coachKpiColRazryads: 'Разрядтар',
-            coachKpiColScore: 'Ұпай',
             coachKpiRazryadKMS: 'ХШҚ',
             coachKpiRazryad1st: '1-разряд',
             coachKpiRazryad2nd: '2-разряд',
