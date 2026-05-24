@@ -178,7 +178,8 @@
     /**
      * Stable sort of a coach leaderboard. Numeric columns sort descending by
      * default (more is better); `coach_name` and `branches` sort ascending.
-     * Unknown keys fall back to `composite_score` desc — the headline metric.
+     * Unknown keys fall back to `total_tournaments` desc — the headline visible
+     * metric once the composite Score column was retired.
      */
     function sortLeaderboard(rows, sortKey, direction) {
         const list = Array.isArray(rows) ? rows.slice() : [];
@@ -187,7 +188,7 @@
             ? direction
             : (ascDefault ? 'asc' : 'desc');
         const mult = dir === 'asc' ? 1 : -1;
-        const key = (sortKey && (sortKey in (list[0] || {}))) ? sortKey : 'composite_score';
+        const key = (sortKey && (sortKey in (list[0] || {}))) ? sortKey : 'total_tournaments';
 
         return list
             .map((row, i) => ({ row, i }))
@@ -600,9 +601,8 @@
     }
 
     /**
-     * Render the coach leaderboard table. Sorts and color-codes the
-     * composite score column. Empty / non-array `rows` falls through to
-     * `renderEmptyState` so callers don't need a separate branch.
+     * Render the coach leaderboard table. Empty / non-array `rows` falls
+     * through to `renderEmptyState` so callers don't need a separate branch.
      */
     function renderLeaderboard(container, rows, opts) {
         if (typeof document === 'undefined' || !container) return;
@@ -626,12 +626,10 @@
                 _el('th', { text: label('coachKpiColRatingGained', 'Rating gained') }),
                 _el('th', { text: label('coachKpiColPromotions', 'Promotions') }),
                 _el('th', { text: label('coachKpiColRazryads', 'Razryads') }),
-                _el('th', { text: label('coachKpiColScore', 'Score') }),
             ]),
         ]);
         const tbody = _el('tbody');
         for (const row of sorted) {
-            const color = scoreColor(row.composite_score);
             tbody.appendChild(_el('tr', { dataset: { coachId: row.coach_id || '' } }, [
                 _el('td', { text: row.coach_name || '—' }),
                 _el('td', { text: formatHeroValue(row.active_students_count) }),
@@ -640,7 +638,6 @@
                 _el('td', { text: formatHeroValue(row.total_rating_gained, { signed: true }) }),
                 _el('td', { text: formatHeroValue(row.promotions_count) }),
                 _el('td', { text: formatHeroValue(row.new_razryads_count) }),
-                _el('td', { className: `kpi-score kpi-score-${color}`, text: formatScore(row.composite_score) }),
             ]));
         }
         table.appendChild(thead);
@@ -1098,12 +1095,11 @@
     /**
      * Phase 2 leaderboard table — columns per COACH_KPI_PHASE2_SPEC.md §4:
      *   rank, coach name, branch, active students, tournament entries,
-     *   avg rating delta, top-3 finishes, promotions, razryads earned,
-     *   composite score.
+     *   avg rating delta, top-3 finishes, promotions, razryads earned.
      *
-     * Sorted by composite_score desc with tie-break on participation_rate
-     * desc (spec §1 / §4). Equal-score ties render at the same rank with the
-     * next rank skipped — "D-style behavior".
+     * Sorted by tournament_entries desc with tie-break on participation_rate
+     * desc — replaces the retired composite_score sort. Equal pairs render at
+     * the same rank with the next rank skipped — "D-style behavior".
      */
     function renderPhase2Leaderboard(container, rows, opts) {
         if (typeof document === 'undefined' || !container) return;
@@ -1117,23 +1113,23 @@
             return;
         }
 
-        // Composite-score-desc primary, participation_rate-desc tie-break.
+        // tournament_entries-desc primary, participation_rate-desc tie-break.
         const sorted = rows.slice().sort((a, b) => {
-            const ac = Number(a.composite_score) || 0;
-            const bc = Number(b.composite_score) || 0;
-            if (bc !== ac) return bc - ac;
+            const ae = Number(a.tournament_entries) || 0;
+            const be = Number(b.tournament_entries) || 0;
+            if (be !== ae) return be - ae;
             const ap = Number(a.participation_rate) || 0;
             const bp = Number(b.participation_rate) || 0;
             return bp - ap;
         });
 
-        // D-style rank assignment: same composite + same participation_rate → same rank.
+        // D-style rank assignment: same entries + same participation_rate → same rank.
         const ranks = [];
         for (let i = 0; i < sorted.length; i++) {
             if (i > 0) {
                 const prev = sorted[i - 1];
                 const cur = sorted[i];
-                if (Number(prev.composite_score) === Number(cur.composite_score)
+                if (Number(prev.tournament_entries) === Number(cur.tournament_entries)
                     && Number(prev.participation_rate) === Number(cur.participation_rate)) {
                     ranks.push(ranks[i - 1]);
                     continue;
@@ -1155,12 +1151,10 @@
                 _el('th', { text: label('admin.coachKpi.colTop3', 'Top-3 finishes') }),
                 _el('th', { text: label('admin.coachKpi.colPromotions', 'Promotions') }),
                 _el('th', { text: label('admin.coachKpi.colRazryads', 'Razryads earned') }),
-                _el('th', { text: label('admin.coachKpi.colScore', 'Score') }),
             ]),
         ]);
         const tbody = _el('tbody');
         sorted.forEach((row, i) => {
-            const color = scoreColor(row.composite_score);
             const branches = Array.isArray(row.branches) ? row.branches.join(', ') : (row.branch || '—');
             tbody.appendChild(_el('tr', { dataset: { coachId: row.coach_id || '' } }, [
                 _el('td', { text: String(ranks[i]) }),
@@ -1172,7 +1166,6 @@
                 _el('td', { text: formatHeroValue(row.top3_count) }),
                 _el('td', { text: formatHeroValue(row.promotions_count) }),
                 _el('td', { text: formatHeroValue(row.new_razryads_count) }),
-                _el('td', { className: `kpi-score kpi-score-${color}`, text: formatScore(row.composite_score) }),
             ]));
         });
         table.appendChild(thead);
