@@ -5143,7 +5143,8 @@ tr[data-student-id] {
 }
 
 #section-coach-kpi .kpi-filter-league,
-#section-coach-kpi .kpi-filter-branch {
+#section-coach-kpi .kpi-filter-branch,
+#section-coach-kpi .kpi-filter-coach {
     padding: 0.625rem 0.875rem;
     border: 1px solid #e2e8f0;
     border-radius: 0.5rem;
@@ -5155,12 +5156,14 @@ tr[data-student-id] {
 }
 
 #section-coach-kpi .kpi-filter-league:hover,
-#section-coach-kpi .kpi-filter-branch:hover {
+#section-coach-kpi .kpi-filter-branch:hover,
+#section-coach-kpi .kpi-filter-coach:hover {
     border-color: #cbd5e1;
 }
 
 #section-coach-kpi .kpi-filter-league:focus,
-#section-coach-kpi .kpi-filter-branch:focus {
+#section-coach-kpi .kpi-filter-branch:focus,
+#section-coach-kpi .kpi-filter-coach:focus {
     outline: none;
     border-color: #d97706;
     box-shadow: 0 0 0 3px rgb(217 119 6 / 0.1);
@@ -5502,7 +5505,8 @@ tr[data-student-id] {
         text-align: center;
     }
     #section-coach-kpi .kpi-filter-league,
-    #section-coach-kpi .kpi-filter-branch {
+    #section-coach-kpi .kpi-filter-branch,
+    #section-coach-kpi .kpi-filter-coach {
         width: 100%;
     }
     .kpi-view-switcher {
