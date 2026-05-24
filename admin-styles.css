@@ -5450,32 +5450,6 @@ tr[data-student-id] {
     min-height: 320px;
 }
 
-#section-coach-kpi .kpi-score {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    min-width: 2.5rem;
-    padding: 0.25rem 0.625rem;
-    border-radius: 999px;
-    font-weight: 700;
-    font-size: 0.8125rem;
-}
-
-#section-coach-kpi .kpi-score-red {
-    background: #fee2e2;
-    color: #b91c1c;
-}
-
-#section-coach-kpi .kpi-score-amber {
-    background: #fef3c7;
-    color: #b45309;
-}
-
-#section-coach-kpi .kpi-score-green {
-    background: #dcfce7;
-    color: #15803d;
-}
-
 #section-coach-kpi .kpi-insights {
     background: #fffbeb;
     border-left: 4px solid #f59e0b;
