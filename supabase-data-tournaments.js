@@ -773,7 +773,8 @@
 
         const config = opts.config || (typeof window !== 'undefined' && window.supabaseConfig) || {};
         const url = config.url || '';
-        const apiKey = config.anonKey || config.apiKey || 'ce-api-2026-k8x9m2p4q7w1';
+        const edgeApiKey = config.apiKey || 'ce-api-2026-k8x9m2p4q7w1';
+        const gatewayJwt = config.anonKey || '';
         const days = Number.isFinite(opts.days) ? opts.days : 90;
 
         const leagues = (!league || league === 'All') ? ['A', 'B', 'C'] : [league];
@@ -788,7 +789,7 @@
             try {
                 const resp = await fetchFn(endpoint, {
                     method: 'GET',
-                    headers: { 'x-api-key': apiKey, 'Authorization': `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
+                    headers: { 'x-api-key': edgeApiKey, 'Authorization': `Bearer ${gatewayJwt}`, 'Content-Type': 'application/json' },
                 });
                 if (!resp || !resp.ok) continue;
                 const body = await resp.json();

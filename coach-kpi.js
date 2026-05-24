@@ -312,12 +312,13 @@
         if (!fetchFn) return { success: false, error: 'fetch unavailable' };
         const config = o.config || (typeof window !== 'undefined' && window.supabaseConfig) || {};
         const url = config.url || '';
-        const apiKey = config.anonKey || config.apiKey || '';
+        const edgeApiKey = config.apiKey || 'ce-api-2026-k8x9m2p4q7w1';
+        const gatewayJwt = config.anonKey || '';
         const endpoint = `${url}/functions/v1/analytics-tournaments?${encodeQuery(query)}`;
         try {
             const resp = await fetchFn(endpoint, {
                 method: 'GET',
-                headers: { 'x-api-key': apiKey, 'Authorization': `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
+                headers: { 'x-api-key': edgeApiKey, 'Authorization': `Bearer ${gatewayJwt}`, 'Content-Type': 'application/json' },
             });
             if (!resp || !resp.ok) {
                 return { success: false, error: `HTTP ${resp ? resp.status : 'no-response'}` };
