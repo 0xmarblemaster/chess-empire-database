@@ -3527,7 +3527,7 @@ window.translateStatus = translateStatus;
             coachKpiAvgPlace: 'Avg place',
             coachKpiChartUnavailable: 'Chart.js not loaded',
             coachKpiEmptyTitle: 'No data yet',
-            coachKpiEmptyState: 'Coach KPI data not yet available — apply migrations 036/037/038 on Supabase to enable.',
+            coachKpiEmptyState: 'No data yet for this window.',
             coachKpiNoDataYet: 'No data yet for this window.'
         },
         ru: {
@@ -3832,7 +3832,7 @@ window.translateStatus = translateStatus;
             coachKpiAvgPlace: 'Среднее место',
             coachKpiChartUnavailable: 'Chart.js не загружен',
             coachKpiEmptyTitle: 'Данных пока нет',
-            coachKpiEmptyState: 'Данные KPI ещё недоступны — примените миграции 036/037/038 в Supabase.',
+            coachKpiEmptyState: 'За выбранный период данных пока нет.',
             coachKpiNoDataYet: 'За выбранный период данных пока нет.'
         },
         kk: {
@@ -3915,7 +3915,7 @@ window.translateStatus = translateStatus;
             coachKpiAvgPlace: 'Орташа орын',
             coachKpiChartUnavailable: 'Chart.js жүктелмеген',
             coachKpiEmptyTitle: 'Әзірге деректер жоқ',
-            coachKpiEmptyState: 'Жаттықтырушы KPI деректері әлі қолжетімсіз — Supabase-те 036/037/038 миграцияларын қолданыңыз.',
+            coachKpiEmptyState: 'Бұл кезеңде әзірге деректер жоқ.',
             coachKpiNoDataYet: 'Бұл кезеңде әзірге деректер жоқ.'
         }
     };

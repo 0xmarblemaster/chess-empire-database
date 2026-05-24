@@ -226,11 +226,10 @@ assertEqual(
     0,
     'non-numeric column treated as 0 (never NaN)');
 
-console.log('\n=== isKpiEmpty (Phase 2 migrations-not-applied predicate) =============\n');
-// Phase 2: migrations 036/037/038 may not be live yet, so the edge function
-// can come back null, 4xx (`success:false`), or an empty payload. The
-// predicate must catch all three so the renderer can fall back to the
-// friendly "apply migrations" card.
+console.log('\n=== isKpiEmpty (empty-payload predicate) =============================\n');
+// The edge function can come back null, 4xx (`success:false`), or an empty
+// payload (no tournaments uploaded for the window). The predicate must catch
+// all three so the renderer can fall back to a friendly "no data yet" card.
 assertEqual(kpi.isKpiEmpty(null),                                       true,  'null → empty');
 assertEqual(kpi.isKpiEmpty(undefined),                                  true,  'undefined → empty');
 assertEqual(kpi.isKpiEmpty('not an object'),                            true,  'non-object → empty');
@@ -302,10 +301,10 @@ function _findHelper(card) {
     assertEqual(card.attributes.role, 'status',
         'empty card has role="status" for assistive tech');
     const helper = _findHelper(card);
-    assert(helper && /Coach KPI data not yet available/.test(helper.textContent),
-        'empty card shows the migrations-not-applied helper text');
-    assert(helper && /036\/037\/038/.test(helper.textContent),
-        'empty card names migrations 036/037/038 so on-call knows which to apply');
+    assert(helper && /No data yet/i.test(helper.textContent),
+        'empty card shows a generic "no data yet" helper line');
+    assert(helper && !/migration|036|037|038/i.test(helper.textContent),
+        'empty-state copy never leaks migration filenames to end users');
 })();
 
 (function testRenderEmptyStateCustomMessage() {
@@ -314,7 +313,7 @@ function _findHelper(card) {
     const helper = _findHelper(c.children[0]);
     assertEqual(helper && helper.textContent,
         'No tournaments in this window.',
-        'custom message overrides the default migration string');
+        'custom message overrides the default empty-state copy');
 })();
 
 (function testRenderEmptyStateNoContainer() {
@@ -326,8 +325,9 @@ function _findHelper(card) {
 
 (function testRenderEmptyStateConstantExported() {
     assert(typeof kpi.EMPTY_STATE_MESSAGE === 'string'
-        && /036\/037\/038/.test(kpi.EMPTY_STATE_MESSAGE),
-        'EMPTY_STATE_MESSAGE exported so other modules can reuse the same copy');
+        && kpi.EMPTY_STATE_MESSAGE.length > 0
+        && !/migration|036|037|038/i.test(kpi.EMPTY_STATE_MESSAGE),
+        'EMPTY_STATE_MESSAGE exported and free of operator-facing migration notes');
 })();
 
 console.log('\n=== renderSchoolHero falls back to empty state ========================\n');

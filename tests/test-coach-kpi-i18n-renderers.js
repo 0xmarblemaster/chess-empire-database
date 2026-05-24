@@ -259,7 +259,7 @@ console.log('\n=== renderEmptyState helper + title localize through opts.t =====
     // The default helper resolves via coachKpiEmptyState, which we deliberately
     // do not stub in RU — so the English fallback should land here. (Russian
     // copy is verified end-to-end in test-coach-kpi-i18n.js.)
-    assert(helper && /Coach KPI data not yet available/.test(helper.textContent),
+    assert(helper && /No data yet/i.test(helper.textContent),
         'empty-state helper falls back to English coachKpiEmptyState when t() returns the key');
 })();
 

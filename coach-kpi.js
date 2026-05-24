@@ -32,8 +32,7 @@
     const DEFAULT_LEAGUE = 'all';
     const DEFAULT_BRANCH = 'all';
     const SCORE_THRESHOLDS = Object.freeze({ red: 40, amber: 70 });
-    const EMPTY_STATE_MESSAGE =
-        'Coach KPI data not yet available — apply migrations 036/037/038 on Supabase to enable.';
+    const EMPTY_STATE_MESSAGE = 'No data yet for this window.';
 
     const WINDOW_LABELS = Object.freeze({
         '30d': '30 days',

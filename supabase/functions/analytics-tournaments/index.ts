@@ -395,13 +395,15 @@ serve(async (req) => {
 
       let results: any[] = []
       if (uploadIds.length > 0 && allStudentIds.length > 0) {
+        // Same URL-length pitfall as school_kpi_summary — filter client-side
+        // on student_id instead of stuffing 700+ UUIDs into the query string.
         const { data: rs, error: rsErr } = await supabase
           .from('tournament_results')
           .select('upload_id, student_id, rank, score, games_played, rating_before, rating_delta, earned_razryad')
           .in('upload_id', uploadIds)
-          .in('student_id', allStudentIds)
-        if (rsErr) throw rsErr
-        results = rs || []
+        if (rsErr) { console.error('coach_leaderboard tournament_results error', rsErr); throw rsErr }
+        const allStudentSet = new Set(allStudentIds)
+        results = (rs || []).filter((r: any) => allStudentSet.has(r.student_id))
       }
 
       // 4. League promotions in window (existing 038 trigger).
@@ -410,12 +412,12 @@ serve(async (req) => {
         const { data: ev, error: evErr } = await supabase
           .from('student_league_events')
           .select('student_id, event_type, occurred_at')
-          .in('student_id', allStudentIds)
           .eq('event_type', 'promotion')
           .gte('occurred_at', windowStart)
           .lte('occurred_at', `${windowEnd}T23:59:59.999Z`)
-        if (evErr) throw evErr
-        promotions = ev || []
+        if (evErr) { console.error('coach_leaderboard promotions error', evErr); throw evErr }
+        const allStudentSet = new Set(allStudentIds)
+        promotions = (ev || []).filter((e: any) => allStudentSet.has(e.student_id))
       }
 
       // 5. School-wide max abs avg-delta across coaches (denominator for
@@ -551,37 +553,65 @@ serve(async (req) => {
       if (stErr) throw stErr
       const studentIds = (students || []).map((s: any) => s.id)
 
+      // Per-coach Phase 2 read: pull uploads in window, then the coach's
+      // students' results joined to those uploads. Mirrors coach_leaderboard
+      // and replaces the legacy tournament_participants source (which the
+      // upload flow never populates).
+      const { data: uploadsInWindow, error: upErr } = await supabase
+        .from('tournaments_uploads')
+        .select('id, kind, tournament_date')
+        .gte('tournament_date', windowStart)
+        .lte('tournament_date', windowEnd)
+      if (upErr) { console.error('coach_kpi_summary uploads error', upErr); throw upErr }
+      const uploadsList = uploadsInWindow || []
+      const uploadIdList = uploadsList.map((u: any) => u.id)
+      const uploadByIdMap = new Map<string, any>()
+      for (const u of uploadsList) uploadByIdMap.set((u as any).id, u)
+
       let parts: any[] = []
       let proms: any[] = []
       let razs: any[] = []
-      if (studentIds.length > 0) {
+      if (studentIds.length > 0 && uploadIdList.length > 0) {
+        const studentSet = new Set(studentIds)
         const { data: partsData, error: pErr } = await supabase
-          .from('tournament_participants')
-          .select('student_id, place, rating_delta, tournament:tournaments!inner(id, tournament_date, name, league)')
-          .in('student_id', studentIds)
-          .gte('tournament.tournament_date', windowStart)
-          .lte('tournament.tournament_date', windowEnd)
-        if (pErr) throw pErr
-        parts = (partsData || []).filter((r: any) => r.tournament)
+          .from('tournament_results')
+          .select('upload_id, student_id, rank, score, games_played, rating_before, rating_delta, earned_razryad')
+          .in('upload_id', uploadIdList)
+        if (pErr) { console.error('coach_kpi_summary tournament_results error', pErr); throw pErr }
+        parts = (partsData || [])
+          .filter((r: any) => studentSet.has(r.student_id) && (Number(r.games_played) || 0) >= 1)
+          .map((r: any) => {
+            const u = uploadByIdMap.get(r.upload_id)
+            return {
+              student_id: r.student_id,
+              place: Number(r.rank),
+              rating_delta: Number(r.rating_delta) || 0,
+              tournament: u
+                ? { id: u.id, tournament_date: u.tournament_date, kind: u.kind }
+                : null,
+            }
+          })
+          .filter((r: any) => r.tournament)
+      }
 
+      if (studentIds.length > 0) {
+        const studentSet = new Set(studentIds)
         const { data: ev, error: evErr } = await supabase
           .from('student_league_events')
           .select('student_id, event_type, from_league, to_league, occurred_at')
-          .in('student_id', studentIds)
           .eq('event_type', 'promotion')
           .gte('occurred_at', windowStart)
           .lte('occurred_at', `${windowEnd}T23:59:59.999Z`)
-        if (evErr) throw evErr
-        proms = ev || []
+        if (evErr) { console.error('coach_kpi_summary promotions error', evErr); throw evErr }
+        proms = (ev || []).filter((e: any) => studentSet.has(e.student_id))
 
         const { data: rz, error: rzErr } = await supabase
           .from('razryad_history')
           .select('student_id, old_razryad, new_razryad, changed_at')
-          .in('student_id', studentIds)
           .gte('changed_at', windowStart)
           .lte('changed_at', `${windowEnd}T23:59:59.999Z`)
-        if (rzErr) throw rzErr
-        razs = (rz || []).filter((r: any) => r.new_razryad && r.new_razryad !== 'none')
+        if (rzErr) { console.error('coach_kpi_summary razryad_history error', rzErr); throw rzErr }
+        razs = (rz || []).filter((r: any) => studentSet.has(r.student_id) && r.new_razryad && r.new_razryad !== 'none')
       }
 
       // Per-student breakdown.
@@ -673,7 +703,7 @@ serve(async (req) => {
 
       const { data: students, error: stErr } = await supabase
         .from('students').select('id, status').eq('status', 'active')
-      if (stErr) throw stErr
+      if (stErr) { console.error('school_kpi students error', stErr); throw stErr }
       const studentIds = (students || []).map((s: any) => s.id)
       const activeCount = studentIds.length
 
@@ -684,7 +714,7 @@ serve(async (req) => {
         .select('id, kind, tournament_date')
         .gte('tournament_date', windowStart)
         .lte('tournament_date', windowEnd)
-      if (upErr) throw upErr
+      if (upErr) { console.error('school_kpi uploads error', upErr); throw upErr }
       const uploads = uploadsInWindow || []
       const uploadIds = uploads.map((u: any) => u.id)
       const razryadUploadIds = new Set(
@@ -693,26 +723,32 @@ serve(async (req) => {
 
       let results: any[] = []
       if (uploadIds.length > 0 && studentIds.length > 0) {
+        // Scope by upload_id only — student_id is implicit from the FK and a
+        // .in() with hundreds of student UUIDs blows past PostgREST's URL limit
+        // (~8KB), which surfaces here as a generic "Bad Request" with no code.
         const { data: rs, error: rsErr } = await supabase
           .from('tournament_results')
           .select('upload_id, student_id, rank, score, games_played, rating_before, rating_delta, earned_razryad')
           .in('upload_id', uploadIds)
-          .in('student_id', studentIds)
-        if (rsErr) throw rsErr
-        results = rs || []
+        if (rsErr) { console.error('school_kpi tournament_results error', rsErr); throw rsErr }
+        const activeStudentSet = new Set(studentIds)
+        results = (rs || []).filter((r: any) => activeStudentSet.has(r.student_id))
       }
 
       let proms: any[] = []
       if (studentIds.length > 0) {
+        // Skip the .in('student_id', ...) — see note above. We need only the
+        // count of promotion events from coach-rostered students in window;
+        // every student in the table is in scope at the school level anyway.
         const { data: ev, error: evErr } = await supabase
           .from('student_league_events')
           .select('student_id, event_type, occurred_at')
-          .in('student_id', studentIds)
           .eq('event_type', 'promotion')
           .gte('occurred_at', windowStart)
           .lte('occurred_at', `${windowEnd}T23:59:59.999Z`)
-        if (evErr) throw evErr
-        proms = ev || []
+        if (evErr) { console.error('school_kpi promotions error', evErr); throw evErr }
+        const activeStudentSet = new Set(studentIds)
+        proms = (ev || []).filter((e: any) => activeStudentSet.has(e.student_id))
       }
 
       // Aggregate the Phase 2 results just like coach_leaderboard does:
@@ -763,6 +799,19 @@ serve(async (req) => {
 
     return json({ success: false, error: 'Invalid action. Use: list, detail, student_history, branch_leaderboard, coach_leaderboard, coach_kpi_summary, school_kpi_summary' }, 400)
   } catch (error) {
-    return json({ success: false, error: error instanceof Error ? error.message : String(error) }, 500)
+    // PostgREST/supabase-js errors are plain objects with { message, code, details, hint }
+    // — not Error instances — so `error.message` and String(error) lose everything.
+    // Serialize the full shape so the caller (and console logs) can see what failed.
+    let payload: unknown
+    if (error instanceof Error) {
+      payload = { message: error.message, name: error.name, stack: error.stack }
+    } else if (error && typeof error === 'object') {
+      const e = error as Record<string, unknown>
+      payload = { message: e.message, code: e.code, details: e.details, hint: e.hint }
+    } else {
+      payload = { message: String(error) }
+    }
+    console.error('analytics-tournaments error:', payload)
+    return json({ success: false, error: payload }, 500)
   }
 })
