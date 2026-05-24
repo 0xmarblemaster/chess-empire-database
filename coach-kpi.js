@@ -1224,7 +1224,7 @@
         const refresh = () => {
             Promise.resolve(_fetchForView(roleInfo, view, state, {}))
                 .then((result) => { _renderDashboard(view, result, t); })
-                .catch(() => { /* silent */ });
+                .catch((err) => { console.warn('[coach-kpi] refresh failed:', err); });
         };
 
         // Debounce so the branch picker's keystroke handler in the filter
