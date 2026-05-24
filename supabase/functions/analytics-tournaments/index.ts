@@ -725,22 +725,67 @@ serve(async (req) => {
       // was retired with migrations 036/037/038.
       const windowStart = p('window_start')
       const windowEnd = p('window_end')
+      const schoolBranchId = p('branch_id') // optional
+      // League A was retired from the internal tournament rotation (spec §10);
+      // map only B/C to upload kinds. Any other value is ignored.
+      const schoolLeagueParam = p('league')
+      const schoolLeagueKind = schoolLeagueParam === 'B' ? 'league_b'
+        : schoolLeagueParam === 'C' ? 'league_c'
+        : null
       const validationError = validateWindow(windowStart, windowEnd)
       if (validationError) return json({ success: false, error: validationError }, 400)
 
-      const { data: students, error: stErr } = await supabase
-        .from('students').select('id, status').eq('status', 'active')
+      // Active students — scoped to the branch when branch_id is given. The
+      // branch lives on the coach (via coach_branches), not on the student
+      // directly, so we resolve coaches → students through the junction.
+      let scopedCoachIds: string[] | null = null
+      if (schoolBranchId) {
+        const { data: cb, error: cbErr } = await supabase
+          .from('coach_branches').select('coach_id').eq('branch_id', schoolBranchId)
+        if (cbErr) { console.error('school_kpi coach_branches error', cbErr); throw cbErr }
+        scopedCoachIds = (cb || []).map((r: any) => r.coach_id)
+      }
+
+      let studentsQuery = supabase
+        .from('students').select('id, status, coach_id').eq('status', 'active')
+      if (scopedCoachIds !== null) {
+        if (scopedCoachIds.length === 0) {
+          return json({
+            success: true,
+            data: {
+              window: { start: windowStart, end: windowEnd },
+              active_students_count: 0,
+              participants_count: 0,
+              participation_pct: 0,
+              total_tournaments: 0,
+              total_results: 0,
+              top1_count: 0,
+              top3_count: 0,
+              total_rating_gained: 0,
+              avg_rating_delta: 0,
+              promotions_count: 0,
+              new_razryads_count: 0,
+              branch_id: schoolBranchId,
+              league: schoolLeagueParam || null,
+            },
+          })
+        }
+        studentsQuery = studentsQuery.in('coach_id', scopedCoachIds)
+      }
+      const { data: students, error: stErr } = await studentsQuery
       if (stErr) { console.error('school_kpi students error', stErr); throw stErr }
       const studentIds = (students || []).map((s: any) => s.id)
       const activeCount = studentIds.length
 
       // Tournaments uploaded in the window — drives total_tournaments and
       // razryad-earning eligibility (razryad_3 / razryad_4 uploads only).
-      const { data: uploadsInWindow, error: upErr } = await supabase
+      let schoolUploadsQuery = supabase
         .from('tournaments_uploads')
         .select('id, kind, tournament_date')
         .gte('tournament_date', windowStart)
         .lte('tournament_date', windowEnd)
+      if (schoolLeagueKind) schoolUploadsQuery = schoolUploadsQuery.eq('kind', schoolLeagueKind)
+      const { data: uploadsInWindow, error: upErr } = await schoolUploadsQuery
       if (upErr) { console.error('school_kpi uploads error', upErr); throw upErr }
       const uploads = uploadsInWindow || []
       const uploadIds = uploads.map((u: any) => u.id)
@@ -820,6 +865,8 @@ serve(async (req) => {
           avg_rating_delta: deltaCount > 0 ? Math.round((totalDelta / deltaCount) * 100) / 100 : 0,
           promotions_count: proms.length,
           new_razryads_count: razryadEarners.size,
+          branch_id: schoolBranchId || null,
+          league: schoolLeagueParam || null,
         },
       })
     }

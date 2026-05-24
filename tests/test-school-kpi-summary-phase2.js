@@ -73,5 +73,17 @@ console.log('\n=== source contract: only counts rated games (games_played >= 1) 
 assert(/games_played/.test(BLOCK),
     'gates aggregation on games_played (matches coach_leaderboard rule)');
 
+console.log('\n=== source contract: school_kpi_summary honors branch_id + league =====\n');
+assert(/p\(['"]branch_id['"]\)/.test(BLOCK),
+    'school_kpi_summary reads the `branch_id` query param');
+assert(/coach_branches/.test(BLOCK),
+    'school_kpi_summary resolves branch → students via coach_branches junction');
+assert(/p\(['"]league['"]\)/.test(BLOCK),
+    'school_kpi_summary reads the `league` query param');
+assert(/league_b/.test(BLOCK) && /league_c/.test(BLOCK),
+    'school_kpi_summary maps league B/C to upload kinds league_b / league_c');
+assert(!/['"]league_a['"]/.test(BLOCK),
+    'school_kpi_summary never maps to league_a (retired from internal rotation)');
+
 console.log(`\n--- ${passed} passed, ${failed} failed ---\n`);
 if (failed > 0) process.exit(1);
