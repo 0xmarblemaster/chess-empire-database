@@ -31,6 +31,7 @@
     const LEAGUES = Object.freeze(['all', 'A', 'B', 'C']);
     const DEFAULT_LEAGUE = 'all';
     const DEFAULT_BRANCH = 'all';
+    const DEFAULT_COACH = 'all';
     const SCORE_THRESHOLDS = Object.freeze({ red: 40, amber: 70 });
     const EMPTY_STATE_MESSAGE = 'No data yet for this window.';
 
@@ -209,6 +210,17 @@
     }
 
     /**
+     * Filter the leaderboard to a single coach by id. Missing coach / empty
+     * id / 'all' → input unchanged. Rows without a matching `coach_id` are
+     * dropped — the leaderboard is row-per-coach so this is a 1-or-0 result.
+     */
+    function filterLeaderboardByCoach(rows, coachId) {
+        const list = Array.isArray(rows) ? rows.slice() : [];
+        if (!coachId || coachId === 'all') return list;
+        return list.filter(r => r && r.coach_id === coachId);
+    }
+
+    /**
      * Roll a coach leaderboard up into the six PRD §5 hero numbers for the
      * school overview. Used as a fallback if `school_kpi_summary` is
      * unavailable; the edge function is still the source of truth when it
@@ -243,7 +255,12 @@
      * today — see `getInitialBranchScope` / `getInitialCoachScope`).
      */
     function defaultFilterState(_roleInfo) {
-        return { window: DEFAULT_WINDOW, league: DEFAULT_LEAGUE, branchId: DEFAULT_BRANCH };
+        return {
+            window: DEFAULT_WINDOW,
+            league: DEFAULT_LEAGUE,
+            branchId: DEFAULT_BRANCH,
+            coachId: DEFAULT_COACH,
+        };
     }
 
     /**
@@ -260,7 +277,10 @@
         const branchId = (typeof i.branchId === 'string' && i.branchId.length > 0)
             ? i.branchId
             : DEFAULT_BRANCH;
-        return { window: win, league: lg, branchId };
+        const coachId = (typeof i.coachId === 'string' && i.coachId.length > 0)
+            ? i.coachId
+            : DEFAULT_COACH;
+        return { window: win, league: lg, branchId, coachId };
     }
 
     /**
@@ -866,6 +886,14 @@
      *
      * `opts.branches` — array of `{ id, name }` or strings. When empty, the
      * branch selector is rendered but only offers "All branches".
+     * `opts.coaches` — array of coach roster entries. Each entry should carry
+     * `id` plus `first_name`/`last_name` (snake_case from the edge function)
+     * or the camelCase `firstName`/`lastName` shape returned by
+     * window.supabaseData.getCoaches.
+     * `opts.view` — `'school'` | `'branch'` | `'coach'`. The Coach dropdown
+     * is only rendered on the school view; the branch and coach views are
+     * already scoped to a single coach (or a branch of coaches) so a school-
+     * wide coach picker would be misleading there.
      * `opts.t(key, fallback)` — optional i18n lookup. When absent the labels
      * fall back to the hard-coded English strings in WINDOW_LABELS /
      * LEAGUE_LABELS.
@@ -881,6 +909,16 @@
         const branchOptions = (Array.isArray(o.branches) ? o.branches : [])
             .map(b => (typeof b === 'string' ? { id: b, name: b } : b))
             .filter(b => b && typeof b.id === 'string' && b.id.length > 0);
+
+        const coachOptions = (Array.isArray(o.coaches) ? o.coaches : [])
+            .filter(c => c && typeof c.id === 'string' && c.id.length > 0)
+            .map(c => {
+                const first = c.first_name || c.firstName || '';
+                const last  = c.last_name  || c.lastName  || '';
+                const full = `${first} ${last}`.trim() || c.coach_name || c.name || c.id;
+                return { id: c.id, name: full };
+            });
+        const showCoachSelect = o.view === 'school';
 
         container.innerHTML = '';
         const root = _el('div', { className: 'kpi-filters', role: 'group' });
@@ -960,7 +998,11 @@
         branchSelect.value = state.branchId;
         branchSelect.addEventListener && branchSelect.addEventListener('change', (e) => {
             const value = (e && e.target && e.target.value) || branchSelect.value;
-            const next = normalizeFilters({ ...state, branchId: value });
+            // Changing branch invalidates the current coach selection — the
+            // coach roster a school admin sees may not include coaches from
+            // the newly picked branch. Reset coachId to "all" so the next
+            // render's coach dropdown is consistent with the rows we fetch.
+            const next = normalizeFilters({ ...state, branchId: value, coachId: 'all' });
             if (onChange) onChange(next);
         });
         const branchField = _el('div', { className: 'filter-group' }, [
@@ -971,6 +1013,40 @@
             branchSelect,
         ]);
         root.appendChild(branchField);
+
+        if (showCoachSelect) {
+            const coachSelect = _el('select', {
+                className: 'kpi-filter-coach',
+                'aria-label': label('coachKpiCoachGroup', 'Coach'),
+            });
+            const allCoachOpt = _el('option', {
+                value: 'all',
+                text: label('coachKpiCoachAll', 'All coaches'),
+            });
+            if (state.coachId === 'all') allCoachOpt.setAttribute('selected', 'selected');
+            coachSelect.appendChild(allCoachOpt);
+            for (const c of coachOptions) {
+                const opt = _el('option', { value: c.id, text: c.name });
+                if (state.coachId === c.id) opt.setAttribute('selected', 'selected');
+                coachSelect.appendChild(opt);
+            }
+            coachSelect.value = state.coachId;
+            coachSelect.addEventListener && coachSelect.addEventListener('change', (e) => {
+                const value = (e && e.target && e.target.value) || coachSelect.value;
+                // Coach change leaves branch alone — the user may have picked
+                // a branch first and then narrowed to a single coach in it.
+                const next = normalizeFilters({ ...state, coachId: value });
+                if (onChange) onChange(next);
+            });
+            const coachField = _el('div', { className: 'filter-group' }, [
+                _el('label', {
+                    className: 'filter-label',
+                    text: label('coachKpiCoachGroup', 'Coach'),
+                }),
+                coachSelect,
+            ]);
+            root.appendChild(coachField);
+        }
 
         container.appendChild(root);
         _rememberRender('renderFilters', container, [current, o]);
@@ -1127,15 +1203,27 @@
      * For the coach view, `result.data` is the `coach_kpi_summary` payload
      * `{ coach, hero, students }`; the hero comes from `result.data.hero`.
      */
-    function _renderDashboard(view, result, t) {
+    function _renderDashboard(view, result, t, state) {
         if (typeof document === 'undefined') return;
         const opts = { t };
         if (view === 'school') {
-            const rows = (result && result.success && Array.isArray(result.data)) ? result.data : [];
+            const rawRows = (result && result.success && Array.isArray(result.data)) ? result.data : [];
+            const s = state || {};
+            const afterBranch = filterLeaderboardByBranch(rawRows, s.branchId);
+            const rows = filterLeaderboardByCoach(afterBranch, s.coachId);
             const heroHost = document.getElementById('coach-kpi-school-hero');
             if (heroHost) {
                 if (rows.length === 0) {
                     renderEmptyState(heroHost, undefined, opts);
+                } else if (s.coachId && s.coachId !== 'all') {
+                    // A single-coach filter is a hard re-cut of the school
+                    // hero — the edge function's school_kpi_summary card
+                    // (and the aggregated coach_leaderboard fallback) both
+                    // count school-wide totals, which would lie when the
+                    // user has narrowed the leaderboard to one coach.
+                    // Re-derive the hero from the filtered rows so the cards
+                    // match what is actually shown below.
+                    renderSchoolHero(heroHost, aggregateSchoolHero(rows), opts);
                 } else {
                     renderSchoolHero(heroHost, aggregateSchoolHero(rows), opts);
                 }
@@ -1220,14 +1308,15 @@
 
         let view = _initialView(roleInfo);
         let state = defaultFilterState(roleInfo);
-        // Populated asynchronously by _loadBranches below. renderFilters reads
-        // this on every paint, so the dropdown updates when the roster
-        // arrives.
+        // The branch/coach rosters are loaded once below; renderFilters reads
+        // them out of these closures so a re-render after a filter change
+        // doesn't re-fetch.
         let branches = [];
+        let coaches = [];
 
         const refresh = () => {
             Promise.resolve(_fetchForView(roleInfo, view, state, {}))
-                .then((result) => { _renderDashboard(view, result, t); })
+                .then((result) => { _renderDashboard(view, result, t, state); })
                 .catch((err) => { console.warn('[coach-kpi] refresh failed:', err); });
         };
 
@@ -1241,26 +1330,33 @@
             state = normalizeFilters(next);
             if (filtersHost) {
                 renderFilters(filtersHost, state, {
-                    t, onChange: handleFilterChange, branches,
+                    t, onChange: handleFilterChange,
+                    branches, coaches, view,
                 });
             }
             debouncedRefresh();
         }
         if (filtersHost) {
             renderFilters(filtersHost, state, {
-                t, onChange: handleFilterChange, branches,
+                t, onChange: handleFilterChange,
+                branches, coaches, view,
             });
         }
 
-        // The Branch dropdown was previously never populated because
-        // initCoachKpi never passed opts.branches to renderFilters — the
-        // <select> only ever offered "All branches". Load the roster from
-        // window.supabaseData.getBranches and re-render once it lands.
-        _loadBranches().then((loaded) => {
-            branches = loaded;
+        // Load the branch + coach rosters in parallel so the filter dropdowns
+        // can populate without blocking the initial fetch. The previous
+        // implementation never populated branches at all (initCoachKpi never
+        // passed opts.branches to renderFilters), so the Branch dropdown only
+        // ever showed "All branches" — fixed here by loading via
+        // window.supabaseData.getBranches / getCoaches and re-rendering once
+        // the rosters arrive.
+        _loadRosters().then((rosters) => {
+            branches = rosters.branches;
+            coaches = rosters.coaches;
             if (filtersHost) {
                 renderFilters(filtersHost, state, {
-                    t, onChange: handleFilterChange, branches,
+                    t, onChange: handleFilterChange,
+                    branches, coaches, view,
                 });
             }
         });
@@ -1270,7 +1366,17 @@
             renderLeaderboard(leaderboardHost, [], { t });
         }
 
-        _wireViewTabs(roleInfo, () => view, (next) => { view = next; }, debouncedRefresh);
+        _wireViewTabs(roleInfo, () => view, (next) => {
+            view = next;
+            // Re-render the filter bar so the Coach dropdown appears /
+            // disappears as the user switches views.
+            if (filtersHost) {
+                renderFilters(filtersHost, state, {
+                    t, onChange: handleFilterChange,
+                    branches, coaches, view,
+                });
+            }
+        }, debouncedRefresh);
 
         // Subscribe AFTER first paint so the cache is non-empty by the time
         // the user can flip languages. Idempotent via the __kpiLangSubscribed
@@ -1288,22 +1394,27 @@
     }
 
     /**
-     * Load the branches roster from the project's data access layer. Tolerant
-     * of a missing data access layer (server-side tests, partially-initialised
-     * pages) and of method-level failures — any failure resolves to an empty
-     * array so the dashboard always renders.
+     * Load the branches + coaches roster in parallel. Tolerant of a missing
+     * data access layer (server-side tests, partially-initialised pages) and
+     * of method-level failures — any failure resolves to an empty array so
+     * the dashboard always renders.
      */
-    function _loadBranches() {
+    function _loadRosters() {
         const da = (typeof window !== 'undefined' && window.supabaseData) || null;
-        if (!da || typeof da.getBranches !== 'function') return Promise.resolve([]);
-        try {
-            return Promise.resolve(da.getBranches()).then(
-                (v) => (Array.isArray(v) ? v : []),
-                () => [],
-            );
-        } catch (_) {
-            return Promise.resolve([]);
-        }
+        const safe = (fn) => {
+            if (!da || typeof da[fn] !== 'function') return Promise.resolve([]);
+            try {
+                return Promise.resolve(da[fn]()).then(
+                    (v) => (Array.isArray(v) ? v : []),
+                    () => [],
+                );
+            } catch (_) {
+                return Promise.resolve([]);
+            }
+        };
+        return Promise.all([safe('getBranches'), safe('getCoaches')])
+            .then(([branches, coaches]) => ({ branches, coaches }))
+            .catch(() => ({ branches: [], coaches: [] }));
     }
 
     // View-tab DOM contract — mirrors admin-v2.html #section-coach-kpi:
@@ -1410,7 +1521,7 @@
                 const state = (typeof getState === 'function') ? getState() : defaultFilterState(roleInfo);
                 const view = (typeof getView === 'function') ? getView() : null;
                 Promise.resolve(_fetchForView(roleInfo, view, state, {}))
-                    .then((result) => { _renderDashboard(view, result, adapter); })
+                    .then((result) => { _renderDashboard(view, result, adapter, state); })
                     .catch(() => { /* silent */ });
             } catch (_) { /* silent */ }
         });
@@ -1436,6 +1547,7 @@
         LEAGUES,
         DEFAULT_LEAGUE,
         DEFAULT_BRANCH,
+        DEFAULT_COACH,
         WINDOW_LABELS,
         LEAGUE_LABELS,
         SCORE_THRESHOLDS,
@@ -1454,6 +1566,7 @@
         isStudentInactive,
         sortLeaderboard,
         filterLeaderboardByBranch,
+        filterLeaderboardByCoach,
         aggregateSchoolHero,
         aggregateRazryadFromStudents,
         defaultFilterState,

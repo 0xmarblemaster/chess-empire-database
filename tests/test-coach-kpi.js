@@ -388,32 +388,32 @@ console.log('\n=== renderLeaderboard falls back to empty state =================
 
 console.log('\n=== defaultFilterState / normalizeFilters =============================\n');
 assertEqual(kpi.defaultFilterState(),
-    { window: '90d', league: 'all', branchId: 'all' },
-    'default: 90d window, all leagues, all branches');
+    { window: '90d', league: 'all', branchId: 'all', coachId: 'all' },
+    'default: 90d window, all leagues, all branches, all coaches');
 assertEqual(kpi.defaultFilterState(ADMIN),
-    { window: '90d', league: 'all', branchId: 'all' },
+    { window: '90d', league: 'all', branchId: 'all', coachId: 'all' },
     'roleInfo passed through: admin → same defaults (transparency model)');
 assertEqual(kpi.defaultFilterState(COACH),
-    { window: '90d', league: 'all', branchId: 'all' },
+    { window: '90d', league: 'all', branchId: 'all', coachId: 'all' },
     'roleInfo passed through: coach → same defaults');
 
 assertEqual(kpi.normalizeFilters({ window: '30d', league: 'A', branchId: 'b-1' }),
-    { window: '30d', league: 'A', branchId: 'b-1' },
+    { window: '30d', league: 'A', branchId: 'b-1', coachId: 'all' },
     'normalizeFilters: valid input passes through unchanged');
 assertEqual(kpi.normalizeFilters({ window: 'bogus', league: 'D', branchId: '' }),
-    { window: '90d', league: 'all', branchId: 'all' },
+    { window: '90d', league: 'all', branchId: 'all', coachId: 'all' },
     'normalizeFilters: bogus values fall back to defaults');
 assertEqual(kpi.normalizeFilters(null),
-    { window: '90d', league: 'all', branchId: 'all' },
+    { window: '90d', league: 'all', branchId: 'all', coachId: 'all' },
     'normalizeFilters(null) → defaults (no crash)');
 assertEqual(kpi.normalizeFilters({}),
-    { window: '90d', league: 'all', branchId: 'all' },
+    { window: '90d', league: 'all', branchId: 'all', coachId: 'all' },
     'normalizeFilters({}) → defaults');
 assertEqual(kpi.normalizeFilters({ window: 'ytd' }),
-    { window: 'ytd', league: 'all', branchId: 'all' },
+    { window: 'ytd', league: 'all', branchId: 'all', coachId: 'all' },
     'normalizeFilters: partial update keeps requested field, defaults the rest');
 assertEqual(kpi.normalizeFilters({ branchId: 123 }),
-    { window: '90d', league: 'all', branchId: 'all' },
+    { window: '90d', league: 'all', branchId: 'all', coachId: 'all' },
     'normalizeFilters: non-string branchId rejected');
 
 console.log('\n=== renderFilters (DOM stub) ==========================================\n');
@@ -521,7 +521,7 @@ function _branchSelect(root) {
     const pill30d = pills.find(p => p.dataset.window === '30d');
     pill30d.dispatch('click');
     assertEqual(events[events.length - 1],
-        { window: '30d', league: 'all', branchId: 'all' },
+        { window: '30d', league: 'all', branchId: 'all', coachId: 'all' },
         'window pill click fires onChange with updated state');
 
     // Clicking the already-active pill should NOT re-fire onChange.
