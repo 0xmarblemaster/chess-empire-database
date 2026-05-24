@@ -1220,6 +1220,10 @@
 
         let view = _initialView(roleInfo);
         let state = defaultFilterState(roleInfo);
+        // Populated asynchronously by _loadBranches below. renderFilters reads
+        // this on every paint, so the dropdown updates when the roster
+        // arrives.
+        let branches = [];
 
         const refresh = () => {
             Promise.resolve(_fetchForView(roleInfo, view, state, {}))
@@ -1236,13 +1240,30 @@
         function handleFilterChange(next) {
             state = normalizeFilters(next);
             if (filtersHost) {
-                renderFilters(filtersHost, state, { t, onChange: handleFilterChange });
+                renderFilters(filtersHost, state, {
+                    t, onChange: handleFilterChange, branches,
+                });
             }
             debouncedRefresh();
         }
         if (filtersHost) {
-            renderFilters(filtersHost, state, { t, onChange: handleFilterChange });
+            renderFilters(filtersHost, state, {
+                t, onChange: handleFilterChange, branches,
+            });
         }
+
+        // The Branch dropdown was previously never populated because
+        // initCoachKpi never passed opts.branches to renderFilters — the
+        // <select> only ever offered "All branches". Load the roster from
+        // window.supabaseData.getBranches and re-render once it lands.
+        _loadBranches().then((loaded) => {
+            branches = loaded;
+            if (filtersHost) {
+                renderFilters(filtersHost, state, {
+                    t, onChange: handleFilterChange, branches,
+                });
+            }
+        });
 
         const leaderboardHost = document.getElementById('coach-kpi-school-leaderboard');
         if (leaderboardHost) {
@@ -1264,6 +1285,25 @@
         // Fire the initial fetch + render after wiring listeners so the
         // hero/leaderboard/charts are populated by first paint.
         if (view) refresh();
+    }
+
+    /**
+     * Load the branches roster from the project's data access layer. Tolerant
+     * of a missing data access layer (server-side tests, partially-initialised
+     * pages) and of method-level failures — any failure resolves to an empty
+     * array so the dashboard always renders.
+     */
+    function _loadBranches() {
+        const da = (typeof window !== 'undefined' && window.supabaseData) || null;
+        if (!da || typeof da.getBranches !== 'function') return Promise.resolve([]);
+        try {
+            return Promise.resolve(da.getBranches()).then(
+                (v) => (Array.isArray(v) ? v : []),
+                () => [],
+            );
+        } catch (_) {
+            return Promise.resolve([]);
+        }
     }
 
     // View-tab DOM contract — mirrors admin-v2.html #section-coach-kpi:
