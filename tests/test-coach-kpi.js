@@ -45,7 +45,8 @@ for (const name of apiNames) {
 }
 assertEqual(kpi.TIME_WINDOWS, ['30d', '90d', 'ytd'], 'TIME_WINDOWS exported (no "all" — dropped Phase 2)');
 assertEqual(kpi.DEFAULT_WINDOW, '90d', 'DEFAULT_WINDOW = 90d');
-assertEqual(kpi.LEAGUES, ['all', 'A', 'B', 'C'], 'LEAGUES exported');
+assertEqual(kpi.LEAGUES, ['all', 'B', 'C'],
+    'LEAGUES exported (no League A — retired from internal tournament rotation)');
 assertEqual(kpi.DEFAULT_LEAGUE, 'all', 'DEFAULT_LEAGUE = all');
 assertEqual(kpi.DEFAULT_BRANCH, 'all', 'DEFAULT_BRANCH = all');
 assertEqual(kpi.SCORE_THRESHOLDS, { red: 40, amber: 70 }, 'SCORE_THRESHOLDS exported');
@@ -400,12 +401,15 @@ assertEqual(kpi.defaultFilterState(COACH),
     { window: '90d', league: 'all', branchId: 'all', coachId: 'all' },
     'roleInfo passed through: coach → same defaults');
 
-assertEqual(kpi.normalizeFilters({ window: '30d', league: 'A', branchId: 'b-1' }),
-    { window: '30d', league: 'A', branchId: 'b-1', coachId: 'all' },
+assertEqual(kpi.normalizeFilters({ window: '30d', league: 'B', branchId: 'b-1' }),
+    { window: '30d', league: 'B', branchId: 'b-1', coachId: 'all' },
     'normalizeFilters: valid input passes through unchanged');
 assertEqual(kpi.normalizeFilters({ window: 'bogus', league: 'D', branchId: '' }),
     { window: '90d', league: 'all', branchId: 'all', coachId: 'all' },
     'normalizeFilters: bogus values fall back to defaults');
+assertEqual(kpi.normalizeFilters({ league: 'A' }),
+    { window: '90d', league: 'all', branchId: 'all', coachId: 'all' },
+    'normalizeFilters: League A is no longer a valid filter — falls back to all');
 assertEqual(kpi.normalizeFilters(null),
     { window: '90d', league: 'all', branchId: 'all', coachId: 'all' },
     'normalizeFilters(null) → defaults (no crash)');
@@ -484,7 +488,11 @@ function _branchSelect(root) {
     const leagueSelect = _leagueSelect(root);
     assertEqual(leagueSelect.tagName, 'select', 'league control is a <select>');
     assertEqual(leagueSelect.value, 'all', 'league defaults to "all"');
-    assertEqual(leagueSelect.children.length, 4, 'league has all/A/B/C options');
+    // League A was retired from the internal tournament rotation; only
+    // all / B / C remain as filter options.
+    assertEqual(leagueSelect.children.length, 3, 'league has all/B/C options (no League A)');
+    const leagueValues = leagueSelect.children.map(o => o.attributes.value);
+    assertEqual(leagueValues.includes('A'), false, 'no League A option in the league select');
 
     const branchSelect = _branchSelect(root);
     assertEqual(branchSelect.tagName, 'select', 'branch control is a <select>');
@@ -536,11 +544,11 @@ function _branchSelect(root) {
     assertEqual(events.length, before + 1,
         'clicking a different pill fires onChange (current state still 90d in initial render)');
 
-    // Change the league select.
+    // Change the league select. (League A is no longer offered — use B.)
     const leagueSelect = _leagueSelect(root);
-    leagueSelect.value = 'A';
-    leagueSelect.dispatch('change', { target: { value: 'A' } });
-    assertEqual(events[events.length - 1].league, 'A',
+    leagueSelect.value = 'B';
+    leagueSelect.dispatch('change', { target: { value: 'B' } });
+    assertEqual(events[events.length - 1].league, 'B',
         'league select change fires onChange with new league');
     assertEqual(events[events.length - 1].window, '90d',
         'league change preserves window (parent owns state, child returns full snapshot)');
@@ -672,9 +680,10 @@ assertEqual(
 
 console.log('\n=== buildKpiQuery filters (league + branch) ============================\n');
 // League filter: passes through for every view when non-empty / non-'all'.
+// (League A was retired from the filter; B and C are the remaining options.)
 assertEqual(
-    kpi.buildKpiQuery(ADMIN, 'school', { league: 'A', now: NOW }).league,
-    'A', 'school + league=A → league:"A" added to query');
+    kpi.buildKpiQuery(ADMIN, 'school', { league: 'B', now: NOW }).league,
+    'B', 'school + league=B → league:"B" added to query');
 assertEqual(
     kpi.buildKpiQuery(ADMIN, 'coach', { coachId: 'coach-uuid-2', league: 'B', now: NOW }).league,
     'B', 'coach + league=B → league:"B" added to query');
@@ -707,7 +716,7 @@ assert(
 const BQ_FULL = kpi.buildKpiQuery(ADMIN, 'branch', {
     branchName: 'Debut',
     branchId: 'branch-id-debut',
-    league: 'A',
+    league: 'B',
     window: '30d',
     now: NOW,
 });
@@ -717,7 +726,7 @@ assertEqual(BQ_FULL, {
     window_start: '2026-04-15',
     window_end: '2026-05-14',
     branch_id: 'branch-id-debut',
-    league: 'A',
+    league: 'B',
 }, 'all filters combined: action + time window + branch + league');
 
 console.log('\n=== callKpiEndpoint (fetch wrapper) ===================================\n');
@@ -829,7 +838,7 @@ async function runFetchTests() {
     // League + branch filters surface in the actual URL for every action.
     let leaderboardUrl = '';
     await kpi.fetchView(ADMIN, 'branch', {
-        branchName: 'Debut', branchId: 'b-debut', league: 'A', window: '30d', now: NOW,
+        branchName: 'Debut', branchId: 'b-debut', league: 'B', window: '30d', now: NOW,
     }, {
         fetch: (u) => { leaderboardUrl = u; return Promise.resolve({ ok: true, status: 200, json: () => Promise.resolve({ success: true, data: [] }) }); },
         config: { url: 'https://x', apiKey: 'k' },
@@ -838,7 +847,7 @@ async function runFetchTests() {
         'branch view fetch issues coach_leaderboard action');
     assert(/branch_id=b-debut/.test(leaderboardUrl),
         'branch view fetch includes branch_id in URL');
-    assert(/league=A/.test(leaderboardUrl),
+    assert(/league=B/.test(leaderboardUrl),
         'branch view fetch includes league filter in URL');
     assert(/window_start=2026-04-15/.test(leaderboardUrl),
         'branch view fetch includes resolved window_start (30d preset)');

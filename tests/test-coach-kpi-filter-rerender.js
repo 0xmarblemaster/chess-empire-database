@@ -223,17 +223,18 @@ async function runStateClosureTest() {
 
     const filtersHost = dom.elements['coach-kpi-filters'];
 
-    // 1) Change the league via the dropdown to 'A'.
+    // 1) Change the league via the dropdown to 'B'. (League A was retired
+    //    from the filter list; B and C are the only options now.)
     const leagueSelect = findLeagueSelect(filtersHost);
     assert(leagueSelect !== null, 'league <select> exists');
     if (leagueSelect) {
-        leagueSelect.value = 'A';
-        leagueSelect.dispatch('change', { target: { value: 'A' } });
+        leagueSelect.value = 'B';
+        leagueSelect.dispatch('change', { target: { value: 'B' } });
     }
     // Debounce.
     await new Promise((r) => setTimeout(r, 400));
 
-    // 2) Now click 30d. The new fetch URL must carry BOTH league=A AND the 30d window.
+    // 2) Now click 30d. The new fetch URL must carry BOTH league=B AND the 30d window.
     const beforeClick = stub.calls.length;
     const pill30 = findPillByWindow(filtersHost, '30d');
     assert(pill30 !== null, '30d pill exists after league change');
@@ -243,8 +244,8 @@ async function runStateClosureTest() {
     assert(stub.calls.length > beforeClick,
         'clicking 30d after a league change issues a fresh fetch');
     const lastUrl = stub.calls[stub.calls.length - 1].url;
-    assert(/league=A/.test(lastUrl),
-        'latest fetch URL retains league=A (no stale closure overwrote it)');
+    assert(/league=B/.test(lastUrl),
+        'latest fetch URL retains league=B (no stale closure overwrote it)');
     // 30d window is 30 days end-inclusive.
     const m = /window_start=(\d{4}-\d{2}-\d{2})&window_end=(\d{4}-\d{2}-\d{2})/.exec(lastUrl);
     if (m) {
@@ -254,12 +255,12 @@ async function runStateClosureTest() {
         assert(days === 30, `30d window produces a 30-day range (got ${days})`);
     }
 
-    // 3) Active pill should now be 30d, and the league select should still be 'A'.
+    // 3) Active pill should now be 30d, and the league select should still be 'B'.
     assert(activeWindow(filtersHost) === '30d',
         'after league + 30d clicks: active window pill = 30d');
     const leagueSelectAfter = findLeagueSelect(filtersHost);
-    assert(leagueSelectAfter && leagueSelectAfter.value === 'A',
-        'after re-render: league <select> retains value="A"');
+    assert(leagueSelectAfter && leagueSelectAfter.value === 'B',
+        'after re-render: league <select> retains value="B"');
 
     finish();
 }

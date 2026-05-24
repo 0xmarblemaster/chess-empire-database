@@ -28,7 +28,10 @@
     // current calendar month, with 30d/90d/ytd as the user-facing presets).
     const TIME_WINDOWS = Object.freeze(['30d', '90d', 'ytd']);
     const DEFAULT_WINDOW = '90d';
-    const LEAGUES = Object.freeze(['all', 'A', 'B', 'C']);
+    // League A is intentionally absent — it was retired from the internal
+    // tournament rotation in COACH_KPI_PHASE2_SPEC.md §10 ("League A — not
+    // part of internal tournament rotation"). Only B and C are filterable.
+    const LEAGUES = Object.freeze(['all', 'B', 'C']);
     const DEFAULT_LEAGUE = 'all';
     const DEFAULT_BRANCH = 'all';
     const DEFAULT_COACH = 'all';
@@ -42,6 +45,15 @@
     });
     const LEAGUE_LABELS = Object.freeze({
         all: 'All leagues',
+        B: 'League B',
+        C: 'League C',
+    });
+    // The internal-tournament charts (renderTournamentsByLeagueStackedBar /
+    // renderTournamentsByLeagueBar) still display historical League A counts
+    // when the source data includes them — that's a passive read-side display,
+    // not an interactive filter, so keep A in the plot order even though the
+    // user-facing pill is gone.
+    const LEAGUE_PLOT_LABELS = Object.freeze({
         A: 'League A',
         B: 'League B',
         C: 'League C',
@@ -762,7 +774,7 @@
         const canvas = _mountCanvas(container);
         const labels = list.map(b => b.branch_name || b.branchName || b.name || '—');
         const datasets = LEAGUE_PLOT_ORDER.map(lg => ({
-            label: label('coachKpiLeague' + lg, LEAGUE_LABELS[lg]),
+            label: label('coachKpiLeague' + lg, LEAGUE_PLOT_LABELS[lg]),
             data: list.map(b => {
                 const lc = b.league_counts || b.leagueCounts || {};
                 return Number(lc[lg]) || 0;
@@ -810,7 +822,7 @@
             return null;
         }
         const canvas = _mountCanvas(container);
-        const labels = LEAGUE_PLOT_ORDER.map(lg => label('coachKpiLeague' + lg, LEAGUE_LABELS[lg]));
+        const labels = LEAGUE_PLOT_ORDER.map(lg => label('coachKpiLeague' + lg, LEAGUE_PLOT_LABELS[lg]));
         const data = LEAGUE_PLOT_ORDER.map(lg => Number(counts && counts[lg]) || 0);
         const colors = LEAGUE_PLOT_ORDER.map(lg => LEAGUE_COLORS[lg]);
         const inst = new ChartCtor(canvas, {
@@ -1601,6 +1613,7 @@
         DEFAULT_COACH,
         WINDOW_LABELS,
         LEAGUE_LABELS,
+        LEAGUE_PLOT_LABELS,
         SCORE_THRESHOLDS,
         EMPTY_STATE_MESSAGE,
         RAZRYAD_ORDER,
