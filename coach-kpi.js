@@ -1218,7 +1218,7 @@
             return fb;
         };
 
-        const view = _initialView(roleInfo);
+        let view = _initialView(roleInfo);
         let state = defaultFilterState(roleInfo);
 
         const refresh = () => {
@@ -1249,6 +1249,8 @@
             renderLeaderboard(leaderboardHost, [], { t });
         }
 
+        _wireViewTabs(roleInfo, () => view, (next) => { view = next; }, debouncedRefresh);
+
         // Subscribe AFTER first paint so the cache is non-empty by the time
         // the user can flip languages. Idempotent via the __kpiLangSubscribed
         // flag inside subscribeLanguageEvents.
@@ -1257,14 +1259,100 @@
         // After a successful upload from the merged Rating Management modal,
         // the leaderboard must refresh. The commit path dispatches a
         // coachKpiUploadCommitted window event — listen once.
-        _subscribeUploadCommittedOnce(roleInfo, view, () => state);
+        _subscribeUploadCommittedOnce(roleInfo, () => view, () => state);
 
         // Fire the initial fetch + render after wiring listeners so the
         // hero/leaderboard/charts are populated by first paint.
         if (view) refresh();
     }
 
-    function _subscribeUploadCommittedOnce(roleInfo, view, getState) {
+    // View-tab DOM contract — mirrors admin-v2.html #section-coach-kpi:
+    //   - three buttons .kpi-view-btn[data-kpi-view=school|branch|coach]
+    //   - three panels  #coach-kpi-{school,branch,coach}-view
+    // tests/test-coach-kpi-section-container.js pins the panel ids.
+    const _VIEW_PANEL_IDS = Object.freeze({
+        school: 'coach-kpi-school-view',
+        branch: 'coach-kpi-branch-view',
+        coach: 'coach-kpi-coach-view',
+    });
+
+    function _wireViewTabs(roleInfo, getView, setView, debouncedRefresh) {
+        if (typeof document === 'undefined') return;
+        const section = document.getElementById('section-coach-kpi');
+        let buttons = null;
+        if (section && typeof section.querySelectorAll === 'function') {
+            buttons = section.querySelectorAll('.kpi-view-btn[data-kpi-view]');
+        } else if (typeof document.querySelectorAll === 'function') {
+            buttons = document.querySelectorAll('#section-coach-kpi .kpi-view-btn[data-kpi-view]');
+        }
+        if (!buttons || buttons.length === 0) return;
+
+        // If the role lock refuses every non-current view, do not wire — locked
+        // coaches see a single allowed view and switching is intentionally off.
+        const reachable = [];
+        buttons.forEach((btn) => {
+            const target = btn.dataset && btn.dataset.kpiView;
+            if (target && roleLock && roleLock.canAccessView(roleInfo, target)) {
+                reachable.push(target);
+            }
+        });
+        if (reachable.length <= 1) return;
+
+        buttons.forEach((btn) => {
+            btn.addEventListener('click', () => {
+                const target = btn.dataset && btn.dataset.kpiView;
+                if (!target) return;
+                if (roleLock && !roleLock.canAccessView(roleInfo, target)) return;
+                if (target === getView()) return;
+                setView(target);
+                _applyViewTabState(target, buttons);
+                debouncedRefresh();
+            });
+        });
+    }
+
+    function _applyViewTabState(view, buttons) {
+        if (typeof document === 'undefined') return;
+        if (buttons && buttons.forEach) {
+            buttons.forEach((btn) => {
+                const target = btn.dataset && btn.dataset.kpiView;
+                const isActive = target === view;
+                if (btn.classList && typeof btn.classList.toggle === 'function') {
+                    btn.classList.toggle('is-active', isActive);
+                } else {
+                    const cls = (btn.className || '').split(/\s+/).filter(c => c && c !== 'is-active');
+                    if (isActive) cls.push('is-active');
+                    btn.className = cls.join(' ');
+                }
+                btn.setAttribute('aria-selected', isActive ? 'true' : 'false');
+            });
+        }
+        for (const v of Object.keys(_VIEW_PANEL_IDS)) {
+            const panel = document.getElementById(_VIEW_PANEL_IDS[v]);
+            if (!panel) continue;
+            const isActive = v === view;
+            if (isActive) {
+                panel.removeAttribute('hidden');
+                if (panel.classList && typeof panel.classList.add === 'function') {
+                    panel.classList.add('is-active');
+                } else {
+                    const cls = (panel.className || '').split(/\s+/).filter(c => c && c !== 'is-active');
+                    cls.push('is-active');
+                    panel.className = cls.join(' ');
+                }
+            } else {
+                panel.setAttribute('hidden', '');
+                if (panel.classList && typeof panel.classList.remove === 'function') {
+                    panel.classList.remove('is-active');
+                } else {
+                    const cls = (panel.className || '').split(/\s+/).filter(c => c && c !== 'is-active');
+                    panel.className = cls.join(' ');
+                }
+            }
+        }
+    }
+
+    function _subscribeUploadCommittedOnce(roleInfo, getView, getState) {
         if (typeof window === 'undefined' || typeof window.addEventListener !== 'function') return;
         if (window.__kpiUploadCommittedSubscribed) return;
         window.__kpiUploadCommittedSubscribed = true;
@@ -1280,6 +1368,7 @@
                     return fb;
                 };
                 const state = (typeof getState === 'function') ? getState() : defaultFilterState(roleInfo);
+                const view = (typeof getView === 'function') ? getView() : null;
                 Promise.resolve(_fetchForView(roleInfo, view, state, {}))
                     .then((result) => { _renderDashboard(view, result, adapter); })
                     .catch(() => { /* silent */ });
