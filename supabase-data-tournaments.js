@@ -773,7 +773,7 @@
 
         const config = opts.config || (typeof window !== 'undefined' && window.supabaseConfig) || {};
         const url = config.url || '';
-        const apiKey = config.apiKey || 'ce-api-2026-k8x9m2p4q7w1';
+        const apiKey = config.anonKey || config.apiKey || 'ce-api-2026-k8x9m2p4q7w1';
         const days = Number.isFinite(opts.days) ? opts.days : 90;
 
         const leagues = (!league || league === 'All') ? ['A', 'B', 'C'] : [league];

@@ -312,7 +312,7 @@
         if (!fetchFn) return { success: false, error: 'fetch unavailable' };
         const config = o.config || (typeof window !== 'undefined' && window.supabaseConfig) || {};
         const url = config.url || '';
-        const apiKey = config.apiKey || '';
+        const apiKey = config.anonKey || config.apiKey || '';
         const endpoint = `${url}/functions/v1/analytics-tournaments?${encodeQuery(query)}`;
         try {
             const resp = await fetchFn(endpoint, {

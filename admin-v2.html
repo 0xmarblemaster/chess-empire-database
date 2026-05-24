@@ -2591,8 +2591,9 @@
             sidebar.classList.toggle('mobile-open');
             overlay.classList.toggle('active');
 
-            // Update icon
-            const icon = menuToggle.querySelector('i');
+            // Update icon — match both pre-lucide <i> and post-lucide <svg>.
+            const icon = menuToggle.querySelector('[data-lucide]');
+            if (!icon) return;
             if (sidebar.classList.contains('mobile-open')) {
                 icon.setAttribute('data-lucide', 'x');
             } else {
@@ -2609,7 +2610,8 @@
             sidebar.classList.remove('mobile-open');
             overlay.classList.remove('active');
 
-            const icon = menuToggle.querySelector('i');
+            const icon = menuToggle.querySelector('[data-lucide]');
+            if (!icon) return;
             icon.setAttribute('data-lucide', 'menu');
             lucide.createIcons();
         }
