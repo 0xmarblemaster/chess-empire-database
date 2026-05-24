@@ -326,6 +326,13 @@ serve(async (req) => {
       const windowStart = p('window_start')
       const windowEnd = p('window_end')
       const branchId = p('branch_id') // optional
+      // League A was retired from the internal tournament rotation (spec §10);
+      // the only league filters honored here are B and C, mapped to the
+      // tournaments_uploads.kind enum.
+      const leagueParam = p('league')
+      const leagueKind = leagueParam === 'B' ? 'league_b'
+        : leagueParam === 'C' ? 'league_c'
+        : null
       const validationError = validateWindow(windowStart, windowEnd)
       if (validationError) return json({ success: false, error: validationError }, 400)
 
@@ -337,7 +344,14 @@ serve(async (req) => {
         if (cbErr) throw cbErr
         coachIdsScope = new Set((cb || []).map((r: any) => r.coach_id))
         if (coachIdsScope.size === 0) {
-          return json({ success: true, data: [], count: 0, window: { start: windowStart, end: windowEnd } })
+          return json({
+            success: true,
+            data: [],
+            count: 0,
+            window: { start: windowStart, end: windowEnd },
+            branch_id: branchId,
+            league: leagueParam || null,
+          })
         }
       }
 
@@ -378,17 +392,18 @@ serve(async (req) => {
       const allStudentIds = [...coachByStudent.keys()]
 
       // 3. Tournaments + per-student results in window.
-      const { data: uploadsInWindow, error: upErr } = await supabase
+      let uploadsQuery = supabase
         .from('tournaments_uploads')
         .select('id, kind, tournament_date')
         .gte('tournament_date', windowStart)
         .lte('tournament_date', windowEnd)
+      if (leagueKind) uploadsQuery = uploadsQuery.eq('kind', leagueKind)
+      const { data: uploadsInWindow, error: upErr } = await uploadsQuery
       if (upErr) throw upErr
       const uploads = uploadsInWindow || []
       const uploadIds = uploads.map((u: any) => u.id)
       const uploadById = new Map<string, any>()
       for (const u of uploads) uploadById.set((u as any).id, u)
-      const totalUploadsInWindow = uploads.length
       const razryadUploadIds = new Set(
         uploads.filter((u: any) => u.kind === 'razryad_3' || u.kind === 'razryad_4').map((u: any) => u.id)
       )
@@ -435,6 +450,11 @@ serve(async (req) => {
         const playedEntries: any[] = []
         const razryadParticipants = new Set<string>()
         const razryadEarners = new Set<string>()
+        // Per-coach distinct uploads: count an upload only when at least one
+        // of this coach's students actually played (games_played >= 1). The
+        // school-wide upload count is a misleading denominator on the school
+        // hero summed across N coaches it inflates by N×.
+        const participatedUploadIds = new Set<string>()
         let top3Count = 0
 
         for (const r of myResults) {
@@ -442,6 +462,7 @@ serve(async (req) => {
           if (!u) continue
           if (r.games_played >= 1) {
             playedEntries.push(r)
+            participatedUploadIds.add(r.upload_id)
             const cur = deltaByStudent.get(r.student_id) || 0
             deltaByStudent.set(r.student_id, cur + (Number(r.rating_delta) || 0))
             internalEntries.push(r)
@@ -460,7 +481,7 @@ serve(async (req) => {
         return {
           coach,
           activeStudentsCount: myStudentIds.size,
-          totalUploadsInWindow,
+          coachTournamentCount: participatedUploadIds.size,
           participationNumerator: playedEntries.length,
           internalEntries: internalEntries.length,
           top3Count,
@@ -478,8 +499,13 @@ serve(async (req) => {
       )
 
       // 6. Build rows with composite score + sub-metric rates.
+      const totalUploadsInWindow = uploads.length
       const rows = rawByCoach.map((r) => {
-        const denom = r.activeStudentsCount * r.totalUploadsInWindow
+        // Participation denominator stays the SCHOOL-wide upload count so the
+        // rate compares apples-to-apples across coaches (otherwise a coach who
+        // only attended one tournament would tie with one who attended all
+        // five, given equal raw entry counts).
+        const denom = r.activeStudentsCount * totalUploadsInWindow
         const participation_rate = denom > 0 ? r.participationNumerator / denom : 0
         const normalized_avg_rating_delta = maxAbsAvgDelta > 0
           ? Math.max(0, r.avgDelta) / maxAbsAvgDelta
@@ -507,7 +533,7 @@ serve(async (req) => {
           coach_name: `${r.coach.first_name} ${r.coach.last_name}`.trim(),
           branches: branchesByCoach.get(r.coach.id) || [],
           active_students_count: r.activeStudentsCount,
-          total_tournaments: r.totalUploadsInWindow,
+          total_tournaments: r.coachTournamentCount,
           tournament_entries: r.participationNumerator,
           avg_rating_delta: Math.round(r.avgDelta * 10) / 10,
           top3_count: r.top3Count,
@@ -530,6 +556,7 @@ serve(async (req) => {
         count: rows.length,
         window: { start: windowStart, end: windowEnd },
         branch_id: branchId || null,
+        league: leagueParam || null,
         weights: COACH_SCORE_WEIGHTS,
       })
     }
