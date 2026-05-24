@@ -1233,14 +1233,15 @@
         const debouncedRefresh = _debounce(refresh, 250);
 
         const filtersHost = document.getElementById('coach-kpi-filters');
+        function handleFilterChange(next) {
+            state = normalizeFilters(next);
+            if (filtersHost) {
+                renderFilters(filtersHost, state, { t, onChange: handleFilterChange });
+            }
+            debouncedRefresh();
+        }
         if (filtersHost) {
-            renderFilters(filtersHost, state, {
-                t,
-                onChange: (next) => {
-                    state = normalizeFilters(next);
-                    debouncedRefresh();
-                },
-            });
+            renderFilters(filtersHost, state, { t, onChange: handleFilterChange });
         }
 
         const leaderboardHost = document.getElementById('coach-kpi-school-leaderboard');
