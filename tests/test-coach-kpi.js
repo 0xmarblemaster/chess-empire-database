@@ -210,7 +210,9 @@ assertEqual(kpi.aggregateSchoolHero([
     promotions_count:      1,
     new_razryads_count:    2,
     total_rating_gained:  40,
-}, 'sums every numeric column');
+    // 0 entries / 16 active → 0% (no tournament_entries on the inputs)
+    participation_pct:     0,
+}, 'sums every numeric column (plus the participation_pct fallback key)');
 assertEqual(kpi.aggregateSchoolHero([]), {
     active_students_count: 0,
     total_tournaments:     0,
@@ -218,6 +220,7 @@ assertEqual(kpi.aggregateSchoolHero([]), {
     promotions_count:      0,
     new_razryads_count:    0,
     total_rating_gained:   0,
+    participation_pct:     0,
 }, 'empty array → zeroed shape (no NaN/null leaks)');
 assertEqual(kpi.aggregateSchoolHero(null).active_students_count, 0,
     'null input → zeroed shape (defensive)');

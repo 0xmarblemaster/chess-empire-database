@@ -221,10 +221,17 @@
     }
 
     /**
-     * Roll a coach leaderboard up into the six PRD §5 hero numbers for the
+     * Roll a coach leaderboard up into the seven PRD §5 hero numbers for the
      * school overview. Used as a fallback if `school_kpi_summary` is
      * unavailable; the edge function is still the source of truth when it
      * returns data.
+     *
+     * `participation_pct` is the share of active students who entered at
+     * least one tournament. The leaderboard rows carry `tournament_entries`
+     * (raw entry count, can exceed student count) and an `active_students_count`
+     * denominator, so we approximate participation as min(entries, active)/active.
+     * It's not a perfect re-derivation of the server's distinct-participant
+     * count, but it keeps the card non-blank when a single coach is selected.
      */
     function aggregateSchoolHero(rows) {
         const list = Array.isArray(rows) ? rows : [];
@@ -235,16 +242,24 @@
             promotions_count: 0,
             new_razryads_count: 0,
             total_rating_gained: 0,
+            participation_pct: 0,
         };
+        let participantsApprox = 0;
         for (const r of list) {
             if (!r) continue;
-            out.active_students_count += Number(r.active_students_count) || 0;
+            const active = Number(r.active_students_count) || 0;
+            const entries = Number(r.tournament_entries) || 0;
+            out.active_students_count += active;
             out.total_tournaments     += Number(r.total_tournaments)     || 0;
             out.top3_count            += Number(r.top3_count)            || 0;
             out.promotions_count      += Number(r.promotions_count)      || 0;
             out.new_razryads_count    += Number(r.new_razryads_count)    || 0;
             out.total_rating_gained   += Number(r.total_rating_gained)   || 0;
+            participantsApprox += Math.min(entries, active);
         }
+        out.participation_pct = out.active_students_count > 0
+            ? Math.round((participantsApprox / out.active_students_count) * 1000) / 10
+            : 0;
         return out;
     }
 
@@ -1170,26 +1185,46 @@
     }
 
     /**
-     * Fetch the data backing the school overview. The legacy
-     * `school_kpi_summary` endpoint still reads the pre-Phase 2 tables in
-     * some deployments, so we drive the school view from `coach_leaderboard`
-     * directly (the same Phase 2 source the per-coach leaderboard uses).
-     * Returns the parsed edge-function response, or null when the user is
-     * not allowed.
+     * Fetch the data backing the school overview. Issues two parallel calls:
+     *   - `school_kpi_summary` → canonical hero numbers (participation_pct,
+     *     total_tournaments, top3, etc.) for the school card row.
+     *   - `coach_leaderboard`  → per-coach rows for the leaderboard table.
+     *
+     * Both calls receive the same window / branch_id / league filters so the
+     * card numbers always reflect what the table is showing. Returns:
+     *   { success, hero, rows, heroResult, rowsResult }
+     * where `hero` is the school_kpi_summary `data` envelope, `rows` is the
+     * coach_leaderboard `data` array, and the *Result fields are the full
+     * edge-function responses for callers that need extra context.
      */
     async function _fetchSchoolLeaderboard(roleInfo, params, opts) {
         if (!roleLock || !roleLock.canViewCoachKpi(roleInfo)) return null;
         if (!roleLock.canAccessView(roleInfo, 'school')) return null;
         const p = params || {};
         const win = resolveTimeWindow(p.window, p.now);
-        const query = {
-            action: 'coach_leaderboard',
-            window_start: win.start,
-            window_end: win.end,
+        const baseQuery = { window_start: win.start, window_end: win.end };
+        if (p.branchId && p.branchId !== 'all') baseQuery.branch_id = p.branchId;
+        if (p.league && p.league !== 'all') baseQuery.league = p.league;
+
+        const heroQuery = { action: 'school_kpi_summary', ...baseQuery };
+        const rowsQuery = { action: 'coach_leaderboard',  ...baseQuery };
+
+        const [heroResult, rowsResult] = await Promise.all([
+            callKpiEndpoint(heroQuery, opts),
+            callKpiEndpoint(rowsQuery, opts),
+        ]);
+        const hero = (heroResult && heroResult.success && heroResult.data) ? heroResult.data : null;
+        const rows = (rowsResult && rowsResult.success && Array.isArray(rowsResult.data)) ? rowsResult.data : [];
+        return {
+            success: !!(heroResult && heroResult.success) || !!(rowsResult && rowsResult.success),
+            hero,
+            rows,
+            heroResult,
+            rowsResult,
+            // Back-compat: legacy callers (tests, the upload-committed
+            // subscriber) read `result.data` as the leaderboard rows.
+            data: rows,
         };
-        if (p.branchId && p.branchId !== 'all') query.branch_id = p.branchId;
-        if (p.league && p.league !== 'all') query.league = p.league;
-        return callKpiEndpoint(query, opts);
     }
 
     /**
@@ -1207,25 +1242,41 @@
         if (typeof document === 'undefined') return;
         const opts = { t };
         if (view === 'school') {
-            const rawRows = (result && result.success && Array.isArray(result.data)) ? result.data : [];
             const s = state || {};
+            // Two payload shapes are accepted:
+            //   1. New shape from _fetchSchoolLeaderboard → { hero, rows, ... }
+            //      where hero is the school_kpi_summary data envelope.
+            //   2. Legacy shape from a direct coach_leaderboard call →
+            //      { success, data: [rows] } with no separate hero. We
+            //      reconstruct the hero by aggregating the rows.
+            const isNewShape = result && (Array.isArray(result.rows) || result.hero != null);
+            const heroFromServer = isNewShape ? result.hero : null;
+            const rawRows = isNewShape
+                ? (Array.isArray(result.rows) ? result.rows : [])
+                : ((result && result.success && Array.isArray(result.data)) ? result.data : []);
             const afterBranch = filterLeaderboardByBranch(rawRows, s.branchId);
             const rows = filterLeaderboardByCoach(afterBranch, s.coachId);
+
             const heroHost = document.getElementById('coach-kpi-school-hero');
             if (heroHost) {
-                if (rows.length === 0) {
-                    renderEmptyState(heroHost, undefined, opts);
-                } else if (s.coachId && s.coachId !== 'all') {
-                    // A single-coach filter is a hard re-cut of the school
-                    // hero — the edge function's school_kpi_summary card
-                    // (and the aggregated coach_leaderboard fallback) both
-                    // count school-wide totals, which would lie when the
-                    // user has narrowed the leaderboard to one coach.
-                    // Re-derive the hero from the filtered rows so the cards
-                    // match what is actually shown below.
+                if (s.coachId && s.coachId !== 'all') {
+                    // Coach filter is a hard re-cut of the hero — the server's
+                    // school totals lie when the table is narrowed to one
+                    // coach. Re-derive from the (now correctly per-coach)
+                    // single leaderboard row so the cards match the table.
+                    if (rows.length === 0) {
+                        renderEmptyState(heroHost, undefined, opts);
+                    } else {
+                        renderSchoolHero(heroHost, aggregateSchoolHero(rows), opts);
+                    }
+                } else if (heroFromServer) {
+                    // Canonical source — school_kpi_summary already honored
+                    // the branch_id + league filters server-side.
+                    renderSchoolHero(heroHost, heroFromServer, opts);
+                } else if (rows.length > 0) {
                     renderSchoolHero(heroHost, aggregateSchoolHero(rows), opts);
                 } else {
-                    renderSchoolHero(heroHost, aggregateSchoolHero(rows), opts);
+                    renderEmptyState(heroHost, undefined, opts);
                 }
             }
             const lbHost = document.getElementById('coach-kpi-school-leaderboard');

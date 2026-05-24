@@ -111,29 +111,47 @@ function flush() {
 console.log('\n=== initCoachKpi issues an initial fetch for the default view ===========\n');
 (async function testInitialFetch() {
     const dom = makeDom(HOST_IDS);
-    const stub = makeFetchStub(() => ({
-        success: true,
-        data: [
-            {
-                coach_id: 'c-1', coach_name: 'Alice', branches: ['Debut'],
-                active_students_count: 4, total_tournaments: 2,
-                tournament_entries: 8, avg_rating_delta: 12,
-                top3_count: 3, total_rating_gained: 100,
-                promotions_count: 1, new_razryads_count: 0,
-                composite_score: 65.0, participation_rate: 0.5,
-            },
-        ],
-    }));
+    const stub = makeFetchStub((url) => {
+        if (/action=school_kpi_summary/.test(url)) {
+            return {
+                success: true,
+                data: {
+                    window: { start: '2026-02-14', end: '2026-05-14' },
+                    active_students_count: 4, participants_count: 3,
+                    participation_pct: 75, total_tournaments: 2,
+                    top3_count: 3, promotions_count: 1, new_razryads_count: 0,
+                    total_rating_gained: 100,
+                },
+            };
+        }
+        return {
+            success: true,
+            data: [
+                {
+                    coach_id: 'c-1', coach_name: 'Alice', branches: ['Debut'],
+                    active_students_count: 4, total_tournaments: 2,
+                    tournament_entries: 8, avg_rating_delta: 12,
+                    top3_count: 3, total_rating_gained: 100,
+                    promotions_count: 1, new_razryads_count: 0,
+                    composite_score: 65.0, participation_rate: 0.5,
+                },
+            ],
+        };
+    });
     const win = { supabaseConfig: { url: 'https://test', apiKey: 'k' } };
     const mod = loadModule({ document: dom, window: win, fetch: stub.fn });
 
     mod.initCoachKpi({ isAdmin: true });
     await flush();
+    await flush();
 
     assert(stub.calls.length >= 1,
         'admin → initCoachKpi triggers at least one edge-function call');
-    assert(/action=coach_leaderboard/.test(stub.calls[0].url),
-        'admin default (school) view fetches via coach_leaderboard (Phase 2 source)');
+    const initialUrls = stub.calls.map(c => c.url);
+    assert(initialUrls.some(u => /action=school_kpi_summary/.test(u)),
+        'admin default (school) view fetches school_kpi_summary as the hero source');
+    assert(initialUrls.some(u => /action=coach_leaderboard/.test(u)),
+        'admin default (school) view also fetches coach_leaderboard for the per-coach table');
     assert(/window_start=\d{4}-\d{2}-\d{2}/.test(stub.calls[0].url),
         'initial fetch carries a resolved window_start');
 
@@ -204,16 +222,27 @@ async function runFilterChangeTest() {
 }
 
 async function runSchoolFallbackTest() {
-    console.log('\n=== school view falls back to aggregateSchoolHero(coach_leaderboard rows) ===\n');
+    console.log('\n=== school view sources hero from school_kpi_summary, table from coach_leaderboard ===\n');
 
-    // Force school_kpi_summary to come back empty — initCoachKpi must still
-    // populate the hero via aggregateSchoolHero(coach_leaderboard rows).
+    // The school view now fires both school_kpi_summary (canonical hero) and
+    // coach_leaderboard (per-coach rows) in parallel — they share the same
+    // window / branch_id / league filters so the card numbers always reflect
+    // what the table is showing.
     const dom = makeDom(HOST_IDS);
     const stub = makeFetchStub((url) => {
         if (/action=school_kpi_summary/.test(url)) {
-            return { success: true, data: {} };
+            return {
+                success: true,
+                data: {
+                    window: { start: '2026-02-14', end: '2026-05-14' },
+                    active_students_count: 8, participants_count: 6,
+                    participation_pct: 75, total_tournaments: 3,
+                    top3_count: 2, promotions_count: 1, new_razryads_count: 1,
+                    total_rating_gained: 60,
+                },
+            };
         }
-        // coach_leaderboard rows that aggregateSchoolHero should roll up.
+        // coach_leaderboard rows for the table below.
         return {
             success: true,
             data: [
@@ -233,9 +262,11 @@ async function runSchoolFallbackTest() {
 
     mod.initCoachKpi({ isAdmin: true });
     await flush();
+    // Two parallel calls + render = needs a microtask round to settle.
+    await flush();
 
-    // Direct unit on the helper: aggregateSchoolHero rolls up the right
-    // total without ever calling school_kpi_summary.
+    // Direct unit on the helper: aggregateSchoolHero still rolls up the right
+    // totals — it's the coach-filter fallback now (single-coach view).
     const rolled = mod.aggregateSchoolHero([
         { active_students_count: 5, total_tournaments: 2, top3_count: 1,
           promotions_count: 1, new_razryads_count: 1, total_rating_gained: 50 },
@@ -247,18 +278,18 @@ async function runSchoolFallbackTest() {
     assert(rolled.top3_count === 1 && rolled.promotions_count === 1
         && rolled.new_razryads_count === 1 && rolled.total_rating_gained === 60,
         'aggregateSchoolHero sums top3, promotions, razryads, rating gained');
+    assert(typeof rolled.participation_pct === 'number',
+        'aggregateSchoolHero now emits participation_pct so the card is never blank');
 
-    // No call to school_kpi_summary in any of the captured URLs — the
-    // dashboard renders without that endpoint.
     const calledEndpoints = stub.calls.map(c => c.url);
-    assert(calledEndpoints.every(u => !/action=school_kpi_summary/.test(u)),
-        'school view does NOT hit the legacy school_kpi_summary action');
+    assert(calledEndpoints.some(u => /action=school_kpi_summary/.test(u)),
+        'school view hits school_kpi_summary as the canonical hero source');
     assert(calledEndpoints.some(u => /action=coach_leaderboard/.test(u)),
-        'school view drives off coach_leaderboard instead');
+        'school view also hits coach_leaderboard for the per-coach table');
 
     const heroHost = dom.elements['coach-kpi-school-hero'];
     assert(heroHost.children.length === 6,
-        'school hero renders 6 stat cards from the rolled-up coach_leaderboard rows');
+        'school hero renders 6 stat cards from the school_kpi_summary payload');
 
     await runUploadEventViewName();
 }
@@ -293,11 +324,16 @@ async function runUploadEventViewName() {
         await flush();
         assert(stub.calls.length > beforeUpload,
             'coachKpiUploadCommitted handler issues a refresh fetch');
-        const lastUrl = stub.calls[stub.calls.length - 1].url;
-        assert(/action=coach_leaderboard/.test(lastUrl),
-            'admin upload refresh fetches the school view (coach_leaderboard), not coach_kpi_view');
-        assert(!/action=coach_kpi_view/.test(lastUrl),
-            'refresh URL never carries the bogus coach_kpi_view action');
+        // School view refreshes BOTH school_kpi_summary and coach_leaderboard
+        // in parallel — check the most recent call window covers both, not
+        // just the very last URL.
+        const fresh = stub.calls.slice(beforeUpload).map(c => c.url);
+        assert(fresh.some(u => /action=coach_leaderboard/.test(u)),
+            'admin upload refresh fetches coach_leaderboard for the table');
+        assert(fresh.some(u => /action=school_kpi_summary/.test(u)),
+            'admin upload refresh fetches school_kpi_summary for the hero');
+        assert(fresh.every(u => !/action=coach_kpi_view/.test(u)),
+            'refresh URLs never carry the bogus coach_kpi_view action');
     }
 
     await runLockedCoachInit();
