@@ -112,20 +112,21 @@ assertEqual(kpi.formatHeroValue(NaN), '—', 'NaN → em-dash');
 assertEqual(kpi.formatHeroValue('Aibek'), 'Aibek', 'string passthrough');
 
 console.log('\n=== sortLeaderboard ===================================================\n');
+// total_tournaments is the default sort key after the Score column was retired.
 const ROWS = [
-    { coach_id: 'a', coach_name: 'Alice', composite_score: 55, top3_count: 4, total_rating_gained:  10, branches: ['b1'] },
-    { coach_id: 'b', coach_name: 'Bob',   composite_score: 78, top3_count: 1, total_rating_gained: 120, branches: ['b1', 'b2'] },
-    { coach_id: 'c', coach_name: 'Cara',  composite_score: 30, top3_count: 7, total_rating_gained: -40, branches: ['b2'] },
+    { coach_id: 'a', coach_name: 'Alice', total_tournaments: 5, top3_count: 4, total_rating_gained:  10, branches: ['b1'] },
+    { coach_id: 'b', coach_name: 'Bob',   total_tournaments: 9, top3_count: 1, total_rating_gained: 120, branches: ['b1', 'b2'] },
+    { coach_id: 'c', coach_name: 'Cara',  total_tournaments: 2, top3_count: 7, total_rating_gained: -40, branches: ['b2'] },
 ];
 
 assertEqual(
     kpi.sortLeaderboard(ROWS).map(r => r.coach_id),
     ['b', 'a', 'c'],
-    'default: composite_score desc');
+    'default: total_tournaments desc');
 assertEqual(
-    kpi.sortLeaderboard(ROWS, 'composite_score', 'asc').map(r => r.coach_id),
+    kpi.sortLeaderboard(ROWS, 'total_tournaments', 'asc').map(r => r.coach_id),
     ['c', 'a', 'b'],
-    'composite_score asc when requested');
+    'total_tournaments asc when requested');
 assertEqual(
     kpi.sortLeaderboard(ROWS, 'top3_count').map(r => r.coach_id),
     ['c', 'a', 'b'],
@@ -145,35 +146,35 @@ assertEqual(
 assertEqual(
     kpi.sortLeaderboard(ROWS, 'bogus').map(r => r.coach_id),
     ['b', 'a', 'c'],
-    'unknown sort key → fallback to composite_score desc');
-assertEqual(kpi.sortLeaderboard([], 'composite_score'), [],
+    'unknown sort key → fallback to total_tournaments desc');
+assertEqual(kpi.sortLeaderboard([], 'total_tournaments'), [],
     'empty input → empty output');
-assertEqual(kpi.sortLeaderboard(null, 'composite_score'), [],
+assertEqual(kpi.sortLeaderboard(null, 'total_tournaments'), [],
     'null input → empty output');
 
 // Null-handling: rows with a null sort value should sort LAST regardless of direction.
 const ROWS_WITH_NULL = [
-    { coach_id: 'x', composite_score: null },
-    { coach_id: 'y', composite_score: 50 },
-    { coach_id: 'z', composite_score: 10 },
+    { coach_id: 'x', total_tournaments: null },
+    { coach_id: 'y', total_tournaments: 50 },
+    { coach_id: 'z', total_tournaments: 10 },
 ];
 assertEqual(
-    kpi.sortLeaderboard(ROWS_WITH_NULL, 'composite_score', 'desc').map(r => r.coach_id),
+    kpi.sortLeaderboard(ROWS_WITH_NULL, 'total_tournaments', 'desc').map(r => r.coach_id),
     ['y', 'z', 'x'],
     'null values sort last when desc');
 assertEqual(
-    kpi.sortLeaderboard(ROWS_WITH_NULL, 'composite_score', 'asc').map(r => r.coach_id),
+    kpi.sortLeaderboard(ROWS_WITH_NULL, 'total_tournaments', 'asc').map(r => r.coach_id),
     ['z', 'y', 'x'],
     'null values still sort last when asc (never reads as best)');
 
 // Stability: equal sort keys preserve input order.
 const TIES = [
-    { coach_id: 'first',  composite_score: 50 },
-    { coach_id: 'second', composite_score: 50 },
-    { coach_id: 'third',  composite_score: 50 },
+    { coach_id: 'first',  total_tournaments: 50 },
+    { coach_id: 'second', total_tournaments: 50 },
+    { coach_id: 'third',  total_tournaments: 50 },
 ];
 assertEqual(
-    kpi.sortLeaderboard(TIES, 'composite_score').map(r => r.coach_id),
+    kpi.sortLeaderboard(TIES, 'total_tournaments').map(r => r.coach_id),
     ['first', 'second', 'third'],
     'ties preserve original insertion order (stable sort)');
 

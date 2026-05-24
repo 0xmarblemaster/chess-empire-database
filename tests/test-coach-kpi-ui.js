@@ -174,20 +174,22 @@ assertEqual(kpi.isStudentInactive(new Date(AS_OF.getTime() + 7 * DAY_MS), AS_OF)
 })();
 
 console.log('\n=== sortLeaderboard ===================================================\n');
+// The leaderboard's headline visible metric is now `total_tournaments` (the
+// retired Score column was the previous default).
 const ROWS = [
-    { coach_id: 'a', coach_name: 'Alice', composite_score: 55, top3_count: 4, total_rating_gained:  10 },
-    { coach_id: 'b', coach_name: 'Bob',   composite_score: 78, top3_count: 1, total_rating_gained: 120 },
-    { coach_id: 'c', coach_name: 'Cara',  composite_score: 30, top3_count: 7, total_rating_gained: -40 },
+    { coach_id: 'a', coach_name: 'Alice', total_tournaments: 5, top3_count: 4, total_rating_gained:  10 },
+    { coach_id: 'b', coach_name: 'Bob',   total_tournaments: 9, top3_count: 1, total_rating_gained: 120 },
+    { coach_id: 'c', coach_name: 'Cara',  total_tournaments: 2, top3_count: 7, total_rating_gained: -40 },
 ];
 
 assertEqual(
     kpi.sortLeaderboard(ROWS).map(r => r.coach_id),
     ['b', 'a', 'c'],
-    'default: composite_score desc (b 78 > a 55 > c 30)');
+    'default: total_tournaments desc (b 9 > a 5 > c 2)');
 assertEqual(
-    kpi.sortLeaderboard(ROWS, 'composite_score', 'asc').map(r => r.coach_id),
+    kpi.sortLeaderboard(ROWS, 'total_tournaments', 'asc').map(r => r.coach_id),
     ['c', 'a', 'b'],
-    'composite_score asc when requested');
+    'total_tournaments asc when requested');
 assertEqual(
     kpi.sortLeaderboard(ROWS, 'top3_count').map(r => r.coach_id),
     ['c', 'a', 'b'],
@@ -206,58 +208,58 @@ assertEqual(
     'coach_name desc when requested');
 
 // PRD §Task 4 edge case: empty rows in sort.
-assertEqual(kpi.sortLeaderboard([], 'composite_score'), [],
+assertEqual(kpi.sortLeaderboard([], 'total_tournaments'), [],
     'EDGE: empty rows array → empty result');
-assertEqual(kpi.sortLeaderboard([], 'composite_score', 'asc'), [],
+assertEqual(kpi.sortLeaderboard([], 'total_tournaments', 'asc'), [],
     'EDGE: empty rows + explicit direction → empty result');
-assertEqual(kpi.sortLeaderboard(null, 'composite_score'), [],
+assertEqual(kpi.sortLeaderboard(null, 'total_tournaments'), [],
     'EDGE: null rows → empty result (defensive)');
-assertEqual(kpi.sortLeaderboard(undefined, 'composite_score'), [],
+assertEqual(kpi.sortLeaderboard(undefined, 'total_tournaments'), [],
     'EDGE: undefined rows → empty result');
-assertEqual(kpi.sortLeaderboard('not an array', 'composite_score'), [],
+assertEqual(kpi.sortLeaderboard('not an array', 'total_tournaments'), [],
     'EDGE: non-array rows → empty result');
-assertEqual(kpi.sortLeaderboard([{ coach_id: 'only' }], 'composite_score').map(r => r.coach_id),
+assertEqual(kpi.sortLeaderboard([{ coach_id: 'only' }], 'total_tournaments').map(r => r.coach_id),
     ['only'],
     'single-row array sorts to itself');
 
 // PRD §Task 4 edge case: null/undefined values sort LAST regardless of direction.
 const ROWS_WITH_NULL = [
-    { coach_id: 'x', composite_score: null },
-    { coach_id: 'y', composite_score: 50 },
-    { coach_id: 'z', composite_score: 10 },
-    { coach_id: 'w', composite_score: undefined },
+    { coach_id: 'x', total_tournaments: null },
+    { coach_id: 'y', total_tournaments: 50 },
+    { coach_id: 'z', total_tournaments: 10 },
+    { coach_id: 'w', total_tournaments: undefined },
 ];
 assertEqual(
-    kpi.sortLeaderboard(ROWS_WITH_NULL, 'composite_score', 'desc').map(r => r.coach_id),
+    kpi.sortLeaderboard(ROWS_WITH_NULL, 'total_tournaments', 'desc').map(r => r.coach_id),
     ['y', 'z', 'x', 'w'],
     'null/undefined sort last even when desc (real values come first)');
 assertEqual(
-    kpi.sortLeaderboard(ROWS_WITH_NULL, 'composite_score', 'asc').map(r => r.coach_id),
+    kpi.sortLeaderboard(ROWS_WITH_NULL, 'total_tournaments', 'asc').map(r => r.coach_id),
     ['z', 'y', 'x', 'w'],
     'null/undefined still sort last when asc (never read as best/smallest)');
 
 const ALL_NULL = [
-    { coach_id: 'first',  composite_score: null },
-    { coach_id: 'second', composite_score: null },
-    { coach_id: 'third',  composite_score: undefined },
+    { coach_id: 'first',  total_tournaments: null },
+    { coach_id: 'second', total_tournaments: null },
+    { coach_id: 'third',  total_tournaments: undefined },
 ];
 assertEqual(
-    kpi.sortLeaderboard(ALL_NULL, 'composite_score').map(r => r.coach_id),
+    kpi.sortLeaderboard(ALL_NULL, 'total_tournaments').map(r => r.coach_id),
     ['first', 'second', 'third'],
     'all-null rows preserve original order (stable when every key is null)');
 
 // Stability: equal sort keys preserve input order.
 const TIES = [
-    { coach_id: 'first',  composite_score: 50 },
-    { coach_id: 'second', composite_score: 50 },
-    { coach_id: 'third',  composite_score: 50 },
+    { coach_id: 'first',  total_tournaments: 50 },
+    { coach_id: 'second', total_tournaments: 50 },
+    { coach_id: 'third',  total_tournaments: 50 },
 ];
 assertEqual(
-    kpi.sortLeaderboard(TIES, 'composite_score').map(r => r.coach_id),
+    kpi.sortLeaderboard(TIES, 'total_tournaments').map(r => r.coach_id),
     ['first', 'second', 'third'],
     'ties preserve original insertion order (stable sort, desc)');
 assertEqual(
-    kpi.sortLeaderboard(TIES, 'composite_score', 'asc').map(r => r.coach_id),
+    kpi.sortLeaderboard(TIES, 'total_tournaments', 'asc').map(r => r.coach_id),
     ['first', 'second', 'third'],
     'ties preserve original insertion order (stable sort, asc)');
 
@@ -272,20 +274,20 @@ assertEqual(
     ['b', 'a', 'c'],
     'string sort is case-insensitive (Alice < bob < cara regardless of case)');
 
-// Unknown sort key falls back to composite_score desc — the headline metric.
+// Unknown sort key falls back to total_tournaments desc — the headline metric.
 assertEqual(
     kpi.sortLeaderboard(ROWS, 'bogus').map(r => r.coach_id),
     ['b', 'a', 'c'],
-    'unknown sort key → falls back to composite_score desc');
+    'unknown sort key → falls back to total_tournaments desc');
 assertEqual(
     kpi.sortLeaderboard(ROWS, undefined).map(r => r.coach_id),
     ['b', 'a', 'c'],
-    'undefined sort key → falls back to composite_score desc');
+    'undefined sort key → falls back to total_tournaments desc');
 
 // Non-mutation: input array stays intact (renderers depend on this).
 (function testNoMutation() {
     const before = ROWS.map(r => r.coach_id);
-    kpi.sortLeaderboard(ROWS, 'composite_score', 'desc');
+    kpi.sortLeaderboard(ROWS, 'total_tournaments', 'desc');
     kpi.sortLeaderboard(ROWS, 'coach_name', 'asc');
     const after = ROWS.map(r => r.coach_id);
     assertEqual(after, before, 'sortLeaderboard does not mutate its input array');

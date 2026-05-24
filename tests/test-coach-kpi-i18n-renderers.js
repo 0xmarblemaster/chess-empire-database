@@ -143,7 +143,6 @@ const RU = {
     coachKpiColRatingGained: 'Прирост рейтинга',
     coachKpiColPromotions: 'Повышения',
     coachKpiColRazryads: 'Разряды',
-    coachKpiColScore: 'Балл',
     'admin.coachKpi.uploadTitle': 'Загрузка турнира',
     'admin.coachKpi.uploadKind': 'Тип турнира',
     'admin.coachKpi.uploadFile': 'Экспорт Swiss-Manager',
@@ -204,7 +203,7 @@ console.log('\n=== renderSchoolHero falls back to English without opts.t =======
         'English fallback "Participation" rendered when no opts.t supplied');
 })();
 
-console.log('\n=== renderLeaderboard localizes its eight column headers ==============\n');
+console.log('\n=== renderLeaderboard localizes its seven column headers ==============\n');
 (function testLeaderboardHeaders() {
     const kpi = loadKpi({});
     const container = makeContainer();
@@ -218,7 +217,7 @@ console.log('\n=== renderLeaderboard localizes its eight column headers ========
     kpi.renderLeaderboard(container, rows, { t: ruT });
 
     const headers = findAllByTag(container, 'th').map(n => n.textContent);
-    assert(headers.length === 8, 'eight <th> headers render');
+    assert(headers.length === 7, 'seven <th> headers render (Score column retired)');
     assert(headers[0] === 'Тренер', 'Coach column → Тренер');
     assert(headers[1] === 'Активные', 'Active column → Активные');
     assert(headers[2] === 'Турниры', 'Tournaments column → Турниры');
@@ -226,7 +225,7 @@ console.log('\n=== renderLeaderboard localizes its eight column headers ========
     assert(headers[4] === 'Прирост рейтинга', 'Rating gained column → Прирост рейтинга');
     assert(headers[5] === 'Повышения', 'Promotions column → Повышения');
     assert(headers[6] === 'Разряды', 'Razryads column → Разряды');
-    assert(headers[7] === 'Балл', 'Score column → Балл');
+    assert(!headers.includes('Балл'), 'Score column header is gone');
 })();
 
 console.log('\n=== renderFilters localizes the three filter-group labels =============\n');

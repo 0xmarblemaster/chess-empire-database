@@ -112,7 +112,7 @@ const REQUIRED_KEYS = [
     'coachKpiColRatingGained',
     'coachKpiColPromotions',
     'coachKpiColRazryads',
-    'coachKpiColScore',
+    // coachKpiColScore intentionally absent — the Score column was retired.
 ];
 
 function valueFor(block, key) {
