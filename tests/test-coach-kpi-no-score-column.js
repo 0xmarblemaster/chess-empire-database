@@ -1,7 +1,6 @@
 /**
  * Regression guard for the removal of the Score column from the Coach KPI
- * leaderboards. Asserts that neither renderLeaderboard nor
- * renderPhase2Leaderboard outputs:
+ * leaderboards. Asserts that renderLeaderboard never outputs:
  *
  *   - a Score column header (English "Score", Russian "Балл", Kazakh "Ұпай"),
  *   - a `.kpi-score` / `.kpi-score-{red|amber|green}` cell in any row, or
@@ -135,21 +134,6 @@ const COACH_ROWS = [
     },
 ];
 
-const PHASE2_ROWS = [
-    {
-        coach_id: 'a', coach_name: 'Alice', branches: ['br-1'],
-        active_students_count: 4, tournament_entries: 8, avg_rating_delta: 10,
-        top3_count: 2, promotions_count: 1, new_razryads_count: 1,
-        composite_score: 70, participation_rate: 0.6,
-    },
-    {
-        coach_id: 'b', coach_name: 'Bob', branches: ['br-2'],
-        active_students_count: 3, tournament_entries: 5, avg_rating_delta: 4,
-        top3_count: 0, promotions_count: 0, new_razryads_count: 0,
-        composite_score: 30, participation_rate: 0.3,
-    },
-];
-
 console.log('\n=== renderLeaderboard never emits a Score header in any locale ========\n');
 for (const locale of ['en', 'ru', 'kk']) {
     const kpi = loadKpi();
@@ -171,24 +155,6 @@ for (const locale of ['en', 'ru', 'kk']) {
         assert(toned.length === 0,
             `[${locale}] no .kpi-score-${tone} cell in renderLeaderboard output`);
     }
-}
-
-console.log('\n=== renderPhase2Leaderboard never emits a Score header in any locale ==\n');
-for (const locale of ['en', 'ru', 'kk']) {
-    const kpi = loadKpi();
-    const container = makeMockEl('div');
-    kpi.renderPhase2Leaderboard(container, PHASE2_ROWS, { t: makeT(locale) });
-
-    const headers = findAllByTag(container, 'th').map(n => n.textContent);
-    assert(headers.length === 9, `[${locale}] exactly nine <th> headers render (Score removed)`);
-    for (const lbl of SCORE_LABELS) {
-        assert(!headers.includes(lbl),
-            `[${locale}] no <th> reads "${lbl}" in school-view leaderboard`);
-    }
-
-    const scoreCells = findAllByClass(container, 'kpi-score');
-    assert(scoreCells.length === 0,
-        `[${locale}] no .kpi-score cell in renderPhase2Leaderboard output`);
 }
 
 console.log('\n=== i18n.js no longer ships the retired Score labels ===================\n');

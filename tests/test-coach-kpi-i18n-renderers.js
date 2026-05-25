@@ -7,8 +7,6 @@
  *
  *   - renderSchoolHero, renderLeaderboard, renderFilters honour opts.t for
  *     hero labels, column headers, and filter group labels.
- *   - renderPhase2Leaderboard honours opts.t for its "no data yet" empty
- *     state and column headers.
  *   - The chart renderers' "Chart.js not loaded" fallback honours opts.t.
  *   - renderUploadModal localizes its title, kind label, file label,
  *     date label, cancel and commit buttons.
@@ -272,16 +270,7 @@ console.log('\n=== renderEmptyState helper + title localize through opts.t =====
         'empty-state helper falls back to English coachKpiEmptyState when t() returns the key');
 })();
 
-console.log('\n=== renderPhase2Leaderboard empty + Chart fallback are localized ======\n');
-(function testPhase2Empty() {
-    const kpi = loadKpi({});
-    const container = makeContainer();
-    kpi.renderPhase2Leaderboard(container, [], { t: ruT });
-    const helper = findByClass(container, 'kpi-empty-helper');
-    assert(helper && helper.textContent === 'За выбранный период данных пока нет.',
-        'phase-2 empty helper resolves via coachKpiNoDataYet');
-})();
-
+console.log('\n=== Chart fallback ("Chart.js not loaded") is localized ===============\n');
 (function testChartUnavailable() {
     // Force Chart.js to be unavailable by leaving window/global Chart unset.
     const kpi = loadKpi({});
@@ -338,6 +327,121 @@ console.log('\n=== initCoachKpi builds a window.i18n adapter and threads it thro
     assert(labels.includes('Time window'),
         'filter label falls back to English "Time window" when window.i18n is absent');
 })();
+
+// ---------------------------------------------------------------------------
+// Drilldown panel — zero English leakage in ru / kk renders.
+//
+// The drilldown was the most recent surface added to the dashboard and is the
+// likely culprit for an untranslated string in production. We render the four
+// metrics' tables + headers under each locale and assert no header / cell text
+// matches an English-only token we'd recognise from the EN fallback. Per
+// COACH_KPI_PHASE2_SPEC: dates render numerically (DD.MM.YYYY), so they don't
+// count as English leakage either.
+// ---------------------------------------------------------------------------
+
+// Russian + Kazakh stubs covering every coachKpiDrill* + filter key the
+// drilldown reads. Mirrors the production i18n.js values closely enough that
+// a real English string falling through is an obvious failure.
+function makeLocaleStub(map) {
+    return (key, fb) => Object.prototype.hasOwnProperty.call(map, key) ? map[key] : fb;
+}
+const DRILL_RU = {
+    coachKpiDrillStudent: 'Ученик', coachKpiDrillBranch: 'Филиал', coachKpiDrillCoach: 'Тренер',
+    coachKpiDrillLeague: 'Лига', coachKpiDrillRazryad: 'Разряд',
+    coachKpiDrillTournament: 'Турнир', coachKpiDrillDate: 'Дата',
+    coachKpiDrillBack: '← Назад', coachKpiDrillRow: 'строка', coachKpiDrillRows: 'строк',
+    coachKpiDrillGames: 'Партии', coachKpiDrillTournamentsPlayed: 'Турниры',
+    coachKpiDrillRatingDelta: 'Прирост рейтинга', coachKpiDrillPlacement: 'Место',
+    coachKpiDrillOldRazryad: 'Старый разряд', coachKpiDrillNewRazryad: 'Новый разряд',
+    coachKpiDrillEarnedAt: 'Получен', coachKpiDrillFrom: 'Из', coachKpiDrillTo: 'В',
+    coachKpiDrillOccurredAt: 'Повышен',
+    coachKpiDrillTitle_active_players: 'Активные игроки',
+    coachKpiDrillTitle_top3: 'Топ-3 места',
+    coachKpiDrillTitle_new_razryads: 'Новые разряды',
+    coachKpiDrillTitle_promotions: 'Повышения уровня',
+    coachKpiLeagueA: 'Лига A', coachKpiLeagueB: 'Лига B', coachKpiLeagueC: 'Лига C',
+    coachKpiRazryadKMS: 'КМС', coachKpiRazryad1st: '1-й разряд', coachKpiRazryad2nd: '2-й разряд',
+    coachKpiRazryad3rd: '3-й разряд', coachKpiRazryad4th: '4-й разряд', coachKpiRazryadNone: 'Нет',
+};
+const DRILL_KK = {
+    coachKpiDrillStudent: 'Оқушы', coachKpiDrillBranch: 'Бөлімше', coachKpiDrillCoach: 'Жаттықтырушы',
+    coachKpiDrillLeague: 'Лига', coachKpiDrillRazryad: 'Разряд',
+    coachKpiDrillTournament: 'Турнир', coachKpiDrillDate: 'Күні',
+    coachKpiDrillBack: '← Артқа', coachKpiDrillRow: 'жол', coachKpiDrillRows: 'жол',
+    coachKpiDrillGames: 'Партиялар', coachKpiDrillTournamentsPlayed: 'Турнирлер',
+    coachKpiDrillRatingDelta: 'Рейтинг өсімі', coachKpiDrillPlacement: 'Орын',
+    coachKpiDrillOldRazryad: 'Ескі разряд', coachKpiDrillNewRazryad: 'Жаңа разряд',
+    coachKpiDrillEarnedAt: 'Алынды', coachKpiDrillFrom: 'Қайдан', coachKpiDrillTo: 'Қайда',
+    coachKpiDrillOccurredAt: 'Көтерілді',
+    coachKpiDrillTitle_active_players: 'Белсенді ойыншылар',
+    coachKpiDrillTitle_top3: 'Топ-3 орын',
+    coachKpiDrillTitle_new_razryads: 'Жаңа разрядтар',
+    coachKpiDrillTitle_promotions: 'Деңгей көтерілуі',
+    coachKpiLeagueA: 'A лигасы', coachKpiLeagueB: 'B лигасы', coachKpiLeagueC: 'C лигасы',
+    coachKpiRazryadKMS: 'ХШҚ', coachKpiRazryad1st: '1-разряд', coachKpiRazryad2nd: '2-разряд',
+    coachKpiRazryad3rd: '3-разряд', coachKpiRazryad4th: '4-разряд', coachKpiRazryadNone: 'Жоқ',
+};
+
+// English-only tokens that should NEVER appear in a ru/kk drilldown render.
+const ENGLISH_LEAK_TOKENS = [
+    'Student', 'Branch', 'Coach', 'League', 'Razryad', 'Tournament', 'Tournaments',
+    'Date', 'Games', 'Placement', 'Old razryad', 'New razryad', 'Earned',
+    'From', 'To', 'Promoted', '← Back',
+    // Drilldown titles — the English fallbacks shipped in METRIC_TITLES.
+    'Active players', 'Top-3 finishes', 'New razryads', 'Promotions',
+    'row', 'rows',
+];
+
+function collectAllText(root, out) {
+    out = out || [];
+    if (!root) return out;
+    if (typeof root.textContent === 'string' && root.textContent.length > 0
+        && (!root.children || root.children.length === 0)) {
+        out.push(root.textContent);
+    }
+    if (Array.isArray(root.children)) {
+        for (const c of root.children) collectAllText(c, out);
+    }
+    return out;
+}
+
+const DRILLDOWN_FIXTURES = {
+    active_players: [
+        { student_id: 'S1', first_name: 'X', last_name: 'Y', branch_name: 'BR', coach_name: 'CO',
+          league: 'A', razryad: 'kms', games_played: 5, tournaments_played: 1, rating_delta_total: 10 },
+    ],
+    top3: [
+        { tournament_id: 'T1', tournament_name: 'L', occurred_at: '2026-03-15', placement: 1,
+          student_id: 'S1', first_name: 'X', last_name: 'Y', branch_name: 'BR', coach_name: 'CO' },
+    ],
+    new_razryads: [
+        { student_id: 'S1', first_name: 'X', last_name: 'Y', branch_name: 'BR', coach_name: 'CO',
+          old_razryad: 'none', new_razryad: '4th', earned_at: '2026-04-01', tournament_name: 'L' },
+    ],
+    promotions: [
+        { student_id: 'S1', first_name: 'X', last_name: 'Y', branch_name: 'BR', coach_name: 'CO',
+          from_league: 'B', to_league: 'A', occurred_at: '2026-04-25' },
+    ],
+};
+
+for (const [localeName, stubMap] of [['ru', DRILL_RU], ['kk', DRILL_KK]]) {
+    console.log(`\n=== drilldown render has zero English leakage (${localeName}) =============\n`);
+    const tStub = makeLocaleStub(stubMap);
+    for (const metric of Object.keys(DRILLDOWN_FIXTURES)) {
+        const kpi = loadKpi({});
+        const table = makeContainer();
+        const header = makeContainer();
+        kpi.renderDrilldown(table, metric, DRILLDOWN_FIXTURES[metric], { window: '90d' }, { t: tStub });
+        kpi.renderDrilldownHeader(header, metric, DRILLDOWN_FIXTURES[metric].length, { t: tStub, onBack: () => {} });
+
+        const texts = [].concat(collectAllText(table), collectAllText(header));
+        for (const token of ENGLISH_LEAK_TOKENS) {
+            const hit = texts.find(s => s === token || s === `1 ${token}` || s === `${DRILLDOWN_FIXTURES[metric].length} ${token}`);
+            assert(!hit,
+                `[${localeName} / ${metric}] no leaf text equals English token "${token}"`);
+        }
+    }
+}
 
 console.log(`\n--- ${passed} passed, ${failed} failed ---\n`);
 if (failed > 0) process.exit(1);

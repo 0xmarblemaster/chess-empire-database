@@ -1190,88 +1190,6 @@
     }
 
     /**
-     * Phase 2 leaderboard table — columns per COACH_KPI_PHASE2_SPEC.md §4:
-     *   rank, coach name, branch, active students, tournament entries,
-     *   avg rating delta, top-3 finishes, promotions, razryads earned.
-     *
-     * Sorted by tournament_entries desc with tie-break on participation_rate
-     * desc — replaces the retired composite_score sort. Equal pairs render at
-     * the same rank with the next rank skipped — "D-style behavior".
-     */
-    function renderPhase2Leaderboard(container, rows, opts) {
-        if (typeof document === 'undefined' || !container) return;
-        const o = opts || {};
-        const t = typeof o.t === 'function' ? o.t : null;
-        const label = (key, fb) => (t ? t(key, fb) : fb);
-        if (!Array.isArray(rows) || rows.length === 0) {
-            const msg = o.emptyMessage || label('coachKpiNoDataYet', 'No data yet for this window.');
-            renderEmptyState(container, msg, { t });
-            _rememberRender('renderPhase2Leaderboard', container, [rows, o]);
-            return;
-        }
-
-        // tournament_entries-desc primary, participation_rate-desc tie-break.
-        const sorted = rows.slice().sort((a, b) => {
-            const ae = Number(a.tournament_entries) || 0;
-            const be = Number(b.tournament_entries) || 0;
-            if (be !== ae) return be - ae;
-            const ap = Number(a.participation_rate) || 0;
-            const bp = Number(b.participation_rate) || 0;
-            return bp - ap;
-        });
-
-        // D-style rank assignment: same entries + same participation_rate → same rank.
-        const ranks = [];
-        for (let i = 0; i < sorted.length; i++) {
-            if (i > 0) {
-                const prev = sorted[i - 1];
-                const cur = sorted[i];
-                if (Number(prev.tournament_entries) === Number(cur.tournament_entries)
-                    && Number(prev.participation_rate) === Number(cur.participation_rate)) {
-                    ranks.push(ranks[i - 1]);
-                    continue;
-                }
-            }
-            ranks.push(i + 1);
-        }
-
-        container.innerHTML = '';
-        const table = _el('table', { className: 'kpi-leaderboard kpi-leaderboard-v2' });
-        const thead = _el('thead', null, [
-            _el('tr', null, [
-                _el('th', { text: label('admin.coachKpi.rank', '#') }),
-                _el('th', { text: label('admin.coachKpi.colCoach', 'Coach') }),
-                _el('th', { text: label('admin.coachKpi.colBranch', 'Branch') }),
-                _el('th', { text: label('admin.coachKpi.colActive', 'Active students') }),
-                _el('th', { text: label('admin.coachKpi.colEntries', 'Tournament entries') }),
-                _el('th', { text: label('admin.coachKpi.colAvgDelta', 'Avg rating delta') }),
-                _el('th', { text: label('admin.coachKpi.colTop3', 'Top-3 finishes') }),
-                _el('th', { text: label('admin.coachKpi.colPromotions', 'Promotions') }),
-                _el('th', { text: label('admin.coachKpi.colRazryads', 'Razryads earned') }),
-            ]),
-        ]);
-        const tbody = _el('tbody');
-        sorted.forEach((row, i) => {
-            const branches = Array.isArray(row.branches) ? row.branches.join(', ') : (row.branch || '—');
-            tbody.appendChild(_el('tr', { dataset: { coachId: row.coach_id || '' } }, [
-                _el('td', { text: String(ranks[i]) }),
-                _el('td', { text: row.coach_name || '—' }),
-                _el('td', { text: branches || '—' }),
-                _el('td', { text: formatHeroValue(row.active_students_count) }),
-                _el('td', { text: formatHeroValue(row.tournament_entries) }),
-                _el('td', { text: formatRatingDelta(row.avg_rating_delta) }),
-                _el('td', { text: formatHeroValue(row.top3_count) }),
-                _el('td', { text: formatHeroValue(row.promotions_count) }),
-                _el('td', { text: formatHeroValue(row.new_razryads_count) }),
-            ]));
-        });
-        table.appendChild(thead);
-        table.appendChild(tbody);
-        container.appendChild(table);
-        _rememberRender('renderPhase2Leaderboard', container, [rows, o]);
-    }
-
-    /**
      * Resolve the initial view the dashboard should open on, given the role.
      *   - Admin → 'school'
      *   - Locked coach → 'coach'
@@ -1360,6 +1278,40 @@
      * metric-cell-strong column carries the variant-colored emphasis so the
      * eye lands on the number that matches the hero card the user clicked.
      */
+    // Normalize a razryad enum value (DB: 'kms' / '1st' / '2nd' / '3rd' / '4th'
+     // / 'none' or numeric '1'..'4') to the i18n suffix the locale dictionaries
+     // ship: 'KMS' / '1st' / '2nd' / '3rd' / '4th' / 'None'. Unknown values
+     // return null so callers keep the raw text.
+    function _normalizeRazryadSuffix(value) {
+        if (value === null || value === undefined) return 'None';
+        const r = String(value).toLowerCase();
+        if (r === 'kms') return 'KMS';
+        if (r === '1st' || r === '1') return '1st';
+        if (r === '2nd' || r === '2') return '2nd';
+        if (r === '3rd' || r === '3') return '3rd';
+        if (r === '4th' || r === '4') return '4th';
+        if (r === 'none' || r === '') return 'None';
+        return null;
+    }
+
+    /**
+     * Format a date for drilldown cells. Numeric DD.MM.YYYY across all locales
+     * (universal, no translation surface). Accepts an ISO string, Date, or any
+     * value Date(...) can parse. Invalid input → raw input as a string fallback.
+     */
+    function formatDrilldownDate(value) {
+        if (value === null || value === undefined || value === '') return '—';
+        // ISO date-only strings ('2026-03-15') — sidestep timezone wobble by
+        // splitting directly when the prefix matches.
+        if (typeof value === 'string') {
+            const m = value.match(/^(\d{4})-(\d{2})-(\d{2})/);
+            if (m) return `${m[3]}.${m[2]}.${m[1]}`;
+        }
+        const d = (value instanceof Date) ? value : new Date(value);
+        if (!d || !Number.isFinite(d.getTime())) return String(value);
+        return `${pad2(d.getUTCDate())}.${pad2(d.getUTCMonth() + 1)}.${d.getUTCFullYear()}`;
+    }
+
     function renderDrilldown(container, metric, students, state, opts) {
         if (typeof document === 'undefined' || !container) return;
         const o = opts || {};
@@ -1376,6 +1328,18 @@
         const strongCls = `metric-cell-strong variant-${variant}`;
         const table = _el('table', { className: 'kpi-leaderboard kpi-drilldown-table' });
         const fullName = (r) => `${r.first_name || ''} ${r.last_name || ''}`.trim() || '—';
+        // Localized enum cells share the filter-bar lookup keys (coachKpiLeague*
+        // / coachKpiRazryad*) so a coach reading the dashboard in Russian sees
+        // "Лига A" / "КМС" instead of the raw DB enum value.
+        const leagueCell = (raw) => {
+            if (raw === null || raw === undefined || raw === '') return '—';
+            return label('coachKpiLeague' + raw, raw);
+        };
+        const razryadCell = (raw) => {
+            if (raw === null || raw === undefined || raw === '') return '—';
+            const suf = _normalizeRazryadSuffix(raw);
+            return suf ? label('coachKpiRazryad' + suf, raw) : raw;
+        };
         let thead = null;
         let tbody = null;
         if (metric === 'active_players') {
@@ -1395,8 +1359,8 @@
                     _el('td', { text: fullName(r) }),
                     _el('td', { text: r.branch_name || '—' }),
                     _el('td', { text: r.coach_name || '—' }),
-                    _el('td', { text: r.league || '—' }),
-                    _el('td', { text: r.razryad || '—' }),
+                    _el('td', { text: leagueCell(r.league) }),
+                    _el('td', { text: razryadCell(r.razryad) }),
                     _el('td', { text: formatHeroValue(r.games_played) }),
                     _el('td', { className: strongCls, text: formatHeroValue(r.tournaments_played) }),
                     _el('td', { text: formatRatingDelta(r.rating_delta_total) }),
@@ -1414,7 +1378,7 @@
             tbody = _el('tbody');
             for (const r of rows) {
                 tbody.appendChild(_el('tr', { dataset: { tournamentId: r.tournament_id || '' } }, [
-                    _el('td', { text: r.occurred_at || '—' }),
+                    _el('td', { text: formatDrilldownDate(r.occurred_at) }),
                     _el('td', { text: r.tournament_name || '—' }),
                     _el('td', { text: fullName(r) }),
                     _el('td', { text: r.branch_name || '—' }),
@@ -1438,9 +1402,9 @@
                     _el('td', { text: fullName(r) }),
                     _el('td', { text: r.branch_name || '—' }),
                     _el('td', { text: r.coach_name || '—' }),
-                    _el('td', { text: r.old_razryad || '—' }),
-                    _el('td', { className: strongCls, text: r.new_razryad || '—' }),
-                    _el('td', { text: r.earned_at || '—' }),
+                    _el('td', { text: razryadCell(r.old_razryad) }),
+                    _el('td', { className: strongCls, text: razryadCell(r.new_razryad) }),
+                    _el('td', { text: formatDrilldownDate(r.earned_at) }),
                     _el('td', { text: r.tournament_name || '—' }),
                 ]));
             }
@@ -1459,9 +1423,9 @@
                     _el('td', { text: fullName(r) }),
                     _el('td', { text: r.branch_name || '—' }),
                     _el('td', { text: r.coach_name || '—' }),
-                    _el('td', { text: r.from_league || '—' }),
-                    _el('td', { className: strongCls, text: r.to_league || '—' }),
-                    _el('td', { text: r.occurred_at || '—' }),
+                    _el('td', { text: leagueCell(r.from_league) }),
+                    _el('td', { className: strongCls, text: leagueCell(r.to_league) }),
+                    _el('td', { text: formatDrilldownDate(r.occurred_at) }),
                 ]));
             }
         }
@@ -1980,9 +1944,9 @@
         renderTournamentsByLeagueStackedBar,
         renderTournamentsByLeagueBar,
         renderAvgPlaceTrendLine,
-        renderPhase2Leaderboard,
         renderDrilldown,
         renderDrilldownHeader,
+        formatDrilldownDate,
         _fetchDrilldown,
         DRILLABLE_METRICS,
         METRIC_TO_VARIANT,
