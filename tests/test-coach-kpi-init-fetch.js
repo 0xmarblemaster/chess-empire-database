@@ -269,15 +269,15 @@ async function runSchoolFallbackTest() {
     // totals — it's the coach-filter fallback now (single-coach view).
     const rolled = mod.aggregateSchoolHero([
         { active_students_count: 5, total_tournaments: 2, top3_count: 1,
-          promotions_count: 1, new_razryads_count: 1, total_rating_gained: 50 },
+          promotions_count: 1, new_razryads_count: 1 },
         { active_students_count: 3, total_tournaments: 1, top3_count: 0,
-          promotions_count: 0, new_razryads_count: 0, total_rating_gained: 10 },
+          promotions_count: 0, new_razryads_count: 0 },
     ]);
     assert(rolled.active_students_count === 8 && rolled.total_tournaments === 3,
         'aggregateSchoolHero sums per-coach counts (5+3=8, 2+1=3)');
     assert(rolled.top3_count === 1 && rolled.promotions_count === 1
-        && rolled.new_razryads_count === 1 && rolled.total_rating_gained === 60,
-        'aggregateSchoolHero sums top3, promotions, razryads, rating gained');
+        && rolled.new_razryads_count === 1,
+        'aggregateSchoolHero sums top3, promotions, razryads');
     assert(typeof rolled.participation_pct === 'number',
         'aggregateSchoolHero now emits participation_pct so the card is never blank');
 

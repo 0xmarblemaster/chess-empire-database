@@ -109,10 +109,10 @@ const REQUIRED_KEYS = [
     'coachKpiColActive',
     'coachKpiColTournaments',
     'coachKpiColTop3',
-    'coachKpiColRatingGained',
     'coachKpiColPromotions',
     'coachKpiColRazryads',
-    // coachKpiColScore intentionally absent — the Score column was retired.
+    // coachKpiColScore + coachKpiColRatingGained intentionally absent —
+    // both columns were retired from the v1 leaderboard.
 ];
 
 function valueFor(block, key) {

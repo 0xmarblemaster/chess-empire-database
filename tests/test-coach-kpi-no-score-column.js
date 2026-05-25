@@ -79,7 +79,7 @@ const TRANSLATIONS = {
     en: {
         coachKpiColCoach: 'Coach', coachKpiColActive: 'Active',
         coachKpiColTournaments: 'Tournaments', coachKpiColTop3: 'Top-3',
-        coachKpiColRatingGained: 'Rating gained', coachKpiColPromotions: 'Promotions',
+        coachKpiColPromotions: 'Promotions',
         coachKpiColRazryads: 'Razryads',
         'admin.coachKpi.rank': '#', 'admin.coachKpi.colCoach': 'Coach',
         'admin.coachKpi.colBranch': 'Branch', 'admin.coachKpi.colActive': 'Active students',
@@ -90,7 +90,7 @@ const TRANSLATIONS = {
     ru: {
         coachKpiColCoach: 'Тренер', coachKpiColActive: 'Активные',
         coachKpiColTournaments: 'Турниры', coachKpiColTop3: 'Топ-3',
-        coachKpiColRatingGained: 'Прирост рейтинга', coachKpiColPromotions: 'Повышения',
+        coachKpiColPromotions: 'Повышения',
         coachKpiColRazryads: 'Разряды',
         'admin.coachKpi.rank': '№', 'admin.coachKpi.colCoach': 'Тренер',
         'admin.coachKpi.colBranch': 'Филиал', 'admin.coachKpi.colActive': 'Активные ученики',
@@ -101,7 +101,7 @@ const TRANSLATIONS = {
     kk: {
         coachKpiColCoach: 'Жаттықтырушы', coachKpiColActive: 'Белсенді',
         coachKpiColTournaments: 'Турнирлер', coachKpiColTop3: 'Топ-3',
-        coachKpiColRatingGained: 'Рейтинг өсімі', coachKpiColPromotions: 'Көтерілулер',
+        coachKpiColPromotions: 'Көтерілулер',
         coachKpiColRazryads: 'Разрядтар',
         'admin.coachKpi.rank': '№', 'admin.coachKpi.colCoach': 'Жаттықтырушы',
         'admin.coachKpi.colBranch': 'Бөлімше', 'admin.coachKpi.colActive': 'Белсенді оқушылар',
@@ -154,7 +154,7 @@ for (const locale of ['en', 'ru', 'kk']) {
     kpi.renderLeaderboard(container, COACH_ROWS, { t: makeT(locale) });
 
     const headers = findAllByTag(container, 'th').map(n => n.textContent);
-    assert(headers.length === 7, `[${locale}] exactly seven <th> headers render (Score removed)`);
+    assert(headers.length === 6, `[${locale}] exactly six <th> headers render (Score + Rating gained removed)`);
     for (const lbl of SCORE_LABELS) {
         assert(!headers.includes(lbl),
             `[${locale}] no <th> reads "${lbl}"`);

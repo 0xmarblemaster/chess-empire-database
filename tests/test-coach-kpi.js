@@ -203,15 +203,14 @@ assertEqual(kpi.filterLeaderboardByBranch(null, 'b1'), [],
 
 console.log('\n=== aggregateSchoolHero ===============================================\n');
 assertEqual(kpi.aggregateSchoolHero([
-    { active_students_count: 10, total_tournaments: 4, top3_count: 2, promotions_count: 1, new_razryads_count: 0, total_rating_gained:  50 },
-    { active_students_count:  6, total_tournaments: 3, top3_count: 1, promotions_count: 0, new_razryads_count: 2, total_rating_gained: -10 },
+    { active_students_count: 10, total_tournaments: 4, top3_count: 2, promotions_count: 1, new_razryads_count: 0 },
+    { active_students_count:  6, total_tournaments: 3, top3_count: 1, promotions_count: 0, new_razryads_count: 2 },
 ]), {
     active_students_count: 16,
     total_tournaments:     7,
     top3_count:            3,
     promotions_count:      1,
     new_razryads_count:    2,
-    total_rating_gained:  40,
     // 0 entries / 16 active → 0% (no tournament_entries on the inputs)
     participation_pct:     0,
 }, 'sums every numeric column (plus the participation_pct fallback key)');
@@ -221,7 +220,6 @@ assertEqual(kpi.aggregateSchoolHero([]), {
     top3_count:            0,
     promotions_count:      0,
     new_razryads_count:    0,
-    total_rating_gained:   0,
     participation_pct:     0,
 }, 'empty array → zeroed shape (no NaN/null leaks)');
 assertEqual(kpi.aggregateSchoolHero(null).active_students_count, 0,

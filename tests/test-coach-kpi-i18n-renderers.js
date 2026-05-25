@@ -140,7 +140,6 @@ const RU = {
     coachKpiColActive: 'Активные',
     coachKpiColTournaments: 'Турниры',
     coachKpiColTop3: 'Топ-3',
-    coachKpiColRatingGained: 'Прирост рейтинга',
     coachKpiColPromotions: 'Повышения',
     coachKpiColRazryads: 'Разряды',
     'admin.coachKpi.uploadTitle': 'Загрузка турнира',
@@ -203,29 +202,29 @@ console.log('\n=== renderSchoolHero falls back to English without opts.t =======
         'English fallback "Participation" rendered when no opts.t supplied');
 })();
 
-console.log('\n=== renderLeaderboard localizes its seven column headers ==============\n');
+console.log('\n=== renderLeaderboard localizes its six column headers ================\n');
 (function testLeaderboardHeaders() {
     const kpi = loadKpi({});
     const container = makeContainer();
     const rows = [{
         coach_id: 'c1', coach_name: 'Ivan Ivanov',
         active_students_count: 5, total_tournaments: 3,
-        top3_count: 1, total_rating_gained: 12,
+        top3_count: 1,
         promotions_count: 1, new_razryads_count: 0,
         composite_score: 65,
     }];
     kpi.renderLeaderboard(container, rows, { t: ruT });
 
     const headers = findAllByTag(container, 'th').map(n => n.textContent);
-    assert(headers.length === 7, 'seven <th> headers render (Score column retired)');
+    assert(headers.length === 6, 'six <th> headers render (Score + Rating gained retired)');
     assert(headers[0] === 'Тренер', 'Coach column → Тренер');
     assert(headers[1] === 'Активные', 'Active column → Активные');
     assert(headers[2] === 'Турниры', 'Tournaments column → Турниры');
     assert(headers[3] === 'Топ-3', 'Top-3 column → Топ-3');
-    assert(headers[4] === 'Прирост рейтинга', 'Rating gained column → Прирост рейтинга');
-    assert(headers[5] === 'Повышения', 'Promotions column → Повышения');
-    assert(headers[6] === 'Разряды', 'Razryads column → Разряды');
+    assert(headers[4] === 'Повышения', 'Promotions column → Повышения');
+    assert(headers[5] === 'Разряды', 'Razryads column → Разряды');
     assert(!headers.includes('Балл'), 'Score column header is gone');
+    assert(!headers.includes('Прирост рейтинга'), 'Rating gained column header is gone');
 })();
 
 console.log('\n=== renderFilters localizes the three filter-group labels =============\n');
