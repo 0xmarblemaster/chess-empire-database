@@ -891,7 +891,362 @@ serve(async (req) => {
       })
     }
 
-    return json({ success: false, error: 'Invalid action. Use: list, detail, student_history, branch_leaderboard, coach_leaderboard, coach_kpi_summary, school_kpi_summary' }, 400)
+    if (action === 'school_student_drilldown') {
+      // Powers the Coach Effectiveness clickable-hero drilldown. Returns a
+      // per-metric list (students or events) scoped by the same time-window /
+      // league / branch / coach filters the main dashboard uses. Reuses the
+      // exact in-memory sets that drive school_kpi_summary so counts match.
+      const metric = p('metric')
+      const VALID_METRICS = ['active_players', 'top3', 'new_razryads', 'promotions']
+      if (!metric || !VALID_METRICS.includes(metric)) {
+        return json({ success: false, error: `metric required (one of: ${VALID_METRICS.join(', ')})` }, 400)
+      }
+      const windowStart = p('window_start')
+      const windowEnd = p('window_end')
+      const validationError = validateWindow(windowStart, windowEnd)
+      if (validationError) return json({ success: false, error: validationError }, 400)
+      const drillBranchId = p('branch_id')
+      const drillCoachId = p('coach_id')
+      const drillLeagueParam = p('league')
+      const drillLeagueKind = drillLeagueParam === 'B' ? 'league_b'
+        : drillLeagueParam === 'C' ? 'league_c'
+        : null
+
+      // Resolve coach scope: explicit coach_id wins, else branch_id → coaches,
+      // else all coaches. Mirrors school_kpi_summary's logic so the drilldown
+      // student set matches the hero count exactly.
+      let scopedCoachIds: string[] | null = null
+      if (drillCoachId) {
+        scopedCoachIds = [drillCoachId]
+      } else if (drillBranchId) {
+        const { data: cb, error: cbErr } = await supabase
+          .from('coach_branches').select('coach_id').eq('branch_id', drillBranchId)
+        if (cbErr) throw cbErr
+        scopedCoachIds = (cb || []).map((r: any) => r.coach_id)
+      }
+
+      const emptyResp = (extra?: any) => json({
+        success: true,
+        data: {
+          metric,
+          window: { start: windowStart, end: windowEnd },
+          filters: {
+            branch_id: drillBranchId || null,
+            league: drillLeagueParam || null,
+            coach_id: drillCoachId || null,
+          },
+          students: [],
+          ...extra,
+        },
+      })
+
+      let studentsQuery = supabase
+        .from('students')
+        .select('id, first_name, last_name, branch_id, coach_id, razryad, status')
+        .eq('status', 'active')
+      if (scopedCoachIds !== null) {
+        if (scopedCoachIds.length === 0) return emptyResp()
+        studentsQuery = studentsQuery.in('coach_id', scopedCoachIds)
+      }
+      const { data: students, error: stErr } = await studentsQuery
+      if (stErr) throw stErr
+      const studentList = students || []
+      const studentById = new Map<string, any>()
+      for (const s of studentList) studentById.set((s as any).id, s)
+      const studentIds = studentList.map((s: any) => s.id)
+      if (studentIds.length === 0) return emptyResp()
+
+      // Resolve coach + branch display names so the drilldown rows can render
+      // without a second client roundtrip.
+      const coachIds = [...new Set(studentList.map((s: any) => s.coach_id).filter(Boolean))]
+      const coachById = new Map<string, any>()
+      if (coachIds.length > 0) {
+        const { data: cs, error: csErr } = await supabase
+          .from('coaches').select('id, first_name, last_name').in('id', coachIds)
+        if (csErr) throw csErr
+        for (const c of cs || []) coachById.set((c as any).id, c)
+      }
+      const branchIds = [...new Set(studentList.map((s: any) => s.branch_id).filter(Boolean))]
+      const branchById = new Map<string, any>()
+      if (branchIds.length > 0) {
+        const { data: bs, error: bsErr } = await supabase
+          .from('branches').select('id, name').in('id', branchIds)
+        if (bsErr) throw bsErr
+        for (const b of bs || []) branchById.set((b as any).id, b)
+      }
+      const coachName = (id: string | null) => {
+        if (!id) return null
+        const c = coachById.get(id)
+        return c ? `${c.first_name} ${c.last_name}`.trim() : null
+      }
+      const branchName = (id: string | null) => {
+        if (!id) return null
+        const b = branchById.get(id)
+        return b ? b.name : null
+      }
+
+      // Tournament uploads in window — drives top3, active_players, razryads.
+      let drillUploadsQuery = supabase
+        .from('tournaments_uploads')
+        .select('id, kind, tournament_date')
+        .gte('tournament_date', windowStart)
+        .lte('tournament_date', windowEnd)
+      if (drillLeagueKind) drillUploadsQuery = drillUploadsQuery.eq('kind', drillLeagueKind)
+      const { data: drillUploads, error: drillUpErr } = await drillUploadsQuery
+      if (drillUpErr) throw drillUpErr
+      const drillUploadsList = drillUploads || []
+      const drillUploadIds = drillUploadsList.map((u: any) => u.id)
+      const drillUploadById = new Map<string, any>()
+      for (const u of drillUploadsList) drillUploadById.set((u as any).id, u)
+      const drillRazryadUploadIds = new Set(
+        drillUploadsList.filter((u: any) => u.kind === 'razryad_3' || u.kind === 'razryad_4').map((u: any) => u.id)
+      )
+
+      const KIND_LABELS: Record<string, string> = {
+        league_b: 'League B',
+        league_c: 'League C',
+        razryad_3: '3rd Razryad Qualifier',
+        razryad_4: '4th Razryad Qualifier',
+      }
+      const tournamentName = (upload: any) => {
+        if (!upload) return null
+        const label = KIND_LABELS[upload.kind] || upload.kind
+        return `${label} (${upload.tournament_date})`
+      }
+
+      let drillResults: any[] = []
+      if (drillUploadIds.length > 0) {
+        const { data: rs, error: rsErr } = await supabase
+          .from('tournament_results')
+          .select('upload_id, student_id, rank, score, games_played, rating_before, rating_delta, earned_razryad')
+          .in('upload_id', drillUploadIds)
+        if (rsErr) throw rsErr
+        const studentSet = new Set(studentIds)
+        drillResults = (rs || []).filter((r: any) => studentSet.has(r.student_id))
+      }
+
+      const ratingToLeague = (rating: number | null | undefined) => {
+        const n = Number(rating)
+        if (!Number.isFinite(n)) return null
+        if (n > 800) return 'A'
+        if (n >= 450) return 'B'
+        return 'C'
+      }
+
+      if (metric === 'active_players') {
+        // One row per distinct student that played ≥1 rated game in window.
+        // Length === school_kpi_summary.active_players_count.
+        type Slot = {
+          student_id: string
+          games_played: number
+          tournaments: Set<string>
+          rating_delta_total: number
+          latest_rating: number | null
+        }
+        const byStudent = new Map<string, Slot>()
+        for (const r of drillResults) {
+          if ((Number(r.games_played) || 0) < 1) continue
+          const slot = byStudent.get(r.student_id) || {
+            student_id: r.student_id,
+            games_played: 0,
+            tournaments: new Set<string>(),
+            rating_delta_total: 0,
+            latest_rating: null,
+          }
+          slot.games_played += Number(r.games_played) || 0
+          slot.tournaments.add(r.upload_id)
+          slot.rating_delta_total += Number(r.rating_delta) || 0
+          const rating = Number(r.rating_before) + (Number(r.rating_delta) || 0)
+          if (Number.isFinite(rating)) slot.latest_rating = rating
+          byStudent.set(r.student_id, slot)
+        }
+        const rows = [...byStudent.values()].map((slot) => {
+          const s = studentById.get(slot.student_id) || {}
+          return {
+            student_id: slot.student_id,
+            first_name: s.first_name || null,
+            last_name: s.last_name || null,
+            branch_id: s.branch_id || null,
+            branch_name: branchName(s.branch_id || null),
+            coach_id: s.coach_id || null,
+            coach_name: coachName(s.coach_id || null),
+            league: ratingToLeague(slot.latest_rating),
+            razryad: s.razryad || null,
+            games_played: slot.games_played,
+            tournaments_played: slot.tournaments.size,
+            rating_delta_total: slot.rating_delta_total,
+          }
+        }).sort((a, b) => (b.rating_delta_total || 0) - (a.rating_delta_total || 0))
+        return json({
+          success: true,
+          data: {
+            metric,
+            window: { start: windowStart, end: windowEnd },
+            filters: {
+              branch_id: drillBranchId || null,
+              league: drillLeagueParam || null,
+              coach_id: drillCoachId || null,
+            },
+            students: rows,
+          },
+        })
+      }
+
+      if (metric === 'top3') {
+        // One row per top-3 EVENT (rank<=3 AND games_played>=1). A student with
+        // 5 top-3 finishes appears 5 times. Length === sum of top3 events.
+        const rows: any[] = []
+        for (const r of drillResults) {
+          if ((Number(r.games_played) || 0) < 1) continue
+          if (!Number.isFinite(r.rank) || r.rank > 3) continue
+          const u = drillUploadById.get(r.upload_id)
+          const s = studentById.get(r.student_id) || {}
+          rows.push({
+            tournament_id: r.upload_id,
+            tournament_name: tournamentName(u),
+            occurred_at: u ? u.tournament_date : null,
+            placement: Number(r.rank),
+            student_id: r.student_id,
+            first_name: s.first_name || null,
+            last_name: s.last_name || null,
+            coach_name: coachName(s.coach_id || null),
+            branch_name: branchName(s.branch_id || null),
+          })
+        }
+        rows.sort((a, b) => {
+          const dateCmp = String(b.occurred_at || '').localeCompare(String(a.occurred_at || ''))
+          if (dateCmp !== 0) return dateCmp
+          return (a.placement || 0) - (b.placement || 0)
+        })
+        return json({
+          success: true,
+          data: {
+            metric,
+            window: { start: windowStart, end: windowEnd },
+            filters: {
+              branch_id: drillBranchId || null,
+              league: drillLeagueParam || null,
+              coach_id: drillCoachId || null,
+            },
+            students: rows,
+          },
+        })
+      }
+
+      if (metric === 'new_razryads') {
+        // One row per earned razryad event (a tournament_results row with
+        // earned_razryad set on a razryad_3 / razryad_4 upload). Pull
+        // razryad_history in the same window so old_razryad/new_razryad land
+        // on the row even when the trigger fired late.
+        const { data: rzHistRaw, error: rzErr } = await supabase
+          .from('razryad_history')
+          .select('student_id, old_razryad, new_razryad, changed_at')
+          .gte('changed_at', windowStart)
+          .lte('changed_at', `${windowEnd}T23:59:59.999Z`)
+        if (rzErr) throw rzErr
+        const studentSet = new Set(studentIds)
+        const rzHist = (rzHistRaw || []).filter((r: any) => studentSet.has(r.student_id) && r.new_razryad && r.new_razryad !== 'none')
+
+        // Map student_id → list of history rows so we can pair each tournament
+        // event with the closest matching transition (by date).
+        const histByStudent = new Map<string, any[]>()
+        for (const h of rzHist) {
+          const arr = histByStudent.get(h.student_id) || []
+          arr.push(h); histByStudent.set(h.student_id, arr)
+        }
+
+        const rows: any[] = []
+        for (const r of drillResults) {
+          if ((Number(r.games_played) || 0) < 1) continue
+          if (!r.earned_razryad) continue
+          if (!drillRazryadUploadIds.has(r.upload_id)) continue
+          const u = drillUploadById.get(r.upload_id)
+          const s = studentById.get(r.student_id) || {}
+          const hist = (histByStudent.get(r.student_id) || []).slice().sort((a, b) =>
+            String(a.changed_at).localeCompare(String(b.changed_at))
+          )
+          // Pick the first history row at or after the tournament_date — that's
+          // the trigger's record of this earn.
+          const matching = hist.find((h: any) =>
+            String(h.changed_at).slice(0, 10) >= String(u && u.tournament_date)
+          ) || hist[hist.length - 1] || null
+          rows.push({
+            student_id: r.student_id,
+            first_name: s.first_name || null,
+            last_name: s.last_name || null,
+            coach_name: coachName(s.coach_id || null),
+            branch_name: branchName(s.branch_id || null),
+            old_razryad: matching ? matching.old_razryad : null,
+            new_razryad: matching ? matching.new_razryad : r.earned_razryad,
+            earned_at: u ? u.tournament_date : (matching ? matching.changed_at : null),
+            tournament_name: tournamentName(u),
+          })
+        }
+        rows.sort((a, b) => String(b.earned_at || '').localeCompare(String(a.earned_at || '')))
+        return json({
+          success: true,
+          data: {
+            metric,
+            window: { start: windowStart, end: windowEnd },
+            filters: {
+              branch_id: drillBranchId || null,
+              league: drillLeagueParam || null,
+              coach_id: drillCoachId || null,
+            },
+            students: rows,
+          },
+        })
+      }
+
+      if (metric === 'promotions') {
+        // One row per UNIQUE student showing their LATEST promotion in window
+        // (Q2: deduped per student). Length === school_kpi_summary.promotions_count.
+        const { data: evRaw, error: evErr } = await supabase
+          .from('student_league_events')
+          .select('student_id, event_type, from_league, to_league, occurred_at')
+          .eq('event_type', 'promotion')
+          .gte('occurred_at', windowStart)
+          .lte('occurred_at', `${windowEnd}T23:59:59.999Z`)
+        if (evErr) throw evErr
+        const studentSet = new Set(studentIds)
+        const proms = (evRaw || []).filter((e: any) => studentSet.has(e.student_id))
+        const latestByStudent = new Map<string, any>()
+        for (const e of proms) {
+          const prev = latestByStudent.get(e.student_id)
+          if (!prev || String(e.occurred_at) > String(prev.occurred_at)) {
+            latestByStudent.set(e.student_id, e)
+          }
+        }
+        const rows = [...latestByStudent.values()].map((e) => {
+          const s = studentById.get(e.student_id) || {}
+          return {
+            student_id: e.student_id,
+            first_name: s.first_name || null,
+            last_name: s.last_name || null,
+            coach_name: coachName(s.coach_id || null),
+            branch_name: branchName(s.branch_id || null),
+            from_league: e.from_league,
+            to_league: e.to_league,
+            occurred_at: e.occurred_at,
+          }
+        }).sort((a, b) => String(b.occurred_at || '').localeCompare(String(a.occurred_at || '')))
+        return json({
+          success: true,
+          data: {
+            metric,
+            window: { start: windowStart, end: windowEnd },
+            filters: {
+              branch_id: drillBranchId || null,
+              league: drillLeagueParam || null,
+              coach_id: drillCoachId || null,
+            },
+            students: rows,
+          },
+        })
+      }
+    }
+
+    return json({ success: false, error: 'Invalid action. Use: list, detail, student_history, branch_leaderboard, coach_leaderboard, coach_kpi_summary, school_kpi_summary, school_student_drilldown' }, 400)
   } catch (error) {
     // PostgREST/supabase-js errors are plain objects with { message, code, details, hint }
     // — not Error instances — so `error.message` and String(error) lose everything.

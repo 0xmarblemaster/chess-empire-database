@@ -59,6 +59,28 @@
         C: 'League C',
     });
 
+    // Hero-card variant → drilldown metric. The other three variants
+    // (active-students, participation, tournaments) intentionally stay
+    // non-interactive — the drilldown only has handlers for these four.
+    const DRILLABLE_METRICS = Object.freeze({
+        'active-players': 'active_players',
+        'top3': 'top3',
+        'razryads': 'new_razryads',
+        'promotions': 'promotions',
+    });
+    const METRIC_TO_VARIANT = Object.freeze({
+        'active_players': 'active-players',
+        'top3': 'top3',
+        'new_razryads': 'razryads',
+        'promotions': 'promotions',
+    });
+    const METRIC_TITLES = Object.freeze({
+        'active_players': 'Active players',
+        'top3': 'Top-3 finishes',
+        'new_razryads': 'New razryads',
+        'promotions': 'Promotions',
+    });
+
     // Razryad order + colors match the existing branch / coach doughnuts in
     // admin-v2.js so the dashboards read consistently.
     const RAZRYAD_ORDER = Object.freeze(['KMS', '1st', '2nd', '3rd', '4th', 'None']);
@@ -597,13 +619,40 @@
             ['promotions',      '⬆',  label('coachKpiPromotions',     'Promotions'),      formatHeroValue(s.promotions_count)],
             ['tournaments',     '🗓', label('coachKpiTournamentsYtd', 'Tournaments'),     formatHeroValue(s.total_tournaments)],
         ];
+        const onCardClick = typeof o.onCardClick === 'function' ? o.onCardClick : null;
         container.innerHTML = '';
         for (const [variant, icon, cardLabel, value] of cards) {
-            container.appendChild(_el('div', { className: `stat-card kpi-hero-card variant-${variant}` }, [
+            const metric = DRILLABLE_METRICS[variant] || null;
+            const clickable = !!(metric && onCardClick);
+            const props = {
+                className: `stat-card kpi-hero-card variant-${variant}${clickable ? ' is-clickable' : ''}`,
+            };
+            if (clickable) {
+                props.role = 'button';
+                props.tabindex = '0';
+                props.dataset = { metric };
+                props['aria-label'] = cardLabel;
+            }
+            const card = _el('div', props, [
                 _el('span', { className: 'stat-icon', 'aria-hidden': 'true', text: icon }),
                 _el('div', { className: 'stat-card-value', text: value }),
                 _el('div', { className: 'stat-card-label', text: cardLabel }),
-            ]));
+            ]);
+            if (clickable && card.addEventListener) {
+                card.addEventListener('click', () => onCardClick(metric));
+                card.addEventListener('keydown', (e) => {
+                    if (!e) return;
+                    const key = e.key;
+                    const code = e.keyCode;
+                    const isEnter = key === 'Enter' || code === 13;
+                    const isSpace = key === ' ' || key === 'Spacebar' || code === 32;
+                    if (isEnter || isSpace) {
+                        if (typeof e.preventDefault === 'function') e.preventDefault();
+                        onCardClick(metric);
+                    }
+                });
+            }
+            container.appendChild(card);
         }
         _rememberRender('renderSchoolHero', container, [summary, o]);
     }
@@ -1281,6 +1330,180 @@
     }
 
     /**
+     * Issue the drilldown fetch for a clicked hero card. Coach-locked viewers
+     * (non-admin coaches) have coach_id forced to self so a coach cannot peek
+     * at another coach's students via the URL.
+     */
+    async function _fetchDrilldown(roleInfo, metric, state, opts) {
+        if (!roleLock || !roleLock.canViewCoachKpi(roleInfo)) return null;
+        const s = state || {};
+        const win = resolveTimeWindow(s.window, s.now);
+        const query = {
+            action: 'school_student_drilldown',
+            metric,
+            window_start: win.start,
+            window_end: win.end,
+        };
+        if (s.branchId && s.branchId !== 'all') query.branch_id = s.branchId;
+        if (s.league && s.league !== 'all') query.league = s.league;
+        if (roleLock.isCoachLocked && roleLock.isCoachLocked(roleInfo)) {
+            query.coach_id = roleInfo.coachId;
+        } else if (s.coachId && s.coachId !== 'all') {
+            query.coach_id = s.coachId;
+        }
+        return callKpiEndpoint(query, opts);
+    }
+
+    /**
+     * Render the drilldown table. Columns vary per metric (see edge-function
+     * row shapes in supabase/functions/analytics-tournaments/index.ts). The
+     * metric-cell-strong column carries the variant-colored emphasis so the
+     * eye lands on the number that matches the hero card the user clicked.
+     */
+    function renderDrilldown(container, metric, students, state, opts) {
+        if (typeof document === 'undefined' || !container) return;
+        const o = opts || {};
+        const t = typeof o.t === 'function' ? o.t : null;
+        const label = (key, fb) => (t ? t(key, fb) : fb);
+        const rows = Array.isArray(students) ? students : [];
+        container.innerHTML = '';
+        if (rows.length === 0) {
+            renderEmptyState(container, undefined, { t });
+            _rememberRender('renderDrilldown', container, [metric, students, state, o]);
+            return;
+        }
+        const variant = METRIC_TO_VARIANT[metric] || 'active-players';
+        const strongCls = `metric-cell-strong variant-${variant}`;
+        const table = _el('table', { className: 'kpi-leaderboard kpi-drilldown-table' });
+        const fullName = (r) => `${r.first_name || ''} ${r.last_name || ''}`.trim() || '—';
+        let thead = null;
+        let tbody = null;
+        if (metric === 'active_players') {
+            thead = _el('thead', null, [_el('tr', null, [
+                _el('th', { text: label('coachKpiDrillStudent', 'Student') }),
+                _el('th', { text: label('coachKpiDrillBranch', 'Branch') }),
+                _el('th', { text: label('coachKpiDrillCoach', 'Coach') }),
+                _el('th', { text: label('coachKpiDrillLeague', 'League') }),
+                _el('th', { text: label('coachKpiDrillRazryad', 'Razryad') }),
+                _el('th', { text: label('coachKpiDrillGames', 'Games') }),
+                _el('th', { text: label('coachKpiDrillTournamentsPlayed', 'Tournaments') }),
+                _el('th', { text: label('coachKpiDrillRatingDelta', 'Rating Δ') }),
+            ])]);
+            tbody = _el('tbody');
+            for (const r of rows) {
+                tbody.appendChild(_el('tr', { dataset: { studentId: r.student_id || '' } }, [
+                    _el('td', { text: fullName(r) }),
+                    _el('td', { text: r.branch_name || '—' }),
+                    _el('td', { text: r.coach_name || '—' }),
+                    _el('td', { text: r.league || '—' }),
+                    _el('td', { text: r.razryad || '—' }),
+                    _el('td', { text: formatHeroValue(r.games_played) }),
+                    _el('td', { className: strongCls, text: formatHeroValue(r.tournaments_played) }),
+                    _el('td', { text: formatRatingDelta(r.rating_delta_total) }),
+                ]));
+            }
+        } else if (metric === 'top3') {
+            thead = _el('thead', null, [_el('tr', null, [
+                _el('th', { text: label('coachKpiDrillDate', 'Date') }),
+                _el('th', { text: label('coachKpiDrillTournament', 'Tournament') }),
+                _el('th', { text: label('coachKpiDrillStudent', 'Student') }),
+                _el('th', { text: label('coachKpiDrillBranch', 'Branch') }),
+                _el('th', { text: label('coachKpiDrillCoach', 'Coach') }),
+                _el('th', { text: label('coachKpiDrillPlacement', 'Placement') }),
+            ])]);
+            tbody = _el('tbody');
+            for (const r of rows) {
+                tbody.appendChild(_el('tr', { dataset: { tournamentId: r.tournament_id || '' } }, [
+                    _el('td', { text: r.occurred_at || '—' }),
+                    _el('td', { text: r.tournament_name || '—' }),
+                    _el('td', { text: fullName(r) }),
+                    _el('td', { text: r.branch_name || '—' }),
+                    _el('td', { text: r.coach_name || '—' }),
+                    _el('td', { className: strongCls, text: r.placement != null ? String(r.placement) : '—' }),
+                ]));
+            }
+        } else if (metric === 'new_razryads') {
+            thead = _el('thead', null, [_el('tr', null, [
+                _el('th', { text: label('coachKpiDrillStudent', 'Student') }),
+                _el('th', { text: label('coachKpiDrillBranch', 'Branch') }),
+                _el('th', { text: label('coachKpiDrillCoach', 'Coach') }),
+                _el('th', { text: label('coachKpiDrillOldRazryad', 'Old razryad') }),
+                _el('th', { text: label('coachKpiDrillNewRazryad', 'New razryad') }),
+                _el('th', { text: label('coachKpiDrillEarnedAt', 'Earned') }),
+                _el('th', { text: label('coachKpiDrillTournament', 'Tournament') }),
+            ])]);
+            tbody = _el('tbody');
+            for (const r of rows) {
+                tbody.appendChild(_el('tr', { dataset: { studentId: r.student_id || '' } }, [
+                    _el('td', { text: fullName(r) }),
+                    _el('td', { text: r.branch_name || '—' }),
+                    _el('td', { text: r.coach_name || '—' }),
+                    _el('td', { text: r.old_razryad || '—' }),
+                    _el('td', { className: strongCls, text: r.new_razryad || '—' }),
+                    _el('td', { text: r.earned_at || '—' }),
+                    _el('td', { text: r.tournament_name || '—' }),
+                ]));
+            }
+        } else if (metric === 'promotions') {
+            thead = _el('thead', null, [_el('tr', null, [
+                _el('th', { text: label('coachKpiDrillStudent', 'Student') }),
+                _el('th', { text: label('coachKpiDrillBranch', 'Branch') }),
+                _el('th', { text: label('coachKpiDrillCoach', 'Coach') }),
+                _el('th', { text: label('coachKpiDrillFrom', 'From') }),
+                _el('th', { text: label('coachKpiDrillTo', 'To') }),
+                _el('th', { text: label('coachKpiDrillOccurredAt', 'Promoted') }),
+            ])]);
+            tbody = _el('tbody');
+            for (const r of rows) {
+                tbody.appendChild(_el('tr', { dataset: { studentId: r.student_id || '' } }, [
+                    _el('td', { text: fullName(r) }),
+                    _el('td', { text: r.branch_name || '—' }),
+                    _el('td', { text: r.coach_name || '—' }),
+                    _el('td', { text: r.from_league || '—' }),
+                    _el('td', { className: strongCls, text: r.to_league || '—' }),
+                    _el('td', { text: r.occurred_at || '—' }),
+                ]));
+            }
+        }
+        if (thead) table.appendChild(thead);
+        if (tbody) table.appendChild(tbody);
+        container.appendChild(table);
+        _rememberRender('renderDrilldown', container, [metric, students, state, o]);
+    }
+
+    /**
+     * Render the drilldown header (back button + variant-colored title + count
+     * badge). Standalone so the orchestrator can wire its own back handler.
+     */
+    function renderDrilldownHeader(container, metric, count, opts) {
+        if (typeof document === 'undefined' || !container) return;
+        const o = opts || {};
+        const t = typeof o.t === 'function' ? o.t : null;
+        const label = (key, fb) => (t ? t(key, fb) : fb);
+        const variant = METRIC_TO_VARIANT[metric] || 'active-players';
+        const titleText = label('coachKpiDrillTitle_' + metric, METRIC_TITLES[metric] || metric);
+        container.innerHTML = '';
+        const back = _el('button', {
+            type: 'button',
+            className: 'kpi-drilldown-back',
+            text: label('coachKpiDrillBack', '← Back'),
+        });
+        if (typeof o.onBack === 'function' && back.addEventListener) {
+            back.addEventListener('click', () => o.onBack());
+        }
+        container.appendChild(back);
+        container.appendChild(_el('h3', {
+            className: `kpi-drilldown-title variant-${variant}`,
+            text: titleText,
+        }));
+        const n = Number(count) || 0;
+        container.appendChild(_el('span', {
+            className: 'kpi-drilldown-count',
+            text: `${n} ${n === 1 ? label('coachKpiDrillRow', 'row') : label('coachKpiDrillRows', 'rows')}`,
+        }));
+    }
+
+    /**
      * Render the resolved dashboard payload into the school/coach host
      * containers. Pure DOM — fetching is the caller's job.
      *
@@ -1291,9 +1514,10 @@
      * For the coach view, `result.data` is the `coach_kpi_summary` payload
      * `{ coach, hero, students }`; the hero comes from `result.data.hero`.
      */
-    function _renderDashboard(view, result, t, state) {
+    function _renderDashboard(view, result, t, state, extra) {
         if (typeof document === 'undefined') return;
-        const opts = { t };
+        const onCardClick = (extra && typeof extra.onCardClick === 'function') ? extra.onCardClick : null;
+        const opts = onCardClick ? { t, onCardClick } : { t };
         if (view === 'school') {
             const s = state || {};
             // Two payload shapes are accepted:
@@ -1417,10 +1641,46 @@
         // doesn't re-fetch.
         let branches = [];
         let coaches = [];
+        // Drilldown bookkeeping — `drilldownMetric` is non-null while the
+        // drilldown subview is open; `prevView` remembers which main subview
+        // to restore when the user clicks Back. The drilldown carries its own
+        // filter state object so toggling a filter inside the drilldown does
+        // not retroactively change what the main panels were showing.
+        let drilldownMetric = null;
+        let prevView = view;
+        let drilldownState = null;
+
+        function handleDrilldownFilterChange(next) {
+            if (!drilldownMetric) return;
+            drilldownState = normalizeFilters(next);
+            _renderDrilldownPanel(roleInfo, drilldownMetric, drilldownState, branches, coaches, t, {
+                onBack: closeDrilldown,
+                onFilterChange: handleDrilldownFilterChange,
+            });
+        }
+
+        const openDrilldown = (metric) => {
+            if (!metric || !METRIC_TITLES[metric]) return;
+            prevView = drilldownMetric ? prevView : view;
+            drilldownMetric = metric;
+            drilldownState = normalizeFilters(state);
+            _applyDrilldownPanelState(true);
+            _renderDrilldownPanel(roleInfo, metric, drilldownState, branches, coaches, t, {
+                onBack: closeDrilldown,
+                onFilterChange: handleDrilldownFilterChange,
+            });
+        };
+
+        const closeDrilldown = () => {
+            if (!drilldownMetric) return;
+            drilldownMetric = null;
+            drilldownState = null;
+            _applyDrilldownPanelState(false, prevView);
+        };
 
         const refresh = () => {
             Promise.resolve(_fetchForView(roleInfo, view, state, {}))
-                .then((result) => { _renderDashboard(view, result, t, state); })
+                .then((result) => { _renderDashboard(view, result, t, state, { onCardClick: openDrilldown }); })
                 .catch((err) => { console.warn('[coach-kpi] refresh failed:', err); });
         };
 
@@ -1513,6 +1773,8 @@
 
     // Panel DOM contract — mirrors admin-v2.html #section-coach-kpi:
     //   - three panels #coach-kpi-{school,branch,coach}-view
+    //   - one drilldown panel #coach-kpi-drilldown-view (4th, opened by
+    //     clicking a hero card)
     // tests/test-coach-kpi-section-container.js pins the panel ids. The
     // view-switcher tabs were retired in favor of the inline filter dropdowns
     // (period / league / branch / coach), so the role-default view is the only
@@ -1522,6 +1784,7 @@
         branch: 'coach-kpi-branch-view',
         coach: 'coach-kpi-coach-view',
     });
+    const _DRILLDOWN_PANEL_ID = 'coach-kpi-drilldown-view';
 
     function _applyInitialPanelState(view) {
         if (typeof document === 'undefined' || !view) return;
@@ -1548,6 +1811,87 @@
                 }
             }
         }
+    }
+
+    /**
+     * Toggle the drilldown panel on/off. When opening, hide all main subviews
+     * and reveal #coach-kpi-drilldown-view. When closing, reverse it and
+     * restore `restoreView` (the subview that was active before the drilldown
+     * opened — defaults to the role-default view).
+     */
+    function _applyDrilldownPanelState(open, restoreView) {
+        if (typeof document === 'undefined') return;
+        const drill = document.getElementById(_DRILLDOWN_PANEL_ID);
+        if (open) {
+            for (const v of Object.keys(_VIEW_PANEL_IDS)) {
+                const panel = document.getElementById(_VIEW_PANEL_IDS[v]);
+                if (!panel) continue;
+                panel.setAttribute('hidden', '');
+                if (panel.classList && typeof panel.classList.remove === 'function') {
+                    panel.classList.remove('is-active');
+                }
+            }
+            if (drill) {
+                drill.removeAttribute('hidden');
+                if (drill.classList && typeof drill.classList.add === 'function') {
+                    drill.classList.add('is-active');
+                }
+            }
+        } else {
+            if (drill) {
+                drill.setAttribute('hidden', '');
+                if (drill.classList && typeof drill.classList.remove === 'function') {
+                    drill.classList.remove('is-active');
+                }
+            }
+            _applyInitialPanelState(restoreView);
+        }
+    }
+
+    /**
+     * Fetch + render the drilldown subview (header, filter bar, table). Each
+     * call replaces the contents in place so a filter change inside the
+     * drilldown only re-renders the drilldown's own hosts — the main panels
+     * stay intact behind it.
+     */
+    function _renderDrilldownPanel(roleInfo, metric, state, branches, coaches, t, opts) {
+        if (typeof document === 'undefined') return Promise.resolve(null);
+        const o = opts || {};
+        const headerHost = document.getElementById('coach-kpi-drilldown-header');
+        const filtersHost = document.getElementById('coach-kpi-drilldown-filters');
+        const tableHost = document.getElementById('coach-kpi-drilldown-table');
+        if (filtersHost) {
+            renderFilters(filtersHost, state, {
+                t,
+                onChange: o.onFilterChange,
+                branches,
+                coaches,
+                view: 'school',
+            });
+        }
+        if (headerHost) {
+            renderDrilldownHeader(headerHost, metric, 0, { t, onBack: o.onBack });
+        }
+        if (tableHost) {
+            renderEmptyState(tableHost, undefined, { t });
+        }
+        return Promise.resolve(_fetchDrilldown(roleInfo, metric, state, {}))
+            .then((res) => {
+                const data = (res && res.success && res.data) ? res.data : null;
+                const students = (data && Array.isArray(data.students)) ? data.students : [];
+                if (headerHost) {
+                    renderDrilldownHeader(headerHost, metric, students.length, { t, onBack: o.onBack });
+                }
+                if (tableHost) {
+                    renderDrilldown(tableHost, metric, students, state, { t });
+                }
+                return res;
+            })
+            .catch((err) => {
+                console.warn('[coach-kpi] drilldown fetch failed:', err);
+                if (tableHost) renderEmptyState(tableHost, undefined, { t });
+                return null;
+            });
     }
 
     function _subscribeUploadCommittedOnce(roleInfo, getView, getState) {
@@ -1637,6 +1981,12 @@
         renderTournamentsByLeagueBar,
         renderAvgPlaceTrendLine,
         renderPhase2Leaderboard,
+        renderDrilldown,
+        renderDrilldownHeader,
+        _fetchDrilldown,
+        DRILLABLE_METRICS,
+        METRIC_TO_VARIANT,
+        METRIC_TITLES,
         currentMonthWindow,
         initCoachKpi,
         subscribeLanguageEvents,
