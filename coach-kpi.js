@@ -1418,17 +1418,7 @@
             renderLeaderboard(leaderboardHost, [], { t });
         }
 
-        _wireViewTabs(roleInfo, () => view, (next) => {
-            view = next;
-            // Re-render the filter bar so the Coach dropdown appears /
-            // disappears as the user switches views.
-            if (filtersHost) {
-                renderFilters(filtersHost, state, {
-                    t, onChange: handleFilterChange,
-                    branches, coaches, view,
-                });
-            }
-        }, debouncedRefresh);
+        _applyInitialPanelState(view);
 
         // Subscribe AFTER first paint so the cache is non-empty by the time
         // the user can flip languages. Idempotent via the __kpiLangSubscribed
@@ -1469,67 +1459,20 @@
             .catch(() => ({ branches: [], coaches: [] }));
     }
 
-    // View-tab DOM contract — mirrors admin-v2.html #section-coach-kpi:
-    //   - three buttons .kpi-view-btn[data-kpi-view=school|branch|coach]
-    //   - three panels  #coach-kpi-{school,branch,coach}-view
-    // tests/test-coach-kpi-section-container.js pins the panel ids.
+    // Panel DOM contract — mirrors admin-v2.html #section-coach-kpi:
+    //   - three panels #coach-kpi-{school,branch,coach}-view
+    // tests/test-coach-kpi-section-container.js pins the panel ids. The
+    // view-switcher tabs were retired in favor of the inline filter dropdowns
+    // (period / league / branch / coach), so the role-default view is the only
+    // panel ever shown — no runtime toggling.
     const _VIEW_PANEL_IDS = Object.freeze({
         school: 'coach-kpi-school-view',
         branch: 'coach-kpi-branch-view',
         coach: 'coach-kpi-coach-view',
     });
 
-    function _wireViewTabs(roleInfo, getView, setView, debouncedRefresh) {
-        if (typeof document === 'undefined') return;
-        const section = document.getElementById('section-coach-kpi');
-        let buttons = null;
-        if (section && typeof section.querySelectorAll === 'function') {
-            buttons = section.querySelectorAll('.kpi-view-btn[data-kpi-view]');
-        } else if (typeof document.querySelectorAll === 'function') {
-            buttons = document.querySelectorAll('#section-coach-kpi .kpi-view-btn[data-kpi-view]');
-        }
-        if (!buttons || buttons.length === 0) return;
-
-        // If the role lock refuses every non-current view, do not wire — locked
-        // coaches see a single allowed view and switching is intentionally off.
-        const reachable = [];
-        buttons.forEach((btn) => {
-            const target = btn.dataset && btn.dataset.kpiView;
-            if (target && roleLock && roleLock.canAccessView(roleInfo, target)) {
-                reachable.push(target);
-            }
-        });
-        if (reachable.length <= 1) return;
-
-        buttons.forEach((btn) => {
-            btn.addEventListener('click', () => {
-                const target = btn.dataset && btn.dataset.kpiView;
-                if (!target) return;
-                if (roleLock && !roleLock.canAccessView(roleInfo, target)) return;
-                if (target === getView()) return;
-                setView(target);
-                _applyViewTabState(target, buttons);
-                debouncedRefresh();
-            });
-        });
-    }
-
-    function _applyViewTabState(view, buttons) {
-        if (typeof document === 'undefined') return;
-        if (buttons && buttons.forEach) {
-            buttons.forEach((btn) => {
-                const target = btn.dataset && btn.dataset.kpiView;
-                const isActive = target === view;
-                if (btn.classList && typeof btn.classList.toggle === 'function') {
-                    btn.classList.toggle('is-active', isActive);
-                } else {
-                    const cls = (btn.className || '').split(/\s+/).filter(c => c && c !== 'is-active');
-                    if (isActive) cls.push('is-active');
-                    btn.className = cls.join(' ');
-                }
-                btn.setAttribute('aria-selected', isActive ? 'true' : 'false');
-            });
-        }
+    function _applyInitialPanelState(view) {
+        if (typeof document === 'undefined' || !view) return;
         for (const v of Object.keys(_VIEW_PANEL_IDS)) {
             const panel = document.getElementById(_VIEW_PANEL_IDS[v]);
             if (!panel) continue;
