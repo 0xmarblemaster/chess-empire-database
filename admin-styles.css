@@ -1,8 +1,11 @@
-/* Position language button as part of header actions group - organic button grouping */
+/* Pin language widget to the true top-right corner so it never sits on top
+   of the .header-actions buttons (.kpi-view-switcher, Import data, etc.).
+   .header-actions reserves matching right margin below to keep its content
+   from sliding under this fixed widget. */
 .language-dropdown {
     position: fixed;
-    top: 2.75rem;
-    right: 15.5rem; /* Closer spacing for organic button group */
+    top: 1rem;
+    right: 1.5rem;
     z-index: 120;
 }
 
@@ -62,10 +65,11 @@
     }
 }
 
-/* Adjust for larger screens to maintain consistent spacing */
+/* Keep the language widget pinned to the top-right corner at all
+   desktop sizes (mobile rules below override for <=768px). */
 @media (min-width: 1400px) {
     .language-dropdown {
-        right: 17rem;
+        right: 1.5rem;
     }
 }
 
@@ -617,6 +621,9 @@ body {
     display: flex;
     gap: 1rem;
     align-items: center;
+    /* Reserve clearance for the fixed .language-dropdown widget pinned at
+       top: 1rem; right: 1.5rem; — keeps action buttons from sliding under it. */
+    margin-right: 9rem;
 }
 
 .btn {
@@ -1483,6 +1490,9 @@ td {
     .header-actions {
         flex-direction: column;
         gap: 0.75rem;
+        /* .language-dropdown is hidden at this breakpoint, so drop the
+           desktop clearance margin and let buttons fill the row. */
+        margin-right: 0;
     }
 
     /* Stats cards - stack on mobile */
