@@ -124,6 +124,7 @@ function findAllByTag(root, tag, out) {
 // passed by the renderer — that's the contract we're verifying.
 const RU = {
     coachKpiActiveStudents: 'Активные ученики',
+    coachKpiActivePlayers: 'Активные игроки',
     coachKpiTournamentsYtd: 'Турниры с начала года',
     coachKpiTop3: 'Топ-3 места',
     coachKpiPromotions: 'Повышения уровня',
@@ -138,6 +139,8 @@ const RU = {
     coachKpiChartUnavailable: 'Chart.js не загружен',
     coachKpiColCoach: 'Тренер',
     coachKpiColActive: 'Активные',
+    coachKpiColActivePlayers: 'Активные игроки',
+    coachKpiColParticipation: 'Участие',
     coachKpiColTournaments: 'Турниры',
     coachKpiColTop3: 'Топ-3',
     coachKpiColPromotions: 'Повышения',
@@ -151,12 +154,13 @@ const RU = {
 };
 function ruT(key, fb) { return Object.prototype.hasOwnProperty.call(RU, key) ? RU[key] : fb; }
 
-console.log('\n=== renderSchoolHero localizes its six hero labels =====================\n');
+console.log('\n=== renderSchoolHero localizes its seven hero labels ===================\n');
 (function testSchoolHero() {
     const kpi = loadKpi({});
     const container = makeContainer();
     const summary = {
         active_students_count: 12,
+        active_players_count: 9,
         total_tournaments: 4,
         top3_count: 7,
         promotions_count: 2,
@@ -166,9 +170,11 @@ console.log('\n=== renderSchoolHero localizes its six hero labels ==============
     kpi.renderSchoolHero(container, summary, { t: ruT });
 
     const labels = findAllByClass(container, 'stat-card-label').map(n => n.textContent);
-    assert(labels.length === 6, 'six hero cards render (one label per metric)');
+    assert(labels.length === 7, 'seven hero cards render (one label per metric, Active players added)');
     assert(labels.includes('Активные ученики'),
         'Active students label translated via coachKpiActiveStudents');
+    assert(labels.includes('Активные игроки'),
+        'Active players label translated via coachKpiActivePlayers');
     assert(labels.includes('Турниры с начала года'),
         'Tournaments label translated via coachKpiTournamentsYtd');
     assert(labels.includes('Топ-3 места'),
@@ -187,6 +193,7 @@ console.log('\n=== renderSchoolHero falls back to English without opts.t =======
     const container = makeContainer();
     kpi.renderSchoolHero(container, {
         active_students_count: 1,
+        active_players_count: 1,
         total_tournaments: 1,
         top3_count: 1,
         promotions_count: 1,
@@ -196,19 +203,21 @@ console.log('\n=== renderSchoolHero falls back to English without opts.t =======
     const labels = findAllByClass(container, 'stat-card-label').map(n => n.textContent);
     assert(labels.includes('Active students'),
         'English fallback "Active students" rendered when no opts.t supplied');
+    assert(labels.includes('Active players'),
+        'English fallback "Active players" rendered when no opts.t supplied');
     assert(labels.includes('Tournaments'),
         'English fallback "Tournaments" rendered when no opts.t supplied');
     assert(labels.includes('Participation'),
         'English fallback "Participation" rendered when no opts.t supplied');
 })();
 
-console.log('\n=== renderLeaderboard localizes its six column headers ================\n');
+console.log('\n=== renderLeaderboard localizes its eight column headers ==============\n');
 (function testLeaderboardHeaders() {
     const kpi = loadKpi({});
     const container = makeContainer();
     const rows = [{
         coach_id: 'c1', coach_name: 'Ivan Ivanov',
-        active_students_count: 5, total_tournaments: 3,
+        active_students_count: 5, active_players_count: 4, total_tournaments: 3,
         top3_count: 1,
         promotions_count: 1, new_razryads_count: 0,
         composite_score: 65,
@@ -216,13 +225,15 @@ console.log('\n=== renderLeaderboard localizes its six column headers ==========
     kpi.renderLeaderboard(container, rows, { t: ruT });
 
     const headers = findAllByTag(container, 'th').map(n => n.textContent);
-    assert(headers.length === 6, 'six <th> headers render (Score + Rating gained retired)');
+    assert(headers.length === 8, 'eight <th> headers render (Coach + 7 metrics)');
     assert(headers[0] === 'Тренер', 'Coach column → Тренер');
     assert(headers[1] === 'Активные', 'Active column → Активные');
-    assert(headers[2] === 'Турниры', 'Tournaments column → Турниры');
-    assert(headers[3] === 'Топ-3', 'Top-3 column → Топ-3');
-    assert(headers[4] === 'Повышения', 'Promotions column → Повышения');
+    assert(headers[2] === 'Активные игроки', 'Active players column → Активные игроки');
+    assert(headers[3] === 'Участие', 'Participation column → Участие');
+    assert(headers[4] === 'Топ-3', 'Top-3 column → Топ-3');
     assert(headers[5] === 'Разряды', 'Razryads column → Разряды');
+    assert(headers[6] === 'Повышения', 'Promotions column → Повышения');
+    assert(headers[7] === 'Турниры', 'Tournaments column → Турниры');
     assert(!headers.includes('Балл'), 'Score column header is gone');
     assert(!headers.includes('Прирост рейтинга'), 'Rating gained column header is gone');
 })();

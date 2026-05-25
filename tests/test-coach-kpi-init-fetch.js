@@ -288,8 +288,8 @@ async function runSchoolFallbackTest() {
         'school view also hits coach_leaderboard for the per-coach table');
 
     const heroHost = dom.elements['coach-kpi-school-hero'];
-    assert(heroHost.children.length === 6,
-        'school hero renders 6 stat cards from the school_kpi_summary payload');
+    assert(heroHost.children.length === 7,
+        'school hero renders 7 stat cards from the school_kpi_summary payload (Active players added)');
 
     await runUploadEventViewName();
 }

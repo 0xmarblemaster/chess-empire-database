@@ -78,6 +78,7 @@ function findAllByClass(root, token, out) {
 const TRANSLATIONS = {
     en: {
         coachKpiColCoach: 'Coach', coachKpiColActive: 'Active',
+        coachKpiColActivePlayers: 'Active players', coachKpiColParticipation: 'Participation',
         coachKpiColTournaments: 'Tournaments', coachKpiColTop3: 'Top-3',
         coachKpiColPromotions: 'Promotions',
         coachKpiColRazryads: 'Razryads',
@@ -89,6 +90,7 @@ const TRANSLATIONS = {
     },
     ru: {
         coachKpiColCoach: 'Тренер', coachKpiColActive: 'Активные',
+        coachKpiColActivePlayers: 'Активные игроки', coachKpiColParticipation: 'Участие',
         coachKpiColTournaments: 'Турниры', coachKpiColTop3: 'Топ-3',
         coachKpiColPromotions: 'Повышения',
         coachKpiColRazryads: 'Разряды',
@@ -100,6 +102,7 @@ const TRANSLATIONS = {
     },
     kk: {
         coachKpiColCoach: 'Жаттықтырушы', coachKpiColActive: 'Белсенді',
+        coachKpiColActivePlayers: 'Белсенді ойыншылар', coachKpiColParticipation: 'Қатысу',
         coachKpiColTournaments: 'Турнирлер', coachKpiColTop3: 'Топ-3',
         coachKpiColPromotions: 'Көтерілулер',
         coachKpiColRazryads: 'Разрядтар',
@@ -154,7 +157,7 @@ for (const locale of ['en', 'ru', 'kk']) {
     kpi.renderLeaderboard(container, COACH_ROWS, { t: makeT(locale) });
 
     const headers = findAllByTag(container, 'th').map(n => n.textContent);
-    assert(headers.length === 6, `[${locale}] exactly six <th> headers render (Score + Rating gained removed)`);
+    assert(headers.length === 8, `[${locale}] exactly eight <th> headers render (Coach + 7 metrics, Score absent)`);
     for (const lbl of SCORE_LABELS) {
         assert(!headers.includes(lbl),
             `[${locale}] no <th> reads "${lbl}"`);

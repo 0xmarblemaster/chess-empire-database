@@ -250,6 +250,7 @@
         const list = Array.isArray(rows) ? rows : [];
         const out = {
             active_students_count: 0,
+            active_players_count: 0,
             total_tournaments: 0,
             top3_count: 0,
             promotions_count: 0,
@@ -262,6 +263,7 @@
             const active = Number(r.active_students_count) || 0;
             const entries = Number(r.tournament_entries) || 0;
             out.active_students_count += active;
+            out.active_players_count  += Number(r.active_players_count)  || 0;
             out.total_tournaments     += Number(r.total_tournaments)     || 0;
             out.top3_count            += Number(r.top3_count)            || 0;
             out.promotions_count      += Number(r.promotions_count)      || 0;
@@ -566,7 +568,7 @@
     }
 
     /**
-     * Build the six hero stat cards from a school summary. Pure DOM, no
+     * Build the seven hero stat cards from a school summary. Pure DOM, no
      * data fetching. Returns the container element.
      */
     function renderSchoolHero(container, summary, opts) {
@@ -580,13 +582,17 @@
             return;
         }
         const s = summary;
+        // Order locked by COACH_KPI_PHASE2_SPEC follow-up: active students,
+        // active players (distinct students who played ≥1 game), participation,
+        // top-3 events, new razryads, promotions (deduped), tournaments.
         const cards = [
             [label('coachKpiActiveStudents',  'Active students'),  formatHeroValue(s.active_students_count)],
-            [label('coachKpiTournamentsYtd',  'Tournaments'),      formatHeroValue(s.total_tournaments)],
-            [label('coachKpiTop3',            'Top-3 finishes'),   formatHeroValue(s.top3_count)],
-            [label('coachKpiPromotions',      'Promotions'),       formatHeroValue(s.promotions_count)],
-            [label('coachKpiNewRazryads',     'New razryads'),     formatHeroValue(s.new_razryads_count)],
+            [label('coachKpiActivePlayers',   'Active players'),   formatHeroValue(s.active_players_count)],
             [label('coachKpiParticipation',   'Participation'),    formatHeroValue(s.participation_pct, { percent: true })],
+            [label('coachKpiTop3',            'Top-3 finishes'),   formatHeroValue(s.top3_count)],
+            [label('coachKpiNewRazryads',     'New razryads'),     formatHeroValue(s.new_razryads_count)],
+            [label('coachKpiPromotions',      'Promotions'),       formatHeroValue(s.promotions_count)],
+            [label('coachKpiTournamentsYtd',  'Tournaments'),      formatHeroValue(s.total_tournaments)],
         ];
         container.innerHTML = '';
         for (const [label, value] of cards) {
@@ -615,25 +621,37 @@
         const sorted = sortLeaderboard(rows, o.sortKey, o.direction);
         container.innerHTML = '';
         const table = _el('table', { className: 'kpi-leaderboard' });
+        // Columns: Coach name + the seven metric columns in the same order as
+        // the school hero cards (active students, active players, participation,
+        // top-3, new razryads, promotions, tournaments).
         const thead = _el('thead', null, [
             _el('tr', null, [
                 _el('th', { text: label('coachKpiColCoach', 'Coach') }),
                 _el('th', { text: label('coachKpiColActive', 'Active') }),
-                _el('th', { text: label('coachKpiColTournaments', 'Tournaments') }),
+                _el('th', { text: label('coachKpiColActivePlayers', 'Active players') }),
+                _el('th', { text: label('coachKpiColParticipation', 'Participation') }),
                 _el('th', { text: label('coachKpiColTop3', 'Top-3') }),
-                _el('th', { text: label('coachKpiColPromotions', 'Promotions') }),
                 _el('th', { text: label('coachKpiColRazryads', 'Razryads') }),
+                _el('th', { text: label('coachKpiColPromotions', 'Promotions') }),
+                _el('th', { text: label('coachKpiColTournaments', 'Tournaments') }),
             ]),
         ]);
         const tbody = _el('tbody');
         for (const row of sorted) {
+            const activeStudents = Number(row.active_students_count) || 0;
+            const activePlayers = Number(row.active_players_count) || 0;
+            const participationPct = activeStudents > 0
+                ? Math.round((activePlayers / activeStudents) * 1000) / 10
+                : 0;
             tbody.appendChild(_el('tr', { dataset: { coachId: row.coach_id || '' } }, [
                 _el('td', { text: row.coach_name || '—' }),
                 _el('td', { text: formatHeroValue(row.active_students_count) }),
-                _el('td', { text: formatHeroValue(row.total_tournaments) }),
+                _el('td', { text: formatHeroValue(row.active_players_count) }),
+                _el('td', { text: formatHeroValue(participationPct, { percent: true }) }),
                 _el('td', { text: formatHeroValue(row.top3_count) }),
-                _el('td', { text: formatHeroValue(row.promotions_count) }),
                 _el('td', { text: formatHeroValue(row.new_razryads_count) }),
+                _el('td', { text: formatHeroValue(row.promotions_count) }),
+                _el('td', { text: formatHeroValue(row.total_tournaments) }),
             ]));
         }
         table.appendChild(thead);

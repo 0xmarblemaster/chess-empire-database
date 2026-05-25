@@ -203,10 +203,11 @@ assertEqual(kpi.filterLeaderboardByBranch(null, 'b1'), [],
 
 console.log('\n=== aggregateSchoolHero ===============================================\n');
 assertEqual(kpi.aggregateSchoolHero([
-    { active_students_count: 10, total_tournaments: 4, top3_count: 2, promotions_count: 1, new_razryads_count: 0 },
-    { active_students_count:  6, total_tournaments: 3, top3_count: 1, promotions_count: 0, new_razryads_count: 2 },
+    { active_students_count: 10, active_players_count: 7, total_tournaments: 4, top3_count: 2, promotions_count: 1, new_razryads_count: 0 },
+    { active_students_count:  6, active_players_count: 4, total_tournaments: 3, top3_count: 1, promotions_count: 0, new_razryads_count: 2 },
 ]), {
     active_students_count: 16,
+    active_players_count:  11,
     total_tournaments:     7,
     top3_count:            3,
     promotions_count:      1,
@@ -216,6 +217,7 @@ assertEqual(kpi.aggregateSchoolHero([
 }, 'sums every numeric column (plus the participation_pct fallback key)');
 assertEqual(kpi.aggregateSchoolHero([]), {
     active_students_count: 0,
+    active_players_count:  0,
     total_tournaments:     0,
     top3_count:            0,
     promotions_count:      0,
@@ -349,14 +351,15 @@ console.log('\n=== renderSchoolHero falls back to empty state ==================
     const c = makeMockEl('div');
     kpi.renderSchoolHero(c, {
         active_students_count: 12,
+        active_players_count: 9,
         total_tournaments: 4,
         top3_count: 2,
         promotions_count: 1,
         new_razryads_count: 0,
         participation_pct: 75.5,
     });
-    assertEqual(c.children.length, 6,
-        'renderSchoolHero(data) builds the six PRD §5 hero cards');
+    assertEqual(c.children.length, 7,
+        'renderSchoolHero(data) builds the seven hero cards (Active players added)');
     assert(c.children.every(card => !/\bempty-state\b/.test(card.className)),
         'no card carries the empty-state class when data is present');
 })();

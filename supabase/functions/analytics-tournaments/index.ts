@@ -455,6 +455,10 @@ serve(async (req) => {
         // school-wide upload count is a misleading denominator on the school
         // hero summed across N coaches it inflates by N×.
         const participatedUploadIds = new Set<string>()
+        // Distinct students who played at least one rated game in the window.
+        // Surfaced as `active_players_count` on the leaderboard row so the
+        // school hero can show "Active players" alongside "Active students".
+        const activePlayersSet = new Set<string>()
         let top3Count = 0
 
         for (const r of myResults) {
@@ -463,6 +467,7 @@ serve(async (req) => {
           if (r.games_played >= 1) {
             playedEntries.push(r)
             participatedUploadIds.add(r.upload_id)
+            activePlayersSet.add(r.student_id)
             const cur = deltaByStudent.get(r.student_id) || 0
             deltaByStudent.set(r.student_id, cur + (Number(r.rating_delta) || 0))
             internalEntries.push(r)
@@ -478,16 +483,21 @@ serve(async (req) => {
         const avgDelta = deltaValues.length ? deltaValues.reduce((a, b) => a + b, 0) / deltaValues.length : 0
         const totalRatingGained = deltaValues.reduce((a, b) => a + b, 0)
 
+        // Dedupe promotions by student_id — a student counts once no matter
+        // how many promotion events the trigger emitted in the window.
+        const promotedStudents = new Set<string>(myProms.map((p: any) => p.student_id))
+
         return {
           coach,
           activeStudentsCount: myStudentIds.size,
+          activePlayersCount: activePlayersSet.size,
           coachTournamentCount: participatedUploadIds.size,
           participationNumerator: playedEntries.length,
           internalEntries: internalEntries.length,
           top3Count,
           avgDelta,
           totalRatingGained,
-          promotionsCount: myProms.length,
+          promotionsCount: promotedStudents.size,
           razryadParticipants: razryadParticipants.size,
           razryadEarners: razryadEarners.size,
         }
@@ -533,6 +543,7 @@ serve(async (req) => {
           coach_name: `${r.coach.first_name} ${r.coach.last_name}`.trim(),
           branches: branchesByCoach.get(r.coach.id) || [],
           active_students_count: r.activeStudentsCount,
+          active_players_count: r.activePlayersCount,
           total_tournaments: r.coachTournamentCount,
           tournament_entries: r.participationNumerator,
           avg_rating_delta: Math.round(r.avgDelta * 10) / 10,
@@ -684,6 +695,10 @@ serve(async (req) => {
         const slot = byStudent.get(r.student_id); if (slot) slot.new_razryads++
       }
 
+      // Dedupe promotions by student_id so a student counts once even if the
+      // trigger emitted multiple promotion rows in the window.
+      const promotedStudentIds = new Set<string>(proms.map((p: any) => p.student_id))
+
       const avgDelta = deltas.length ? deltas.reduce((a, b) => a + b, 0) / deltas.length : 0
       const composite = calcCompositeScore({
         active_students_count: studentIds.length,
@@ -691,7 +706,7 @@ serve(async (req) => {
         total_results: parts.length,
         top3_count: top3,
         avg_rating_delta: avgDelta,
-        promotions_count: proms.length,
+        promotions_count: promotedStudentIds.size,
         new_razryads_count: razs.length,
       })
 
@@ -709,7 +724,7 @@ serve(async (req) => {
             top1_count: top1,
             top3_count: top3,
             total_rating_gained: deltas.reduce((a, b) => a + b, 0),
-            promotions_count: proms.length,
+            promotions_count: promotedStudentIds.size,
             new_razryads_count: razs.length,
             composite_score: composite,
           },
@@ -850,6 +865,11 @@ serve(async (req) => {
         }
       }
 
+      // Dedupe promotions by student_id — count distinct students promoted in
+      // the window, not raw event rows (a student who is promoted twice in
+      // the window still counts once).
+      const promotedStudentIds = new Set<string>(proms.map((p: any) => p.student_id))
+
       return json({
         success: true,
         data: {
@@ -863,7 +883,7 @@ serve(async (req) => {
           top3_count: top3,
           total_rating_gained: Math.round(totalDelta * 10) / 10,
           avg_rating_delta: deltaCount > 0 ? Math.round((totalDelta / deltaCount) * 100) / 100 : 0,
-          promotions_count: proms.length,
+          promotions_count: promotedStudentIds.size,
           new_razryads_count: razryadEarners.size,
           branch_id: schoolBranchId || null,
           league: schoolLeagueParam || null,

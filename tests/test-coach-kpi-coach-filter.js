@@ -214,15 +214,15 @@ const BRANCHES = [
 function leaderboardRows() {
     return [
         { coach_id: 'co-1', coach_name: 'Alice Anderson', branches: ['br-1'],
-          active_students_count: 5, total_tournaments: 3, top3_count: 2,
+          active_students_count: 5, active_players_count: 4, total_tournaments: 3, top3_count: 2,
           promotions_count: 1, new_razryads_count: 1, total_rating_gained: 80,
           composite_score: 75 },
         { coach_id: 'co-2', coach_name: 'Bob Brown', branches: ['br-2'],
-          active_students_count: 4, total_tournaments: 2, top3_count: 1,
+          active_students_count: 4, active_players_count: 3, total_tournaments: 2, top3_count: 1,
           promotions_count: 0, new_razryads_count: 0, total_rating_gained: 30,
           composite_score: 55 },
         { coach_id: 'co-3', coach_name: 'Carol Cardenas', branches: ['br-1', 'br-2'],
-          active_students_count: 6, total_tournaments: 4, top3_count: 3,
+          active_students_count: 6, active_players_count: 5, total_tournaments: 4, top3_count: 3,
           promotions_count: 2, new_razryads_count: 1, total_rating_gained: 90,
           composite_score: 80 },
     ];
@@ -409,15 +409,18 @@ console.log('\n=== _renderDashboard filters school rows by branch + coach ======
     // school-wide totals.
     const heroHost = dom.elements['coach-kpi-school-hero'];
     const cards = findAllByClass(heroHost, 'stat-card');
-    assertEqual(cards.length, 6,
-        'six hero stat-cards rendered after coach filter');
+    assertEqual(cards.length, 7,
+        'seven hero stat-cards rendered after coach filter (Active players added)');
     const values = cards.map(c => findByClass(c, 'stat-card-value').textContent);
-    // aggregateSchoolHero of the single Alice row → 5 / 3 / 2 / 1 / 1
+    // Hero card order (locked): active students, active players, participation,
+    // top-3, new razryads, promotions, tournaments. Alice's single row →
+    // 5 / 4 / 80% (4/5) / 2 / 1 / 1 / 3.
     assertEqual(values[0], '5', 'active_students_count → 5 (Alice only)');
-    assertEqual(values[1], '3', 'total_tournaments → 3 (Alice only)');
-    assertEqual(values[2], '2', 'top3_count → 2 (Alice only)');
-    assertEqual(values[3], '1', 'promotions_count → 1 (Alice only)');
+    assertEqual(values[1], '4', 'active_players_count → 4 (Alice only)');
+    assertEqual(values[3], '2', 'top3_count → 2 (Alice only)');
     assertEqual(values[4], '1', 'new_razryads_count → 1 (Alice only)');
+    assertEqual(values[5], '1', 'promotions_count → 1 (Alice only)');
+    assertEqual(values[6], '3', 'total_tournaments → 3 (Alice only)');
 })();
 
 console.log('\n=== _renderDashboard: coach="all" keeps the full leaderboard ========\n');

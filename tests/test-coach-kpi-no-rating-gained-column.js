@@ -67,16 +67,19 @@ function findAllByTag(root, tag, out) {
 const TRANSLATIONS = {
     en: {
         coachKpiColCoach: 'Coach', coachKpiColActive: 'Active',
+        coachKpiColActivePlayers: 'Active players', coachKpiColParticipation: 'Participation',
         coachKpiColTournaments: 'Tournaments', coachKpiColTop3: 'Top-3',
         coachKpiColPromotions: 'Promotions', coachKpiColRazryads: 'Razryads',
     },
     ru: {
         coachKpiColCoach: 'Тренер', coachKpiColActive: 'Активные',
+        coachKpiColActivePlayers: 'Активные игроки', coachKpiColParticipation: 'Участие',
         coachKpiColTournaments: 'Турниры', coachKpiColTop3: 'Топ-3',
         coachKpiColPromotions: 'Повышения', coachKpiColRazryads: 'Разряды',
     },
     kk: {
         coachKpiColCoach: 'Жаттықтырушы', coachKpiColActive: 'Белсенді',
+        coachKpiColActivePlayers: 'Белсенді ойыншылар', coachKpiColParticipation: 'Қатысу',
         coachKpiColTournaments: 'Турнирлер', coachKpiColTop3: 'Топ-3',
         coachKpiColPromotions: 'Көтерілулер', coachKpiColRazryads: 'Разрядтар',
     },
@@ -110,7 +113,7 @@ for (const locale of ['en', 'ru', 'kk']) {
     kpi.renderLeaderboard(container, COACH_ROWS, { t: makeT(locale) });
 
     const headers = findAllByTag(container, 'th').map(n => n.textContent);
-    assert(headers.length === 6, `[${locale}] exactly six <th> headers render (Rating gained removed)`);
+    assert(headers.length === 8, `[${locale}] exactly eight <th> headers render (Coach + 7 metrics, Rating gained absent)`);
     for (const lbl of RATING_GAINED_LABELS) {
         assert(!headers.includes(lbl),
             `[${locale}] no <th> reads "${lbl}"`);
@@ -120,8 +123,8 @@ for (const locale of ['en', 'ru', 'kk']) {
     const rows = findAllByTag(container, 'tr').filter(r =>
         Array.isArray(r.children) && r.children.length > 0 && r.children[0].tagName === 'td');
     for (const row of rows) {
-        assert(row.children.length === 6,
-            `[${locale}] data row has six <td>s (no Rating gained cell)`);
+        assert(row.children.length === 8,
+            `[${locale}] data row has eight <td>s (no Rating gained cell)`);
     }
 }
 

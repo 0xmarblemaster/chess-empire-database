@@ -247,7 +247,7 @@ function defaultLeaderboardRows() {
     return [
         {
             coach_id: 'co-1', coach_name: 'Alice A', branches: ['br-1'],
-            active_students_count: 4, total_tournaments: 3,
+            active_students_count: 4, active_players_count: 3, total_tournaments: 3,
             tournament_entries: 6, top3_count: 2,
             promotions_count: 1, new_razryads_count: 1,
             total_rating_gained: 70, composite_score: 65,
@@ -255,7 +255,7 @@ function defaultLeaderboardRows() {
         },
         {
             coach_id: 'co-2', coach_name: 'Bob B', branches: ['br-2'],
-            active_students_count: 5, total_tournaments: 2,
+            active_students_count: 5, active_players_count: 4, total_tournaments: 2,
             tournament_entries: 4, top3_count: 1,
             promotions_count: 0, new_razryads_count: 0,
             total_rating_gained: 20, composite_score: 40,
@@ -269,6 +269,7 @@ function defaultSchoolHero(extras) {
     return Object.assign({
         window: { start: '2026-04-25', end: '2026-05-24' },
         active_students_count: 9,
+        active_players_count: 7,
         participants_count: 7,
         participation_pct: 77.8,
         total_tournaments: 3,

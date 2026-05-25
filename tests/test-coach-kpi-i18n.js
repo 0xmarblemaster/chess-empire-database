@@ -107,10 +107,15 @@ const REQUIRED_KEYS = [
     'coachKpiRazryadNone',
     'coachKpiColCoach',
     'coachKpiColActive',
+    'coachKpiColActivePlayers',
+    'coachKpiColParticipation',
     'coachKpiColTournaments',
     'coachKpiColTop3',
     'coachKpiColPromotions',
     'coachKpiColRazryads',
+    // coachKpiActivePlayers + coachKpiColActivePlayers added for the new
+    // "Active players" hero card / leaderboard column.
+    'coachKpiActivePlayers',
     // coachKpiColScore + coachKpiColRatingGained intentionally absent —
     // both columns were retired from the v1 leaderboard.
 ];
