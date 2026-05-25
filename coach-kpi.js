@@ -254,7 +254,6 @@
             top3_count: 0,
             promotions_count: 0,
             new_razryads_count: 0,
-            total_rating_gained: 0,
             participation_pct: 0,
         };
         let participantsApprox = 0;
@@ -267,7 +266,6 @@
             out.top3_count            += Number(r.top3_count)            || 0;
             out.promotions_count      += Number(r.promotions_count)      || 0;
             out.new_razryads_count    += Number(r.new_razryads_count)    || 0;
-            out.total_rating_gained   += Number(r.total_rating_gained)   || 0;
             participantsApprox += Math.min(entries, active);
         }
         out.participation_pct = out.active_students_count > 0
@@ -623,7 +621,6 @@
                 _el('th', { text: label('coachKpiColActive', 'Active') }),
                 _el('th', { text: label('coachKpiColTournaments', 'Tournaments') }),
                 _el('th', { text: label('coachKpiColTop3', 'Top-3') }),
-                _el('th', { text: label('coachKpiColRatingGained', 'Rating gained') }),
                 _el('th', { text: label('coachKpiColPromotions', 'Promotions') }),
                 _el('th', { text: label('coachKpiColRazryads', 'Razryads') }),
             ]),
@@ -635,7 +632,6 @@
                 _el('td', { text: formatHeroValue(row.active_students_count) }),
                 _el('td', { text: formatHeroValue(row.total_tournaments) }),
                 _el('td', { text: formatHeroValue(row.top3_count) }),
-                _el('td', { text: formatHeroValue(row.total_rating_gained, { signed: true }) }),
                 _el('td', { text: formatHeroValue(row.promotions_count) }),
                 _el('td', { text: formatHeroValue(row.new_razryads_count) }),
             ]));
