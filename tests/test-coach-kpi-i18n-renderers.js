@@ -129,7 +129,12 @@ const RU = {
     coachKpiNewRazryads: 'Новые разряды',
     coachKpiParticipation: 'Участие',
     coachKpiWindowGroup: 'Период',
-    coachKpiLeagueGroup: 'Лига',
+    coachKpiLeagueGroup: 'Турнир',
+    coachKpiLeagueAll: 'Все турниры',
+    coachKpiLeagueB: 'Лига B',
+    coachKpiLeagueC: 'Лига C',
+    coachKpiLeagueR3: '3 разряд',
+    coachKpiLeagueR4: '4 разряд',
     coachKpiBranchGroup: 'Филиал',
     coachKpiBranchAll: 'Все филиалы',
     coachKpiEmptyTitle: 'Данных пока нет',
@@ -243,7 +248,7 @@ console.log('\n=== renderFilters localizes the three filter-group labels =======
     kpi.renderFilters(container, { window: '90d', league: 'all', branchId: 'all' }, { t: ruT });
     const labels = findAllByClass(container, 'filter-label').map(n => n.textContent);
     assert(labels.includes('Период'), 'window-group label → Период');
-    assert(labels.includes('Лига'), 'league-group label → Лига');
+    assert(labels.includes('Турнир'), 'league-group label → Турнир');
     assert(labels.includes('Филиал'), 'branch-group label → Филиал');
 
     // The "All branches" option in the branch <select> should also be localized.
@@ -252,6 +257,22 @@ console.log('\n=== renderFilters localizes the three filter-group labels =======
     const optionTexts = (branchSelect && branchSelect.children || []).map(o => o.textContent);
     assert(optionTexts.includes('Все филиалы'),
         '"All branches" option translated via coachKpiBranchAll');
+
+    // The league <select> must mount five options — all, B, C, R3, R4. League A
+    // is intentionally absent (retired from rotation) and razryad qualifiers
+    // were added so the filter can scope the dashboard to 3rd/4th-razryad
+    // tournaments alongside Leagues B and C.
+    const leagueSelect = findByClass(container, 'kpi-filter-league');
+    assert(leagueSelect !== null, '.kpi-filter-league mounted');
+    const leagueOptionTexts = (leagueSelect && leagueSelect.children || []).map(o => o.textContent);
+    assert(leagueOptionTexts.length === 5,
+        'league <select> exposes 5 options (all + B + C + R3 + R4)');
+    assert(leagueOptionTexts.includes('Все турниры'),
+        '"All tournaments" option translated via coachKpiLeagueAll');
+    assert(leagueOptionTexts.includes('3 разряд'),
+        '"3rd razryad" option translated via coachKpiLeagueR3');
+    assert(leagueOptionTexts.includes('4 разряд'),
+        '"4th razryad" option translated via coachKpiLeagueR4');
 })();
 
 console.log('\n=== renderEmptyState helper + title localize through opts.t ===========\n');

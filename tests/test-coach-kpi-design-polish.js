@@ -176,8 +176,8 @@ console.log('\n=== renderFilters wraps each control in a .filter-group + label =
     const labelTexts = labels.map(l => l.textContent);
     assert(labelTexts.includes('Time window'),
         'window-group label falls back to "Time window" when i18n missing');
-    assert(labelTexts.includes('League'),
-        'league-group label falls back to "League" when i18n missing');
+    assert(labelTexts.includes('Tournament'),
+        'league-group label falls back to "Tournament" when i18n missing');
     assert(labelTexts.includes('Branch'),
         'branch-group label falls back to "Branch" when i18n missing');
 })();
@@ -191,7 +191,7 @@ console.log('\n=== renderFilters honors i18n keys when t() is supplied =========
         calls.push(key);
         const map = {
             coachKpiWindowGroup: 'Период',
-            coachKpiLeagueGroup: 'Лига',
+            coachKpiLeagueGroup: 'Турнир',
             coachKpiBranchGroup: 'Филиал',
         };
         return map[key] || fb;
@@ -201,7 +201,7 @@ console.log('\n=== renderFilters honors i18n keys when t() is supplied =========
     const labels = findAllByClass(container, 'filter-label').map(l => l.textContent);
     assert(labels.includes('Период'),
         'window label resolves via coachKpiWindowGroup when t() returns a value');
-    assert(labels.includes('Лига'),
+    assert(labels.includes('Турнир'),
         'league label resolves via coachKpiLeagueGroup when t() returns a value');
     assert(labels.includes('Филиал'),
         'branch label resolves via coachKpiBranchGroup when t() returns a value');

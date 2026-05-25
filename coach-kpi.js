@@ -31,7 +31,7 @@
     // League A is intentionally absent — it was retired from the internal
     // tournament rotation in COACH_KPI_PHASE2_SPEC.md §10 ("League A — not
     // part of internal tournament rotation"). Only B and C are filterable.
-    const LEAGUES = Object.freeze(['all', 'B', 'C']);
+    const LEAGUES = Object.freeze(['all', 'B', 'C', 'R3', 'R4']);
     const DEFAULT_LEAGUE = 'all';
     const DEFAULT_BRANCH = 'all';
     const DEFAULT_COACH = 'all';
@@ -44,9 +44,11 @@
         'ytd': 'YTD',
     });
     const LEAGUE_LABELS = Object.freeze({
-        all: 'All leagues',
+        all: 'All tournaments',
         B: 'League B',
         C: 'League C',
+        R3: '3rd razryad',
+        R4: '4th razryad',
     });
     // The internal-tournament charts (renderTournamentsByLeagueStackedBar /
     // renderTournamentsByLeagueBar) still display historical League A counts
@@ -1095,7 +1097,7 @@
         const leagueField = _el('div', { className: 'filter-group' }, [
             _el('label', {
                 className: 'filter-label',
-                text: label('coachKpiLeagueGroup', 'League'),
+                text: label('coachKpiLeagueGroup', 'Tournament'),
             }),
             leagueSelect,
         ]);
@@ -1331,8 +1333,12 @@
         // Localized enum cells share the filter-bar lookup keys (coachKpiLeague*
         // / coachKpiRazryad*) so a coach reading the dashboard in Russian sees
         // "Лига A" / "КМС" instead of the raw DB enum value.
-        const leagueCell = (raw) => {
-            if (raw === null || raw === undefined || raw === '') return '—';
+        const leagueCell = (raw, kind) => {
+            if (raw === null || raw === undefined || raw === '') {
+                if (kind === 'razryad_3') return label('coachKpiLeagueR3', '3rd razryad');
+                if (kind === 'razryad_4') return label('coachKpiLeagueR4', '4th razryad');
+                return '—';
+            }
             return label('coachKpiLeague' + raw, raw);
         };
         const razryadCell = (raw) => {
@@ -1359,7 +1365,7 @@
                     _el('td', { text: fullName(r) }),
                     _el('td', { text: r.branch_name || '—' }),
                     _el('td', { text: r.coach_name || '—' }),
-                    _el('td', { text: leagueCell(r.league) }),
+                    _el('td', { text: leagueCell(r.league, r.tournament_kind) }),
                     _el('td', { text: razryadCell(r.razryad) }),
                     _el('td', { text: formatHeroValue(r.games_played) }),
                     _el('td', { className: strongCls, text: formatHeroValue(r.tournaments_played) }),

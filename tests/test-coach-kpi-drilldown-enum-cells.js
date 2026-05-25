@@ -71,6 +71,8 @@ const RU = {
     coachKpiLeagueA: 'Лига A',
     coachKpiLeagueB: 'Лига B',
     coachKpiLeagueC: 'Лига C',
+    coachKpiLeagueR3: '3 разряд',
+    coachKpiLeagueR4: '4 разряд',
     coachKpiRazryadKMS: 'КМС',
     coachKpiRazryad1st: '1-й разряд',
     coachKpiRazryad2nd: '2-й разряд',
@@ -78,7 +80,21 @@ const RU = {
     coachKpiRazryad4th: '4-й разряд',
     coachKpiRazryadNone: 'Нет',
 };
+const KK = {
+    coachKpiLeagueA: 'A лигасы',
+    coachKpiLeagueB: 'B лигасы',
+    coachKpiLeagueC: 'C лигасы',
+    coachKpiLeagueR3: '3 разряд',
+    coachKpiLeagueR4: '4 разряд',
+    coachKpiRazryadKMS: 'ХШҚ',
+    coachKpiRazryad1st: '1-разряд',
+    coachKpiRazryad2nd: '2-разряд',
+    coachKpiRazryad3rd: '3-разряд',
+    coachKpiRazryad4th: '4-разряд',
+    coachKpiRazryadNone: 'Жоқ',
+};
 const ruT = (key, fb) => Object.prototype.hasOwnProperty.call(RU, key) ? RU[key] : fb;
+const kkT = (key, fb) => Object.prototype.hasOwnProperty.call(KK, key) ? KK[key] : fb;
 
 const kpi = loadKpi();
 
@@ -163,6 +179,71 @@ console.log('\n=== english fallback still works when t() is not supplied =======
     // renderer never strips data when i18n is unwired.
     assertEqual(tds[3].textContent, 'A', 'league cell falls back to raw value');
     assertEqual(tds[4].textContent, 'kms', 'razryad cell falls back to raw value');
+}
+
+console.log('\n=== active_players league cell falls back to R3/R4 via tournament_kind (ru) ==\n');
+{
+    // Students who only played razryad qualifiers have no rating-derived league
+    // (latest_rating is null → ratingToLeague returns null on the edge). With
+    // the tournament_kind context the renderer should label these rows as
+    // "3 разряд" / "4 разряд" instead of an em-dash, so a coach scanning the
+    // drilldown can still tell what tournaments the student played.
+    const container = makeMockEl('div');
+    const rows = [
+        { student_id: 'S1', first_name: 'A', last_name: 'A', branch_name: 'B', coach_name: 'C',
+          league: null, tournament_kind: 'razryad_3', razryad: '3rd',
+          games_played: 5, tournaments_played: 1, rating_delta_total: 0 },
+        { student_id: 'S2', first_name: 'B', last_name: 'B', branch_name: 'B', coach_name: 'C',
+          league: null, tournament_kind: 'razryad_4', razryad: '4th',
+          games_played: 6, tournaments_played: 1, rating_delta_total: 0 },
+    ];
+    kpi.renderDrilldown(container, 'active_players', rows, { window: '90d' }, { t: ruT });
+    const tds = findAll(container, n => n.tagName === 'td');
+    const leagueCells = [tds[3].textContent, tds[11].textContent];
+    assertEqual(leagueCells, ['3 разряд', '4 разряд'],
+        'null league + razryad_3/razryad_4 kind → R3/R4 label (ru)');
+    assert(!leagueCells.includes('—'),
+        'em-dash never appears when razryad kind context is available');
+}
+
+console.log('\n=== active_players league cell falls back to R3/R4 via tournament_kind (kk) ==\n');
+{
+    // Same fallback contract in Kazakh — Kazakh and Russian share the "3/4
+    // разряд" rendering, but the test pins both locales so a future
+    // localization tweak fails loudly here rather than at runtime.
+    const container = makeMockEl('div');
+    const rows = [
+        { student_id: 'S1', first_name: 'A', last_name: 'A', branch_name: 'B', coach_name: 'C',
+          league: null, tournament_kind: 'razryad_3', razryad: '3rd',
+          games_played: 5, tournaments_played: 1, rating_delta_total: 0 },
+        { student_id: 'S2', first_name: 'B', last_name: 'B', branch_name: 'B', coach_name: 'C',
+          league: null, tournament_kind: 'razryad_4', razryad: '4th',
+          games_played: 6, tournaments_played: 1, rating_delta_total: 0 },
+    ];
+    kpi.renderDrilldown(container, 'active_players', rows, { window: '90d' }, { t: kkT });
+    const tds = findAll(container, n => n.tagName === 'td');
+    const leagueCells = [tds[3].textContent, tds[11].textContent];
+    assertEqual(leagueCells, ['3 разряд', '4 разряд'],
+        'null league + razryad_3/razryad_4 kind → R3/R4 label (kk)');
+}
+
+console.log('\n=== leagueCell direct R3/R4 raw values resolve via coachKpiLeagueR3/R4 ==\n');
+{
+    // When the edge function ever returns the raw "R3"/"R4" enum directly
+    // (not via the kind-fallback path) the cell must still localize via the
+    // same coachKpiLeague* keys — the helper checks the value before the
+    // kind context.
+    const container = makeMockEl('div');
+    const rows = [
+        { student_id: 'S1', first_name: 'A', last_name: 'A', branch_name: 'B', coach_name: 'C',
+          league: 'R3', razryad: '3rd', games_played: 1, tournaments_played: 1, rating_delta_total: 0 },
+        { student_id: 'S2', first_name: 'B', last_name: 'B', branch_name: 'B', coach_name: 'C',
+          league: 'R4', razryad: '4th', games_played: 1, tournaments_played: 1, rating_delta_total: 0 },
+    ];
+    kpi.renderDrilldown(container, 'active_players', rows, { window: '90d' }, { t: ruT });
+    const tds = findAll(container, n => n.tagName === 'td');
+    assertEqual([tds[3].textContent, tds[11].textContent], ['3 разряд', '4 разряд'],
+        'raw "R3"/"R4" league values localize via coachKpiLeagueR3/R4 (ru)');
 }
 
 console.log(`\n--- ${passed} passed, ${failed} failed ---\n`);

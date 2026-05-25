@@ -61,9 +61,11 @@ function sliceLocale(src, locale) {
 
 const EN_BLOCK = sliceLocale(I18N_SRC, 'en');
 const RU_BLOCK = sliceLocale(I18N_SRC, 'ru');
+const KK_BLOCK = sliceLocale(I18N_SRC, 'kk');
 
 assert(EN_BLOCK.length > 0, 'extracted `en` locale block');
 assert(RU_BLOCK.length > 0, 'extracted `ru` locale block');
+assert(KK_BLOCK.length > 0, 'extracted `kk` locale block');
 
 const REQUIRED_KEYS = [
     'coachKpiTitle',
@@ -85,6 +87,8 @@ const REQUIRED_KEYS = [
     'coachKpiLeagueA',
     'coachKpiLeagueB',
     'coachKpiLeagueC',
+    'coachKpiLeagueR3',
+    'coachKpiLeagueR4',
     'coachKpiInactiveStudent',
     'coachKpiTopPerformer',
     'coachKpiBiggestClimber',
@@ -180,6 +184,57 @@ for (const key of REQUIRED_KEYS) {
     if (!v) continue;
     assert(CYRILLIC.test(v), `[ru] "${key}" contains Cyrillic characters`);
 }
+
+console.log('\n=== razryad qualifier league keys (R3/R4) in all three locales =======\n');
+
+// The league filter exposes 3rd/4th-razryad qualifiers alongside Leagues B/C.
+// Every locale must carry a label so a Kazakh- or Russian-speaking coach never
+// sees the raw "R3"/"R4" enum bleeding through.
+const RAZRYAD_LEAGUE_KEYS = ['coachKpiLeagueR3', 'coachKpiLeagueR4'];
+for (const key of RAZRYAD_LEAGUE_KEYS) {
+    for (const [name, block] of [['en', EN_BLOCK], ['ru', RU_BLOCK], ['kk', KK_BLOCK]]) {
+        const v = valueFor(block, key);
+        assert(typeof v === 'string' && v.length > 0,
+            `[${name}] "${key}" defined and non-empty`);
+    }
+}
+assertEqual(valueFor(EN_BLOCK, 'coachKpiLeagueR3'), '3rd razryad',
+    'coachKpiLeagueR3 = "3rd razryad" (en)');
+assertEqual(valueFor(EN_BLOCK, 'coachKpiLeagueR4'), '4th razryad',
+    'coachKpiLeagueR4 = "4th razryad" (en)');
+assertEqual(valueFor(RU_BLOCK, 'coachKpiLeagueR3'), '3 разряд',
+    'coachKpiLeagueR3 = "3 разряд" (ru)');
+assertEqual(valueFor(RU_BLOCK, 'coachKpiLeagueR4'), '4 разряд',
+    'coachKpiLeagueR4 = "4 разряд" (ru)');
+assertEqual(valueFor(KK_BLOCK, 'coachKpiLeagueR3'), '3 разряд',
+    'coachKpiLeagueR3 = "3 разряд" (kk)');
+assertEqual(valueFor(KK_BLOCK, 'coachKpiLeagueR4'), '4 разряд',
+    'coachKpiLeagueR4 = "4 разряд" (kk)');
+
+console.log('\n=== renamed values: coachKpiLeagueGroup + coachKpiLeagueAll ===========\n');
+
+// Phase 2 renamed the league-filter copy from "League / All leagues" to
+// "Tournament / All tournaments" so razryad qualifiers (R3/R4) read sensibly
+// alongside Leagues B/C in the same dropdown. Pin the new values per locale.
+assertEqual(valueFor(EN_BLOCK, 'coachKpiLeagueGroup'), 'Tournament',
+    'coachKpiLeagueGroup = "Tournament" (en)');
+assertEqual(valueFor(EN_BLOCK, 'coachKpiLeagueAll'), 'All tournaments',
+    'coachKpiLeagueAll = "All tournaments" (en)');
+assertEqual(valueFor(RU_BLOCK, 'coachKpiLeagueGroup'), 'Турнир',
+    'coachKpiLeagueGroup = "Турнир" (ru)');
+assertEqual(valueFor(RU_BLOCK, 'coachKpiLeagueAll'), 'Все турниры',
+    'coachKpiLeagueAll = "Все турниры" (ru)');
+assertEqual(valueFor(KK_BLOCK, 'coachKpiLeagueGroup'), 'Турнир',
+    'coachKpiLeagueGroup = "Турнир" (kk)');
+assertEqual(valueFor(KK_BLOCK, 'coachKpiLeagueAll'), 'Барлық турнирлер',
+    'coachKpiLeagueAll = "Барлық турнирлер" (kk)');
+
+// Leagues B and C must stay literally unchanged — the rename only swept the
+// group label, the "All" option, and added razryad qualifiers.
+assertEqual(valueFor(EN_BLOCK, 'coachKpiLeagueB'), 'League B',
+    'coachKpiLeagueB stays "League B" (en)');
+assertEqual(valueFor(EN_BLOCK, 'coachKpiLeagueC'), 'League C',
+    'coachKpiLeagueC stays "League C" (en)');
 
 console.log(`\n--- ${passed} passed, ${failed} failed ---\n`);
 if (failed > 0) process.exit(1);

@@ -327,11 +327,13 @@ serve(async (req) => {
       const windowEnd = p('window_end')
       const branchId = p('branch_id') // optional
       // League A was retired from the internal tournament rotation (spec §10);
-      // the only league filters honored here are B and C, mapped to the
-      // tournaments_uploads.kind enum.
+      // the league filter now also accepts razryad qualifier kinds (R3/R4)
+      // mapped to the tournaments_uploads.kind enum.
       const leagueParam = p('league')
       const leagueKind = leagueParam === 'B' ? 'league_b'
         : leagueParam === 'C' ? 'league_c'
+        : leagueParam === 'R3' ? 'razryad_3'
+        : leagueParam === 'R4' ? 'razryad_4'
         : null
       const validationError = validateWindow(windowStart, windowEnd)
       if (validationError) return json({ success: false, error: validationError }, 400)
@@ -910,6 +912,8 @@ serve(async (req) => {
       const drillLeagueParam = p('league')
       const drillLeagueKind = drillLeagueParam === 'B' ? 'league_b'
         : drillLeagueParam === 'C' ? 'league_c'
+        : drillLeagueParam === 'R3' ? 'razryad_3'
+        : drillLeagueParam === 'R4' ? 'razryad_4'
         : null
 
       // Resolve coach scope: explicit coach_id wins, else branch_id → coaches,
@@ -1062,6 +1066,15 @@ serve(async (req) => {
         }
         const rows = [...byStudent.values()].map((slot) => {
           const s = studentById.get(slot.student_id) || {}
+          // When the dashboard filters by a razryad qualifier (R3/R4) every
+          // upload in scope shares that kind — surface it so the frontend can
+          // label rows whose rating-derived league is null.
+          const kinds = new Set<string>()
+          for (const upId of slot.tournaments) {
+            const u = drillUploadById.get(upId)
+            if (u && u.kind) kinds.add(u.kind)
+          }
+          const tournamentKind = kinds.size === 1 ? [...kinds][0] : null
           return {
             student_id: slot.student_id,
             first_name: s.first_name || null,
@@ -1072,6 +1085,7 @@ serve(async (req) => {
             coach_name: coachName(s.coach_id || null),
             league: ratingToLeague(slot.latest_rating),
             razryad: s.razryad || null,
+            tournament_kind: tournamentKind,
             games_played: slot.games_played,
             tournaments_played: slot.tournaments.size,
             rating_delta_total: slot.rating_delta_total,

@@ -45,8 +45,8 @@ for (const name of apiNames) {
 }
 assertEqual(kpi.TIME_WINDOWS, ['30d', '90d', 'ytd'], 'TIME_WINDOWS exported (no "all" — dropped Phase 2)');
 assertEqual(kpi.DEFAULT_WINDOW, '90d', 'DEFAULT_WINDOW = 90d');
-assertEqual(kpi.LEAGUES, ['all', 'B', 'C'],
-    'LEAGUES exported (no League A — retired from internal tournament rotation)');
+assertEqual(kpi.LEAGUES, ['all', 'B', 'C', 'R3', 'R4'],
+    'LEAGUES exported (no League A — retired; R3/R4 razryad qualifiers added)');
 assertEqual(kpi.DEFAULT_LEAGUE, 'all', 'DEFAULT_LEAGUE = all');
 assertEqual(kpi.DEFAULT_BRANCH, 'all', 'DEFAULT_BRANCH = all');
 assertEqual(kpi.SCORE_THRESHOLDS, { red: 40, amber: 70 }, 'SCORE_THRESHOLDS exported');
@@ -490,11 +490,15 @@ function _branchSelect(root) {
     const leagueSelect = _leagueSelect(root);
     assertEqual(leagueSelect.tagName, 'select', 'league control is a <select>');
     assertEqual(leagueSelect.value, 'all', 'league defaults to "all"');
-    // League A was retired from the internal tournament rotation; only
-    // all / B / C remain as filter options.
-    assertEqual(leagueSelect.children.length, 3, 'league has all/B/C options (no League A)');
+    // League A was retired from the internal tournament rotation. The filter
+    // now exposes the razryad qualifiers (R3/R4) alongside B and C so a school
+    // admin can scope the dashboard to 3rd/4th-razryad tournaments.
+    assertEqual(leagueSelect.children.length, 5,
+        'league has all/B/C/R3/R4 options (no League A; razryad qualifiers added)');
     const leagueValues = leagueSelect.children.map(o => o.attributes.value);
     assertEqual(leagueValues.includes('A'), false, 'no League A option in the league select');
+    assertEqual(leagueValues.includes('R3'), true, 'R3 razryad qualifier option present');
+    assertEqual(leagueValues.includes('R4'), true, 'R4 razryad qualifier option present');
 
     const branchSelect = _branchSelect(root);
     assertEqual(branchSelect.tagName, 'select', 'branch control is a <select>');
@@ -592,7 +596,7 @@ function _branchSelect(root) {
     const c = makeMockEl('div');
     const translations = {
         coachKpiTimeWindow30d: '30 дней',
-        coachKpiLeagueAll: 'Все лиги',
+        coachKpiLeagueAll: 'Все турниры',
         coachKpiBranchAll: 'Все филиалы',
     };
     const t = (key, fallback) => translations[key] || fallback;
@@ -600,7 +604,7 @@ function _branchSelect(root) {
     const pill30d = _windowGroup(root).children.find(p => p.dataset.window === '30d');
     assertEqual(pill30d.textContent, '30 дней',
         'i18n: time-window labels resolved via t()');
-    assertEqual(_leagueSelect(root).children[0].textContent, 'Все лиги',
+    assertEqual(_leagueSelect(root).children[0].textContent, 'Все турниры',
         'i18n: league "all" option resolved via t()');
     assertEqual(_branchSelect(root).children[0].textContent, 'Все филиалы',
         'i18n: branch "all" option resolved via t()');

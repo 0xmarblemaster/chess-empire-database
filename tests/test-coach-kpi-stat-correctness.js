@@ -440,8 +440,8 @@ async function runLeaguePillTest() {
     const leagueSelect = findByClass(root, 'kpi-filter-league');
     assert(leagueSelect !== null, 'league <select> is rendered');
     const optionValues = leagueSelect.children.map(o => o.attributes.value);
-    assertEqual(optionValues, ['all', 'B', 'C'],
-        'league select offers exactly all/B/C — no League A pill in the DOM');
+    assertEqual(optionValues, ['all', 'B', 'C', 'R3', 'R4'],
+        'league select offers all/B/C plus razryad qualifiers R3/R4 — no League A pill in the DOM');
     assert(!optionValues.includes('A'),
         'league select MUST NOT include League A (retired from internal rotation)');
 
