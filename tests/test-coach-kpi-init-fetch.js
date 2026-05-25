@@ -117,7 +117,7 @@ console.log('\n=== initCoachKpi issues an initial fetch for the default view ===
                 success: true,
                 data: {
                     window: { start: '2026-02-14', end: '2026-05-14' },
-                    active_students_count: 4, participants_count: 3,
+                    active_students_count: 4, active_players_count: 3,
                     participation_pct: 75, total_tournaments: 2,
                     top3_count: 3, promotions_count: 1, new_razryads_count: 0,
                     total_rating_gained: 100,
@@ -235,7 +235,7 @@ async function runSchoolFallbackTest() {
                 success: true,
                 data: {
                     window: { start: '2026-02-14', end: '2026-05-14' },
-                    active_students_count: 8, participants_count: 6,
+                    active_students_count: 8, active_players_count: 6,
                     participation_pct: 75, total_tournaments: 3,
                     top3_count: 2, promotions_count: 1, new_razryads_count: 1,
                     total_rating_gained: 60,

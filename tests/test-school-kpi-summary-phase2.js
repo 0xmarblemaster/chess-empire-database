@@ -51,7 +51,7 @@ assert(!/from\('tournaments'\)/.test(BLOCK),
 
 console.log('\n=== source contract: response shape stays stable =======================\n');
 assert(/active_students_count/.test(BLOCK), 'still emits active_students_count');
-assert(/participants_count/.test(BLOCK), 'still emits participants_count');
+assert(/active_players_count/.test(BLOCK), 'still emits active_players_count');
 assert(/participation_pct/.test(BLOCK), 'still emits participation_pct');
 assert(/total_tournaments/.test(BLOCK), 'still emits total_tournaments');
 assert(/top3_count/.test(BLOCK), 'still emits top3_count');

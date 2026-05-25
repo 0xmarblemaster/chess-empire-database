@@ -92,7 +92,7 @@ Same six numbers as the school view, narrowed to one coach: `active_students_cou
 `composite_score` (replaces school's `participation_pct` for the per-coach
 context).
 
-Extra fields available from `hero`: `participants_count`, `total_results`,
+Extra fields available from `hero`: `active_players_count`, `total_results`,
 `avg_place` (mean place across finite places, `null` if no results),
 `top1_count`, `total_rating_gained`.
 

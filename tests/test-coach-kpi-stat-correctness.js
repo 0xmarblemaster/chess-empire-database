@@ -270,7 +270,6 @@ function defaultSchoolHero(extras) {
         window: { start: '2026-04-25', end: '2026-05-24' },
         active_students_count: 9,
         active_players_count: 7,
-        participants_count: 7,
         participation_pct: 77.8,
         total_tournaments: 3,
         total_results: 10,
@@ -490,7 +489,7 @@ async function runCrossProductTest() {
     const stub = makeFetchStub([
         [/action=school_kpi_summary/, () => ({ success: true, data: defaultSchoolHero({
             // Branch + League B scope: 1 league_b upload, Alice's branch only.
-            active_students_count: 4, participants_count: 3,
+            active_students_count: 4, active_players_count: 3,
             participation_pct: 75, total_tournaments: 1,
             top3_count: 1, promotions_count: 0, new_razryads_count: 0,
             total_rating_gained: 25,

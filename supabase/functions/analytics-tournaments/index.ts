@@ -717,7 +717,7 @@ serve(async (req) => {
           window: { start: windowStart, end: windowEnd },
           hero: {
             active_students_count: studentIds.length,
-            participants_count: participantStudentIds.size,
+            active_players_count: participantStudentIds.size,
             total_tournaments: tournamentIds.size,
             total_results: parts.length,
             avg_place: places.length ? Math.round((places.reduce((a, b) => a + b, 0) / places.length) * 100) / 100 : null,
@@ -770,7 +770,7 @@ serve(async (req) => {
             data: {
               window: { start: windowStart, end: windowEnd },
               active_students_count: 0,
-              participants_count: 0,
+              active_players_count: 0,
               participation_pct: 0,
               total_tournaments: 0,
               total_results: 0,
@@ -875,7 +875,7 @@ serve(async (req) => {
         data: {
           window: { start: windowStart, end: windowEnd },
           active_students_count: activeCount,
-          participants_count: participantStudentIds.size,
+          active_players_count: participantStudentIds.size,
           participation_pct: activeCount > 0 ? Math.round((participantStudentIds.size / activeCount) * 1000) / 10 : 0,
           total_tournaments: uploads.length,
           total_results: results.length,
