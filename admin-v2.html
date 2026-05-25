@@ -1000,6 +1000,17 @@
                     </div>
                 </div>
 
+                <!-- Attendance Student Search (orphan handlers in admin-v2.js) -->
+                <div class="attendance-search-container" style="margin-bottom: 0.75rem;">
+                    <input type="text"
+                           id="attendanceStudentSearch"
+                           class="attendance-search-input"
+                           oninput="handleAttendanceSearch(this.value)"
+                           data-i18n-placeholder="admin.attendance.searchStudent"
+                           placeholder="Search student...">
+                    <div id="attendanceSearchDropdown" class="attendance-search-dropdown" style="display:none;"></div>
+                </div>
+
                 <!-- Attendance Calendar Grid -->
                 <div class="branch-card" style="margin-bottom: 1.5rem;">
                     <div id="attendanceCalendarContainer" style="overflow-x: auto;">
