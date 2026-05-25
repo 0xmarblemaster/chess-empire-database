@@ -5505,3 +5505,124 @@ tr[data-student-id] {
         grid-template-columns: 1fr;
     }
 }
+
+/* =====================================================================
+ * Coach KPI dashboard — color highlights
+ * Each of the 7 hero cards carries a .variant-* modifier that paints a
+ * 4px left border + a gradient .stat-icon circle. Palette is hardcoded
+ * to the same tokens used elsewhere (branch-styles.css .stat-icon.*,
+ * coach-styles.css teal accent) — no new design tokens introduced.
+ * ===================================================================== */
+
+.kpi-hero-card {
+    position: relative;
+    border-left: 4px solid transparent;
+}
+
+.kpi-hero-card .stat-icon {
+    width: 44px;
+    height: 44px;
+    border-radius: 0.75rem;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.35rem;
+    line-height: 1;
+    margin-bottom: 0.75rem;
+    color: #ffffff;
+}
+
+.kpi-hero-card.variant-active-students {
+    border-left-color: #14b8a6;
+}
+.kpi-hero-card.variant-active-students .stat-icon {
+    background: linear-gradient(135deg, #14b8a6 0%, #0d9488 100%);
+}
+
+.kpi-hero-card.variant-active-players {
+    border-left-color: #3b82f6;
+}
+.kpi-hero-card.variant-active-players .stat-icon {
+    background: linear-gradient(135deg, #3b82f6 0%, #60a5fa 100%);
+}
+
+.kpi-hero-card.variant-participation {
+    border-left-color: #d97706;
+}
+.kpi-hero-card.variant-participation .stat-icon {
+    background: linear-gradient(135deg, #d97706 0%, #f59e0b 100%);
+}
+
+.kpi-hero-card.variant-top3 {
+    border-left-color: #fbbf24;
+}
+.kpi-hero-card.variant-top3 .stat-icon {
+    background: linear-gradient(135deg, #fbbf24 0%, #f59e0b 100%);
+    color: #92400e;
+}
+
+.kpi-hero-card.variant-razryads {
+    border-left-color: #667eea;
+}
+.kpi-hero-card.variant-razryads .stat-icon {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+}
+
+.kpi-hero-card.variant-promotions {
+    border-left-color: #10b981;
+}
+.kpi-hero-card.variant-promotions .stat-icon {
+    background: linear-gradient(135deg, #10b981 0%, #34d399 100%);
+}
+
+.kpi-hero-card.variant-tournaments {
+    border-left-color: #1e293b;
+}
+.kpi-hero-card.variant-tournaments .stat-icon {
+    background: linear-gradient(135deg, #1e293b 0%, #475569 100%);
+}
+
+/* Leaderboard row rank highlights — applied only on default sort.
+ * Rank 1 gets the gold tint + border; rank 2/3 get an amber border only. */
+.kpi-leaderboard tr.leaderboard-row.rank-1 {
+    background: #fef3c7;
+    box-shadow: inset 4px 0 0 0 #fbbf24;
+}
+.kpi-leaderboard tr.leaderboard-row.rank-2 {
+    box-shadow: inset 4px 0 0 0 #d97706;
+}
+.kpi-leaderboard tr.leaderboard-row.rank-3 {
+    box-shadow: inset 4px 0 0 0 #d97706;
+}
+
+/* Cell color helpers (sort-independent). Reuses the delta-up green token
+ * that already appears in branch-styles.css / student-styles.css. */
+.kpi-leaderboard td.top3-cell.has-value {
+    color: #92400e;
+    font-weight: 700;
+}
+.kpi-leaderboard td.promo-cell.has-value {
+    color: #047857;
+    font-weight: 600;
+}
+.kpi-leaderboard td.participation-cell.low {
+    color: #b91c1c;
+    font-weight: 600;
+}
+.kpi-leaderboard td.participation-cell.mid {
+    color: #d97706;
+    font-weight: 600;
+}
+.kpi-leaderboard td.participation-cell.high {
+    color: #047857;
+    font-weight: 600;
+}
+
+@media (max-width: 768px) {
+    .kpi-hero-card .stat-icon {
+        width: 36px;
+        height: 36px;
+        font-size: 1.1rem;
+        margin-bottom: 0.5rem;
+    }
+}

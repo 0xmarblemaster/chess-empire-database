@@ -585,20 +585,24 @@
         // Order locked by COACH_KPI_PHASE2_SPEC follow-up: active students,
         // active players (distinct students who played ≥1 game), participation,
         // top-3 events, new razryads, promotions (deduped), tournaments.
+        // `variant` drives the color accent (left border + .stat-icon gradient)
+        // defined in admin-styles.css → palette is hardcoded to existing tokens
+        // (teal / blue / amber / gold / purple / green / slate).
         const cards = [
-            [label('coachKpiActiveStudents',  'Active students'),  formatHeroValue(s.active_students_count)],
-            [label('coachKpiActivePlayers',   'Active players'),   formatHeroValue(s.active_players_count)],
-            [label('coachKpiParticipation',   'Participation'),    formatHeroValue(s.participation_pct, { percent: true })],
-            [label('coachKpiTop3',            'Top-3 finishes'),   formatHeroValue(s.top3_count)],
-            [label('coachKpiNewRazryads',     'New razryads'),     formatHeroValue(s.new_razryads_count)],
-            [label('coachKpiPromotions',      'Promotions'),       formatHeroValue(s.promotions_count)],
-            [label('coachKpiTournamentsYtd',  'Tournaments'),      formatHeroValue(s.total_tournaments)],
+            ['active-students', '👥', label('coachKpiActiveStudents', 'Active students'), formatHeroValue(s.active_students_count)],
+            ['active-players',  '♟',  label('coachKpiActivePlayers',  'Active players'),  formatHeroValue(s.active_players_count)],
+            ['participation',   '📊', label('coachKpiParticipation',  'Participation'),   formatHeroValue(s.participation_pct, { percent: true })],
+            ['top3',            '🏆', label('coachKpiTop3',           'Top-3 finishes'),  formatHeroValue(s.top3_count)],
+            ['razryads',        '⭐', label('coachKpiNewRazryads',    'New razryads'),    formatHeroValue(s.new_razryads_count)],
+            ['promotions',      '⬆',  label('coachKpiPromotions',     'Promotions'),      formatHeroValue(s.promotions_count)],
+            ['tournaments',     '🗓', label('coachKpiTournamentsYtd', 'Tournaments'),     formatHeroValue(s.total_tournaments)],
         ];
         container.innerHTML = '';
-        for (const [label, value] of cards) {
-            container.appendChild(_el('div', { className: 'stat-card' }, [
+        for (const [variant, icon, cardLabel, value] of cards) {
+            container.appendChild(_el('div', { className: `stat-card kpi-hero-card variant-${variant}` }, [
+                _el('span', { className: 'stat-icon', 'aria-hidden': 'true', text: icon }),
                 _el('div', { className: 'stat-card-value', text: value }),
-                _el('div', { className: 'stat-card-label', text: label }),
+                _el('div', { className: 'stat-card-label', text: cardLabel }),
             ]));
         }
         _rememberRender('renderSchoolHero', container, [summary, o]);
@@ -619,6 +623,14 @@
             return;
         }
         const sorted = sortLeaderboard(rows, o.sortKey, o.direction);
+        // Rank-row highlights apply only when the table is sorted by its
+        // default headline metric — i.e. the "composite-like" ordering. A
+        // user-driven sort by name, branch, etc. should not paint Top-3
+        // medals onto unrelated columns.
+        const defaultSortKey = 'total_tournaments';
+        const usingDefaultSort = !o.sortKey
+            || o.sortKey === defaultSortKey
+            || !(sorted.length > 0 && o.sortKey in sorted[0]);
         container.innerHTML = '';
         const table = _el('table', { className: 'kpi-leaderboard' });
         // Columns: Coach name + the seven metric columns in the same order as
@@ -637,23 +649,45 @@
             ]),
         ]);
         const tbody = _el('tbody');
-        for (const row of sorted) {
+        sorted.forEach((row, i) => {
             const activeStudents = Number(row.active_students_count) || 0;
             const activePlayers = Number(row.active_players_count) || 0;
             const participationPct = activeStudents > 0
                 ? Math.round((activePlayers / activeStudents) * 1000) / 10
                 : 0;
-            tbody.appendChild(_el('tr', { dataset: { coachId: row.coach_id || '' } }, [
+            const top3 = Number(row.top3_count) || 0;
+            const promotions = Number(row.promotions_count) || 0;
+            let rowClass = 'leaderboard-row';
+            if (usingDefaultSort && i < 3) rowClass += ` rank-${i + 1}`;
+            let pBand = '';
+            if (activeStudents > 0) {
+                if (participationPct < 30) pBand = ' low';
+                else if (participationPct <= 60) pBand = ' mid';
+                else pBand = ' high';
+            }
+            tbody.appendChild(_el('tr', {
+                className: rowClass,
+                dataset: { coachId: row.coach_id || '' },
+            }, [
                 _el('td', { text: row.coach_name || '—' }),
                 _el('td', { text: formatHeroValue(row.active_students_count) }),
                 _el('td', { text: formatHeroValue(row.active_players_count) }),
-                _el('td', { text: formatHeroValue(participationPct, { percent: true }) }),
-                _el('td', { text: formatHeroValue(row.top3_count) }),
+                _el('td', {
+                    className: `participation-cell${pBand}`,
+                    text: formatHeroValue(participationPct, { percent: true }),
+                }),
+                _el('td', {
+                    className: `top3-cell${top3 > 0 ? ' has-value' : ''}`,
+                    text: formatHeroValue(row.top3_count),
+                }),
                 _el('td', { text: formatHeroValue(row.new_razryads_count) }),
-                _el('td', { text: formatHeroValue(row.promotions_count) }),
+                _el('td', {
+                    className: `promo-cell${promotions > 0 ? ' has-value' : ''}`,
+                    text: formatHeroValue(row.promotions_count),
+                }),
                 _el('td', { text: formatHeroValue(row.total_tournaments) }),
             ]));
-        }
+        });
         table.appendChild(thead);
         table.appendChild(tbody);
         container.appendChild(table);
