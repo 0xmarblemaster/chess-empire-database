@@ -100,13 +100,13 @@ assertEqual(lock.defaultView(null),  null,     'null: no view');
 
 console.log('\n=== navMenuVisibility =================================================\n');
 assertEqual(lock.navMenuVisibility(ADMIN), { hidden: false, disabled: false },
-    'admin: Coach Performance nav visible');
+    'admin: Coach KPI nav visible');
 assertEqual(lock.navMenuVisibility(COACH), { hidden: false, disabled: false },
-    'coach: Coach Performance nav visible (sees branch + coach views)');
+    'coach: Coach KPI nav visible (sees branch + coach views)');
 assertEqual(lock.navMenuVisibility(ANON), { hidden: true, disabled: true },
-    'anon: Coach Performance nav hidden');
+    'anon: Coach KPI nav hidden');
 assertEqual(lock.navMenuVisibility(null), { hidden: true, disabled: true },
-    'null: Coach Performance nav hidden');
+    'null: Coach KPI nav hidden');
 
 console.log('\n=== viewSwitcherVisibility ============================================\n');
 assertEqual(lock.viewSwitcherVisibility(ADMIN), {

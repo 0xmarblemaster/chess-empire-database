@@ -194,7 +194,7 @@ const translations = {
         "admin.sidebar.dataManagement": "Data Management",
         "admin.sidebar.attendance": "Attendance",
         "admin.sidebar.tournaments": "Tournaments",
-        "admin.sidebar.coachPerformance": "Coach Performance",
+        "admin.sidebar.coachPerformance": "Coach KPI",
         "admin.tournaments.title": "Tournaments",
         "admin.tournaments.upload": "Upload Swiss-Manager files",
         "admin.tournaments.dropHint": "Drag & drop .csv / .txt / .xlsx files here, or click to browse",
@@ -1008,7 +1008,7 @@ const translations = {
         "coach.invalidScore": "Please enter a valid score (0-100)",
 
         // Coach KPI Dashboard — header/insight copy not yet ported to active tree
-        "coachKpiTitle": "Coach Performance",
+        "coachKpiTitle": "Coach KPI",
         "coachKpiSchoolView": "School",
         "coachKpiBranchView": "Branch",
         "coachKpiCoachView": "Coach",
@@ -1195,7 +1195,7 @@ const translations = {
         "admin.sidebar.dataManagement": "Деректерді басқару",
         "admin.sidebar.attendance": "Қатысу",
         "admin.sidebar.tournaments": "Турнирлер",
-        "admin.sidebar.coachPerformance": "Тренер көрсеткіштері",
+        "admin.sidebar.coachPerformance": "Жаттықтырушы KPI",
         "admin.tournaments.title": "Турнирлер",
         "admin.tournaments.upload": "Swiss-Manager файлдарын жүктеу",
         "admin.tournaments.dropHint": ".csv / .txt / .xlsx файлдарын осында сүйреп тастаңыз немесе шолу үшін басыңыз",
@@ -2160,7 +2160,7 @@ const translations = {
         "admin.sidebar.dataManagement": "Управление данными",
         "admin.sidebar.attendance": "Посещаемость",
         "admin.sidebar.tournaments": "Турниры",
-        "admin.sidebar.coachPerformance": "Эффективность тренеров",
+        "admin.sidebar.coachPerformance": "KPI тренеров",
         "admin.tournaments.title": "Турниры",
         "admin.tournaments.upload": "Загрузить файлы Swiss-Manager",
         "admin.tournaments.dropHint": "Перетащите .csv / .txt / .xlsx сюда или нажмите для выбора",
@@ -2975,7 +2975,7 @@ const translations = {
         "coach.invalidScore": "Введите корректный результат (0-100)",
 
         // Coach KPI Dashboard — header/insight copy not yet ported to active tree
-        "coachKpiTitle": "Эффективность тренеров",
+        "coachKpiTitle": "KPI тренеров",
         "coachKpiSchoolView": "Школа",
         "coachKpiBranchView": "Филиал",
         "coachKpiCoachView": "Тренер",

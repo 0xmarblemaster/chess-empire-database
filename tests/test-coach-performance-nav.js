@@ -64,8 +64,8 @@ assert(/data-lucide="bar-chart-3"/.test(navHtml),
     'uses bar-chart-3 lucide icon (KPI visual cue)');
 assert(/data-i18n="admin\.sidebar\.coachPerformance"/.test(navHtml),
     'span carries data-i18n="admin.sidebar.coachPerformance"');
-assert(/>Coach Performance</.test(navHtml),
-    'default (English) label is "Coach Performance"');
+assert(/>Coach KPI</.test(navHtml),
+    'default (English) label is "Coach KPI"');
 
 console.log('\n=== i18n keys (EN / KK / RU) =========================================\n');
 
@@ -76,8 +76,8 @@ assertEqual(keyMatches.length, 3,
     'admin.sidebar.coachPerformance defined exactly once per locale (en/kk/ru)');
 
 // English value sanity check.
-assert(/"admin\.sidebar\.coachPerformance"\s*:\s*"Coach Performance"/.test(I18N),
-    'English translation = "Coach Performance"');
+assert(/"admin\.sidebar\.coachPerformance"\s*:\s*"Coach KPI"/.test(I18N),
+    'English translation = "Coach KPI"');
 // Russian + Kazakh: just confirm a non-empty translated value lives in the
 // other locale blocks (catches the common "added EN only" mistake).
 const ruMatch = I18N.match(/"admin\.sidebar\.coachPerformance"\s*:\s*"([^"]+)"/g) || [];

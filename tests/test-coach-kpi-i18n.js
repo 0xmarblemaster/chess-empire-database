@@ -164,8 +164,8 @@ for (const key of REQUIRED_KEYS) {
 
 console.log('\n=== english spot-checks ===============================================\n');
 
-assertEqual(valueFor(EN_BLOCK, 'coachKpiTitle'), 'Coach Performance',
-    'coachKpiTitle = "Coach Performance"');
+assertEqual(valueFor(EN_BLOCK, 'coachKpiTitle'), 'Coach KPI',
+    'coachKpiTitle = "Coach KPI"');
 assertEqual(valueFor(EN_BLOCK, 'coachKpiTimeWindow30d'), '30 days',
     'coachKpiTimeWindow30d = "30 days"');
 assertEqual(valueFor(EN_BLOCK, 'coachKpiLeagueA'), 'League A',
