@@ -5582,6 +5582,29 @@ tr[data-student-id] {
     background: linear-gradient(135deg, #1e293b 0%, #475569 100%);
 }
 
+/* Sortable header affordance — clickable + selectable=none so the arrow
+ * glyph stays attached to the label even when the user accidentally drags. */
+.kpi-leaderboard th[data-sort-key] {
+    cursor: pointer;
+    user-select: none;
+}
+.kpi-leaderboard th[data-sort-key]:hover {
+    background-color: rgba(15, 23, 42, 0.04);
+}
+.kpi-leaderboard th[data-sort-key]:focus-visible {
+    outline: 2px solid #3b82f6;
+    outline-offset: -2px;
+}
+.kpi-leaderboard th .sort-arrow {
+    display: inline-block;
+    margin-left: 0.25rem;
+    font-size: 0.8em;
+    color: #475569;
+}
+.kpi-leaderboard th .sort-arrow.is-active {
+    color: #1e293b;
+}
+
 /* Leaderboard row rank highlights — applied only on default sort.
  * Rank 1 gets the gold tint + border; rank 2/3 get an amber border only. */
 .kpi-leaderboard tr.leaderboard-row.rank-1 {

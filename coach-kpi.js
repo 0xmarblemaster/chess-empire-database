@@ -659,6 +659,33 @@
         _rememberRender('renderSchoolHero', container, [summary, o]);
     }
 
+    // Sortable column registry for the Coach Performance leaderboard. `defaultDir`
+    // is the natural direction used on a column's first click — names asc, metrics
+    // desc. The order here defines the table's column order.
+    const LEADERBOARD_COLUMNS = Object.freeze([
+        { key: 'coach_name',            i18n: 'coachKpiColCoach',          fallback: 'Coach',          defaultDir: 'asc'  },
+        { key: 'active_students_count', i18n: 'coachKpiColActive',         fallback: 'Active',         defaultDir: 'desc' },
+        { key: 'active_players_count',  i18n: 'coachKpiColActivePlayers',  fallback: 'Active players', defaultDir: 'desc' },
+        { key: 'participation_pct',     i18n: 'coachKpiColParticipation',  fallback: 'Participation', defaultDir: 'desc' },
+        { key: 'top3_count',            i18n: 'coachKpiColTop3',           fallback: 'Top-3',          defaultDir: 'desc' },
+        { key: 'new_razryads_count',    i18n: 'coachKpiColRazryads',       fallback: 'Razryads',       defaultDir: 'desc' },
+        { key: 'promotions_count',      i18n: 'coachKpiColPromotions',     fallback: 'Promotions',     defaultDir: 'desc' },
+        { key: 'total_tournaments',     i18n: 'coachKpiColTournaments',    fallback: 'Tournaments',    defaultDir: 'desc' },
+    ]);
+
+    // Module-scoped sort state so a chosen header survives filter / language
+    // re-renders. `opts.sortKey` on a single render call overrides this for
+    // that paint only (it does not mutate the module state).
+    const _LEADERBOARD_DEFAULT_SORT = Object.freeze({ key: 'total_tournaments', direction: 'desc' });
+    let _leaderboardSort = { key: _LEADERBOARD_DEFAULT_SORT.key, direction: _LEADERBOARD_DEFAULT_SORT.direction };
+
+    function _defaultDirFor(sortKey) {
+        for (const col of LEADERBOARD_COLUMNS) {
+            if (col.key === sortKey) return col.defaultDir;
+        }
+        return 'desc';
+    }
+
     /**
      * Render the coach leaderboard table. Empty / non-array `rows` falls
      * through to `renderEmptyState` so callers don't need a separate branch.
@@ -673,39 +700,94 @@
             _rememberRender('renderLeaderboard', container, [rows, o]);
             return;
         }
-        const sorted = sortLeaderboard(rows, o.sortKey, o.direction);
-        // Rank-row highlights apply only when the table is sorted by its
-        // default headline metric — i.e. the "composite-like" ordering. A
-        // user-driven sort by name, branch, etc. should not paint Top-3
-        // medals onto unrelated columns.
-        const defaultSortKey = 'total_tournaments';
-        const usingDefaultSort = !o.sortKey
-            || o.sortKey === defaultSortKey
-            || !(sorted.length > 0 && o.sortKey in sorted[0]);
-        container.innerHTML = '';
-        const table = _el('table', { className: 'kpi-leaderboard' });
-        // Columns: Coach name + the seven metric columns in the same order as
-        // the school hero cards (active students, active players, participation,
-        // top-3, new razryads, promotions, tournaments).
-        const thead = _el('thead', null, [
-            _el('tr', null, [
-                _el('th', { text: label('coachKpiColCoach', 'Coach') }),
-                _el('th', { text: label('coachKpiColActive', 'Active') }),
-                _el('th', { text: label('coachKpiColActivePlayers', 'Active players') }),
-                _el('th', { text: label('coachKpiColParticipation', 'Participation') }),
-                _el('th', { text: label('coachKpiColTop3', 'Top-3') }),
-                _el('th', { text: label('coachKpiColRazryads', 'Razryads') }),
-                _el('th', { text: label('coachKpiColPromotions', 'Promotions') }),
-                _el('th', { text: label('coachKpiColTournaments', 'Tournaments') }),
-            ]),
-        ]);
-        const tbody = _el('tbody');
-        sorted.forEach((row, i) => {
-            const activeStudents = Number(row.active_students_count) || 0;
-            const activePlayers = Number(row.active_players_count) || 0;
+
+        // Pre-attach the computed participation_pct so sortLeaderboard can
+        // treat it like any other numeric column.
+        const enriched = rows.map((row) => {
+            const activeStudents = Number(row && row.active_students_count) || 0;
+            const activePlayers = Number(row && row.active_players_count) || 0;
             const participationPct = activeStudents > 0
                 ? Math.round((activePlayers / activeStudents) * 1000) / 10
                 : 0;
+            return Object.assign({}, row, { participation_pct: participationPct });
+        });
+
+        // opts.sortKey is an explicit per-render override; otherwise the
+        // module state drives.
+        let sortKey;
+        let direction;
+        if (o.sortKey) {
+            sortKey = o.sortKey;
+            direction = (o.direction === 'asc' || o.direction === 'desc')
+                ? o.direction
+                : _defaultDirFor(o.sortKey);
+        } else {
+            sortKey = _leaderboardSort.key;
+            direction = _leaderboardSort.direction;
+        }
+
+        const sorted = sortLeaderboard(enriched, sortKey, direction);
+        // Rank-row highlights apply only on the default headline ordering
+        // (total_tournaments desc). Any other sort — including the same key
+        // but reversed — must drop the medals so the gold tint never paints
+        // an unrelated leader.
+        const usingDefaultSort = sortKey === _LEADERBOARD_DEFAULT_SORT.key
+            && direction === _LEADERBOARD_DEFAULT_SORT.direction;
+
+        container.innerHTML = '';
+        const table = _el('table', { className: 'kpi-leaderboard' });
+        const headerRow = _el('tr');
+        for (const col of LEADERBOARD_COLUMNS) {
+            const isActive = sortKey === col.key;
+            const ariaSort = isActive
+                ? (direction === 'asc' ? 'ascending' : 'descending')
+                : 'none';
+            const arrowChild = isActive ? _el('span', {
+                className: 'sort-arrow is-active',
+                'aria-hidden': 'true',
+                text: direction === 'asc' ? ' ▲' : ' ▼',
+            }) : null;
+            const th = _el('th', {
+                'data-sort-key': col.key,
+                role: 'button',
+                tabindex: '0',
+                'aria-sort': ariaSort,
+                text: label(col.i18n, col.fallback),
+            }, arrowChild ? [arrowChild] : []);
+            const onActivate = () => {
+                const nextDir = (_leaderboardSort.key === col.key)
+                    ? (_leaderboardSort.direction === 'asc' ? 'desc' : 'asc')
+                    : col.defaultDir;
+                _leaderboardSort = { key: col.key, direction: nextDir };
+                // Re-render with the original rows; module state now drives
+                // the sort. Strip any one-shot sortKey override so it can't
+                // re-overrule the user's click.
+                const nextOpts = Object.assign({}, o);
+                delete nextOpts.sortKey;
+                delete nextOpts.direction;
+                renderLeaderboard(container, rows, nextOpts);
+            };
+            if (th.addEventListener) {
+                th.addEventListener('click', onActivate);
+                th.addEventListener('keydown', (e) => {
+                    if (!e) return;
+                    const key = e.key;
+                    const code = e.keyCode;
+                    const isEnter = key === 'Enter' || code === 13;
+                    const isSpace = key === ' ' || key === 'Spacebar' || code === 32;
+                    if (isEnter || isSpace) {
+                        if (typeof e.preventDefault === 'function') e.preventDefault();
+                        onActivate();
+                    }
+                });
+            }
+            headerRow.appendChild(th);
+        }
+        const thead = _el('thead', null, [headerRow]);
+        const tbody = _el('tbody');
+        sorted.forEach((row, i) => {
+            const activeStudents = Number(row.active_students_count) || 0;
+            const participationPct = row.participation_pct;
             const top3 = Number(row.top3_count) || 0;
             const promotions = Number(row.promotions_count) || 0;
             let rowClass = 'leaderboard-row';
