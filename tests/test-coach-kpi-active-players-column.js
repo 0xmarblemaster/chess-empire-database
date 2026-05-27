@@ -111,7 +111,7 @@ const TRANSLATIONS = {
     },
     ru: {
         coachKpiActiveStudents: 'Активные ученики',
-        coachKpiActiveStudentsL2: 'Активные ур. 2+',
+        coachKpiActiveStudentsL2: 'Активные Ступень 2+',
         coachKpiActivePlayers: 'Активные игроки',
         coachKpiParticipation: 'Участие',
         coachKpiTop3: 'Топ-3 места',
@@ -120,7 +120,7 @@ const TRANSLATIONS = {
         coachKpiTournamentsYtd: 'Турниры с начала года',
         coachKpiColCoach: 'Тренер',
         coachKpiColActive: 'Активные',
-        coachKpiColActiveL2: 'Активные ур. 2+',
+        coachKpiColActiveL2: 'Активные Ступень 2+',
         coachKpiColActivePlayers: 'Активные игроки',
         coachKpiColParticipation: 'Участие',
         coachKpiColTop3: 'Топ-3',

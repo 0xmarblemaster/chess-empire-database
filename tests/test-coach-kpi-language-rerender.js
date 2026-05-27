@@ -186,7 +186,7 @@ const TRANSLATIONS = {
     },
     ru: {
         coachKpiActiveStudents: 'Активные ученики',
-        coachKpiActiveStudentsL2: 'Активные ур. 2+',
+        coachKpiActiveStudentsL2: 'Активные Ступень 2+',
         coachKpiTournamentsYtd: 'Турниры с начала года',
         coachKpiTop3: 'Топ-3 места',
         coachKpiPromotions: 'Повышения уровня',
@@ -198,7 +198,7 @@ const TRANSLATIONS = {
         coachKpiBranchAll: 'Все филиалы',
         coachKpiColCoach: 'Тренер',
         coachKpiColActive: 'Активные',
-        coachKpiColActiveL2: 'Активные ур. 2+',
+        coachKpiColActiveL2: 'Активные Ступень 2+',
         coachKpiColTournaments: 'Турниры',
         coachKpiColTop3: 'Топ-3',
         coachKpiColPromotions: 'Повышения',
@@ -319,7 +319,7 @@ console.log('\n=== language event triggers _rerenderAll on cached renderers ====
 
     // First paint: Russian labels.
     let labels = findAllByClass(heroHost, 'stat-card-label').map(n => n.textContent);
-    assert(labels.includes('Активные ур. 2+'),
+    assert(labels.includes('Активные Ступень 2+'),
         'first paint: hero labels render in Russian');
 
     // Subscribe + flip language to English.
@@ -331,7 +331,7 @@ console.log('\n=== language event triggers _rerenderAll on cached renderers ====
     labels = findAllByClass(heroHost, 'stat-card-label').map(n => n.textContent);
     assert(labels.includes('Active Lvl 2+'),
         'after languageChanged: hero labels re-rendered in English');
-    assert(!labels.includes('Активные ур. 2+'),
+    assert(!labels.includes('Активные Ступень 2+'),
         'after languageChanged: old Russian labels are gone');
 })();
 
@@ -402,7 +402,7 @@ console.log('\n=== _rerenderAll covers every cached container, not just the last
     const lbHeaders = findAllByTag(lbHost, 'th').map(n => n.textContent);
     const filterLabels = findAllByClass(filtersHost, 'filter-label').map(n => n.textContent);
 
-    assert(heroLabels.includes('Активные ур. 2+'),
+    assert(heroLabels.includes('Активные Ступень 2+'),
         'hero container re-rendered in Russian');
     assert(lbHeaders.includes('Тренер'),
         'leaderboard container re-rendered in Russian');
@@ -599,8 +599,8 @@ console.log('\n=== language event re-renders into Kazakh =======================
     for (const fn of (win._listeners['languageChanged'] || [])) fn({ type: 'languageChanged' });
 
     const heroLabelsRu = findAllByClass(heroHost, 'stat-card-label').map(n => n.textContent);
-    assert(heroLabelsRu.includes('Активные ур. 2+'),
-        'after KK → RU: hero re-rendered with Russian "Активные ур. 2+"');
+    assert(heroLabelsRu.includes('Активные Ступень 2+'),
+        'after KK → RU: hero re-rendered with Russian "Активные Ступень 2+"');
     assert(!heroLabelsRu.includes('Белсенді 2+ деңг.'),
         'after KK → RU: stale Kazakh labels are gone');
 })();

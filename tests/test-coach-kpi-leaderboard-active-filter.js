@@ -391,16 +391,16 @@ console.log('\n=== "Active Lvl 2+" label renders on hero card and column header 
     // i18n path — supplying opts.t with the new key returns the localized form.
     const ruHost = makeMockEl('div');
     const tRu = (key, fb) => ({
-        coachKpiActiveStudentsL2: 'Активные ур. 2+',
-        coachKpiColActiveL2: 'Активные ур. 2+',
+        coachKpiActiveStudentsL2: 'Активные Ступень 2+',
+        coachKpiColActiveL2: 'Активные Ступень 2+',
     }[key] || fb);
     kpi.renderSchoolHero(ruHost, {
         active_students_count: 1, active_players_count: 1, participation_pct: 100,
         total_tournaments: 0, top3_count: 0, promotions_count: 0, new_razryads_count: 0,
     }, { t: tRu });
     const ruLabels = findAllByClass(ruHost, 'stat-card-label').map((el) => el.textContent);
-    assert(ruLabels.includes('Активные ур. 2+'),
-        'RU translation "Активные ур. 2+" resolves through coachKpiActiveStudentsL2');
+    assert(ruLabels.includes('Активные Ступень 2+'),
+        'RU translation "Активные Ступень 2+" resolves through coachKpiActiveStudentsL2');
 })();
 
 console.log(`\n--- ${passed} passed, ${failed} failed ---\n`);
