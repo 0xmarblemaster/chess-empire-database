@@ -701,6 +701,17 @@
             return;
         }
 
+        // Render-time filter: hide coaches with zero active students (frozen
+        // or left). Hero stats / charts above the table still see the full
+        // aggregation; only the leaderboard hides empty rosters. Filter runs
+        // before sort so visible row positions are not affected by hidden rows.
+        rows = rows.filter((r) => (Number(r && r.active_students_count) || 0) >= 1);
+        if (rows.length === 0) {
+            renderEmptyState(container, undefined, { t });
+            _rememberRender('renderLeaderboard', container, [rows, o]);
+            return;
+        }
+
         // Pre-attach the computed participation_pct so sortLeaderboard can
         // treat it like any other numeric column.
         const enriched = rows.map((row) => {

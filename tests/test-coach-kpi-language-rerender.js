@@ -384,7 +384,7 @@ console.log('\n=== _rerenderAll covers every cached container, not just the last
         promotions_count: 1, new_razryads_count: 1, participation_pct: 50,
     }, { t: adapter });
     kpi.renderLeaderboard(lbHost, [{
-        coach_id: 'c1', coach_name: 'X', composite_score: 50,
+        coach_id: 'c1', coach_name: 'X', composite_score: 50, active_students_count: 1,
     }], { t: adapter });
     kpi.renderFilters(filtersHost, undefined, { t: adapter });
 
@@ -425,7 +425,7 @@ console.log('\n=== _rememberRender dedups by container (no stale entries) ======
         promotions_count: 1, new_razryads_count: 1, participation_pct: 50,
     }, { t: adapter });
     kpi.renderLeaderboard(host, [{
-        coach_id: 'c1', coach_name: 'X', composite_score: 50,
+        coach_id: 'c1', coach_name: 'X', composite_score: 50, active_students_count: 1,
     }], { t: adapter });
 
     kpi.subscribeLanguageEvents();
@@ -567,7 +567,7 @@ console.log('\n=== language event re-renders into Kazakh =======================
         promotions_count: 1, new_razryads_count: 1, participation_pct: 50,
     }, { t: adapter });
     kpi.renderLeaderboard(lbHost, [{
-        coach_id: 'c1', coach_name: 'X', composite_score: 50,
+        coach_id: 'c1', coach_name: 'X', composite_score: 50, active_students_count: 1,
     }], { t: adapter });
     kpi.renderFilters(filtersHost, undefined, { t: adapter });
 

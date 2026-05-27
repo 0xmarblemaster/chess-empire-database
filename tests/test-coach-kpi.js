@@ -379,8 +379,8 @@ console.log('\n=== renderLeaderboard falls back to empty state =================
 (function testLeaderboardNonEmpty() {
     const c = makeMockEl('div');
     kpi.renderLeaderboard(c, [
-        { coach_id: 'a', coach_name: 'Alice', composite_score: 55 },
-        { coach_id: 'b', coach_name: 'Bob',   composite_score: 78 },
+        { coach_id: 'a', coach_name: 'Alice', composite_score: 55, active_students_count: 3 },
+        { coach_id: 'b', coach_name: 'Bob',   composite_score: 78, active_students_count: 2 },
     ]);
     assertEqual(c.children.length, 1,
         'renderLeaderboard(rows) mounts one root element (the table)');
