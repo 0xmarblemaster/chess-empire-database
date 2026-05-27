@@ -176,7 +176,9 @@ function renderCoachProfile() {
 
     // Calculate statistics
     const totalStudents = coachStudents.length;
-    const activeStudents = coachStudents.filter(s => s.status === 'active').length;
+    // "Active" on the Coach KPI dashboard is scoped to Level 2+ — Level 1
+    // (intro) students don't count toward a coach's active roster.
+    const activeStudents = coachStudents.filter(s => s.status === 'active' && (s.currentLevel || 1) >= 2).length;
     const avgLevel = coachStudents.length > 0
         ? (coachStudents.reduce((sum, s) => sum + (s.currentLevel || 1), 0) / coachStudents.length).toFixed(1)
         : '0';
@@ -306,7 +308,7 @@ function renderCoachProfile() {
         <div class="coach-stats">
             <div class="stat-card">
                 <div class="stat-value">${activeStudents}</div>
-                <div class="stat-label">${t('coach.activeStudents') || 'Active'}</div>
+                <div class="stat-label">${t('coachKpiActiveStudentsL2') || 'Active Lvl 2+'}</div>
             </div>
             <div class="stat-card">
                 <div class="stat-value">${totalStudents}</div>

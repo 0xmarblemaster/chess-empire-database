@@ -122,6 +122,7 @@ function findAllByTag(root, tag, out) {
 // passed by the renderer — that's the contract we're verifying.
 const RU = {
     coachKpiActiveStudents: 'Активные ученики',
+    coachKpiActiveStudentsL2: 'Активные ур. 2+',
     coachKpiActivePlayers: 'Активные игроки',
     coachKpiTournamentsYtd: 'Турниры с начала года',
     coachKpiTop3: 'Топ-3 места',
@@ -142,6 +143,7 @@ const RU = {
     coachKpiChartUnavailable: 'Chart.js не загружен',
     coachKpiColCoach: 'Тренер',
     coachKpiColActive: 'Активные',
+    coachKpiColActiveL2: 'Активные ур. 2+',
     coachKpiColActivePlayers: 'Активные игроки',
     coachKpiColParticipation: 'Участие',
     coachKpiColTournaments: 'Турниры',
@@ -174,8 +176,8 @@ console.log('\n=== renderSchoolHero localizes its seven hero labels ============
 
     const labels = findAllByClass(container, 'stat-card-label').map(n => n.textContent);
     assert(labels.length === 7, 'seven hero cards render (one label per metric, Active players added)');
-    assert(labels.includes('Активные ученики'),
-        'Active students label translated via coachKpiActiveStudents');
+    assert(labels.includes('Активные ур. 2+'),
+        'Active students label translated via coachKpiActiveStudentsL2 (L2+ scoping)');
     assert(labels.includes('Активные игроки'),
         'Active players label translated via coachKpiActivePlayers');
     assert(labels.includes('Турниры с начала года'),
@@ -204,8 +206,8 @@ console.log('\n=== renderSchoolHero falls back to English without opts.t =======
         participation_pct: 0.5,
     });
     const labels = findAllByClass(container, 'stat-card-label').map(n => n.textContent);
-    assert(labels.includes('Active students'),
-        'English fallback "Active students" rendered when no opts.t supplied');
+    assert(labels.includes('Active Lvl 2+'),
+        'English fallback "Active Lvl 2+" rendered when no opts.t supplied');
     assert(labels.includes('Active players'),
         'English fallback "Active players" rendered when no opts.t supplied');
     assert(labels.includes('Tournaments'),
@@ -230,7 +232,7 @@ console.log('\n=== renderLeaderboard localizes its eight column headers ========
     const headers = findAllByTag(container, 'th').map(n => n.textContent);
     assert(headers.length === 8, 'eight <th> headers render (Coach + 7 metrics)');
     assert(headers[0] === 'Тренер', 'Coach column → Тренер');
-    assert(headers[1] === 'Активные', 'Active column → Активные');
+    assert(headers[1] === 'Активные ур. 2+', 'Active column → Активные ур. 2+ (L2+ scoping)');
     assert(headers[2] === 'Активные игроки', 'Active players column → Активные игроки');
     assert(headers[3] === 'Участие', 'Participation column → Участие');
     assert(headers[4] === 'Топ-3', 'Top-3 column → Топ-3');

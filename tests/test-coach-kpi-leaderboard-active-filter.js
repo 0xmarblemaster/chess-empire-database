@@ -313,5 +313,95 @@ console.log('\n=== All zero-roster coaches falls through to empty state ========
         'empty-state placeholder is rendered instead of an empty table');
 })();
 
+// ── 6: L1-only coach disappears — edge function L2+ scoping flows through ──
+//
+// The edge function counts only students with status=active AND current_level>=2
+// as "active". For a coach whose entire active roster is Level 1, the payload
+// will arrive with active_students_count=0 and the render-time guard must drop
+// the coach from the leaderboard — same end behaviour as a frozen-roster coach.
+
+console.log('\n=== L1-only coach (L2+ scoping) is dropped from leaderboard ==========\n');
+(function testL1OnlyCoachDropped() {
+    const kpi = loadKpi();
+    const host = makeMockEl('div');
+    // Coach "All Level 1": full roster of 8 students but every one is Level 1.
+    // Per the new Active=L2+ semantics, the edge function returns
+    // active_students_count = 0 for this coach, so it must vanish from the
+    // table even though total_tournaments would otherwise lead.
+    const rows = [
+        { coach_id: 'co-l1-only', coach_name: 'All Level 1',
+          active_students_count: 0, active_players_count: 0, total_tournaments: 12,
+          top3_count: 0, promotions_count: 0, new_razryads_count: 0 },
+        { coach_id: 'co-alice', coach_name: 'Alice Anderson',
+          active_students_count: 5, active_players_count: 4, total_tournaments: 6,
+          top3_count: 1, promotions_count: 3, new_razryads_count: 2 },
+    ];
+    kpi.renderLeaderboard(host, rows, {});
+
+    const table = findByClass(host, 'kpi-leaderboard');
+    const names = rowCoachNames(table);
+    assert(!names.includes('All Level 1'),
+        'coach whose entire active roster is L1 (count=0 after L2+ filter) is hidden');
+    assertEqual(names, ['Alice Anderson'],
+        'only the L2+ coach remains visible');
+})();
+
+// ── 7: Hero card + column header render the new "Active Lvl 2+" label ──────
+//
+// The dashboard label switched from "Active students" / "Active" to the
+// L2+-scoped wording across the hero card and the leaderboard column header.
+// We assert both surfaces so a future rename touches one spot here.
+
+console.log('\n=== "Active Lvl 2+" label renders on hero card and column header ====\n');
+(function testActiveL2PlusLabel() {
+    const kpi = loadKpi();
+
+    // Hero card (renderSchoolHero) — fallback path: no opts.t provided, so the
+    // English fallback string baked into coach-kpi.js must read "Active Lvl 2+".
+    const heroHost = makeMockEl('div');
+    kpi.renderSchoolHero(heroHost, {
+        active_students_count: 7,
+        active_players_count: 5,
+        participation_pct: 71.4,
+        total_tournaments: 4,
+        top3_count: 1,
+        promotions_count: 2,
+        new_razryads_count: 0,
+    }, {});
+    const heroLabels = findAllByClass(heroHost, 'stat-card-label').map((el) => el.textContent);
+    assert(heroLabels.includes('Active Lvl 2+'),
+        'hero card label reads "Active Lvl 2+" (English fallback)');
+    assert(!heroLabels.includes('Active students'),
+        'old "Active students" label is gone from hero card');
+
+    // Leaderboard column header — fallback path, default sort.
+    const tableHost = makeMockEl('div');
+    kpi.renderLeaderboard(tableHost, [
+        { coach_id: 'co-a', coach_name: 'A',
+          active_students_count: 3, active_players_count: 2, total_tournaments: 4,
+          top3_count: 1, promotions_count: 0, new_razryads_count: 0 },
+    ], {});
+    const table = findByClass(tableHost, 'kpi-leaderboard');
+    const headers = findAllByTag(table, 'th').map((th) => th.textContent);
+    assert(headers.includes('Active Lvl 2+'),
+        'leaderboard column header reads "Active Lvl 2+" (English fallback)');
+    assert(!headers.includes('Active'),
+        'old "Active" column header is replaced by "Active Lvl 2+"');
+
+    // i18n path — supplying opts.t with the new key returns the localized form.
+    const ruHost = makeMockEl('div');
+    const tRu = (key, fb) => ({
+        coachKpiActiveStudentsL2: 'Активные ур. 2+',
+        coachKpiColActiveL2: 'Активные ур. 2+',
+    }[key] || fb);
+    kpi.renderSchoolHero(ruHost, {
+        active_students_count: 1, active_players_count: 1, participation_pct: 100,
+        total_tournaments: 0, top3_count: 0, promotions_count: 0, new_razryads_count: 0,
+    }, { t: tRu });
+    const ruLabels = findAllByClass(ruHost, 'stat-card-label').map((el) => el.textContent);
+    assert(ruLabels.includes('Активные ур. 2+'),
+        'RU translation "Активные ур. 2+" resolves through coachKpiActiveStudentsL2');
+})();
+
 console.log(`\n--- ${passed} passed, ${failed} failed ---\n`);
 if (failed > 0) process.exit(1);

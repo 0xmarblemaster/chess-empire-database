@@ -92,6 +92,7 @@ function findAllByClass(root, token, out) {
 const TRANSLATIONS = {
     en: {
         coachKpiActiveStudents: 'Active students',
+        coachKpiActiveStudentsL2: 'Active Lvl 2+',
         coachKpiActivePlayers: 'Active players',
         coachKpiParticipation: 'Participation',
         coachKpiTop3: 'Top-3 finishes',
@@ -100,6 +101,7 @@ const TRANSLATIONS = {
         coachKpiTournamentsYtd: 'Tournaments',
         coachKpiColCoach: 'Coach',
         coachKpiColActive: 'Active',
+        coachKpiColActiveL2: 'Active Lvl 2+',
         coachKpiColActivePlayers: 'Active players',
         coachKpiColParticipation: 'Participation',
         coachKpiColTop3: 'Top-3',
@@ -109,6 +111,7 @@ const TRANSLATIONS = {
     },
     ru: {
         coachKpiActiveStudents: 'Активные ученики',
+        coachKpiActiveStudentsL2: 'Активные ур. 2+',
         coachKpiActivePlayers: 'Активные игроки',
         coachKpiParticipation: 'Участие',
         coachKpiTop3: 'Топ-3 места',
@@ -117,6 +120,7 @@ const TRANSLATIONS = {
         coachKpiTournamentsYtd: 'Турниры с начала года',
         coachKpiColCoach: 'Тренер',
         coachKpiColActive: 'Активные',
+        coachKpiColActiveL2: 'Активные ур. 2+',
         coachKpiColActivePlayers: 'Активные игроки',
         coachKpiColParticipation: 'Участие',
         coachKpiColTop3: 'Топ-3',
@@ -126,6 +130,7 @@ const TRANSLATIONS = {
     },
     kk: {
         coachKpiActiveStudents: 'Белсенді оқушылар',
+        coachKpiActiveStudentsL2: 'Белсенді 2+ деңг.',
         coachKpiActivePlayers: 'Белсенді ойыншылар',
         coachKpiParticipation: 'Қатысу',
         coachKpiTop3: 'Топ-3 орын',
@@ -134,6 +139,7 @@ const TRANSLATIONS = {
         coachKpiTournamentsYtd: 'Жыл басынан бергі турнирлер',
         coachKpiColCoach: 'Жаттықтырушы',
         coachKpiColActive: 'Белсенді',
+        coachKpiColActiveL2: 'Белсенді 2+ деңг.',
         coachKpiColActivePlayers: 'Белсенді ойыншылар',
         coachKpiColParticipation: 'Қатысу',
         coachKpiColTop3: 'Топ-3',
@@ -169,14 +175,14 @@ console.log('\n=== renderSchoolHero: 7 cards in spec-locked order ==============
     const values = findAllByClass(container, 'stat-card-value').map(n => n.textContent);
 
     assertEqual(labels, [
-        'Active students',
+        'Active Lvl 2+',
         'Active players',
         'Participation',
         'Top-3 finishes',
         'New razryads',
         'Promotions',
         'Tournaments',
-    ], 'hero labels match the spec-locked order');
+    ], 'hero labels match the spec-locked order (Active card now reads "Active Lvl 2+")');
 
     assertEqual(values, ['12', '9', '75%', '4', '2', '1', '5'],
         'hero values follow the same order; participation rendered as percent');
@@ -231,7 +237,7 @@ for (const locale of ['en', 'ru', 'kk']) {
     // Header order: Coach + 7 metric columns matching the hero order.
     const expected = [
         TRANSLATIONS[locale].coachKpiColCoach,
-        TRANSLATIONS[locale].coachKpiColActive,
+        TRANSLATIONS[locale].coachKpiColActiveL2,
         TRANSLATIONS[locale].coachKpiColActivePlayers,
         TRANSLATIONS[locale].coachKpiColParticipation,
         TRANSLATIONS[locale].coachKpiColTop3,
@@ -240,7 +246,7 @@ for (const locale of ['en', 'ru', 'kk']) {
         TRANSLATIONS[locale].coachKpiColTournaments,
     ];
     assertEqual(headers, expected,
-        `[${locale}] header order: Coach, Active, Active players, Participation, Top-3, Razryads, Promotions, Tournaments`);
+        `[${locale}] header order: Coach, Active Lvl 2+, Active players, Participation, Top-3, Razryads, Promotions, Tournaments`);
 
     // Each body row has 8 <td>s and slot 2 = active_players_count value.
     const rows = findAllByTag(container, 'tr').filter(r =>

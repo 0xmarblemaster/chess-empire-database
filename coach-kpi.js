@@ -613,7 +613,7 @@
         // defined in admin-styles.css → palette is hardcoded to existing tokens
         // (teal / blue / amber / gold / purple / green / slate).
         const cards = [
-            ['active-students', '👥', label('coachKpiActiveStudents', 'Active students'), formatHeroValue(s.active_students_count)],
+            ['active-students', '👥', label('coachKpiActiveStudentsL2', 'Active Lvl 2+'), formatHeroValue(s.active_students_count)],
             ['active-players',  '♟',  label('coachKpiActivePlayers',  'Active players'),  formatHeroValue(s.active_players_count)],
             ['participation',   '📊', label('coachKpiParticipation',  'Participation'),   formatHeroValue(s.participation_pct, { percent: true })],
             ['top3',            '🏆', label('coachKpiTop3',           'Top-3 finishes'),  formatHeroValue(s.top3_count)],
@@ -664,7 +664,7 @@
     // desc. The order here defines the table's column order.
     const LEADERBOARD_COLUMNS = Object.freeze([
         { key: 'coach_name',            i18n: 'coachKpiColCoach',          fallback: 'Coach',          defaultDir: 'asc'  },
-        { key: 'active_students_count', i18n: 'coachKpiColActive',         fallback: 'Active',         defaultDir: 'desc' },
+        { key: 'active_students_count', i18n: 'coachKpiColActiveL2',       fallback: 'Active Lvl 2+', defaultDir: 'desc' },
         { key: 'active_players_count',  i18n: 'coachKpiColActivePlayers',  fallback: 'Active players', defaultDir: 'desc' },
         { key: 'participation_pct',     i18n: 'coachKpiColParticipation',  fallback: 'Participation', defaultDir: 'desc' },
         { key: 'top3_count',            i18n: 'coachKpiColTop3',           fallback: 'Top-3',          defaultDir: 'desc' },

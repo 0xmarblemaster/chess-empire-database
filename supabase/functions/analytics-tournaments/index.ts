@@ -376,11 +376,14 @@ serve(async (req) => {
         }
       }
 
-      // 2. Active students assigned to these coaches.
+      // 2. Active students assigned to these coaches. "Active" on the Coach
+      // KPI dashboard is scoped to Level 2+ — Level 1 (intro) students don't
+      // count toward a coach's roster size for KPI purposes.
       const { data: students, error: stErr } = await supabase
-        .from('students').select('id, coach_id, status')
+        .from('students').select('id, coach_id, status, current_level')
         .in('coach_id', allCoachIds.length ? allCoachIds : ['00000000-0000-0000-0000-000000000000'])
         .eq('status', 'active')
+        .gte('current_level', 2)
       if (stErr) throw stErr
 
       const studentIdsByCoach = new Map<string, string[]>()
@@ -588,8 +591,8 @@ serve(async (req) => {
       if (!coach) return json({ success: false, error: 'Coach not found' }, 404)
 
       const { data: students, error: stErr } = await supabase
-        .from('students').select('id, first_name, last_name, status, razryad, branch_id')
-        .eq('coach_id', coachId).eq('status', 'active')
+        .from('students').select('id, first_name, last_name, status, razryad, branch_id, current_level')
+        .eq('coach_id', coachId).eq('status', 'active').gte('current_level', 2)
       if (stErr) throw stErr
       const studentIds = (students || []).map((s: any) => s.id)
 
@@ -764,7 +767,8 @@ serve(async (req) => {
       }
 
       let studentsQuery = supabase
-        .from('students').select('id, status, coach_id').eq('status', 'active')
+        .from('students').select('id, status, coach_id, current_level')
+        .eq('status', 'active').gte('current_level', 2)
       if (scopedCoachIds !== null) {
         if (scopedCoachIds.length === 0) {
           return json({
@@ -946,8 +950,8 @@ serve(async (req) => {
 
       let studentsQuery = supabase
         .from('students')
-        .select('id, first_name, last_name, branch_id, coach_id, razryad, status')
-        .eq('status', 'active')
+        .select('id, first_name, last_name, branch_id, coach_id, razryad, status, current_level')
+        .eq('status', 'active').gte('current_level', 2)
       if (scopedCoachIds !== null) {
         if (scopedCoachIds.length === 0) return emptyResp()
         studentsQuery = studentsQuery.in('coach_id', scopedCoachIds)

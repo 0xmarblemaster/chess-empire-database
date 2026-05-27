@@ -160,6 +160,7 @@ function loadKpi(globals) {
 const TRANSLATIONS = {
     en: {
         coachKpiActiveStudents: 'Active students',
+        coachKpiActiveStudentsL2: 'Active Lvl 2+',
         coachKpiTournamentsYtd: 'Tournaments',
         coachKpiTop3: 'Top-3 finishes',
         coachKpiPromotions: 'Promotions',
@@ -171,6 +172,7 @@ const TRANSLATIONS = {
         coachKpiBranchAll: 'All branches',
         coachKpiColCoach: 'Coach',
         coachKpiColActive: 'Active',
+        coachKpiColActiveL2: 'Active Lvl 2+',
         coachKpiColTournaments: 'Tournaments',
         coachKpiColTop3: 'Top-3',
         coachKpiColPromotions: 'Promotions',
@@ -184,6 +186,7 @@ const TRANSLATIONS = {
     },
     ru: {
         coachKpiActiveStudents: 'Активные ученики',
+        coachKpiActiveStudentsL2: 'Активные ур. 2+',
         coachKpiTournamentsYtd: 'Турниры с начала года',
         coachKpiTop3: 'Топ-3 места',
         coachKpiPromotions: 'Повышения уровня',
@@ -195,6 +198,7 @@ const TRANSLATIONS = {
         coachKpiBranchAll: 'Все филиалы',
         coachKpiColCoach: 'Тренер',
         coachKpiColActive: 'Активные',
+        coachKpiColActiveL2: 'Активные ур. 2+',
         coachKpiColTournaments: 'Турниры',
         coachKpiColTop3: 'Топ-3',
         coachKpiColPromotions: 'Повышения',
@@ -208,6 +212,7 @@ const TRANSLATIONS = {
     },
     kk: {
         coachKpiActiveStudents: 'Белсенді оқушылар',
+        coachKpiActiveStudentsL2: 'Белсенді 2+ деңг.',
         coachKpiTournamentsYtd: 'Жыл басынан бергі турнирлер',
         coachKpiTop3: 'Топ-3 орын',
         coachKpiPromotions: 'Деңгей көтерілуі',
@@ -219,6 +224,7 @@ const TRANSLATIONS = {
         coachKpiBranchAll: 'Барлық бөлімшелер',
         coachKpiColCoach: 'Жаттықтырушы',
         coachKpiColActive: 'Белсенді',
+        coachKpiColActiveL2: 'Белсенді 2+ деңг.',
         coachKpiColTournaments: 'Турнирлер',
         coachKpiColTop3: 'Топ-3',
         coachKpiColPromotions: 'Көтерілулер',
@@ -313,7 +319,7 @@ console.log('\n=== language event triggers _rerenderAll on cached renderers ====
 
     // First paint: Russian labels.
     let labels = findAllByClass(heroHost, 'stat-card-label').map(n => n.textContent);
-    assert(labels.includes('Активные ученики'),
+    assert(labels.includes('Активные ур. 2+'),
         'first paint: hero labels render in Russian');
 
     // Subscribe + flip language to English.
@@ -323,9 +329,9 @@ console.log('\n=== language event triggers _rerenderAll on cached renderers ====
     for (const fn of (win._listeners['languageChanged'] || [])) fn({ type: 'languageChanged' });
 
     labels = findAllByClass(heroHost, 'stat-card-label').map(n => n.textContent);
-    assert(labels.includes('Active students'),
+    assert(labels.includes('Active Lvl 2+'),
         'after languageChanged: hero labels re-rendered in English');
-    assert(!labels.includes('Активные ученики'),
+    assert(!labels.includes('Активные ур. 2+'),
         'after languageChanged: old Russian labels are gone');
 })();
 
@@ -396,7 +402,7 @@ console.log('\n=== _rerenderAll covers every cached container, not just the last
     const lbHeaders = findAllByTag(lbHost, 'th').map(n => n.textContent);
     const filterLabels = findAllByClass(filtersHost, 'filter-label').map(n => n.textContent);
 
-    assert(heroLabels.includes('Активные ученики'),
+    assert(heroLabels.includes('Активные ур. 2+'),
         'hero container re-rendered in Russian');
     assert(lbHeaders.includes('Тренер'),
         'leaderboard container re-rendered in Russian');
@@ -581,8 +587,8 @@ console.log('\n=== language event re-renders into Kazakh =======================
     const lbHeaders = findAllByTag(lbHost, 'th').map(n => n.textContent);
     const filterLabels = findAllByClass(filtersHost, 'filter-label').map(n => n.textContent);
 
-    assert(heroLabels.includes('Белсенді оқушылар'),
-        'hero re-rendered with Kazakh "Белсенді оқушылар"');
+    assert(heroLabels.includes('Белсенді 2+ деңг.'),
+        'hero re-rendered with Kazakh "Белсенді 2+ деңг."');
     assert(lbHeaders.includes('Жаттықтырушы'),
         'leaderboard header re-rendered with Kazakh "Жаттықтырушы"');
     assert(filterLabels.includes('Кезең'),
@@ -593,9 +599,9 @@ console.log('\n=== language event re-renders into Kazakh =======================
     for (const fn of (win._listeners['languageChanged'] || [])) fn({ type: 'languageChanged' });
 
     const heroLabelsRu = findAllByClass(heroHost, 'stat-card-label').map(n => n.textContent);
-    assert(heroLabelsRu.includes('Активные ученики'),
-        'after KK → RU: hero re-rendered with Russian "Активные ученики"');
-    assert(!heroLabelsRu.includes('Белсенді оқушылар'),
+    assert(heroLabelsRu.includes('Активные ур. 2+'),
+        'after KK → RU: hero re-rendered with Russian "Активные ур. 2+"');
+    assert(!heroLabelsRu.includes('Белсенді 2+ деңг.'),
         'after KK → RU: stale Kazakh labels are gone');
 })();
 

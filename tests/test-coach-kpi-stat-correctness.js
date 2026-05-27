@@ -316,9 +316,9 @@ console.log('\n=== 1. School hero total comes from school_kpi_summary, not row s
     assertEqual(tournamentsValue, '3',
         'Tournaments card reads 3 (= mocked uploads.length), NOT 5 (sum) or 6 (N×coaches)');
 
-    const activeValue = findValueByLabel(heroHost, 'Active students');
+    const activeValue = findValueByLabel(heroHost, 'Active Lvl 2+');
     assertEqual(activeValue, '9',
-        'Active students card reads 9 (from school_kpi_summary), not 4+5=9 by accident');
+        'Active Lvl 2+ card reads 9 (from school_kpi_summary), not 4+5=9 by accident');
 
     const participationValue = findValueByLabel(heroHost, 'Participation');
     assert(participationValue !== null && participationValue !== '—',
@@ -361,8 +361,8 @@ async function runCoachFilterTest() {
     const heroHost = dom.elements['coach-kpi-school-hero'];
     // Alice's row: 4 active, 3 tournaments, 2 top3, 1 promotion, 1 razryad.
     // The hero MUST reflect Alice's row, NOT the school-wide 9/3/3/1/1.
-    assertEqual(findValueByLabel(heroHost, 'Active students'), '4',
-        'coach filter: Active students = Alice only (4), not school 9');
+    assertEqual(findValueByLabel(heroHost, 'Active Lvl 2+'), '4',
+        'coach filter: Active Lvl 2+ = Alice only (4), not school 9');
     assertEqual(findValueByLabel(heroHost, 'Tournaments'), '3',
         'coach filter: Tournaments = Alice only (3), not school total 5');
     assertEqual(findValueByLabel(heroHost, 'Top-3 finishes'), '2',
@@ -534,8 +534,8 @@ async function runCrossProductTest() {
     const heroHost = dom.elements['coach-kpi-school-hero'];
     // With coachId=co-1, aggregateSchoolHero re-derives from Alice's filtered
     // row (4 active, 1 tournament after league-B narrowing, 1 top-3).
-    assertEqual(findValueByLabel(heroHost, 'Active students'), '4',
-        'cross-product: Active students = Alice (4)');
+    assertEqual(findValueByLabel(heroHost, 'Active Lvl 2+'), '4',
+        'cross-product: Active Lvl 2+ = Alice (4)');
     assertEqual(findValueByLabel(heroHost, 'Tournaments'), '1',
         'cross-product: Tournaments = 1 (only 1 league_b upload in Alice\'s branch)');
     assertEqual(findValueByLabel(heroHost, 'Top-3 finishes'), '1',
