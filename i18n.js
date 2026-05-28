@@ -1030,7 +1030,34 @@ const translations = {
         "admin.imports.kindRating": "Ratings (CSV/Excel)",
         "admin.imports.tournamentDate": "Tournament date",
         "admin.imports.tournamentRounds": "Rounds",
-        "admin.imports.sourceFile": "Source file"
+        "admin.imports.sourceFile": "Source file",
+
+        // Public tournament schedule (tournaments.html)
+        "tournaments.title": "Tournament Schedule",
+        "tournaments.upcoming": "{{count}} upcoming",
+        "tournaments.noUpcoming": "No upcoming tournaments",
+        "tournaments.registerButton": "Register",
+        "tournaments.registrationClosed": "Registration closed",
+        "tournaments.registrationFull": "Registration is full",
+        "tournaments.searchStudent": "Search student by name…",
+        "tournaments.confirmRegister": "Register {{name}} for {{tournament}}?",
+        "tournaments.registeredSuccess": "Registered — see you Saturday!",
+        "tournaments.alreadyRegistered": "Already registered",
+        "tournaments.tournamentNotFound": "Tournament not found",
+        "tournaments.fields.info": "Info",
+        "tournaments.fields.date": "Date",
+        "tournaments.fields.time": "Time",
+        "tournaments.fields.format": "Format",
+        "tournaments.fields.fee": "Registration fee",
+        "tournaments.fields.rounds": "Rounds",
+        "tournaments.fields.capacity": "Registered",
+        "tournaments.fields.roster": "Roster",
+        "tournaments.fee.kzt": "{{amount}} ₸",
+        "tournaments.loadError": "Failed to load tournaments.",
+        "tournaments.noResults": "No students found",
+        "tournaments.confirm": "Confirm",
+        "tournaments.cancel": "Cancel",
+        "tournaments.searchHint": "Type at least 2 characters"
     },
     kk: {
         "common.brand": "Chess Empire",
@@ -1990,7 +2017,34 @@ const translations = {
         "admin.imports.kindRating": "Рейтингтер (CSV/Excel)",
         "admin.imports.tournamentDate": "Турнир күні",
         "admin.imports.tournamentRounds": "Турлар",
-        "admin.imports.sourceFile": "Бастапқы файл"
+        "admin.imports.sourceFile": "Бастапқы файл",
+
+        // Public tournament schedule (tournaments.html)
+        "tournaments.title": "Турнирлер кестесі",
+        "tournaments.upcoming": "Алдағы: {{count}}",
+        "tournaments.noUpcoming": "Алдағы турнирлер жоқ",
+        "tournaments.registerButton": "Тіркелу",
+        "tournaments.registrationClosed": "Тіркеу жабылды",
+        "tournaments.registrationFull": "Орындар бітті",
+        "tournaments.searchStudent": "Оқушыны атымен іздеу…",
+        "tournaments.confirmRegister": "{{name}} оқушысын {{tournament}} турниріне тіркеу?",
+        "tournaments.registeredSuccess": "Тіркелді — сенбіде кездесеміз!",
+        "tournaments.alreadyRegistered": "Бұрын тіркелген",
+        "tournaments.tournamentNotFound": "Турнир табылмады",
+        "tournaments.fields.info": "Сипаттама",
+        "tournaments.fields.date": "Күні",
+        "tournaments.fields.time": "Уақыт",
+        "tournaments.fields.format": "Формат",
+        "tournaments.fields.fee": "Жарна",
+        "tournaments.fields.rounds": "Тур саны",
+        "tournaments.fields.capacity": "Тіркелген",
+        "tournaments.fields.roster": "Тізім",
+        "tournaments.fee.kzt": "{{amount}} ₸",
+        "tournaments.loadError": "Турнирлерді жүктеу мүмкін болмады.",
+        "tournaments.noResults": "Оқушы табылмады",
+        "tournaments.confirm": "Растау",
+        "tournaments.cancel": "Бас тарту",
+        "tournaments.searchHint": "Кемінде 2 таңба теріңіз"
     },
     ru: {
         // Common
@@ -3005,7 +3059,34 @@ const translations = {
         "admin.imports.kindRating": "Рейтинги (CSV/Excel)",
         "admin.imports.tournamentDate": "Дата турнира",
         "admin.imports.tournamentRounds": "Туры",
-        "admin.imports.sourceFile": "Исходный файл"
+        "admin.imports.sourceFile": "Исходный файл",
+
+        // Public tournament schedule (tournaments.html)
+        "tournaments.title": "Расписание турниров",
+        "tournaments.upcoming": "Предстоящих: {{count}}",
+        "tournaments.noUpcoming": "Нет предстоящих турниров",
+        "tournaments.registerButton": "Регистрация",
+        "tournaments.registrationClosed": "Регистрация закрыта",
+        "tournaments.registrationFull": "Места закончились",
+        "tournaments.searchStudent": "Поиск ученика по имени…",
+        "tournaments.confirmRegister": "Зарегистрировать {{name}} на {{tournament}}?",
+        "tournaments.registeredSuccess": "Зарегистрирован — увидимся в субботу!",
+        "tournaments.alreadyRegistered": "Уже зарегистрирован",
+        "tournaments.tournamentNotFound": "Турнир не найден",
+        "tournaments.fields.info": "Описание",
+        "tournaments.fields.date": "Дата",
+        "tournaments.fields.time": "Время",
+        "tournaments.fields.format": "Формат",
+        "tournaments.fields.fee": "Взнос",
+        "tournaments.fields.rounds": "Туров",
+        "tournaments.fields.capacity": "Зарегистрировано",
+        "tournaments.fields.roster": "Список",
+        "tournaments.fee.kzt": "{{amount}} ₸",
+        "tournaments.loadError": "Не удалось загрузить турниры.",
+        "tournaments.noResults": "Ученики не найдены",
+        "tournaments.confirm": "Подтвердить",
+        "tournaments.cancel": "Отмена",
+        "tournaments.searchHint": "Введите не менее 2 символов"
     }
 };
 
