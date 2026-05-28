@@ -5781,6 +5781,40 @@ tr[data-student-id] {
         transform: translateX(16px);
     }
 
+    /* App Access — card layout stacks vertically on mobile so long emails
+       don't push the role dropdown or delete button off-screen. */
+    .app-access-card {
+        padding: 1rem;
+    }
+    .app-access-card-header {
+        flex-direction: column;
+        align-items: stretch;
+        gap: 0.75rem;
+    }
+    .app-access-card-header > div:last-child {
+        width: 100%;
+        justify-content: space-between;
+    }
+    .app-access-user-info {
+        min-width: 0;
+    }
+    .app-access-user-details h3,
+    .app-access-user-details p {
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
+    .app-access-role-selector {
+        flex: 1;
+        min-width: 0;
+        width: 100%;
+    }
+    .app-access-delete-btn {
+        min-width: 44px;
+        min-height: 44px;
+        padding: 0.625rem 0.875rem !important;
+    }
+
     /* Data Management — large tap targets on action cards */
     #dataManagementSection .stat-card {
         min-height: 64px;
