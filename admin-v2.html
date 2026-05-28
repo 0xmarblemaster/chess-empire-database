@@ -107,6 +107,10 @@
                     <i data-lucide="trending-up" style="width: 20px; height: 20px;"></i>
                     <span data-i18n="admin.ratings.title">Ratings</span>
                 </div>
+                <div class="nav-item" id="menuTournamentsAdmin" onclick="showTournamentManagement()" style="display: none;">
+                    <i data-lucide="trophy" style="width: 20px; height: 20px;"></i>
+                    <span data-i18n="admin.tournaments.title">Tournament Management</span>
+                </div>
                 <div class="nav-item" id="menuAppAccess" onclick="showAppAccessManagement()" style="display: none;">
                     <i data-lucide="shield-check" style="width: 20px; height: 20px;"></i>
                     <span data-i18n="access.sidebar.appAccess">App Access</span>
@@ -820,6 +824,85 @@
             </div>
             <!-- End Ratings Section -->
 
+            <!-- Tournament Management Section (admin only) -->
+            <div id="tournamentsAdminSection" class="content-section">
+                <!-- Header -->
+                <div class="header">
+                    <h1 class="header-title" data-i18n="admin.tournaments.title">Tournament Management</h1>
+                    <div class="header-actions">
+                        <div class="kpi-view-switcher" role="tablist" aria-label="Tournament admin view">
+                            <button type="button" class="kpi-view-btn is-active" data-tournaments-admin-tab="tournaments" role="tab" aria-selected="true" onclick="switchTournamentAdminTab('tournaments')" data-i18n="admin.tournaments.tabTournaments">Tournaments</button>
+                            <button type="button" class="kpi-view-btn" data-tournaments-admin-tab="registrations" role="tab" aria-selected="false" onclick="switchTournamentAdminTab('registrations')" data-i18n="admin.tournaments.tabRegistrations">Registrations</button>
+                        </div>
+                        <button class="btn btn-primary" onclick="showCreateTournamentModal()">
+                            <i data-lucide="plus" style="width: 18px; height: 18px;"></i>
+                            <span data-i18n="admin.tournaments.newButton">+ New Tournament</span>
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Tournaments Tab -->
+                <div id="tournamentsAdminTabTournaments">
+                    <div class="table-container">
+                        <div class="table-wrapper">
+                            <table>
+                                <thead>
+                                    <tr>
+                                        <th data-i18n="admin.tournaments.col.branch">Branch</th>
+                                        <th data-i18n="admin.tournaments.col.name">Name</th>
+                                        <th data-i18n="admin.tournaments.col.date">Date</th>
+                                        <th data-i18n="admin.tournaments.col.time">Time</th>
+                                        <th data-i18n="admin.tournaments.col.format">Format</th>
+                                        <th data-i18n="admin.tournaments.col.fee">Fee</th>
+                                        <th data-i18n="admin.tournaments.col.rounds">Rounds</th>
+                                        <th data-i18n="admin.tournaments.col.status">Status</th>
+                                        <th data-i18n="admin.tournaments.col.registered">Registered</th>
+                                        <th data-i18n="admin.tournaments.col.actions">Actions</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="tournamentsAdminTableBody">
+                                    <tr><td colspan="10" style="text-align: center; padding: 2rem; color: #94a3b8;">Loading…</td></tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Registrations Tab -->
+                <div id="tournamentsAdminTabRegistrations" style="display: none;">
+                    <div class="branch-card" style="margin-bottom: 1.5rem;">
+                        <div class="card-header-inline">
+                            <h2 class="card-title-inline">
+                                <i data-lucide="users" style="width: 20px; height: 20px;"></i>
+                                <span data-i18n="admin.tournaments.tabRegistrations">Registrations</span>
+                            </h2>
+                            <select id="tournamentsAdminRegSelect" class="form-input" style="width: auto; min-width: 280px;" onchange="onTournamentsAdminRegSelectChange()">
+                                <option value="" data-i18n="admin.tournaments.selectTournament">Select a tournament</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <div class="table-container">
+                        <div class="table-wrapper">
+                            <table>
+                                <thead>
+                                    <tr>
+                                        <th style="width: 50px;">#</th>
+                                        <th data-i18n="admin.table.student">Student</th>
+                                        <th data-i18n="admin.tournaments.col.date">Registered At</th>
+                                        <th data-i18n="admin.tournaments.col.actions">Actions</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="tournamentsAdminRegBody">
+                                    <tr><td colspan="4" style="text-align: center; padding: 2rem; color: #94a3b8;" data-i18n="admin.tournaments.selectTournament">Select a tournament</td></tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <!-- End Tournament Management Section -->
+
             <!-- Attendance Management Section -->
             <div id="attendanceSection" class="content-section">
                 <!-- Header -->
@@ -1490,6 +1573,15 @@
                                 <i data-lucide="trending-up"></i>
                             </div>
                             <span data-i18n="admin.ratings.title">Ratings</span>
+                        </div>
+                        <i data-lucide="chevron-right" class="more-menu-chevron"></i>
+                    </button>
+                    <button class="more-menu-item" id="moreMenuTournamentsAdmin" style="display:none" onclick="showTournamentManagement()">
+                        <div class="more-menu-item-left">
+                            <div class="more-menu-icon" style="background:#fef9c3;color:#ca8a04;">
+                                <i data-lucide="trophy"></i>
+                            </div>
+                            <span data-i18n="admin.tournaments.title">Tournament Management</span>
                         </div>
                         <i data-lucide="chevron-right" class="more-menu-chevron"></i>
                     </button>
@@ -2373,6 +2465,99 @@
 
             <div class="modal-footer">
                 <button type="button" class="btn-secondary" onclick="closeRatingHistoryModal()" data-i18n="common.close">Close</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Tournament Create/Edit Modal -->
+    <div id="tournamentAdminModal" class="modal">
+        <div class="modal-overlay" onclick="closeTournamentAdminModal()"></div>
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2 class="modal-title" id="tournamentAdminModalTitle" data-i18n="admin.tournaments.newButton">+ New Tournament</h2>
+                <button class="modal-close" onclick="closeTournamentAdminModal()">
+                    <i data-lucide="x" style="width: 24px; height: 24px;"></i>
+                </button>
+            </div>
+
+            <form id="tournamentAdminForm" class="modal-body" onsubmit="return false;">
+                <input type="hidden" id="tournamentAdminId" value="">
+
+                <div class="form-section">
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label class="form-label" data-i18n="admin.tournaments.form.branch">Branch</label>
+                            <select id="tournamentAdminBranch" class="form-input" required>
+                                <option value="">—</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label" data-i18n="admin.tournaments.form.name">Tournament Name</label>
+                            <input type="text" id="tournamentAdminName" class="form-input" required>
+                        </div>
+                    </div>
+
+                    <div class="form-group">
+                        <label class="form-label" data-i18n="admin.tournaments.form.info">Description</label>
+                        <textarea id="tournamentAdminInfo" class="form-input" rows="3"></textarea>
+                    </div>
+
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label class="form-label" data-i18n="admin.tournaments.form.date">Date</label>
+                            <input type="date" id="tournamentAdminDate" class="form-input" required>
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label" data-i18n="admin.tournaments.form.startTime">Start Time</label>
+                            <input type="time" id="tournamentAdminStartTime" class="form-input" required>
+                        </div>
+                    </div>
+
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label class="form-label" data-i18n="admin.tournaments.form.timeFormat">Time Format</label>
+                            <input type="text" id="tournamentAdminTimeFormat" class="form-input" placeholder="Rapid 15+5" required>
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label" data-i18n="admin.tournaments.form.fee">Registration Fee (KZT)</label>
+                            <input type="number" id="tournamentAdminFee" class="form-input" min="0" step="1" value="0" required>
+                        </div>
+                    </div>
+
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label class="form-label" data-i18n="admin.tournaments.form.rounds">Number of Rounds</label>
+                            <input type="number" id="tournamentAdminRounds" class="form-input" min="1" step="1" value="7" required>
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label" data-i18n="admin.tournaments.form.capacity">Capacity</label>
+                            <input type="number" id="tournamentAdminCapacity" class="form-input" min="1" step="1" value="24" required>
+                        </div>
+                    </div>
+
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label class="form-label" data-i18n="admin.tournaments.form.status">Status</label>
+                            <select id="tournamentAdminStatus" class="form-input" required>
+                                <option value="open" data-i18n="admin.tournaments.status.open">Open</option>
+                                <option value="closed" data-i18n="admin.tournaments.status.closed">Closed</option>
+                                <option value="cancelled" data-i18n="admin.tournaments.status.cancelled">Cancelled</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label" data-i18n="admin.tournaments.form.league">League</label>
+                            <input type="text" id="tournamentAdminLeague" class="form-input" value="C" required>
+                        </div>
+                    </div>
+                </div>
+            </form>
+
+            <div class="modal-footer">
+                <button type="button" class="btn-secondary" onclick="closeTournamentAdminModal()" data-i18n="common.cancel">Cancel</button>
+                <button type="button" class="btn-primary" onclick="submitTournamentAdminForm()">
+                    <i data-lucide="save" style="width: 18px; height: 18px;"></i>
+                    <span data-i18n="common.saveChanges">Save Changes</span>
+                </button>
             </div>
         </div>
     </div>

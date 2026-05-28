@@ -117,6 +117,8 @@ function updateMenuVisibility() {
     const moreMenuManageBranches = document.getElementById('moreMenuManageBranches');
     const moreMenuDataManagement = document.getElementById('moreMenuDataManagement');
     const moreMenuSessions = document.getElementById('moreMenuSessions');
+    const menuTournamentsAdmin = document.getElementById('menuTournamentsAdmin');
+    const moreMenuTournamentsAdmin = document.getElementById('moreMenuTournamentsAdmin');
 
     // Admins see everything
     if (userRole.role === 'admin') {
@@ -126,6 +128,7 @@ function updateMenuVisibility() {
         if (menuManageBranches) menuManageBranches.style.display = 'flex';
         if (menuDataManagement) menuDataManagement.style.display = 'flex';
         if (menuAttendance) menuAttendance.style.display = 'flex';
+        if (menuTournamentsAdmin) menuTournamentsAdmin.style.display = 'flex';
         if (managementSectionTitle) managementSectionTitle.style.display = 'block';
 
         // Mirror onto mobile More-menu twins
@@ -134,6 +137,7 @@ function updateMenuVisibility() {
         if (moreMenuManageCoaches) moreMenuManageCoaches.style.display = 'flex';
         if (moreMenuManageBranches) moreMenuManageBranches.style.display = 'flex';
         if (moreMenuDataManagement) moreMenuDataManagement.style.display = 'flex';
+        if (moreMenuTournamentsAdmin) moreMenuTournamentsAdmin.style.display = 'flex';
 
         // Analytics - Grant access to specific admin emails
         const userEmail = sessionStorage.getItem('userEmail');
@@ -320,6 +324,9 @@ function navigateToSection(sectionName) {
             break;
         case 'appAccess':
             showAppAccessManagement();
+            break;
+        case 'tournamentsAdmin':
+            showTournamentManagement(false);
             break;
         default:
             // Default to students section
@@ -844,6 +851,10 @@ function showSection(section) {
     } else if (section === 'coachActivity') {
         switchToSection('coachActivity');
         initCoachActivity();
+    } else if (section === 'tournamentsAdmin') {
+        if (typeof showTournamentManagement === 'function') {
+            showTournamentManagement();
+        }
     }
 
     // Update mobile bottom nav active state
@@ -1106,7 +1117,7 @@ function refreshCoachesListView() {
 
 // Update mobile bottom navigation active state
 function updateMobileBottomNav(activeSection) {
-    const moreSubSections = ['userActivity', 'statusHistory', 'sessions', 'ratings', 'coachActivity', 'coachKpi', 'moreMenu', 'appAccess', 'manageCoaches', 'manageBranches', 'dataManagement'];
+    const moreSubSections = ['userActivity', 'statusHistory', 'sessions', 'ratings', 'coachActivity', 'coachKpi', 'moreMenu', 'appAccess', 'manageCoaches', 'manageBranches', 'dataManagement', 'tournamentsAdmin'];
     const effectiveSection = moreSubSections.includes(activeSection) ? 'settings' : activeSection;
     
     const mobileNavItems = document.querySelectorAll('.mobile-nav-item');
@@ -2945,7 +2956,8 @@ const mobileSectionTitles = {
     appAccess: 'access.sidebar.appAccess',
     manageCoaches: 'admin.sidebar.manageCoaches',
     manageBranches: 'admin.sidebar.manageBranches',
-    dataManagement: 'admin.sidebar.dataManagement'
+    dataManagement: 'admin.sidebar.dataManagement',
+    tournamentsAdmin: 'admin.tournaments.title'
 };
 
 // Show mobile section (called from bottom nav)
@@ -2986,7 +2998,7 @@ function showMobileSection(section, event) {
     showSection(section);
 
     // For sub-sections of More, keep More tab highlighted
-    const moreSubSections = ['userActivity', 'statusHistory', 'sessions', 'ratings', 'coachActivity', 'coachKpi', 'moreMenu', 'settings', 'appAccess', 'manageCoaches', 'manageBranches', 'dataManagement'];
+    const moreSubSections = ['userActivity', 'statusHistory', 'sessions', 'ratings', 'coachActivity', 'coachKpi', 'moreMenu', 'settings', 'appAccess', 'manageCoaches', 'manageBranches', 'dataManagement', 'tournamentsAdmin'];
     if (moreSubSections.includes(section)) {
         const moreBtn = document.querySelector('.mobile-nav-item[data-section="settings"]');
         if (moreBtn) {
@@ -11320,3 +11332,452 @@ function _escapeHtml(s) {
         '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
     }[ch]));
 }
+
+// ============================================================
+// Tournament Management (admin CRUD)
+// ============================================================
+
+// In-memory caches for the Tournament Management section.
+let tournamentsAdminList = [];                  // [{ id, branch_id, branch_name, name, ... }]
+let tournamentsAdminBranches = [];              // [{ id, name }]
+let tournamentsAdminRegCounts = new Map();      // tournament_id -> count
+let tournamentsAdminCurrentRegRows = [];        // [{ id, registered_at, students: {...} }]
+
+function _tt(key) {
+    return (typeof t === 'function') ? t(key) : key;
+}
+
+function _tournamentsAdminToast(msg, type) {
+    if (typeof showToast === 'function') showToast(msg, type);
+}
+
+async function showTournamentManagement(updateHash = true) {
+    const userRole = window.supabaseAuth?.getCurrentUserRole();
+    const isAdmin = userRole?.role === 'admin';
+    if (!userRole || !isAdmin) {
+        _tournamentsAdminToast(_tt('admin.tournaments.accessDenied'), 'error');
+        return;
+    }
+
+    switchToSection('tournamentsAdmin', updateHash);
+
+    // Highlight sidebar nav item
+    document.querySelectorAll('.nav-item').forEach(item => item.classList.remove('active'));
+    const navItem = document.getElementById('menuTournamentsAdmin');
+    if (navItem) navItem.classList.add('active');
+
+    // Default to the tournaments tab
+    switchTournamentAdminTab('tournaments');
+
+    await loadTournamentsAdminList();
+
+    if (typeof lucide !== 'undefined') lucide.createIcons();
+}
+window.showTournamentManagement = showTournamentManagement;
+
+function switchTournamentAdminTab(tabName) {
+    const tournamentsTab = document.getElementById('tournamentsAdminTabTournaments');
+    const registrationsTab = document.getElementById('tournamentsAdminTabRegistrations');
+    if (!tournamentsTab || !registrationsTab) return;
+
+    const isReg = tabName === 'registrations';
+    tournamentsTab.style.display = isReg ? 'none' : '';
+    registrationsTab.style.display = isReg ? '' : 'none';
+
+    document.querySelectorAll('[data-tournaments-admin-tab]').forEach(btn => {
+        const active = btn.getAttribute('data-tournaments-admin-tab') === tabName;
+        btn.classList.toggle('is-active', active);
+        btn.setAttribute('aria-selected', active ? 'true' : 'false');
+    });
+
+    if (isReg) {
+        _populateTournamentsAdminRegDropdown();
+    }
+}
+window.switchTournamentAdminTab = switchTournamentAdminTab;
+
+async function loadTournamentsAdminList() {
+    const tbody = document.getElementById('tournamentsAdminTableBody');
+    if (!tbody) return;
+    const supabase = window.supabaseClient;
+    if (!supabase) {
+        tbody.innerHTML = `<tr><td colspan="10" style="text-align:center; padding:1.5rem; color:#dc2626;">${_escapeHtml(_tt('admin.tournaments.error'))}</td></tr>`;
+        return;
+    }
+
+    try {
+        // Fetch branches (all of them, including excluded ones for admin view).
+        const { data: branchesData, error: bErr } = await supabase
+            .from('branches')
+            .select('id, name')
+            .order('name', { ascending: true });
+        if (bErr) throw bErr;
+        tournamentsAdminBranches = branchesData || [];
+
+        // Fetch all tournaments.
+        const { data: tData, error: tErr } = await supabase
+            .from('tournaments')
+            .select('id, branch_id, name, info, tournament_date, start_time, time_format, registration_fee, rounds, capacity, status, league')
+            .order('tournament_date', { ascending: false });
+        if (tErr) throw tErr;
+
+        const branchById = new Map(tournamentsAdminBranches.map(b => [b.id, b.name]));
+        tournamentsAdminList = (tData || []).map(row => ({
+            ...row,
+            branch_name: branchById.get(row.branch_id) || '—'
+        }));
+
+        // Registration counts
+        const ids = tournamentsAdminList.map(t => t.id);
+        tournamentsAdminRegCounts = new Map();
+        if (ids.length > 0) {
+            const { data: rData, error: rErr } = await supabase
+                .from('tournament_registrations')
+                .select('tournament_id')
+                .in('tournament_id', ids);
+            if (!rErr) {
+                for (const r of rData || []) {
+                    tournamentsAdminRegCounts.set(
+                        r.tournament_id,
+                        (tournamentsAdminRegCounts.get(r.tournament_id) || 0) + 1
+                    );
+                }
+            }
+        }
+
+        renderTournamentsAdminTable();
+    } catch (e) {
+        console.error('Failed to load tournaments admin list:', e);
+        tbody.innerHTML = `<tr><td colspan="10" style="text-align:center; padding:1.5rem; color:#dc2626;">${_escapeHtml(_tt('admin.tournaments.error'))}</td></tr>`;
+    }
+}
+window.loadTournamentsAdminList = loadTournamentsAdminList;
+
+function renderTournamentsAdminTable() {
+    const tbody = document.getElementById('tournamentsAdminTableBody');
+    if (!tbody) return;
+    if (tournamentsAdminList.length === 0) {
+        tbody.innerHTML = `<tr><td colspan="10" style="text-align:center; padding:1.5rem; color:#94a3b8;">${_escapeHtml(_tt('admin.tournaments.noTournaments'))}</td></tr>`;
+        return;
+    }
+
+    tbody.innerHTML = tournamentsAdminList.map(row => {
+        const count = tournamentsAdminRegCounts.get(row.id) || 0;
+        const statusLabel = _tt('admin.tournaments.status.' + row.status) || row.status;
+        const statusColor = row.status === 'open' ? '#16a34a'
+            : row.status === 'cancelled' ? '#dc2626' : '#64748b';
+        const time = row.start_time ? String(row.start_time).slice(0, 5) : '—';
+        return `
+            <tr data-tournament-id="${_escapeHtml(row.id)}">
+                <td>${_escapeHtml(row.branch_name)}</td>
+                <td>${_escapeHtml(row.name)}</td>
+                <td>${_escapeHtml(row.tournament_date || '')}</td>
+                <td>${_escapeHtml(time)}</td>
+                <td>${_escapeHtml(row.time_format || '')}</td>
+                <td>${_escapeHtml(String(row.registration_fee ?? 0))}</td>
+                <td>${_escapeHtml(String(row.rounds ?? ''))}</td>
+                <td><span style="color:${statusColor}; font-weight:600;">${_escapeHtml(statusLabel)}</span></td>
+                <td>${count} / ${_escapeHtml(String(row.capacity ?? 0))}</td>
+                <td>
+                    <div class="action-buttons" style="display:flex; gap:0.4rem;">
+                        <button class="icon-button" onclick="showEditTournamentModal('${_escapeHtml(row.id)}')" title="${_escapeHtml(_tt('admin.tournaments.action.edit'))}">
+                            <i data-lucide="edit"></i>
+                        </button>
+                        <button class="icon-button" onclick="cancelTournament('${_escapeHtml(row.id)}')" title="${_escapeHtml(_tt('admin.tournaments.action.cancel'))}" style="color:#d97706;">
+                            <i data-lucide="ban"></i>
+                        </button>
+                        <button class="icon-button" onclick="deleteTournament('${_escapeHtml(row.id)}')" title="${_escapeHtml(_tt('admin.tournaments.action.delete'))}" style="color:#dc2626;">
+                            <i data-lucide="trash-2"></i>
+                        </button>
+                    </div>
+                </td>
+            </tr>
+        `;
+    }).join('');
+
+    if (typeof lucide !== 'undefined') lucide.createIcons();
+}
+
+function _populateTournamentsAdminBranchSelect(selectedId) {
+    const sel = document.getElementById('tournamentAdminBranch');
+    if (!sel) return;
+    const opts = [`<option value="">—</option>`].concat(
+        tournamentsAdminBranches.map(b =>
+            `<option value="${_escapeHtml(b.id)}"${b.id === selectedId ? ' selected' : ''}>${_escapeHtml(b.name)}</option>`
+        )
+    );
+    sel.innerHTML = opts.join('');
+}
+
+function _populateTournamentsAdminRegDropdown() {
+    const sel = document.getElementById('tournamentsAdminRegSelect');
+    if (!sel) return;
+    const placeholder = `<option value="">${_escapeHtml(_tt('admin.tournaments.selectTournament'))}</option>`;
+    const opts = tournamentsAdminList.map(t =>
+        `<option value="${_escapeHtml(t.id)}">${_escapeHtml(t.branch_name)} — ${_escapeHtml(t.name)} (${_escapeHtml(t.tournament_date || '')})</option>`
+    );
+    sel.innerHTML = placeholder + opts.join('');
+}
+
+async function onTournamentsAdminRegSelectChange() {
+    const sel = document.getElementById('tournamentsAdminRegSelect');
+    if (!sel) return;
+    const id = sel.value;
+    if (!id) {
+        const body = document.getElementById('tournamentsAdminRegBody');
+        if (body) {
+            body.innerHTML = `<tr><td colspan="4" style="text-align:center; padding:2rem; color:#94a3b8;">${_escapeHtml(_tt('admin.tournaments.selectTournament'))}</td></tr>`;
+        }
+        return;
+    }
+    await showTournamentRegistrations(id);
+}
+window.onTournamentsAdminRegSelectChange = onTournamentsAdminRegSelectChange;
+
+async function showTournamentRegistrations(tournamentId) {
+    const supabase = window.supabaseClient;
+    const body = document.getElementById('tournamentsAdminRegBody');
+    if (!body) return;
+    if (!supabase) {
+        body.innerHTML = `<tr><td colspan="4" style="text-align:center; padding:2rem; color:#dc2626;">${_escapeHtml(_tt('admin.tournaments.error'))}</td></tr>`;
+        return;
+    }
+
+    try {
+        const { data, error } = await supabase
+            .from('tournament_registrations')
+            .select('id, registered_at, students!inner(first_name, last_name)')
+            .eq('tournament_id', tournamentId)
+            .order('registered_at', { ascending: true });
+        if (error) throw error;
+
+        tournamentsAdminCurrentRegRows = data || [];
+        if (tournamentsAdminCurrentRegRows.length === 0) {
+            body.innerHTML = `<tr><td colspan="4" style="text-align:center; padding:2rem; color:#94a3b8;">${_escapeHtml(_tt('admin.tournaments.noRegistrations'))}</td></tr>`;
+            return;
+        }
+
+        body.innerHTML = tournamentsAdminCurrentRegRows.map((row, i) => {
+            const name = ((row.students?.last_name || '') + ' ' + (row.students?.first_name || '')).trim();
+            const at = row.registered_at ? String(row.registered_at).replace('T', ' ').slice(0, 16) : '';
+            return `
+                <tr data-registration-id="${_escapeHtml(row.id)}">
+                    <td>${i + 1}</td>
+                    <td>${_escapeHtml(name)}</td>
+                    <td>${_escapeHtml(at)}</td>
+                    <td>
+                        <button class="icon-button" onclick="removeRegistration('${_escapeHtml(row.id)}')" title="${_escapeHtml(_tt('admin.tournaments.action.remove'))}" style="color:#dc2626;">
+                            <i data-lucide="trash-2"></i>
+                        </button>
+                    </td>
+                </tr>
+            `;
+        }).join('');
+        if (typeof lucide !== 'undefined') lucide.createIcons();
+    } catch (e) {
+        console.error('Failed to load registrations:', e);
+        body.innerHTML = `<tr><td colspan="4" style="text-align:center; padding:2rem; color:#dc2626;">${_escapeHtml(_tt('admin.tournaments.error'))}</td></tr>`;
+    }
+}
+window.showTournamentRegistrations = showTournamentRegistrations;
+
+async function removeRegistration(registrationId) {
+    if (!confirm(_tt('admin.tournaments.confirmRemove'))) return;
+    const supabase = window.supabaseClient;
+    if (!supabase) {
+        _tournamentsAdminToast(_tt('admin.tournaments.error'), 'error');
+        return;
+    }
+    try {
+        const { error } = await supabase
+            .from('tournament_registrations')
+            .delete()
+            .eq('id', registrationId);
+        if (error) throw error;
+        _tournamentsAdminToast(_tt('admin.tournaments.registrationRemoved'), 'success');
+        // Refresh tournament list (for capacity counter) and current roster.
+        const sel = document.getElementById('tournamentsAdminRegSelect');
+        const currentTournament = sel ? sel.value : null;
+        await loadTournamentsAdminList();
+        if (currentTournament) {
+            await showTournamentRegistrations(currentTournament);
+            _populateTournamentsAdminRegDropdown();
+            if (sel) sel.value = currentTournament;
+        }
+    } catch (e) {
+        console.error('removeRegistration failed:', e);
+        _tournamentsAdminToast(_tt('admin.tournaments.error'), 'error');
+    }
+}
+window.removeRegistration = removeRegistration;
+
+function showCreateTournamentModal() {
+    const modal = document.getElementById('tournamentAdminModal');
+    if (!modal) return;
+
+    // Reset form
+    document.getElementById('tournamentAdminId').value = '';
+    document.getElementById('tournamentAdminName').value = '';
+    document.getElementById('tournamentAdminInfo').value = '';
+    document.getElementById('tournamentAdminDate').value = '';
+    document.getElementById('tournamentAdminStartTime').value = '14:00';
+    document.getElementById('tournamentAdminTimeFormat').value = 'Rapid 15+5';
+    document.getElementById('tournamentAdminFee').value = '0';
+    document.getElementById('tournamentAdminRounds').value = '7';
+    document.getElementById('tournamentAdminCapacity').value = '24';
+    document.getElementById('tournamentAdminStatus').value = 'open';
+    document.getElementById('tournamentAdminLeague').value = 'C';
+
+    _populateTournamentsAdminBranchSelect(null);
+
+    const titleEl = document.getElementById('tournamentAdminModalTitle');
+    if (titleEl) titleEl.textContent = _tt('admin.tournaments.newButton');
+
+    modal.classList.add('active');
+    if (typeof lucide !== 'undefined') lucide.createIcons();
+}
+window.showCreateTournamentModal = showCreateTournamentModal;
+
+function showEditTournamentModal(tournamentId) {
+    const row = tournamentsAdminList.find(t => String(t.id) === String(tournamentId));
+    if (!row) {
+        _tournamentsAdminToast(_tt('admin.tournaments.error'), 'error');
+        return;
+    }
+    const modal = document.getElementById('tournamentAdminModal');
+    if (!modal) return;
+
+    document.getElementById('tournamentAdminId').value = row.id;
+    document.getElementById('tournamentAdminName').value = row.name || '';
+    document.getElementById('tournamentAdminInfo').value = row.info || '';
+    document.getElementById('tournamentAdminDate').value = row.tournament_date || '';
+    document.getElementById('tournamentAdminStartTime').value = row.start_time
+        ? String(row.start_time).slice(0, 5) : '';
+    document.getElementById('tournamentAdminTimeFormat').value = row.time_format || '';
+    document.getElementById('tournamentAdminFee').value = row.registration_fee ?? 0;
+    document.getElementById('tournamentAdminRounds').value = row.rounds ?? 7;
+    document.getElementById('tournamentAdminCapacity').value = row.capacity ?? 24;
+    document.getElementById('tournamentAdminStatus').value = row.status || 'open';
+    document.getElementById('tournamentAdminLeague').value = row.league || 'C';
+
+    _populateTournamentsAdminBranchSelect(row.branch_id);
+
+    const titleEl = document.getElementById('tournamentAdminModalTitle');
+    if (titleEl) titleEl.textContent = _tt('admin.tournaments.action.edit');
+
+    modal.classList.add('active');
+    if (typeof lucide !== 'undefined') lucide.createIcons();
+}
+window.showEditTournamentModal = showEditTournamentModal;
+
+function closeTournamentAdminModal() {
+    const modal = document.getElementById('tournamentAdminModal');
+    if (modal) modal.classList.remove('active');
+}
+window.closeTournamentAdminModal = closeTournamentAdminModal;
+
+async function submitTournamentAdminForm() {
+    const supabase = window.supabaseClient;
+    if (!supabase) {
+        _tournamentsAdminToast(_tt('admin.tournaments.error'), 'error');
+        return;
+    }
+
+    const id = document.getElementById('tournamentAdminId').value || null;
+    const branchId = document.getElementById('tournamentAdminBranch').value || null;
+    const name = document.getElementById('tournamentAdminName').value.trim();
+    const info = document.getElementById('tournamentAdminInfo').value.trim();
+    const date = document.getElementById('tournamentAdminDate').value;
+    const startTime = document.getElementById('tournamentAdminStartTime').value;
+    const timeFormat = document.getElementById('tournamentAdminTimeFormat').value.trim();
+    const fee = parseFloat(document.getElementById('tournamentAdminFee').value);
+    const rounds = parseInt(document.getElementById('tournamentAdminRounds').value, 10);
+    const capacity = parseInt(document.getElementById('tournamentAdminCapacity').value, 10);
+    const status = document.getElementById('tournamentAdminStatus').value;
+    const league = document.getElementById('tournamentAdminLeague').value.trim();
+
+    if (!branchId || !name || !date || !startTime || !timeFormat
+        || isNaN(fee) || !rounds || rounds < 1 || !capacity || capacity < 1
+        || !status || !league) {
+        _tournamentsAdminToast(_tt('admin.tournaments.error'), 'error');
+        return;
+    }
+
+    const payload = {
+        branch_id: branchId,
+        name,
+        info: info || null,
+        tournament_date: date,
+        start_time: startTime,
+        time_format: timeFormat,
+        registration_fee: fee,
+        rounds,
+        capacity,
+        status,
+        league,
+    };
+
+    try {
+        if (id) {
+            const { error } = await supabase.from('tournaments').update(payload).eq('id', id);
+            if (error) throw error;
+            _tournamentsAdminToast(_tt('admin.tournaments.updated'), 'success');
+        } else {
+            const { error } = await supabase.from('tournaments').insert(payload);
+            if (error) throw error;
+            _tournamentsAdminToast(_tt('admin.tournaments.created'), 'success');
+        }
+        closeTournamentAdminModal();
+        await loadTournamentsAdminList();
+    } catch (e) {
+        console.error('submitTournamentAdminForm failed:', e);
+        _tournamentsAdminToast(_tt('admin.tournaments.error'), 'error');
+    }
+}
+window.submitTournamentAdminForm = submitTournamentAdminForm;
+
+async function deleteTournament(tournamentId) {
+    const row = tournamentsAdminList.find(t => String(t.id) === String(tournamentId));
+    const regCount = tournamentsAdminRegCounts.get(tournamentId) || 0;
+    const baseMsg = _tt('admin.tournaments.confirmDelete');
+    const msg = regCount > 0 ? `${baseMsg} (${regCount})` : baseMsg;
+    if (!confirm(msg)) return;
+
+    const supabase = window.supabaseClient;
+    if (!supabase) {
+        _tournamentsAdminToast(_tt('admin.tournaments.error'), 'error');
+        return;
+    }
+    try {
+        const { error } = await supabase.from('tournaments').delete().eq('id', tournamentId);
+        if (error) throw error;
+        _tournamentsAdminToast(_tt('admin.tournaments.deleted'), 'success');
+        await loadTournamentsAdminList();
+    } catch (e) {
+        console.error('deleteTournament failed:', e);
+        _tournamentsAdminToast(_tt('admin.tournaments.error'), 'error');
+    }
+}
+window.deleteTournament = deleteTournament;
+
+async function cancelTournament(tournamentId) {
+    if (!confirm(_tt('admin.tournaments.confirmCancel'))) return;
+    const supabase = window.supabaseClient;
+    if (!supabase) {
+        _tournamentsAdminToast(_tt('admin.tournaments.error'), 'error');
+        return;
+    }
+    try {
+        const { error } = await supabase
+            .from('tournaments')
+            .update({ status: 'cancelled' })
+            .eq('id', tournamentId);
+        if (error) throw error;
+        _tournamentsAdminToast(_tt('admin.tournaments.cancelled'), 'success');
+        await loadTournamentsAdminList();
+    } catch (e) {
+        console.error('cancelTournament failed:', e);
+        _tournamentsAdminToast(_tt('admin.tournaments.error'), 'error');
+    }
+}
+window.cancelTournament = cancelTournament;
