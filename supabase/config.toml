@@ -1,0 +1,4 @@
+project_id = "papgcizhfkngubwofjuo"
+
+[functions.tournaments-api]
+verify_jwt = false

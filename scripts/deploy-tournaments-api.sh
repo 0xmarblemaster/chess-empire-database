@@ -16,5 +16,7 @@ REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 cd "${REPO_ROOT}"
 
 echo "→ Deploying tournaments-api edge function from ${REPO_ROOT}"
-supabase functions deploy tournaments-api
+# --no-verify-jwt: bots authenticate with x-api-key only; no Supabase JWT needed.
+# Setting is also persisted in supabase/config.toml.
+supabase functions deploy tournaments-api --no-verify-jwt
 echo "✓ tournaments-api deployed"
