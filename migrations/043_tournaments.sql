@@ -75,8 +75,7 @@ BEGIN
 END$$;
 
 CREATE INDEX IF NOT EXISTS t_upcoming_idx
-    ON tournaments(branch_id, tournament_date)
-    WHERE tournament_date >= CURRENT_DATE;
+    ON tournaments(branch_id, tournament_date);
 
 -- ============================================================
 -- 2. TOURNAMENT REGISTRATIONS
