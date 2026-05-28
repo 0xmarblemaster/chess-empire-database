@@ -9680,16 +9680,17 @@ async function applyTimeSlotAssignmentsFromImport(assignments, branchId) {
 // then rows of [full_name, rating] sorted by rating DESC.
 async function exportRatingsExcel() {
     const userRole = window.supabaseAuth?.getCurrentUserRole();
-    if (!userRole || userRole.can_manage_ratings !== true) {
+    const isAdmin = userRole?.role === 'admin';
+    if (!userRole || (!isAdmin && userRole.can_manage_ratings !== true)) {
         showToast(t('admin.ratings.exportError'), 'error');
         return;
     }
 
     try {
         const { data, error } = await window.supabaseClient
-            .from('student_ratings')
-            .select('student_id, rating, rating_date, students!inner(first_name, last_name, status)')
-            .in('students.status', ['active', 'frozen']);
+            .from('students')
+            .select('first_name, last_name, status, student_current_ratings(rating, rating_date)')
+            .in('status', ['active', 'frozen']);
 
         if (error) throw error;
         if (!data || data.length === 0) {
@@ -9697,23 +9698,16 @@ async function exportRatingsExcel() {
             return;
         }
 
-        // Keep only the latest rating row per student (by rating_date).
-        const latestByStudent = new Map();
-        for (const row of data) {
-            const existing = latestByStudent.get(row.student_id);
-            if (!existing || (row.rating_date && row.rating_date > existing.rating_date)) {
-                latestByStudent.set(row.student_id, row);
-            }
-        }
-
-        const rows = Array.from(latestByStudent.values())
-            .filter(r => r.students && typeof r.rating === 'number')
-            .map(r => ({
-                name: `${r.students.last_name || ''} ${r.students.first_name || ''}`.trim(),
-                rating: r.rating,
-                rating_date: r.rating_date
-            }))
-            .filter(r => r.name)
+        const rows = data
+            .map(s => {
+                const r = s.student_current_ratings?.[0];
+                return r ? {
+                    name: `${s.last_name || ''} ${s.first_name || ''}`.trim(),
+                    rating: r.rating,
+                    rating_date: r.rating_date
+                } : null;
+            })
+            .filter(r => r && r.name && typeof r.rating === 'number')
             .sort((a, b) => b.rating - a.rating);
 
         if (rows.length === 0) {

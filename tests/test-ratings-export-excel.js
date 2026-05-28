@@ -7,9 +7,9 @@
  *      Import data button.
  *  (b) i18n.js — admin.ratings.exportButton + status keys present in en/ru/kk
  *      with the requested English/Russian labels.
- *  (c) admin-v2.js — exportRatingsExcel() is defined, queries
- *      student_ratings + students!inner, filters status IN [active, frozen],
- *      de-duplicates per student, sorts by rating DESC, produces a workbook
+ *  (c) admin-v2.js — exportRatingsExcel() is defined, queries the
+ *      students table with an embedded student_current_ratings view, filters
+ *      status IN [active, frozen], sorts by rating DESC, produces a workbook
  *      with sheet name "Sheet1", A1="Name", B1 is a real Excel DATE cell
  *      (type 'd', format 'yyyy-mm-dd') holding the latest rating_date, and
  *      ignores students whose status is 'left'.
@@ -121,10 +121,14 @@ const fnBlock = JS.slice(fnStart, fnStart + 4000);
 
 assert(/can_manage_ratings/.test(fnBlock),
     'function gates on can_manage_ratings');
-assert(/\.from\(['"]student_ratings['"]\)/.test(fnBlock),
-    'function queries student_ratings table directly (not the RPC)');
-assert(/students!inner\(/.test(fnBlock),
-    'function inner-joins students for first_name/last_name/status');
+assert(/userRole\?\.role\s*===\s*['"]admin['"]/.test(fnBlock),
+    'permission gate is admin-aware (role==="admin" bypasses can_manage_ratings)');
+assert(/\.from\(['"]students['"]\)/.test(fnBlock),
+    'function queries the students table (bounded ~942 rows, under PostgREST cap)');
+assert(/student_current_ratings\(/.test(fnBlock),
+    'function embeds the student_current_ratings view for one-row-per-student');
+assert(/\.from\(['"]student_ratings['"]\)/.test(fnBlock) === false,
+    'function does NOT query student_ratings directly (would hit 1000-row cap)');
 assert(/get_rating_leaderboard/.test(fnBlock) === false,
     'function does NOT call get_rating_leaderboard RPC');
 assert(/\['active',\s*'frozen'\]|\["active",\s*"frozen"\]/.test(fnBlock),
@@ -180,34 +184,42 @@ const toastCalls = [];
 function showToast(msg, type) { toastCalls.push({ msg, type }); }
 function t(key) { return key; }
 
-// Mock data: 4 students total — 1 active + 1 frozen + 1 left, plus a second
-// rating for the active student (older). Expected output excludes 'left',
-// dedupes the active student to its later rating, sorts by rating DESC.
-const ratingsRows = [
-    { student_id: 'a', rating: 1100, rating_date: '2026-04-01', students: { first_name: 'Иван',  last_name: 'Иванов',  status: 'active' } },
-    { student_id: 'a', rating: 1250, rating_date: '2026-04-28', students: { first_name: 'Иван',  last_name: 'Иванов',  status: 'active' } },
-    { student_id: 'b', rating: 1500, rating_date: '2026-04-20', students: { first_name: 'Пётр',  last_name: 'Петров',  status: 'frozen' } },
-    { student_id: 'c', rating: 1700, rating_date: '2026-04-15', students: { first_name: 'Бывший', last_name: 'Уход', status: 'left'   } },
+// Mock data: 4 students total — 1 active + 1 frozen + 1 left + 1 active
+// with no rating. The embedded student_current_ratings view returns at most
+// one row per student (DISTINCT ON), so no client-side dedupe is needed.
+// Expected output excludes 'left', skips the active student with no rating,
+// and sorts by rating DESC.
+const studentRows = [
+    { first_name: 'Иван',  last_name: 'Иванов',  status: 'active',
+      student_current_ratings: [{ rating: 1250, rating_date: '2026-04-28' }] },
+    { first_name: 'Пётр',  last_name: 'Петров',  status: 'frozen',
+      student_current_ratings: [{ rating: 1500, rating_date: '2026-04-20' }] },
+    { first_name: 'Бывший', last_name: 'Уход',  status: 'left',
+      student_current_ratings: [{ rating: 1700, rating_date: '2026-04-15' }] },
+    { first_name: 'Новый', last_name: 'Безрейтинга', status: 'active',
+      student_current_ratings: [] },
 ];
 
 const fakeQuery = {
-    _filteredOutLeft: false,
     select() { return this; },
     in(col, values) {
-        assertEqual(col, 'students.status',
-            'function filters on students.status column');
+        assertEqual(col, 'status',
+            'function filters on the students.status column directly');
         assertEqual(values.sort(), ['active', 'frozen'].sort(),
             'function filters students.status IN [active, frozen]');
         // Apply the filter ourselves so the test mirrors the real RLS behaviour.
-        const filtered = ratingsRows.filter(r => values.includes(r.students.status));
+        const filtered = studentRows.filter(s => values.includes(s.status));
         return Promise.resolve({ data: filtered, error: null });
     },
 };
 const supabaseClient = { from(tbl) {
-    assertEqual(tbl, 'student_ratings', 'function reads from student_ratings');
+    assertEqual(tbl, 'students', 'function reads from the students table');
     return fakeQuery;
 } };
-const supabaseAuth = { getCurrentUserRole: () => ({ role: 'admin', can_manage_ratings: true }) };
+// Production admin shape: role='admin' but can_manage_ratings is null.
+// The gate must let this user through (admins implicitly have every
+// can_manage_* permission per the app's convention).
+const supabaseAuth = { getCurrentUserRole: () => ({ role: 'admin', can_manage_ratings: null }) };
 
 // Sandbox: declare bindings the function source closes over, then eval.
 const sandbox = `
@@ -251,19 +263,18 @@ const runner = new Function('supabaseClient', 'supabaseAuth', 'xlsxStub', 'showT
         'B1 cell value is the latest rating_date among exported rows (2026-04-28)');
 
     // Body rows: should be Петров Пётр (1500) first, Иванов Иван (1250) second.
-    // The 'left' student must be absent. Older rating row for the active student
-    // must have been deduped away.
+    // The 'left' student must be absent (RLS-style status filter). The active
+    // student with no current rating row must be skipped.
     const aoa = XLSX.utils.sheet_to_json(ws, { header: 1, raw: true });
     assertEqual(aoa.length, 3,
-        'sheet has 3 rows: header + 2 body rows (left student excluded, dedup applied)');
+        'sheet has 3 rows: header + 2 body rows (left student + rating-less student excluded)');
 
     assertEqual(aoa[1][0], 'Петров Пётр',
         'row 2 is the highest-rated student (frozen included)');
     assertEqual(aoa[1][1], 1500, 'row 2 rating is 1500');
     assertEqual(aoa[2][0], 'Иванов Иван',
         'row 3 is the second-highest student');
-    assertEqual(aoa[2][1], 1250,
-        'row 3 rating is the LATER rating (1250), not the stale 1100');
+    assertEqual(aoa[2][1], 1250, 'row 3 rating is 1250');
 
     // Round-trip: the existing previewRatingCsvFile parser path at admin-v2.js
     // line ~4432 reads [row[0], row[1]] for rows i=1..N. Simulate it.
