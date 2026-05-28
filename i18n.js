@@ -2670,7 +2670,7 @@ const translations = {
         "admin.ratings.disambiguateLevel": "Уровень",
         "admin.ratings.disambiguateBranch": "Филиал",
         "admin.ratings.disambiguateCoach": "Тренер",
-        "admin.ratings.exportButton": "Список текущих рейтингов",
+        "admin.ratings.exportButton": "Текущий рейтинг лист",
         "admin.ratings.exportSuccess": "Рейтинги успешно экспортированы",
         "admin.ratings.exportError": "Ошибка экспорта рейтингов",
         "admin.ratings.exportEmpty": "Нет рейтингов для экспорта",
