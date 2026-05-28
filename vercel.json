@@ -16,6 +16,10 @@
     {
       "source": "/admin.html",
       "destination": "/admin-v2"
+    },
+    {
+      "source": "/api/tournaments-api/:path*",
+      "destination": "https://papgcizhfkngubwofjuo.supabase.co/functions/v1/tournaments-api/:path*"
     }
   ],
   "redirects": [

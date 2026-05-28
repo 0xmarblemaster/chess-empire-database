@@ -221,6 +221,63 @@ curl -H "x-api-key: ce-api-2026-k8x9m2p4q7w1" \
 }
 ```
 
+---
+
+## 8. Tournaments API (public registration)
+
+**Base path:** `/tournaments-api`
+**Vercel proxy:** `https://app.chessempire.kz/api/tournaments-api/<path>` rewrites
+to the Supabase edge function so bots can use the friendlier domain.
+
+Read endpoints are open. Write endpoints (`POST /register`, `DELETE /registrations/:id`)
+require the shared header `x-api-key: <CHESS_EMPIRE_API_KEY>`. The function reads
+its key from the `CHESS_EMPIRE_API_KEY` env var (set via `supabase secrets set`).
+
+Each response uses a consistent envelope:
+
+```json
+{ "ok": true,  ... }
+{ "ok": false, "reason": "unauthorized | not_found | closed | full | duplicate | invalid_input | server_error" }
+```
+
+| Method | Path | Auth | Purpose |
+|---|---|---|---|
+| `GET` | `/branches` | — | Public branches (excludes "НИШ" / "Zhandosova") |
+| `GET` | `/tournaments?branch_id=&upcoming=true` | — | List tournaments (upcoming by default) with `registered_count` |
+| `GET` | `/tournaments/:id` | — | One tournament |
+| `GET` | `/tournaments/:id/registrations` | — | Roster — `{id, source, registered_at, display_name}` (no `external_contact`) |
+| `GET` | `/students/search?q=&limit=` | — | Autocomplete active+frozen students |
+| `POST` | `/tournaments/:id/register` | key | Body: `{ student_id }` OR `{ player_name }`. Optional `external_contact`. Header `x-source: telegram\|whatsapp\|online\|web` |
+| `DELETE` | `/registrations/:registration_id` | key | Cancel a registration; reopens the tournament if it was full |
+| `GET` | `/openapi.json` | — | Hand-written OpenAPI 3.0.3 contract |
+
+### Bot example
+
+```bash
+# 1. Find a tournament
+curl https://app.chessempire.kz/api/tournaments-api/tournaments?upcoming=true
+
+# 2. Optionally look up a student
+curl 'https://app.chessempire.kz/api/tournaments-api/students/search?q=ad'
+
+# 3. Register a known student
+curl -X POST https://app.chessempire.kz/api/tournaments-api/tournaments/<uuid>/register \
+  -H 'x-api-key: ce-api-2026-k8x9m2p4q7w1' \
+  -H 'x-source: telegram' \
+  -H 'content-type: application/json' \
+  -d '{"student_id":"<uuid>"}'
+
+# 4. Or register a free-text player not in the DB
+curl -X POST https://app.chessempire.kz/api/tournaments-api/tournaments/<uuid>/register \
+  -H 'x-api-key: ce-api-2026-k8x9m2p4q7w1' \
+  -H 'x-source: whatsapp' \
+  -H 'content-type: application/json' \
+  -d '{"player_name":"Walk-In Wendy","external_contact":"+77001234567"}'
+```
+
+The OpenAPI spec at `/openapi.json` is the source of truth for request/response
+shapes — point your client generator there.
+
 ## Deployment
 
 ```bash
@@ -231,4 +288,8 @@ supabase functions deploy analytics-users
 supabase functions deploy analytics-attendance
 supabase functions deploy analytics-leaderboards
 supabase functions deploy analytics-students
+
+# Tournament registration API (or run scripts/deploy-tournaments-api.sh)
+supabase secrets set CHESS_EMPIRE_API_KEY='ce-api-2026-k8x9m2p4q7w1'
+supabase functions deploy tournaments-api
 ```
