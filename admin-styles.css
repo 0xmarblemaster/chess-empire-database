@@ -5743,3 +5743,95 @@ tr[data-student-id] {
 .metric-cell-strong.variant-top3 { color: #92400e; }
 .metric-cell-strong.variant-razryads { color: #667eea; }
 .metric-cell-strong.variant-promotions { color: #047857; }
+
+/* =====================================================================
+ * Mobile polish for More-menu destinations
+ * Light pass: tap targets, horizontal-scroll tables, stacked grids.
+ * ===================================================================== */
+@media (max-width: 768px) {
+    /* App Access — single-column permission grid, 44x44 toggles */
+    .app-access-permission-grid {
+        grid-template-columns: 1fr;
+    }
+    .app-access-permission-item {
+        min-height: 44px;
+    }
+    .app-access-toggle {
+        width: 44px;
+        height: 28px;
+        min-width: 44px;
+        min-height: 28px;
+    }
+    .app-access-toggle::after {
+        /* Extend tappable area to 44x44 without changing visual size */
+        content: "";
+        position: absolute;
+        inset: -8px;
+    }
+    .app-access-toggle-slider {
+        border-radius: 28px;
+    }
+    .app-access-toggle-slider::before {
+        width: 22px;
+        height: 22px;
+        top: 3px;
+        left: 3px;
+    }
+    .app-access-toggle input:checked + .app-access-toggle-slider::before {
+        transform: translateX(16px);
+    }
+
+    /* Data Management — large tap targets on action cards */
+    #dataManagementSection .stat-card {
+        min-height: 64px;
+        padding: 1rem;
+    }
+    #dataManagementSection .stat-card .stat-icon {
+        width: 44px;
+        height: 44px;
+    }
+
+    /* Ratings / Coaches / Branches / Sessions — wide tables scroll
+       horizontally inside their wrapper so layout doesn't break. */
+    #ratingsSection .table-card,
+    #coachesSection .table-card,
+    #branchesSection .table-card,
+    #sessionsSection .table-container {
+        overflow-x: auto;
+        -webkit-overflow-scrolling: touch;
+    }
+    #ratingsSection .student-table,
+    #coachesSection .student-table,
+    #branchesSection .student-table,
+    #sessionsSection .data-table {
+        min-width: 640px;
+    }
+    #ratingsSection .student-table th,
+    #ratingsSection .student-table td,
+    #coachesSection .student-table th,
+    #coachesSection .student-table td,
+    #branchesSection .student-table th,
+    #branchesSection .student-table td,
+    #sessionsSection .data-table th,
+    #sessionsSection .data-table td {
+        padding: 0.75rem 0.625rem;
+        white-space: nowrap;
+    }
+
+    /* User Sessions — slimmer filter cards on mobile */
+    #sessionsSection .stats-grid {
+        gap: 0.75rem;
+    }
+
+    /* Sticky first column on management tables so the identifying
+       cell stays visible while horizontally scrolling. */
+    #coachesSection .student-table th:first-child,
+    #coachesSection .student-table td:first-child,
+    #branchesSection .student-table th:first-child,
+    #branchesSection .student-table td:first-child {
+        position: sticky;
+        left: 0;
+        background: #fff;
+        z-index: 1;
+    }
+}

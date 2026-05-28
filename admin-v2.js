@@ -110,6 +110,14 @@ function updateMenuVisibility() {
         moreMenuCoachKpi.style.display = 'flex';
     }
 
+    // Mobile More-menu twins for Management items
+    const moreMenuRatings = document.getElementById('moreMenuRatings');
+    const moreMenuAppAccess = document.getElementById('moreMenuAppAccess');
+    const moreMenuManageCoaches = document.getElementById('moreMenuManageCoaches');
+    const moreMenuManageBranches = document.getElementById('moreMenuManageBranches');
+    const moreMenuDataManagement = document.getElementById('moreMenuDataManagement');
+    const moreMenuSessions = document.getElementById('moreMenuSessions');
+
     // Admins see everything
     if (userRole.role === 'admin') {
         if (menuRatings) menuRatings.style.display = 'flex';
@@ -119,6 +127,13 @@ function updateMenuVisibility() {
         if (menuDataManagement) menuDataManagement.style.display = 'flex';
         if (menuAttendance) menuAttendance.style.display = 'flex';
         if (managementSectionTitle) managementSectionTitle.style.display = 'block';
+
+        // Mirror onto mobile More-menu twins
+        if (moreMenuRatings) moreMenuRatings.style.display = 'flex';
+        if (moreMenuAppAccess) moreMenuAppAccess.style.display = 'flex';
+        if (moreMenuManageCoaches) moreMenuManageCoaches.style.display = 'flex';
+        if (moreMenuManageBranches) moreMenuManageBranches.style.display = 'flex';
+        if (moreMenuDataManagement) moreMenuDataManagement.style.display = 'flex';
 
         // Analytics - Grant access to specific admin emails
         const userEmail = sessionStorage.getItem('userEmail');
@@ -140,6 +155,9 @@ function updateMenuVisibility() {
             // if (menuUserActivity) menuUserActivity.style.display = 'flex';
             if (menuCoachActivity) menuCoachActivity.style.display = 'flex';
             if (analyticsSectionTitle) analyticsSectionTitle.style.display = 'block';
+
+            // Mirror Sessions onto mobile More-menu twin
+            if (moreMenuSessions) moreMenuSessions.style.display = 'flex';
         }
 
         return;
@@ -160,6 +178,7 @@ function updateMenuVisibility() {
             menuAppAccess.style.display = 'flex';
             hasAnyManagementAccess = true;
         }
+        if (moreMenuAppAccess) moreMenuAppAccess.style.display = 'flex';
     }
 
     // Coach management
@@ -168,6 +187,7 @@ function updateMenuVisibility() {
             menuManageCoaches.style.display = 'flex';
             hasAnyManagementAccess = true;
         }
+        if (moreMenuManageCoaches) moreMenuManageCoaches.style.display = 'flex';
     }
 
     // Branch management
@@ -176,6 +196,7 @@ function updateMenuVisibility() {
             menuManageBranches.style.display = 'flex';
             hasAnyManagementAccess = true;
         }
+        if (moreMenuManageBranches) moreMenuManageBranches.style.display = 'flex';
     }
 
     // Ratings management
@@ -184,6 +205,7 @@ function updateMenuVisibility() {
             menuRatings.style.display = 'flex';
             hasAnyManagementAccess = true;
         }
+        if (moreMenuRatings) moreMenuRatings.style.display = 'flex';
     }
 
     // Data management
@@ -192,6 +214,7 @@ function updateMenuVisibility() {
             menuDataManagement.style.display = 'flex';
             hasAnyManagementAccess = true;
         }
+        if (moreMenuDataManagement) moreMenuDataManagement.style.display = 'flex';
     }
 
     // Attendance management
@@ -796,7 +819,28 @@ function showSection(section) {
             lucide.createIcons();
         }
     } else if (section === 'ratings') {
-        switchToSection('ratings');
+        // Wire to handler so data loads (used by deep-link/hash routing too)
+        if (typeof showRatingsManagement === 'function') {
+            showRatingsManagement(false);
+        } else {
+            switchToSection('ratings');
+        }
+    } else if (section === 'appAccess') {
+        if (typeof showAppAccessManagement === 'function') {
+            showAppAccessManagement();
+        }
+    } else if (section === 'manageCoaches') {
+        if (typeof showCoachesManagement === 'function') {
+            showCoachesManagement();
+        }
+    } else if (section === 'manageBranches') {
+        if (typeof showBranchesManagement === 'function') {
+            showBranchesManagement();
+        }
+    } else if (section === 'dataManagement') {
+        if (typeof showDataManagement === 'function') {
+            showDataManagement();
+        }
     } else if (section === 'coachActivity') {
         switchToSection('coachActivity');
         initCoachActivity();
@@ -1062,7 +1106,7 @@ function refreshCoachesListView() {
 
 // Update mobile bottom navigation active state
 function updateMobileBottomNav(activeSection) {
-    const moreSubSections = ['userActivity', 'statusHistory', 'sessions', 'ratings', 'coachActivity', 'coachKpi', 'moreMenu'];
+    const moreSubSections = ['userActivity', 'statusHistory', 'sessions', 'ratings', 'coachActivity', 'coachKpi', 'moreMenu', 'appAccess', 'manageCoaches', 'manageBranches', 'dataManagement'];
     const effectiveSection = moreSubSections.includes(activeSection) ? 'settings' : activeSection;
     
     const mobileNavItems = document.querySelectorAll('.mobile-nav-item');
@@ -2897,7 +2941,11 @@ const mobileSectionTitles = {
     sessions: 'admin.sessions.title',
     ratings: 'admin.ratings.title',
     coachActivity: 'admin.coachActivity.title',
-    coachKpi: 'admin.sidebar.coachPerformance'
+    coachKpi: 'admin.sidebar.coachPerformance',
+    appAccess: 'access.sidebar.appAccess',
+    manageCoaches: 'admin.sidebar.manageCoaches',
+    manageBranches: 'admin.sidebar.manageBranches',
+    dataManagement: 'admin.sidebar.dataManagement'
 };
 
 // Show mobile section (called from bottom nav)
@@ -2938,7 +2986,7 @@ function showMobileSection(section, event) {
     showSection(section);
 
     // For sub-sections of More, keep More tab highlighted
-    const moreSubSections = ['userActivity', 'statusHistory', 'sessions', 'ratings', 'coachActivity', 'coachKpi', 'moreMenu', 'settings'];
+    const moreSubSections = ['userActivity', 'statusHistory', 'sessions', 'ratings', 'coachActivity', 'coachKpi', 'moreMenu', 'settings', 'appAccess', 'manageCoaches', 'manageBranches', 'dataManagement'];
     if (moreSubSections.includes(section)) {
         const moreBtn = document.querySelector('.mobile-nav-item[data-section="settings"]');
         if (moreBtn) {

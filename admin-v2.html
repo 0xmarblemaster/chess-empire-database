@@ -1479,6 +1479,65 @@
                     <h1 class="header-title" data-i18n="admin.header.settings">More</h1>
                 </div>
                 <div class="more-menu-list">
+                    <!-- Management section -->
+                    <button class="more-menu-item" id="moreMenuRatings" style="display:none" onclick="showMobileSection('ratings', event)">
+                        <div class="more-menu-item-left">
+                            <div class="more-menu-icon" style="background:#fef3c7;color:#d97706;">
+                                <i data-lucide="trending-up"></i>
+                            </div>
+                            <span data-i18n="admin.ratings.title">Ratings</span>
+                        </div>
+                        <i data-lucide="chevron-right" class="more-menu-chevron"></i>
+                    </button>
+                    <button class="more-menu-item" id="moreMenuAppAccess" style="display:none" onclick="showMobileSection('appAccess', event)">
+                        <div class="more-menu-item-left">
+                            <div class="more-menu-icon" style="background:#fef2f2;color:#dc2626;">
+                                <i data-lucide="shield-check"></i>
+                            </div>
+                            <span data-i18n="access.sidebar.appAccess">App Access</span>
+                        </div>
+                        <i data-lucide="chevron-right" class="more-menu-chevron"></i>
+                    </button>
+                    <button class="more-menu-item" id="moreMenuManageCoaches" style="display:none" onclick="showMobileSection('manageCoaches', event)">
+                        <div class="more-menu-item-left">
+                            <div class="more-menu-icon" style="background:#f0fdfa;color:#0d9488;">
+                                <i data-lucide="user-check"></i>
+                            </div>
+                            <span data-i18n="admin.sidebar.manageCoaches">Manage Coaches</span>
+                        </div>
+                        <i data-lucide="chevron-right" class="more-menu-chevron"></i>
+                    </button>
+                    <button class="more-menu-item" id="moreMenuManageBranches" style="display:none" onclick="showMobileSection('manageBranches', event)">
+                        <div class="more-menu-item-left">
+                            <div class="more-menu-icon" style="background:#f5f3ff;color:#7c3aed;">
+                                <i data-lucide="building"></i>
+                            </div>
+                            <span data-i18n="admin.sidebar.manageBranches">Manage Branches</span>
+                        </div>
+                        <i data-lucide="chevron-right" class="more-menu-chevron"></i>
+                    </button>
+                    <button class="more-menu-item" id="moreMenuDataManagement" style="display:none" onclick="showMobileSection('dataManagement', event)">
+                        <div class="more-menu-item-left">
+                            <div class="more-menu-icon" style="background:#f0f9ff;color:#0284c7;">
+                                <i data-lucide="database"></i>
+                            </div>
+                            <span data-i18n="admin.sidebar.dataManagement">Data Management</span>
+                        </div>
+                        <i data-lucide="chevron-right" class="more-menu-chevron"></i>
+                    </button>
+                    <button class="more-menu-item" id="moreMenuCoachKpi" style="display:none" onclick="showCoachPerformance(event)">
+                        <div class="more-menu-item-left">
+                            <div class="more-menu-icon" style="background:#eef2ff;color:#4f46e5;">
+                                <i data-lucide="bar-chart-3"></i>
+                            </div>
+                            <span data-i18n="admin.sidebar.coachPerformance">Coach KPI</span>
+                        </div>
+                        <i data-lucide="chevron-right" class="more-menu-chevron"></i>
+                    </button>
+
+                    <div class="more-menu-divider"></div>
+
+                    <!-- Analytics section -->
                     <button class="more-menu-item" onclick="showMobileSection('userActivity', event)">
                         <div class="more-menu-item-left">
                             <div class="more-menu-icon" style="background: #f0fdf4; color: #059669;">
@@ -1506,16 +1565,19 @@
                         </div>
                         <i data-lucide="chevron-right" class="more-menu-chevron"></i>
                     </button>
-                    <button class="more-menu-item" id="moreMenuCoachKpi" style="display:none" onclick="showCoachPerformance(event)">
+                    <button class="more-menu-item" id="moreMenuSessions" style="display:none" onclick="showMobileSection('sessions', event)">
                         <div class="more-menu-item-left">
-                            <div class="more-menu-icon" style="background:#eef2ff;color:#4f46e5;">
-                                <i data-lucide="bar-chart-3"></i>
+                            <div class="more-menu-icon" style="background:#ecfeff;color:#0891b2;">
+                                <i data-lucide="monitor"></i>
                             </div>
-                            <span data-i18n="admin.sidebar.coachPerformance">Coach KPI</span>
+                            <span data-i18n="admin.sessions.title">User Sessions</span>
                         </div>
                         <i data-lucide="chevron-right" class="more-menu-chevron"></i>
                     </button>
+
                     <div class="more-menu-divider"></div>
+
+                    <!-- Settings section -->
                     <button class="more-menu-item more-menu-logout" onclick="handleLogout()">
                         <div class="more-menu-item-left">
                             <div class="more-menu-icon" style="background: #fef2f2; color: #dc2626;">
