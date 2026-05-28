@@ -696,6 +696,10 @@ const translations = {
         "admin.ratings.disambiguateLevel": "Level",
         "admin.ratings.disambiguateBranch": "Branch",
         "admin.ratings.disambiguateCoach": "Coach",
+        "admin.ratings.exportButton": "Export Excel",
+        "admin.ratings.exportSuccess": "Ratings exported successfully",
+        "admin.ratings.exportError": "Error exporting ratings",
+        "admin.ratings.exportEmpty": "No ratings to export",
 
         // Admin Attendance
         "admin.attendance.title": "Attendance Tracking",
@@ -1662,6 +1666,10 @@ const translations = {
         "admin.ratings.disambiguateLevel": "Деңгей",
         "admin.ratings.disambiguateBranch": "Филиал",
         "admin.ratings.disambiguateCoach": "Жаттықтырушы",
+        "admin.ratings.exportButton": "Excel жүктеу",
+        "admin.ratings.exportSuccess": "Рейтингтер сәтті экспортталды",
+        "admin.ratings.exportError": "Рейтингтерді экспорттау қатесі",
+        "admin.ratings.exportEmpty": "Экспорттайтын рейтингтер жоқ",
 
         // Admin Attendance
         "admin.attendance.title": "Қатысуды бақылау",
@@ -2662,6 +2670,10 @@ const translations = {
         "admin.ratings.disambiguateLevel": "Уровень",
         "admin.ratings.disambiguateBranch": "Филиал",
         "admin.ratings.disambiguateCoach": "Тренер",
+        "admin.ratings.exportButton": "Скачать Excel",
+        "admin.ratings.exportSuccess": "Рейтинги успешно экспортированы",
+        "admin.ratings.exportError": "Ошибка экспорта рейтингов",
+        "admin.ratings.exportEmpty": "Нет рейтингов для экспорта",
 
         // Admin Attendance
         "admin.attendance.title": "Учёт посещаемости",

@@ -618,6 +618,10 @@
                             <button type="button" class="kpi-view-btn is-active" data-ratings-view="main" role="tab" aria-selected="true" onclick="switchRatingsView('main')" data-i18n="admin.ratings.viewMain">Ratings</button>
                             <button type="button" class="kpi-view-btn" data-ratings-view="uploads" role="tab" aria-selected="false" onclick="switchRatingsView('uploads')" data-i18n="admin.ratings.viewUploads">Upload History</button>
                         </div>
+                        <button class="btn btn-secondary" onclick="exportRatingsExcel()">
+                            <i data-lucide="download" style="width: 18px; height: 18px;"></i>
+                            <span data-i18n="admin.ratings.exportButton">Export Excel</span>
+                        </button>
                         <button class="btn btn-secondary" onclick="openCSVImportModal()">
                             <i data-lucide="upload" style="width: 18px; height: 18px;"></i>
                             <span data-i18n="admin.imports.button">Import data</span>

@@ -9675,6 +9675,92 @@ async function applyTimeSlotAssignmentsFromImport(assignments, branchId) {
     // and will be reloaded from there when the calendar is refreshed
 }
 
+// Export current ratings (active + frozen students) to Excel.
+// Format matches Alex's rating files: A1="Name", B1=Date cell with latest rating_date,
+// then rows of [full_name, rating] sorted by rating DESC.
+async function exportRatingsExcel() {
+    const userRole = window.supabaseAuth?.getCurrentUserRole();
+    if (!userRole || userRole.can_manage_ratings !== true) {
+        showToast(t('admin.ratings.exportError'), 'error');
+        return;
+    }
+
+    try {
+        const { data, error } = await window.supabaseClient
+            .from('student_ratings')
+            .select('student_id, rating, rating_date, students!inner(first_name, last_name, status)')
+            .in('students.status', ['active', 'frozen']);
+
+        if (error) throw error;
+        if (!data || data.length === 0) {
+            showToast(t('admin.ratings.exportEmpty'), 'info');
+            return;
+        }
+
+        // Keep only the latest rating row per student (by rating_date).
+        const latestByStudent = new Map();
+        for (const row of data) {
+            const existing = latestByStudent.get(row.student_id);
+            if (!existing || (row.rating_date && row.rating_date > existing.rating_date)) {
+                latestByStudent.set(row.student_id, row);
+            }
+        }
+
+        const rows = Array.from(latestByStudent.values())
+            .filter(r => r.students && typeof r.rating === 'number')
+            .map(r => ({
+                name: `${r.students.last_name || ''} ${r.students.first_name || ''}`.trim(),
+                rating: r.rating,
+                rating_date: r.rating_date
+            }))
+            .filter(r => r.name)
+            .sort((a, b) => b.rating - a.rating);
+
+        if (rows.length === 0) {
+            showToast(t('admin.ratings.exportEmpty'), 'info');
+            return;
+        }
+
+        // Latest rating_date across the export — goes in B1 as a real Excel date.
+        let latestDate = null;
+        for (const r of rows) {
+            if (r.rating_date && (!latestDate || r.rating_date > latestDate)) {
+                latestDate = r.rating_date;
+            }
+        }
+        const headerDate = latestDate ? new Date(latestDate + 'T00:00:00') : new Date();
+
+        const aoa = [['Name', headerDate]];
+        for (const r of rows) {
+            aoa.push([r.name, r.rating]);
+        }
+
+        // cellDates: true keeps the Date object in cell.v (otherwise SheetJS
+        // converts it to a numeric serial, and forcing .t='d' afterwards
+        // breaks the writer because cell.v is no longer Date-typed).
+        const ws = XLSX.utils.aoa_to_sheet(aoa, { cellDates: true });
+        if (ws['B1']) {
+            ws['B1'].t = 'd';
+            ws['B1'].z = 'yyyy-mm-dd';
+        }
+
+        const wb = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(wb, ws, 'Sheet1');
+
+        const today = new Date();
+        const dd = String(today.getDate()).padStart(2, '0');
+        const mm = String(today.getMonth() + 1).padStart(2, '0');
+        const yyyy = today.getFullYear();
+        const filename = `Рейтинг ${dd}.${mm}.${yyyy}.xlsx`;
+
+        XLSX.writeFile(wb, filename);
+        showToast(t('admin.ratings.exportSuccess'), 'success');
+    } catch (err) {
+        console.error('Error exporting ratings:', err);
+        showToast(t('admin.ratings.exportError'), 'error');
+    }
+}
+
 // Export attendance to Excel
 async function exportAttendanceExcel() {
     if (!attendanceCurrentBranch) {
