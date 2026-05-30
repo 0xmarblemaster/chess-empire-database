@@ -5478,7 +5478,7 @@ async function loadTimeSlotsCache() {
                 .select(`
                     id, schedule_type, slot_index, start_time, end_time, label,
                     branches!inner(name),
-                    users!time_slots_coach_id_fkey(first_name, last_name)
+                    coaches!time_slots_coach_id_fkey(first_name, last_name)
                 `)
                 .order('schedule_type')
                 .order('slot_index');
@@ -5490,8 +5490,8 @@ async function loadTimeSlotsCache() {
             };
             for (const row of data || []) {
                 const branchName = (row.branches?.name || '').toLowerCase();
-                const coachFirst = row.users?.first_name || '';
-                const coachLast = row.users?.last_name || '';
+                const coachFirst = row.coaches?.first_name || '';
+                const coachLast = row.coaches?.last_name || '';
                 const coachName = `${coachFirst} ${coachLast}`.trim().toLowerCase();
                 const key = `${branchName}|${coachName}|${row.schedule_type}`;
                 if (!cache[key]) cache[key] = [];
