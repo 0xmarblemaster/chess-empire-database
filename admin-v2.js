@@ -263,6 +263,10 @@ document.addEventListener('DOMContentLoaded', async () => {
         loadStudents();
     }
 
+    // Fire-and-forget: warm the time slots cache once auth/role is resolved.
+    // Call sites tolerate fallback to hard-coded arrays while this is in flight.
+    loadTimeSlotsCache().catch(e => console.error('time_slots cache boot failed', e));
+
     // Update menu visibility based on user permissions
     updateMenuVisibility();
 
@@ -5458,6 +5462,78 @@ function loadAttendanceFilterState() {
     return null;
 }
 
+// Time slots cache: loaded from `time_slots` table (P2).
+// Key shape: `${branchName.toLowerCase()}|${coachName.toLowerCase()}|${scheduleType}`
+// Value: array of { id, time: "H:MM-H:MM", label, slotIndex } sorted by slotIndex.
+// null = not yet loaded; {} = loaded-but-empty (fallback to ATTENDANCE_TIME_SLOTS_* arrays).
+let TIME_SLOTS_CACHE = null;
+let TIME_SLOTS_CACHE_LOADING = null;
+
+async function loadTimeSlotsCache() {
+    if (TIME_SLOTS_CACHE_LOADING) return TIME_SLOTS_CACHE_LOADING;
+    TIME_SLOTS_CACHE_LOADING = (async () => {
+        try {
+            const { data, error } = await window.supabaseClient
+                .from('time_slots')
+                .select(`
+                    id, schedule_type, slot_index, start_time, end_time, label,
+                    branches!inner(name),
+                    users!time_slots_coach_id_fkey(first_name, last_name)
+                `)
+                .order('schedule_type')
+                .order('slot_index');
+            if (error) throw error;
+            const cache = {};
+            const fmt = (t) => {
+                const [h, m] = t.split(':');
+                return `${parseInt(h, 10)}:${m}`;
+            };
+            for (const row of data || []) {
+                const branchName = (row.branches?.name || '').toLowerCase();
+                const coachFirst = row.users?.first_name || '';
+                const coachLast = row.users?.last_name || '';
+                const coachName = `${coachFirst} ${coachLast}`.trim().toLowerCase();
+                const key = `${branchName}|${coachName}|${row.schedule_type}`;
+                if (!cache[key]) cache[key] = [];
+                cache[key].push({
+                    id: row.id,
+                    time: `${fmt(row.start_time)}-${fmt(row.end_time)}`,
+                    label: row.label,
+                    slotIndex: row.slot_index
+                });
+            }
+            for (const k of Object.keys(cache)) cache[k].sort((a, b) => a.slotIndex - b.slotIndex);
+            TIME_SLOTS_CACHE = cache;
+            console.log('[time_slots] cache loaded:', Object.keys(cache).length, 'buckets');
+            return cache;
+        } catch (err) {
+            console.error('[time_slots] cache load failed; falling back to hard-coded arrays', err);
+            TIME_SLOTS_CACHE = {};
+            return TIME_SLOTS_CACHE;
+        } finally {
+            TIME_SLOTS_CACHE_LOADING = null;
+        }
+    })();
+    return TIME_SLOTS_CACHE_LOADING;
+}
+
+async function reloadTimeSlotsCache() {
+    TIME_SLOTS_CACHE = null;
+    TIME_SLOTS_CACHE_LOADING = null;
+    return loadTimeSlotsCache();
+}
+window.reloadTimeSlotsCache = reloadTimeSlotsCache;
+
+function getTimeSlotLabel(branchName, scheduleType, coachName, timeString) {
+    if (!TIME_SLOTS_CACHE) return null;
+    const key = `${(branchName || '').toLowerCase()}|${(coachName || '').toLowerCase()}|${scheduleType}`;
+    const bucket = TIME_SLOTS_CACHE[key];
+    if (!bucket) return null;
+    const match = bucket.find(s => s.time === timeString);
+    return match?.label || null;
+}
+window.getTimeSlotLabel = getTimeSlotLabel;
+
 // Time slot configuration: 8 slots, 10 students per slot
 // Default slots for all branches (9:00 - 18:00)
 const ATTENDANCE_TIME_SLOTS_DEFAULT = [
@@ -5701,6 +5777,15 @@ function getStudentsForTimeSlot(slotIndex, filteredData) {
 // Get time slots for a specific branch, schedule type, and coach
 // Saturday-Sunday has shorter hours (last slot 13:00-14:00) for ALL branches
 function getTimeSlotsForBranch(branchName, scheduleType = null, coachName = null) {
+    // DB-driven path (P2): if cache is loaded and the (branch|coach|schedule) bucket
+    // exists, return its times. Falls through to the hard-coded switch on any miss.
+    if (TIME_SLOTS_CACHE && branchName && scheduleType && coachName) {
+        const key = `${branchName.toLowerCase()}|${coachName.toLowerCase()}|${scheduleType}`;
+        const bucket = TIME_SLOTS_CACHE[key];
+        if (bucket && bucket.length > 0) {
+            return bucket.map(s => s.time);
+        }
+    }
     if (!branchName) return ATTENDANCE_TIME_SLOTS_DEFAULT;
     const normalizedName = branchName.toLowerCase().trim();
 
