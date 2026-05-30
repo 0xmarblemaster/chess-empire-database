@@ -7713,6 +7713,7 @@ function renderAttendanceCalendar(preFilteredData = null) {
     });
 
     tbody.innerHTML = bodyHtml;
+    if (window.lucide?.createIcons) window.lucide.createIcons();
 }
 
 // Track which time slots are expanded/collapsed
