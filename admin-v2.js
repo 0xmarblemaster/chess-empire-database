@@ -8017,6 +8017,11 @@ async function toggleAttendanceStatus(studentId, dateStr, cell) {
 
     // Save to database
     try {
+        const slotStr = attendanceCurrentTimeSlot !== 'all' ? attendanceCurrentTimeSlot : null;
+        const slotId = slotStr
+            ? getTimeSlotIdForTime(attendanceCurrentBranch, attendanceCurrentSchedule, attendanceCurrentCoachName, slotStr)
+            : null;
+
         if (newStatus === '') {
             // Delete attendance record
             if (window.supabaseData && typeof window.supabaseData.deleteAttendance === 'function') {
@@ -8030,7 +8035,8 @@ async function toggleAttendanceStatus(studentId, dateStr, cell) {
                     branch_id: branchObj.id,
                     attendance_date: dateStr,
                     schedule_type: attendanceCurrentSchedule,
-                    time_slot: attendanceCurrentTimeSlot !== 'all' ? attendanceCurrentTimeSlot : null,
+                    time_slot: slotStr,
+                    time_slot_id: slotId,
                     status: newStatus
                 });
             }
@@ -8051,7 +8057,8 @@ async function toggleAttendanceStatus(studentId, dateStr, cell) {
                     studentData.attendance.push({
                         attendance_date: dateStr,
                         status: newStatus,
-                        time_slot: attendanceCurrentTimeSlot !== 'all' ? attendanceCurrentTimeSlot : null
+                        time_slot: slotStr,
+                        time_slot_id: slotId
                     });
                 }
             }
@@ -8210,13 +8217,19 @@ async function toggleAttendanceCheckbox(studentId, dateStr, cell) {
         } else {
             // Upsert attendance record
             if (window.supabaseData && typeof window.supabaseData.upsertAttendance === 'function') {
+                const slotStr = attendanceCurrentTimeSlot !== 'all' ? attendanceCurrentTimeSlot : null;
+                const slotId = slotStr
+                    ? getTimeSlotIdForTime(attendanceCurrentBranch, attendanceCurrentSchedule || 'mon_wed', attendanceCurrentCoachName, slotStr)
+                    : null;
+
                 // Capture the result with ID
                 const result = await window.supabaseData.upsertAttendance({
                     studentId: studentId,
                     branchId: branchObj.id,
                     attendanceDate: dateStr,
                     scheduleType: attendanceCurrentSchedule || 'mon_wed',
-                    timeSlot: attendanceCurrentTimeSlot !== 'all' ? attendanceCurrentTimeSlot : null,
+                    timeSlot: slotStr,
+                    timeSlotId: slotId,
                     status: newStatus
                 });
 
@@ -8237,7 +8250,8 @@ async function toggleAttendanceCheckbox(studentId, dateStr, cell) {
                             id: returnedId,  // ID now included
                             attendance_date: dateStr,
                             status: newStatus,
-                            time_slot: attendanceCurrentTimeSlot !== 'all' ? attendanceCurrentTimeSlot : null
+                            time_slot: slotStr,
+                            time_slot_id: slotId
                         });
                     }
                 }
