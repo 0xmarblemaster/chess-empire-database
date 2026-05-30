@@ -5560,7 +5560,7 @@ function openEditTimeSlotModal(timeSlot) {
         timeSlot
     );
     if (!id) {
-        alert('This slot has no DB id (likely a fallback row). Edits are not available yet.');
+        alert(t('admin.attendance.editTimeSlot.notAvailable') || 'This slot has no DB id (likely a fallback row). Edits are not available yet.');
         return;
     }
     const key = `${(attendanceCurrentBranch || '').toLowerCase()}|${(attendanceCurrentCoachName || '').toLowerCase()}|${attendanceCurrentSchedule}`;
@@ -5608,12 +5608,12 @@ async function saveTimeSlotEdit() {
     const labelVal = (document.getElementById('editTimeSlotLabel').value || '').trim();
 
     if (!startVal || !endVal) {
-        errEl.textContent = 'Please enter both start and end time.';
+        errEl.textContent = t('admin.attendance.editTimeSlot.errBothTimes') || 'Please enter both start and end time.';
         errEl.style.display = 'block';
         return;
     }
     if (startVal >= endVal) {
-        errEl.textContent = 'End time must be after start time.';
+        errEl.textContent = t('admin.attendance.editTimeSlot.errEndAfterStart') || 'End time must be after start time.';
         errEl.style.display = 'block';
         return;
     }
@@ -5637,7 +5637,7 @@ async function saveTimeSlotEdit() {
         }
     } catch (err) {
         console.error('[time_slots] save failed', err);
-        errEl.textContent = err?.message || 'Save failed.';
+        errEl.textContent = err?.message || t('admin.attendance.editTimeSlot.errSaveFailed') || 'Save failed.';
         errEl.style.display = 'block';
     }
 }
@@ -5646,7 +5646,7 @@ window.saveTimeSlotEdit = saveTimeSlotEdit;
 async function deleteTimeSlot() {
     if (!editingTimeSlotContext) return;
     const id = document.getElementById('editTimeSlotId').value;
-    if (!confirm('Delete this time slot? Any students assigned to this index will lose their slot mapping.')) return;
+    if (!confirm(t('admin.attendance.editTimeSlot.deleteConfirm') || 'Delete this time slot? Any students assigned to this index will lose their slot mapping.')) return;
     const errEl = document.getElementById('editTimeSlotError');
     errEl.style.display = 'none';
     try {
@@ -5662,7 +5662,7 @@ async function deleteTimeSlot() {
         }
     } catch (err) {
         console.error('[time_slots] delete failed', err);
-        errEl.textContent = err?.message || 'Delete failed.';
+        errEl.textContent = err?.message || t('admin.attendance.editTimeSlot.errDeleteFailed') || 'Delete failed.';
         errEl.style.display = 'block';
     }
 }
