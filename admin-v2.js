@@ -6894,7 +6894,11 @@ async function populateAttendanceTimeSlots() {
     const timeSlots = getTimeSlotsForBranch(attendanceCurrentBranch, attendanceCurrentSchedule, attendanceCurrentCoachName);
     timeSlots.forEach(slot => {
         if (slot) {
-            select.innerHTML += `<option value="${slot}">${slot}</option>`;
+            const label = (typeof window.getTimeSlotLabel === 'function')
+                ? window.getTimeSlotLabel(attendanceCurrentBranch, attendanceCurrentSchedule, attendanceCurrentCoachName, slot)
+                : null;
+            const display = label ? `${slot} · ${label}` : slot;
+            select.innerHTML += `<option value="${slot}">${display}</option>`;
         }
     });
 }
@@ -8507,9 +8511,13 @@ function onAddStudentScheduleChange() {
 
     timeSlotSelect.innerHTML = `
         <option value="">${t('admin.attendance.selectTimeSlot') || 'Select Time Slot'}</option>
-        ${timeSlots.map((slot, index) => `
-            <option value="${index}">${slot}</option>
-        `).join('')}
+        ${timeSlots.map((slot, index) => {
+            const label = (typeof window.getTimeSlotLabel === 'function')
+                ? window.getTimeSlotLabel(selectedBranch, selectedSchedule, coachName, slot)
+                : null;
+            const display = label ? `${slot} · ${label}` : slot;
+            return `<option value="${index}">${display}</option>`;
+        }).join('')}
     `;
 }
 
@@ -8679,7 +8687,13 @@ async function submitAddStudentToCalendar() {
             }
 
             const timeSlots = getTimeSlotsForBranch(selectedBranch, selectedSchedule, coachName);
-            const slotName = timeSlots[timeSlotIndex] || `Slot ${timeSlotIndex + 1}`;
+            const slotTime = timeSlots[timeSlotIndex];
+            const slotLabel = slotTime && typeof window.getTimeSlotLabel === 'function'
+                ? window.getTimeSlotLabel(selectedBranch, selectedSchedule, coachName, slotTime)
+                : null;
+            const slotName = slotTime
+                ? (slotLabel ? `${slotTime} · ${slotLabel}` : slotTime)
+                : `Slot ${timeSlotIndex + 1}`;
             showToast(
                 `Time slot ${slotName} is full (${MAX_TIME_SLOT_CAPACITY} students max). Please select a different time slot.`,
                 'error'
