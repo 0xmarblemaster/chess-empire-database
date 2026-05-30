@@ -5534,6 +5534,140 @@ function getTimeSlotLabel(branchName, scheduleType, coachName, timeString) {
 }
 window.getTimeSlotLabel = getTimeSlotLabel;
 
+function getTimeSlotIdForTime(branchName, scheduleType, coachName, timeString) {
+    if (!TIME_SLOTS_CACHE) return null;
+    const key = `${(branchName || '').toLowerCase()}|${(coachName || '').toLowerCase()}|${scheduleType}`;
+    const bucket = TIME_SLOTS_CACHE[key];
+    if (!bucket) return null;
+    const match = bucket.find(s => s.time === timeString);
+    return match?.id || null;
+}
+window.getTimeSlotIdForTime = getTimeSlotIdForTime;
+
+function canEditCurrentSlots() {
+    if (!attendanceRoleInfo) return false;
+    if (attendanceRoleInfo.isAdmin) return true;
+    return !!attendanceRoleInfo.coachId && attendanceCurrentCoach === attendanceRoleInfo.coachId;
+}
+
+let editingTimeSlotContext = null;
+
+function openEditTimeSlotModal(timeSlot) {
+    const id = getTimeSlotIdForTime(
+        attendanceCurrentBranch,
+        attendanceCurrentSchedule,
+        attendanceCurrentCoachName,
+        timeSlot
+    );
+    if (!id) {
+        alert('This slot has no DB id (likely a fallback row). Edits are not available yet.');
+        return;
+    }
+    const key = `${(attendanceCurrentBranch || '').toLowerCase()}|${(attendanceCurrentCoachName || '').toLowerCase()}|${attendanceCurrentSchedule}`;
+    const bucket = TIME_SLOTS_CACHE?.[key] || [];
+    const row = bucket.find(s => s.id === id);
+
+    const [startStr, endStr] = (row?.time || timeSlot).split('-');
+    const padTime = (t) => {
+        const [h, m] = t.split(':');
+        return `${String(h).padStart(2, '0')}:${m}`;
+    };
+
+    document.getElementById('editTimeSlotId').value = id;
+    document.getElementById('editTimeSlotStart').value = padTime(startStr);
+    document.getElementById('editTimeSlotEnd').value = padTime(endStr);
+    document.getElementById('editTimeSlotLabel').value = row?.label || '';
+    document.getElementById('editTimeSlotError').style.display = 'none';
+
+    editingTimeSlotContext = {
+        id,
+        branch: attendanceCurrentBranch,
+        schedule: attendanceCurrentSchedule,
+        coachName: attendanceCurrentCoachName
+    };
+
+    document.getElementById('editTimeSlotModal').classList.add('active');
+    if (window.lucide?.createIcons) window.lucide.createIcons();
+}
+window.openEditTimeSlotModal = openEditTimeSlotModal;
+
+function closeEditTimeSlotModal() {
+    document.getElementById('editTimeSlotModal').classList.remove('active');
+    editingTimeSlotContext = null;
+}
+window.closeEditTimeSlotModal = closeEditTimeSlotModal;
+
+async function saveTimeSlotEdit() {
+    const errEl = document.getElementById('editTimeSlotError');
+    errEl.style.display = 'none';
+    if (!editingTimeSlotContext) return;
+
+    const id = document.getElementById('editTimeSlotId').value;
+    const startVal = document.getElementById('editTimeSlotStart').value;
+    const endVal   = document.getElementById('editTimeSlotEnd').value;
+    const labelVal = (document.getElementById('editTimeSlotLabel').value || '').trim();
+
+    if (!startVal || !endVal) {
+        errEl.textContent = 'Please enter both start and end time.';
+        errEl.style.display = 'block';
+        return;
+    }
+    if (startVal >= endVal) {
+        errEl.textContent = 'End time must be after start time.';
+        errEl.style.display = 'block';
+        return;
+    }
+
+    try {
+        const { error } = await window.supabaseClient
+            .from('time_slots')
+            .update({
+                start_time: `${startVal}:00`,
+                end_time:   `${endVal}:00`,
+                label: labelVal || null,
+                updated_at: new Date().toISOString()
+            })
+            .eq('id', id);
+        if (error) throw error;
+
+        await window.reloadTimeSlotsCache();
+        closeEditTimeSlotModal();
+        if (typeof renderAttendanceCalendar === 'function') {
+            renderAttendanceCalendar();
+        }
+    } catch (err) {
+        console.error('[time_slots] save failed', err);
+        errEl.textContent = err?.message || 'Save failed.';
+        errEl.style.display = 'block';
+    }
+}
+window.saveTimeSlotEdit = saveTimeSlotEdit;
+
+async function deleteTimeSlot() {
+    if (!editingTimeSlotContext) return;
+    const id = document.getElementById('editTimeSlotId').value;
+    if (!confirm('Delete this time slot? Any students assigned to this index will lose their slot mapping.')) return;
+    const errEl = document.getElementById('editTimeSlotError');
+    errEl.style.display = 'none';
+    try {
+        const { error } = await window.supabaseClient
+            .from('time_slots')
+            .delete()
+            .eq('id', id);
+        if (error) throw error;
+        await window.reloadTimeSlotsCache();
+        closeEditTimeSlotModal();
+        if (typeof renderAttendanceCalendar === 'function') {
+            renderAttendanceCalendar();
+        }
+    } catch (err) {
+        console.error('[time_slots] delete failed', err);
+        errEl.textContent = err?.message || 'Delete failed.';
+        errEl.style.display = 'block';
+    }
+}
+window.deleteTimeSlot = deleteTimeSlot;
+
 // Time slot configuration: 8 slots, 10 students per slot
 // Default slots for all branches (9:00 - 18:00)
 const ATTENDANCE_TIME_SLOTS_DEFAULT = [
@@ -7378,6 +7512,14 @@ function renderAttendanceCalendar(preFilteredData = null) {
         const studentCount = slotStudents.length;
 
         // Build time slot header row with sticky label cell + individual date cells
+        const slotLabel = (typeof window.getTimeSlotLabel === 'function')
+            ? window.getTimeSlotLabel(attendanceCurrentBranch, attendanceCurrentSchedule, attendanceCurrentCoachName, timeSlot)
+            : null;
+        const editBtnHtml = canEditCurrentSlots()
+            ? `<button type="button" class="time-slot-edit-btn" data-slot-time="${timeSlot}" title="Edit time slot" onclick="event.stopPropagation(); openEditTimeSlotModal('${timeSlot}')">
+                    <i data-lucide="pencil" style="width: 14px; height: 14px;"></i>
+                </button>`
+            : '';
         bodyHtml += `
             <tr class="attendance-time-slot-header"
                 data-slot-id="${slotId}"
@@ -7397,7 +7539,9 @@ function renderAttendanceCalendar(preFilteredData = null) {
                             <polyline points="12 6 12 12 16 14"></polyline>
                         </svg>
                         <span>${timeSlot}</span>
+                        ${slotLabel ? `<span class="time-slot-name">· ${escapeHtml(slotLabel)}</span>` : ''}
                         <span class="time-slot-count">(${studentCount}/${MAX_TIME_SLOT_CAPACITY})</span>
+                        ${editBtnHtml}
                     </div>
                 </td>
         `;
