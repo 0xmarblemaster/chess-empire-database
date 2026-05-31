@@ -15,13 +15,18 @@
 })(typeof self !== 'undefined' ? self : this, function () {
     'use strict';
 
-    const TOURNAMENT_KINDS = Object.freeze(['league_c', 'league_b', 'razryad_4', 'razryad_3']);
+    const TOURNAMENT_KINDS = Object.freeze(['league_c', 'league_b', 'razryad_4', 'razryad_3', 'rated']);
+    // ROUNDS_BY_KIND lists fixed-rounds kinds only. 'rated' is intentionally
+    // omitted: rounds are derived from max(games_played) by the parser, and
+    // the validator accepts any value in [RATED_MIN_ROUNDS, RATED_MAX_ROUNDS].
     const ROUNDS_BY_KIND = Object.freeze({
         league_c:  6,
         league_b:  6,
         razryad_4: 10,
         razryad_3: 9,
     });
+    const RATED_MIN_ROUNDS = 1;
+    const RATED_MAX_ROUNDS = 20;
 
     // Russian month → 1-indexed month number.
     const RU_MONTHS = Object.freeze({
@@ -184,7 +189,9 @@
 
         const out = {
             kind,
-            rounds: kind ? ROUNDS_BY_KIND[kind] : null,
+            // Fixed-rounds kinds get their canonical rounds upfront. 'rated'
+            // is derived from max(games_played) after the row loop below.
+            rounds: kind ? (ROUNDS_BY_KIND[kind] || null) : null,
             tournament_date,
             source_filename: filename,
             results: [],
@@ -262,6 +269,21 @@
         }
 
         if (out.results.length === 0) warnings.push('No result rows found');
+
+        // For 'rated' tournaments, derive rounds from the max games_played
+        // across the participant table. In a Swiss tournament only top
+        // finishers play every round, so max(games_played) == total rounds.
+        // Admin can override in the modal if the export has quirks.
+        if (kind === 'rated') {
+            const maxGames = out.results.reduce(
+                (m, r) => Math.max(m, r.games_played || 0), 0
+            );
+            out.rounds = maxGames > 0 ? maxGames : null;
+            if (!out.rounds) {
+                warnings.push('Could not derive rounds from games_played — admin must enter manually');
+            }
+        }
+
         return out;
     }
 
@@ -285,9 +307,16 @@
         if (!parsed.kind || !TOURNAMENT_KINDS.includes(parsed.kind)) {
             errors.push(`Invalid tournament kind: ${parsed.kind}`);
         }
-        const expectedRounds = parsed.kind ? ROUNDS_BY_KIND[parsed.kind] : null;
-        if (parsed.kind && parsed.rounds !== expectedRounds) {
-            errors.push(`Rounds (${parsed.rounds}) does not match kind ${parsed.kind} (expected ${expectedRounds})`);
+        if (parsed.kind === 'rated') {
+            const r = parsed.rounds;
+            if (!Number.isInteger(r) || r < RATED_MIN_ROUNDS || r > RATED_MAX_ROUNDS) {
+                errors.push(`Rounds (${r}) must be an integer between ${RATED_MIN_ROUNDS} and ${RATED_MAX_ROUNDS} for rated tournaments`);
+            }
+        } else if (parsed.kind && TOURNAMENT_KINDS.includes(parsed.kind)) {
+            const expectedRounds = ROUNDS_BY_KIND[parsed.kind];
+            if (parsed.rounds !== expectedRounds) {
+                errors.push(`Rounds (${parsed.rounds}) does not match kind ${parsed.kind} (expected ${expectedRounds})`);
+            }
         }
         if (!parsed.tournament_date) {
             errors.push('Tournament date is required (admin must enter manually if not in filename)');
@@ -304,6 +333,8 @@
     return {
         TOURNAMENT_KINDS,
         ROUNDS_BY_KIND,
+        RATED_MIN_ROUNDS,
+        RATED_MAX_ROUNDS,
         parseDateFromFilename,
         parseTournamentExport,
         extractText,

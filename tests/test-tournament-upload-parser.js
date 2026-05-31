@@ -98,6 +98,43 @@ for (const [kind, expectedRounds] of [
     assertEqual(out.rounds, expectedRounds, `${kind} → rounds=${expectedRounds}`);
 }
 
+console.log('\n=== parseTournamentExport: rated derives rounds from max(games_played) ====\n');
+{
+    // Top row in TSV plays 5 games (max). Heterogeneous: some 4, some 5.
+    const ratedOut = upload.parseTournamentExport(TSV, { kind: 'rated', filename: '17 мая.xlsx' });
+    assertEqual(ratedOut.kind, 'rated', 'rated kind passthrough');
+    assertEqual(ratedOut.rounds, 5, 'rated: rounds = max(games_played) = 5');
+    assertEqual(ratedOut.results.length, 5, 'rated: rows parsed normally');
+}
+
+console.log('\n=== parseTournamentExport: rated with seven-round file ============\n');
+{
+    const TSV7 = [
+        'Шахматный клуб Chess Empire',
+        '',
+        ['Ном.', 'Имя', 'Рейт.', 'Фед', 'Оцен.Очки', 'оцен.партии', 'НРейт.-Ø', 'Рейт+/-'].join('\t'),
+        ['1', 'Player A', '900', 'KAZ', '6', '7', '700', '+50'].join('\t'),
+        ['2', 'Player B', '850', 'KAZ', '5', '7', '680', '+30'].join('\t'),
+        ['3', 'Player C', '800', 'KAZ', '4', '6', '670', '+10'].join('\t'),
+        ['4', 'Player D', '750', 'KAZ', '3', '5', '650', '-10'].join('\t'),
+    ].join('\n');
+    const out = upload.parseTournamentExport(TSV7, { kind: 'rated', filename: '01.06.2026 rated.xlsx' });
+    assertEqual(out.rounds, 7, 'rated: max(games_played)=7 across heterogeneous rows');
+}
+
+console.log('\n=== parseTournamentExport: rated with empty results → rounds null ====\n');
+{
+    const TSV_EMPTY = [
+        'Шахматный клуб',
+        '',
+        ['Ном.', 'Имя', 'Рейт.', 'Оцен.Очки', 'оцен.партии'].join('\t'),
+    ].join('\n');
+    const out = upload.parseTournamentExport(TSV_EMPTY, { kind: 'rated', filename: '01.06.2026.xlsx' });
+    assertEqual(out.rounds, null, 'rated: no result rows → rounds=null');
+    assert(out.warnings.some(w => /derive rounds/.test(w)),
+        'rated: warning surfaced when rounds cannot be derived');
+}
+
 console.log('\n=== extractRowsFromHtml (HTML-table-as-.xls) =========================\n');
 
 const HTML_FIXTURE = `

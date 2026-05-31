@@ -54,6 +54,37 @@ console.log('\n=== validateParsedUpload: rounds-vs-kind enforcement ============
         'unknown kind "league_a" rejected');
 }
 
+console.log('\n=== validateParsedUpload: rated tournaments accept 1..20 rounds =======\n');
+{
+    const okRated = upload.validateParsedUpload({
+        kind: 'rated', rounds: 7, tournament_date: '2026-06-01',
+        results: [{ rank: 1, raw_name: 'A', rating_before: 500, score: 4, games_played: 7, rating_delta: 10 }],
+        warnings: [],
+    });
+    assertEqual(okRated.errors, [], 'rated + 7 rounds → no errors');
+
+    const zeroRated = upload.validateParsedUpload({
+        kind: 'rated', rounds: 0, tournament_date: '2026-06-01',
+        results: [], warnings: [],
+    });
+    assert(zeroRated.errors.some(e => /rated tournaments/i.test(e)),
+        'rated + 0 rounds → error');
+
+    const tooManyRated = upload.validateParsedUpload({
+        kind: 'rated', rounds: 21, tournament_date: '2026-06-01',
+        results: [], warnings: [],
+    });
+    assert(tooManyRated.errors.some(e => /rated tournaments/i.test(e)),
+        'rated + 21 rounds → error (exceeds max)');
+
+    const nullRated = upload.validateParsedUpload({
+        kind: 'rated', rounds: null, tournament_date: '2026-06-01',
+        results: [], warnings: [],
+    });
+    assert(nullRated.errors.some(e => /rated tournaments/i.test(e)),
+        'rated + null rounds → error');
+}
+
 console.log('\n=== validateParsedUpload: missing date is an error ====================\n');
 {
     const missingDate = upload.validateParsedUpload({

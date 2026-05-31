@@ -4413,7 +4413,17 @@ function onCsvUploadKindChange() {
     if (isTournament) {
         const roundsByKind = (window.tournamentParse && window.tournamentParse.ROUNDS_BY_KIND) || {};
         const roundsEl = document.getElementById('csvTournamentRounds');
-        if (roundsEl && roundsByKind[csvImportKind]) roundsEl.value = roundsByKind[csvImportKind];
+        if (roundsEl) {
+            // Fixed-rounds kinds get their canonical value seeded. 'rated'
+            // gets cleared so the parser's auto-detected max(games_played)
+            // populates the field after the file picker, or the admin can
+            // type it manually.
+            if (roundsByKind[csvImportKind]) {
+                roundsEl.value = roundsByKind[csvImportKind];
+            } else {
+                roundsEl.value = '';
+            }
+        }
     }
 
     // Reset preview + parsed state when kind changes mid-modal — old preview
@@ -4911,6 +4921,14 @@ async function commitTournamentUpload(kind) {
 
         if (!tournament_date) {
             showToast(t('admin.imports.dateRequired') || 'Tournament date is required', 'error');
+            if (progressContainer) progressContainer.style.display = 'none';
+            return;
+        }
+
+        // 'rated' has no canonical rounds — must be derived from the file or
+        // entered by the admin. Reject the commit if neither produced one.
+        if (kind === 'rated' && (!Number.isInteger(rounds) || rounds < 1 || rounds > 20)) {
+            showToast(t('admin.imports.roundsRequired') || 'Rounds required for rated tournaments (1–20)', 'error');
             if (progressContainer) progressContainer.style.display = 'none';
             return;
         }

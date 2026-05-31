@@ -995,6 +995,9 @@ const supabaseData = {
             throw new Error('addTournamentUpload requires header.kind and header.tournament_date');
         }
         const reportProgress = typeof onProgress === 'function' ? onProgress : null;
+        // Fixed-rounds kinds only. 'rated' is intentionally omitted: caller
+        // must pass header.rounds explicitly (derived from max(games_played)
+        // by the parser, or entered by the admin).
         const ROUNDS_BY_KIND = { league_c: 6, league_b: 6, razryad_4: 10, razryad_3: 9 };
 
         let uploadedBy = null;
@@ -1003,10 +1006,15 @@ const supabaseData = {
             uploadedBy = user?.id || null;
         } catch (_) { /* anonymous fallback */ }
 
+        const resolvedRounds = header.rounds || ROUNDS_BY_KIND[header.kind] || null;
+        if (header.kind === 'rated' && (!Number.isInteger(resolvedRounds) || resolvedRounds < 1 || resolvedRounds > 20)) {
+            throw new Error('Rated tournaments require header.rounds between 1 and 20');
+        }
+
         const payload = {
             kind: header.kind,
             tournament_date: header.tournament_date,
-            rounds: header.rounds || ROUNDS_BY_KIND[header.kind] || null,
+            rounds: resolvedRounds,
             source_filename: header.source_filename || null,
             uploaded_by: uploadedBy,
         };
