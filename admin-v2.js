@@ -6396,12 +6396,34 @@ function populateAttendanceCoachDropdown() {
     if (branchCoaches.length <= 1) {
         if (filterGroup) filterGroup.style.display = 'none';
         select.disabled = true;
+        // Auto-pin the only coach so the edit-time-slot pencil works for admins
+        // at single-coach branches (the dropdown is hidden, so admin can't pick
+        // a coach manually).
+        if (branchCoaches.length === 1) {
+            const only = branchCoaches[0];
+            attendanceCurrentCoach = only.id;
+            attendanceCurrentCoachName = `${only.firstName} ${only.lastName}`;
+            select.value = only.id;
+        } else {
+            attendanceCurrentCoachName = null;
+        }
+        syncMobileCoachFilter();
         return;
     }
 
     // Show and enable filter for multiple coaches
     if (filterGroup) filterGroup.style.display = 'flex';
     select.disabled = false;
+
+    // Admins on multi-coach branches: default to the first coach so the
+    // edit-time-slot pencil works out of the box. "All Coaches" remains
+    // selectable from the dropdown as a read-only unified view.
+    const isAdmin = !!(attendanceRoleInfo && attendanceRoleInfo.isAdmin);
+    if (isAdmin && (!attendanceCurrentCoach || attendanceCurrentCoach === 'all')) {
+        const firstCoach = branchCoaches[0];
+        attendanceCurrentCoach = firstCoach.id;
+        attendanceCurrentCoachName = `${firstCoach.firstName} ${firstCoach.lastName}`;
+    }
 
     // Add coach options
     branchCoaches.forEach(coach => {
@@ -6424,6 +6446,9 @@ function populateAttendanceCoachDropdown() {
         option.textContent = t('admin.attendance.unassignedCoach') || 'Unassigned';
         select.appendChild(option);
     }
+
+    // Reflect the resolved selection back to the dropdown.
+    if (attendanceCurrentCoach) select.value = attendanceCurrentCoach;
 
     // Sync mobile filter
     syncMobileCoachFilter();
