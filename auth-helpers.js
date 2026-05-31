@@ -59,7 +59,7 @@
         const { data: coach, error: coachError } = await sb
             .from('coaches')
             .select('id')
-            .eq('email', email)
+            .ilike('email', email)
             .maybeSingle();
 
         if (coachError) {

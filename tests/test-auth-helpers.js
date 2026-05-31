@@ -57,20 +57,29 @@ function createMockClient({
             },
         },
         from(table) {
-            const state = { table, col: null, val: null };
+            const state = { table, col: null, val: null, op: null };
             const api = {
                 select() { return api; },
-                eq(col, val) { state.col = col; state.val = val; return api; },
+                eq(col, val) { state.col = col; state.val = val; state.op = 'eq'; return api; },
+                ilike(col, val) { state.col = col; state.val = val; state.op = 'ilike'; return api; },
                 maybeSingle: async () => {
-                    lookups.push({ table, col: state.col, val: state.val });
+                    lookups.push({ table, col: state.col, val: state.val, op: state.op });
+                    const matches = (row) => {
+                        const cell = row[state.col];
+                        if (state.op === 'ilike') {
+                            return typeof cell === 'string' && typeof state.val === 'string'
+                                && cell.toLowerCase() === state.val.toLowerCase();
+                        }
+                        return cell === state.val;
+                    };
                     if (table === 'user_roles') {
                         if (userRolesError) return { data: null, error: userRolesError };
-                        const match = (userRoles || []).find(r => r[state.col] === state.val) || null;
+                        const match = (userRoles || []).find(matches) || null;
                         return { data: match, error: null };
                     }
                     if (table === 'coaches') {
                         if (coachesError) return { data: null, error: coachesError };
-                        const match = (coaches || []).find(c => c[state.col] === state.val) || null;
+                        const match = (coaches || []).find(matches) || null;
                         return { data: match, error: null };
                     }
                     return { data: null, error: null };
@@ -93,9 +102,9 @@ async function run() {
         assertEqual(out, { isAdmin: false, coachId: 'coach-uuid-1', email: 'coach@chessempire.kz' },
             'coach email resolves to { isAdmin:false, coachId:<id> }');
         assertEqual(client._lookups, [
-            { table: 'user_roles', col: 'user_id', val: 'u1' },
-            { table: 'coaches', col: 'email', val: 'coach@chessempire.kz' },
-        ], 'user_roles checked first by user_id, then coaches.email');
+            { table: 'user_roles', col: 'user_id', val: 'u1', op: 'eq' },
+            { table: 'coaches', col: 'email', val: 'coach@chessempire.kz', op: 'ilike' },
+        ], 'user_roles checked first by user_id, then coaches.email (case-insensitive)');
     }
 
     console.log('\n=== getRoleInfo — authenticated non-coach is admin ================\n');
@@ -168,7 +177,7 @@ async function run() {
         assertEqual(out, { isAdmin: true, coachId: null, email: 'coach@chessempire.kz' },
             'admin role short-circuits even when coach row exists');
         assertEqual(client._lookups, [
-            { table: 'user_roles', col: 'user_id', val: 'u1' },
+            { table: 'user_roles', col: 'user_id', val: 'u1', op: 'eq' },
         ], 'coaches lookup is skipped once admin role is found');
     }
 
@@ -183,7 +192,7 @@ async function run() {
         assertEqual(out, { isAdmin: true, coachId: null, email: 'pure-admin@chessempire.kz' },
             'admin-only user → { isAdmin:true, coachId:null }');
         assertEqual(client._lookups, [
-            { table: 'user_roles', col: 'user_id', val: 'u9' },
+            { table: 'user_roles', col: 'user_id', val: 'u9', op: 'eq' },
         ], 'coaches not queried when admin role is set');
     }
 
@@ -198,8 +207,8 @@ async function run() {
         assertEqual(out, { isAdmin: false, coachId: 'coach-uuid-1', email: 'coach@chessempire.kz' },
             'no user_roles row → existing coach-lookup behavior preserved');
         assertEqual(client._lookups, [
-            { table: 'user_roles', col: 'user_id', val: 'u1' },
-            { table: 'coaches', col: 'email', val: 'coach@chessempire.kz' },
+            { table: 'user_roles', col: 'user_id', val: 'u1', op: 'eq' },
+            { table: 'coaches', col: 'email', val: 'coach@chessempire.kz', op: 'ilike' },
         ], 'both tables consulted when user_roles has no row');
     }
 
@@ -240,8 +249,26 @@ async function run() {
         }
         assert(threw, 'user_roles error rethrown (do not silently misclassify role)');
         assertEqual(client._lookups, [
-            { table: 'user_roles', col: 'user_id', val: 'u1' },
+            { table: 'user_roles', col: 'user_id', val: 'u1', op: 'eq' },
         ], 'coaches not queried after user_roles error');
+    }
+
+    console.log('\n=== getRoleInfo — case-mismatched coach email still resolves ======\n');
+    {
+        // Regression: Supabase auth lowercases email on signup, but coaches.email
+        // historically retained the case admins typed. A case-only mismatch must
+        // not silently flip the user to isAdmin=true (see migration 048 + ilike).
+        const client = createMockClient({
+            authUser: { id: 'u1', email: 'asejsenbina@mail.ru' },
+            coaches: [{ id: 'coach-uuid-aizhan', email: 'Asejsenbina@mail.ru' }],
+        });
+        const out = await authHelpers.getRoleInfo(client);
+        assertEqual(out, { isAdmin: false, coachId: 'coach-uuid-aizhan', email: 'asejsenbina@mail.ru' },
+            'uppercase coach email still resolves to coachId (ilike, case-insensitive)');
+        assertEqual(client._lookups, [
+            { table: 'user_roles', col: 'user_id', val: 'u1', op: 'eq' },
+            { table: 'coaches', col: 'email', val: 'asejsenbina@mail.ru', op: 'ilike' },
+        ], 'coaches lookup uses ilike so PostgREST matches case-insensitively');
     }
 
     console.log(`\n--- ${passed} passed, ${failed} failed ---\n`);
