@@ -5637,13 +5637,32 @@ window.getTimeSlotIdForTime = getTimeSlotIdForTime;
 
 function canEditCurrentSlots() {
     if (!attendanceRoleInfo) return false;
+    // A specific coach must be selected — time_slots rows are keyed per-coach,
+    // so "All Coaches" / "Unassigned" has no single row to edit.
+    if (!attendanceCurrentCoachName) return false;
     if (attendanceRoleInfo.isAdmin) return true;
     return !!attendanceRoleInfo.coachId && attendanceCurrentCoach === attendanceRoleInfo.coachId;
 }
 
+function editButtonHiddenReason() {
+    if (!attendanceRoleInfo) return null;
+    if (attendanceRoleInfo.isAdmin && !attendanceCurrentCoachName) return 'admin_no_coach_selected';
+    return null;
+}
+
 let editingTimeSlotContext = null;
 
-function openEditTimeSlotModal(timeSlot) {
+async function openEditTimeSlotModal(timeSlot) {
+    // Ensure cache is loaded for the currently displayed month before resolving
+    // the slot id. A click during page load (cache=null) would otherwise hit
+    // the fallback-id alert even when the row exists in the DB.
+    try {
+        const mk = _currentAttendanceMonthKey();
+        if (TIME_SLOTS_CACHE === null || !TIME_SLOTS_CACHE_LOADED[mk]) {
+            await loadTimeSlotsCache();
+        }
+    } catch (_) { /* fall through; we'll alert below if still null */ }
+
     const id = getTimeSlotIdForTime(
         attendanceCurrentBranch,
         attendanceCurrentSchedule,
@@ -7646,11 +7665,19 @@ function renderAttendanceCalendar(preFilteredData = null) {
         const slotLabel = (typeof window.getTimeSlotLabel === 'function')
             ? window.getTimeSlotLabel(attendanceCurrentBranch, attendanceCurrentSchedule, attendanceCurrentCoachName, timeSlot)
             : null;
-        const editBtnHtml = canEditCurrentSlots()
-            ? `<button type="button" class="time-slot-edit-btn" data-slot-time="${timeSlot}" title="Edit time slot" onclick="event.stopPropagation(); openEditTimeSlotModal('${timeSlot}')">
+        let editBtnHtml = '';
+        if (canEditCurrentSlots()) {
+            editBtnHtml = `<button type="button" class="time-slot-edit-btn" data-slot-time="${timeSlot}" title="${t('admin.attendance.editTimeSlot.title') || 'Edit time slot'}" onclick="event.stopPropagation(); openEditTimeSlotModal('${timeSlot}')">
                     <i data-lucide="pencil" style="width: 14px; height: 14px;"></i>
-                </button>`
-            : '';
+                </button>`;
+        } else if (editButtonHiddenReason() === 'admin_no_coach_selected') {
+            // Render a disabled pencil with a tooltip so admins know the action
+            // exists and how to enable it (pick a specific coach in the filter).
+            const hint = (t('admin.attendance.editTimeSlot.selectCoachToEdit') || 'Select a coach to edit slots').replace(/"/g, '&quot;');
+            editBtnHtml = `<button type="button" class="time-slot-edit-btn" disabled title="${hint}" style="opacity:0.4;cursor:not-allowed;" onclick="event.stopPropagation()">
+                    <i data-lucide="pencil" style="width: 14px; height: 14px;"></i>
+                </button>`;
+        }
         bodyHtml += `
             <tr class="attendance-time-slot-header"
                 data-slot-id="${slotId}"
