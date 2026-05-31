@@ -2674,6 +2674,28 @@ const supabaseData = {
             throw error;
         }
 
+        // Clear any future -1 hide rows for this (student, branch, schedule).
+        // Adding/placing a student onto a slot explicitly contradicts any later
+        // hide marker — without this, the read path (effective_from DESC,
+        // first-row-wins per student in getTimeSlotAssignments above) would
+        // keep returning -1 and the student would stay hidden in the calendar.
+        // Scoped strictly to (student_id, branch_id, schedule_type) and
+        // time_slot_index = -1 so it never touches a sibling schedule's hides
+        // or a positive slot assignment.
+        const { error: clearHidesError } = await window.supabaseClient
+            .from('student_time_slot_assignments')
+            .delete()
+            .eq('student_id', studentId)
+            .eq('branch_id', branchId)
+            .eq('schedule_type', scheduleType)
+            .eq('time_slot_index', -1)
+            .gt('effective_from', '1970-01-01');
+
+        if (clearHidesError) {
+            console.error('Error clearing future hide rows after upsert:', clearHidesError);
+            throw clearHidesError;
+        }
+
         return {
             id: data.id,
             studentId: data.student_id,
