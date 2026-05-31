@@ -4414,14 +4414,18 @@ function onCsvUploadKindChange() {
         const roundsByKind = (window.tournamentParse && window.tournamentParse.ROUNDS_BY_KIND) || {};
         const roundsEl = document.getElementById('csvTournamentRounds');
         if (roundsEl) {
-            // Fixed-rounds kinds get their canonical value seeded. 'rated'
-            // gets cleared so the parser's auto-detected max(games_played)
-            // populates the field after the file picker, or the admin can
-            // type it manually.
+            // Fixed-rounds kinds get their canonical value seeded and locked
+            // to prevent a constraint violation at commit. 'rated' clears the
+            // field and stays editable so the parser's max(games_played) (or
+            // the admin) supplies the value.
             if (roundsByKind[csvImportKind]) {
                 roundsEl.value = roundsByKind[csvImportKind];
+                roundsEl.readOnly = true;
+                roundsEl.disabled = true;
             } else {
                 roundsEl.value = '';
+                roundsEl.readOnly = false;
+                roundsEl.disabled = false;
             }
         }
     }
@@ -4929,6 +4933,15 @@ async function commitTournamentUpload(kind) {
         // entered by the admin. Reject the commit if neither produced one.
         if (kind === 'rated' && (!Number.isInteger(rounds) || rounds < 1 || rounds > 20)) {
             showToast(t('admin.imports.roundsRequired') || 'Rounds required for rated tournaments (1–20)', 'error');
+            if (progressContainer) progressContainer.style.display = 'none';
+            return;
+        }
+
+        // Fixed-kind tournaments must match their canonical round count or
+        // the DB CHECK constraint will reject the insert.
+        const roundsByKind = (window.tournamentParse && window.tournamentParse.ROUNDS_BY_KIND) || {};
+        if (roundsByKind[kind] && rounds !== roundsByKind[kind]) {
+            showToast(t('admin.imports.roundsFixedMismatch') || `This tournament type requires exactly ${roundsByKind[kind]} rounds`, 'error');
             if (progressContainer) progressContainer.style.display = 'none';
             return;
         }
