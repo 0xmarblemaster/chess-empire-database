@@ -46,15 +46,19 @@ function fnBody(src, name) {
 
 console.log('\n=== admin-v2.js saveTimeSlotEdit zero-row guard =====================\n');
 
+// Migration 049 swapped the in-place .update() for the edit_time_slot_versioned
+// RPC, so the post-call guard now checks `!data` (the RPC returns the new/updated
+// row or null when RLS silently drops the underlying UPDATE).
 const saveBody = fnBody(ADMIN_SRC, 'saveTimeSlotEdit');
 assert(saveBody.length > 0, 'located saveTimeSlotEdit function body');
-assert(/\.from\(['"]time_slots['"]\)/.test(saveBody), 'still targets time_slots table');
-assert(/\.update\(\{[\s\S]*?\}\)\s*\.eq\(['"]id['"]\s*,\s*id\)\s*\.select\(\)/.test(saveBody),
-    'update(...).eq(id).select() chain is present');
+assert(/\.rpc\(\s*['"]edit_time_slot_versioned['"]/.test(saveBody),
+    'routes through the edit_time_slot_versioned RPC (no direct .update)');
+assert(!/\.from\(['"]time_slots['"]\)\s*\.update\(/.test(saveBody),
+    'no longer calls .from(\'time_slots\').update() directly');
 assert(/const\s*\{\s*data\s*,\s*error\s*\}\s*=\s*await\s+window\.supabaseClient/.test(saveBody),
     'destructures both data and error from the response');
-assert(/if\s*\(\s*!data\s*\|\|\s*data\.length\s*===\s*0\s*\)/.test(saveBody),
-    'has explicit zero-row guard (!data || data.length === 0)');
+assert(/if\s*\(\s*!data\s*\)/.test(saveBody),
+    'has explicit zero-row guard (!data after RPC)');
 assert(/admin\.attendance\.editTimeSlot\.errPermission/.test(saveBody),
     'zero-row branch references errPermission i18n key');
 

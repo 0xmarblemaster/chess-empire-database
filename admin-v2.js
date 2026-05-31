@@ -5462,71 +5462,161 @@ function loadAttendanceFilterState() {
     return null;
 }
 
-// Time slots cache: loaded from `time_slots` table (P2).
-// Key shape: `${branchName.toLowerCase()}|${coachName.toLowerCase()}|${scheduleType}`
-// Value: array of { id, time: "H:MM-H:MM", label, slotIndex } sorted by slotIndex.
-// null = not yet loaded; {} = loaded-but-empty (fallback to ATTENDANCE_TIME_SLOTS_* arrays).
+// Time slots cache: loaded from `time_slots` table (P2 + versioning in migration 049).
+// Key shape: `${branchName.toLowerCase()}|${coachName.toLowerCase()}|${scheduleType}|${YYYY-MM}`
+// Value: array of { id, time: "H:MM-H:MM", label, slotIndex } sorted by slotIndex,
+// containing the *latest* slot version with effective_from <= last day of YYYY-MM.
+// null cache = not yet loaded for ANY month; bucket miss = fallback to ATTENDANCE_TIME_SLOTS_* arrays.
 let TIME_SLOTS_CACHE = null;
-let TIME_SLOTS_CACHE_LOADING = null;
+const TIME_SLOTS_CACHE_LOADING = {};   // monthKey -> Promise
+const TIME_SLOTS_CACHE_LOADED = {};    // monthKey -> true once a successful load completed
 
-async function loadTimeSlotsCache() {
-    if (TIME_SLOTS_CACHE_LOADING) return TIME_SLOTS_CACHE_LOADING;
-    TIME_SLOTS_CACHE_LOADING = (async () => {
+function _currentAttendanceMonthKey() {
+    // attendanceCurrentYear/Month are top-level `let`s declared further down the file.
+    // Use a try/catch to dodge the temporal dead zone during boot.
+    try {
+        if (typeof attendanceCurrentYear === 'number' && typeof attendanceCurrentMonth === 'number') {
+            return `${attendanceCurrentYear}-${String(attendanceCurrentMonth + 1).padStart(2, '0')}`;
+        }
+    } catch (_) { /* TDZ */ }
+    const d = new Date();
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+}
+
+function _monthKeyFromYM(year, month) {
+    return `${year}-${String(month + 1).padStart(2, '0')}`;
+}
+
+function _monthEndDate(year, month) {
+    const lastDay = new Date(year, month + 1, 0).getDate();
+    return `${year}-${String(month + 1).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`;
+}
+
+async function loadTimeSlotsCache(year, month) {
+    // Default to attendance view month if globals are initialized, else today.
+    let targetYear = year;
+    let targetMonth = month;
+    if (targetYear === undefined || targetMonth === undefined) {
         try {
+            if (typeof attendanceCurrentYear === 'number' && typeof attendanceCurrentMonth === 'number') {
+                targetYear = attendanceCurrentYear;
+                targetMonth = attendanceCurrentMonth;
+            }
+        } catch (_) { /* TDZ */ }
+        if (targetYear === undefined || targetMonth === undefined) {
+            const d = new Date();
+            targetYear = d.getFullYear();
+            targetMonth = d.getMonth();
+        }
+    }
+    const monthKey = _monthKeyFromYM(targetYear, targetMonth);
+    const monthEnd = _monthEndDate(targetYear, targetMonth);
+
+    if (TIME_SLOTS_CACHE_LOADING[monthKey]) return TIME_SLOTS_CACHE_LOADING[monthKey];
+    if (TIME_SLOTS_CACHE && TIME_SLOTS_CACHE_LOADED[monthKey]) return TIME_SLOTS_CACHE;
+
+    TIME_SLOTS_CACHE_LOADING[monthKey] = (async () => {
+        try {
+            // Load all versions whose effective_from <= the displayed month's last day,
+            // then keep only the latest version per (branch, coach, schedule, slot_index).
             const { data, error } = await window.supabaseClient
                 .from('time_slots')
                 .select(`
-                    id, schedule_type, slot_index, start_time, end_time, label,
+                    id, branch_id, coach_id, schedule_type, slot_index,
+                    start_time, end_time, label, effective_from,
                     branches!inner(name),
                     coaches!time_slots_coach_id_fkey(first_name, last_name)
                 `)
+                .lte('effective_from', monthEnd)
+                .order('branch_id')
+                .order('coach_id')
                 .order('schedule_type')
-                .order('slot_index');
+                .order('slot_index')
+                .order('effective_from', { ascending: false });
             if (error) throw error;
-            const cache = {};
+
+            if (TIME_SLOTS_CACHE === null) TIME_SLOTS_CACHE = {};
+
+            // Drop any previously cached entries for this month (we're refreshing it).
+            for (const k of Object.keys(TIME_SLOTS_CACHE)) {
+                if (k.endsWith(`|${monthKey}`)) delete TIME_SLOTS_CACHE[k];
+            }
+
+            const seenSlot = new Set();
             const fmt = (t) => {
                 const [h, m] = t.split(':');
                 return `${parseInt(h, 10)}:${m}`;
             };
             for (const row of data || []) {
+                const slotKey = `${row.branch_id}|${row.coach_id}|${row.schedule_type}|${row.slot_index}`;
+                if (seenSlot.has(slotKey)) continue; // earlier (later effective_from) wins
+                seenSlot.add(slotKey);
                 const branchName = (row.branches?.name || '').toLowerCase();
                 const coachFirst = row.coaches?.first_name || '';
                 const coachLast = row.coaches?.last_name || '';
                 const coachName = `${coachFirst} ${coachLast}`.trim().toLowerCase();
-                const key = `${branchName}|${coachName}|${row.schedule_type}`;
-                if (!cache[key]) cache[key] = [];
-                cache[key].push({
+                const cacheKey = `${branchName}|${coachName}|${row.schedule_type}|${monthKey}`;
+                if (!TIME_SLOTS_CACHE[cacheKey]) TIME_SLOTS_CACHE[cacheKey] = [];
+                TIME_SLOTS_CACHE[cacheKey].push({
                     id: row.id,
                     time: `${fmt(row.start_time)}-${fmt(row.end_time)}`,
                     label: row.label,
                     slotIndex: row.slot_index
                 });
             }
-            for (const k of Object.keys(cache)) cache[k].sort((a, b) => a.slotIndex - b.slotIndex);
-            TIME_SLOTS_CACHE = cache;
-            console.log('[time_slots] cache loaded:', Object.keys(cache).length, 'buckets');
-            return cache;
+            for (const k of Object.keys(TIME_SLOTS_CACHE)) {
+                if (k.endsWith(`|${monthKey}`)) {
+                    TIME_SLOTS_CACHE[k].sort((a, b) => a.slotIndex - b.slotIndex);
+                }
+            }
+            TIME_SLOTS_CACHE_LOADED[monthKey] = true;
+            const bucketCount = Object.keys(TIME_SLOTS_CACHE).filter(k => k.endsWith(`|${monthKey}`)).length;
+            console.log('[time_slots] cache loaded for', monthKey, ':', bucketCount, 'buckets');
+            return TIME_SLOTS_CACHE;
         } catch (err) {
-            console.error('[time_slots] cache load failed; falling back to hard-coded arrays', err);
-            TIME_SLOTS_CACHE = {};
+            console.error('[time_slots] cache load failed for', monthKey, '; falling back to hard-coded arrays', err);
+            if (TIME_SLOTS_CACHE === null) TIME_SLOTS_CACHE = {};
             return TIME_SLOTS_CACHE;
         } finally {
-            TIME_SLOTS_CACHE_LOADING = null;
+            delete TIME_SLOTS_CACHE_LOADING[monthKey];
         }
     })();
-    return TIME_SLOTS_CACHE_LOADING;
+    return TIME_SLOTS_CACHE_LOADING[monthKey];
 }
 
-async function reloadTimeSlotsCache() {
-    TIME_SLOTS_CACHE = null;
-    TIME_SLOTS_CACHE_LOADING = null;
-    return loadTimeSlotsCache();
+async function reloadTimeSlotsCache(year, month) {
+    // Invalidate just the target month (defaults to current attendance month).
+    let targetYear = year;
+    let targetMonth = month;
+    if (targetYear === undefined || targetMonth === undefined) {
+        try {
+            if (typeof attendanceCurrentYear === 'number' && typeof attendanceCurrentMonth === 'number') {
+                targetYear = attendanceCurrentYear;
+                targetMonth = attendanceCurrentMonth;
+            }
+        } catch (_) { /* TDZ */ }
+        if (targetYear === undefined || targetMonth === undefined) {
+            const d = new Date();
+            targetYear = d.getFullYear();
+            targetMonth = d.getMonth();
+        }
+    }
+    const monthKey = _monthKeyFromYM(targetYear, targetMonth);
+    delete TIME_SLOTS_CACHE_LOADED[monthKey];
+    delete TIME_SLOTS_CACHE_LOADING[monthKey];
+    if (TIME_SLOTS_CACHE) {
+        for (const k of Object.keys(TIME_SLOTS_CACHE)) {
+            if (k.endsWith(`|${monthKey}`)) delete TIME_SLOTS_CACHE[k];
+        }
+    }
+    return loadTimeSlotsCache(targetYear, targetMonth);
 }
 window.reloadTimeSlotsCache = reloadTimeSlotsCache;
 
-function getTimeSlotLabel(branchName, scheduleType, coachName, timeString) {
+function getTimeSlotLabel(branchName, scheduleType, coachName, timeString, monthKey) {
     if (!TIME_SLOTS_CACHE) return null;
-    const key = `${(branchName || '').toLowerCase()}|${(coachName || '').toLowerCase()}|${scheduleType}`;
+    const mk = monthKey || _currentAttendanceMonthKey();
+    const key = `${(branchName || '').toLowerCase()}|${(coachName || '').toLowerCase()}|${scheduleType}|${mk}`;
     const bucket = TIME_SLOTS_CACHE[key];
     if (!bucket) return null;
     const match = bucket.find(s => s.time === timeString);
@@ -5534,9 +5624,10 @@ function getTimeSlotLabel(branchName, scheduleType, coachName, timeString) {
 }
 window.getTimeSlotLabel = getTimeSlotLabel;
 
-function getTimeSlotIdForTime(branchName, scheduleType, coachName, timeString) {
+function getTimeSlotIdForTime(branchName, scheduleType, coachName, timeString, monthKey) {
     if (!TIME_SLOTS_CACHE) return null;
-    const key = `${(branchName || '').toLowerCase()}|${(coachName || '').toLowerCase()}|${scheduleType}`;
+    const mk = monthKey || _currentAttendanceMonthKey();
+    const key = `${(branchName || '').toLowerCase()}|${(coachName || '').toLowerCase()}|${scheduleType}|${mk}`;
     const bucket = TIME_SLOTS_CACHE[key];
     if (!bucket) return null;
     const match = bucket.find(s => s.time === timeString);
@@ -5563,7 +5654,8 @@ function openEditTimeSlotModal(timeSlot) {
         alert(t('admin.attendance.editTimeSlot.notAvailable') || 'This slot has no DB id (likely a fallback row). Edits are not available yet.');
         return;
     }
-    const key = `${(attendanceCurrentBranch || '').toLowerCase()}|${(attendanceCurrentCoachName || '').toLowerCase()}|${attendanceCurrentSchedule}`;
+    const monthKey = _currentAttendanceMonthKey();
+    const key = `${(attendanceCurrentBranch || '').toLowerCase()}|${(attendanceCurrentCoachName || '').toLowerCase()}|${attendanceCurrentSchedule}|${monthKey}`;
     const bucket = TIME_SLOTS_CACHE?.[key] || [];
     const row = bucket.find(s => s.id === id);
 
@@ -5578,6 +5670,21 @@ function openEditTimeSlotModal(timeSlot) {
     document.getElementById('editTimeSlotEnd').value = padTime(endStr);
     document.getElementById('editTimeSlotLabel').value = row?.label || '';
     document.getElementById('editTimeSlotError').style.display = 'none';
+
+    // UX guard: tell the user which month the change applies to (P5).
+    const noteEl = document.getElementById('editTimeSlotEffectiveFromNote');
+    if (noteEl) {
+        const lang = (typeof getLanguage === 'function') ? getLanguage() : 'en';
+        const monthNames = lang === 'ru'
+            ? ['Январь', 'Февраль', 'Март', 'Апрель', 'Май', 'Июнь', 'Июль', 'Август', 'Сентябрь', 'Октябрь', 'Ноябрь', 'Декабрь']
+            : lang === 'kk'
+            ? ['Қаңтар', 'Ақпан', 'Наурыз', 'Сәуір', 'Мамыр', 'Маусым', 'Шілде', 'Тамыз', 'Қыркүйек', 'Қазан', 'Қараша', 'Желтоқсан']
+            : ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+        const monthLabel = `${monthNames[attendanceCurrentMonth]} ${attendanceCurrentYear}`;
+        const tpl = t('admin.attendance.editTimeSlot.effectiveFromNote') ||
+            'Changes apply to {month} onward. Previous months remain unchanged.';
+        noteEl.textContent = tpl.replace('{month}', monthLabel);
+    }
 
     editingTimeSlotContext = {
         id,
@@ -5597,6 +5704,7 @@ function closeEditTimeSlotModal() {
 }
 window.closeEditTimeSlotModal = closeEditTimeSlotModal;
 
+// NEVER .update() time_slots directly — use edit_time_slot_versioned RPC. See migration 049.
 async function saveTimeSlotEdit() {
     const errEl = document.getElementById('editTimeSlotError');
     errEl.style.display = 'none';
@@ -5618,23 +5726,26 @@ async function saveTimeSlotEdit() {
         return;
     }
 
+    // Effective-from = first day of the displayed attendance month. Past months
+    // viewed via the calendar continue to render the previous version; only the
+    // displayed month onward sees this change.
+    const currentMonthStart = `${attendanceCurrentYear}-${String(attendanceCurrentMonth + 1).padStart(2, '0')}-01`;
+
     try {
         const { data, error } = await window.supabaseClient
-            .from('time_slots')
-            .update({
-                start_time: `${startVal}:00`,
-                end_time:   `${endVal}:00`,
-                label: labelVal || null,
-                updated_at: new Date().toISOString()
-            })
-            .eq('id', id)
-            .select();
+            .rpc('edit_time_slot_versioned', {
+                p_slot_id: id,
+                p_start: `${startVal}:00`,
+                p_end:   `${endVal}:00`,
+                p_label: labelVal || null,
+                p_effective_from: currentMonthStart
+            });
         if (error) throw error;
-        if (!data || data.length === 0) {
+        if (!data) {
             throw new Error(t('admin.attendance.editTimeSlot.errPermission') || 'You do not have permission to edit this slot. Contact an admin.');
         }
 
-        await window.reloadTimeSlotsCache();
+        await window.reloadTimeSlotsCache(attendanceCurrentYear, attendanceCurrentMonth);
         closeEditTimeSlotModal();
         if (typeof renderAttendanceCalendar === 'function') {
             renderAttendanceCalendar();
@@ -5916,13 +6027,16 @@ function getStudentsForTimeSlot(slotIndex, filteredData) {
     return filteredData.filter(student => student.time_slot_index === slotIndex);
 }
 
-// Get time slots for a specific branch, schedule type, and coach
-// Saturday-Sunday has shorter hours (last slot 13:00-14:00) for ALL branches
-function getTimeSlotsForBranch(branchName, scheduleType = null, coachName = null) {
-    // DB-driven path (P2): if cache is loaded and the (branch|coach|schedule) bucket
-    // exists, return its times. Falls through to the hard-coded switch on any miss.
+// Get time slots for a specific branch, schedule type, and coach.
+// `monthKey` is "YYYY-MM" and selects which versioned slots to return; defaults
+// to the displayed attendance month. Saturday-Sunday has shorter hours (last
+// slot 13:00-14:00) for ALL branches in the hard-coded fallback.
+function getTimeSlotsForBranch(branchName, scheduleType = null, coachName = null, monthKey = null) {
+    // DB-driven path (P2 + versioning in migration 049). Falls through to the
+    // hard-coded switch on any miss.
     if (TIME_SLOTS_CACHE && branchName && scheduleType && coachName) {
-        const key = `${branchName.toLowerCase()}|${coachName.toLowerCase()}|${scheduleType}`;
+        const mk = monthKey || _currentAttendanceMonthKey();
+        const key = `${branchName.toLowerCase()}|${coachName.toLowerCase()}|${scheduleType}|${mk}`;
         const bucket = TIME_SLOTS_CACHE[key];
         if (bucket && bucket.length > 0) {
             return bucket.map(s => s.time);
@@ -7058,8 +7172,11 @@ async function loadAttendanceData() {
             ? attendanceCurrentSchedule
             : null;
 
-        // Run all independent API calls in parallel for faster loading
-        const [scheduleAssignmentsResult, calendarDataResult, timeSlotAssignmentsResult, statsResult, alertsResult] = await Promise.allSettled([
+        // Run all independent API calls in parallel for faster loading.
+        // loadTimeSlotsCache(year, month) fetches the version set effective for
+        // the displayed month — so navigating to a past month shows that month's
+        // labels/times, not today's. See migration 049.
+        const [scheduleAssignmentsResult, calendarDataResult, timeSlotAssignmentsResult, statsResult, alertsResult, _slotsResult] = await Promise.allSettled([
             loadStudentScheduleAssignments(branchObj.id),
             window.supabaseData?.getAttendanceCalendarData?.(
                 branchObj.id,
@@ -7071,7 +7188,8 @@ async function loadAttendanceData() {
             // Load saved time slot assignments from database
             scheduleFilter ? window.supabaseData?.getTimeSlotAssignments?.(branchObj.id, scheduleFilter) : Promise.resolve([]),
             loadAttendanceStats(branchObj.id),
-            loadLowAttendanceAlerts(branchObj.id)
+            loadLowAttendanceAlerts(branchObj.id),
+            loadTimeSlotsCache(attendanceCurrentYear, attendanceCurrentMonth)
         ]);
 
         // Process calendar data result
