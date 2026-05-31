@@ -10143,7 +10143,8 @@ async function exportRatingsExcel() {
         const { data, error } = await window.supabaseClient
             .from('students')
             .select('first_name, last_name, status, student_current_ratings(rating, rating_date)')
-            .in('status', ['active', 'frozen']);
+            .in('status', ['active', 'frozen'])
+            .range(0, 9999);
 
         if (error) throw error;
         if (!data || data.length === 0) {

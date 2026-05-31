@@ -25,7 +25,8 @@ const supabaseData = {
                 branch:branches(id, name, location),
                 coach:coaches(id, first_name, last_name)
             `)
-            .order('created_at', { ascending: false });
+            .order('created_at', { ascending: false })
+            .range(0, 9999);
 
         if (error) {
             console.error('Error fetching students:', error);
