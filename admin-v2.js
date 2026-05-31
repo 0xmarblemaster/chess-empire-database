@@ -6748,158 +6748,6 @@ function onAttendanceCoachChange() {
     loadAttendanceData();
 }
 
-// ========== Global Student Search ==========
-
-function handleGlobalStudentSearch(query) {
-    const resultsDiv = document.getElementById('globalSearchResults');
-    const clearBtn = document.getElementById('globalSearchClear');
-    if (!resultsDiv) return;
-
-    if (clearBtn) clearBtn.style.display = query.length > 0 ? 'block' : 'none';
-
-    if (!query || query.length < 2) {
-        resultsDiv.style.display = 'none';
-        return;
-    }
-
-    const q = query.toLowerCase().trim();
-    const students = window.students || [];
-    const matches = students.filter(s => {
-        const fullName = `${s.firstName || ''} ${s.lastName || ''}`.toLowerCase();
-        return fullName.includes(q);
-    }).slice(0, 15);
-
-    if (matches.length === 0) {
-        resultsDiv.innerHTML = '<div style="padding: 1rem; text-align: center; color: #94a3b8; font-size: 0.875rem;">Ученик не найден</div>';
-        resultsDiv.style.display = 'block';
-        return;
-    }
-
-    resultsDiv.innerHTML = matches.map(s => {
-        const branchName = i18n?.translateBranchName?.(s.branch) || s.branch || '—';
-        const coachName = s.coach || '—';
-        return `<div onmousedown="navigateToGlobalStudent('${s.id}')" style="padding: 0.75rem 1rem; cursor: pointer; border-bottom: 1px solid #f1f5f9; transition: background 0.15s;"
-            onmouseover="this.style.background='#fef2f2'" onmouseout="this.style.background='white'">
-            <div style="font-weight: 500; color: #1e293b; font-size: 0.9375rem;">${s.firstName} ${s.lastName}</div>
-            <div style="font-size: 0.8125rem; color: #64748b; margin-top: 2px;">${branchName} · ${coachName}</div>
-        </div>`;
-    }).join('');
-    resultsDiv.style.display = 'block';
-}
-
-function clearGlobalSearch() {
-    const input = document.getElementById('globalStudentSearchInput');
-    const resultsDiv = document.getElementById('globalSearchResults');
-    const clearBtn = document.getElementById('globalSearchClear');
-    if (input) input.value = '';
-    if (resultsDiv) resultsDiv.style.display = 'none';
-    if (clearBtn) clearBtn.style.display = 'none';
-}
-
-async function navigateToGlobalStudent(studentId) {
-    const student = (window.students || []).find(s => String(s.id) === String(studentId));
-    if (!student) return;
-
-    clearGlobalSearch();
-
-    // Resolve role (cached) so the lock applies to deep-link navigation too.
-    await loadAttendanceRoleInfo();
-    const coachLocked = window.attendanceRoleLock &&
-        window.attendanceRoleLock.isCoachLocked(attendanceRoleInfo);
-
-    // Set branch — but for coaches, do not auto-jump to a branch they aren't
-    // assigned to in coach_branches.
-    const branchSelect = document.getElementById('attendanceBranchFilter');
-    if (branchSelect && student.branch) {
-        let canSwitchBranch = true;
-        if (coachLocked) {
-            const allowedBranches = window.attendanceRoleLock.coachAllowedBranchNames(
-                attendanceRoleInfo, window.coaches
-            );
-            canSwitchBranch = Array.isArray(allowedBranches)
-                && allowedBranches.includes(student.branch);
-        }
-        if (canSwitchBranch) {
-            attendanceCurrentBranch = student.branch;
-            branchSelect.value = student.branch;
-        }
-    }
-
-    // Populate coach dropdown for this branch
-    populateAttendanceCoachDropdown();
-
-    // Coach lock: keep the filter pinned to the coach's own id.
-    if (coachLocked) {
-        attendanceCurrentCoach = attendanceRoleInfo.coachId;
-        const lockedCoach = window.coaches?.find(c => c.id === attendanceRoleInfo.coachId);
-        attendanceCurrentCoachName = lockedCoach
-            ? `${lockedCoach.firstName} ${lockedCoach.lastName}`
-            : null;
-    } else if (student.coachId && window.coaches) {
-        const coach = window.coaches.find(c => c.id === student.coachId);
-        if (coach) {
-            attendanceCurrentCoach = coach.id;
-            const coachSelect = document.getElementById('attendanceCoachFilter');
-            if (coachSelect) coachSelect.value = coach.id;
-            attendanceCurrentCoachName = `${coach.firstName} ${coach.lastName}`;
-        } else {
-            attendanceCurrentCoach = 'all';
-        }
-    } else if (student.coach && window.coaches) {
-        const coach = window.coaches.find(c => `${c.firstName} ${c.lastName}` === student.coach);
-        if (coach) {
-            attendanceCurrentCoach = coach.id;
-            const coachSelect = document.getElementById('attendanceCoachFilter');
-            if (coachSelect) coachSelect.value = coach.id;
-            attendanceCurrentCoachName = student.coach;
-        } else {
-            attendanceCurrentCoach = 'all';
-        }
-    } else {
-        attendanceCurrentCoach = 'all';
-    }
-
-    // Reset schedule to show all initially (needed to load schedule assignments)
-    attendanceCurrentSchedule = '';
-    const scheduleSelect = document.getElementById('attendanceScheduleFilter');
-    if (scheduleSelect) scheduleSelect.value = '';
-
-    populateAttendanceScheduleDropdown();
-    populateAttendanceTimeSlots();
-    saveAttendanceFilterState();
-
-    // First load to populate schedule assignments
-    await loadAttendanceData();
-
-    // Now look up the student's actual schedule and reload with it selected
-    const studentSchedule = attendanceStudentScheduleAssignments?.[studentId];
-    if (studentSchedule) {
-        attendanceCurrentSchedule = studentSchedule;
-        const schSelect = document.getElementById('attendanceScheduleFilter');
-        if (schSelect) schSelect.value = studentSchedule;
-        const mobileSchSelect = document.getElementById('mobileScheduleFilter');
-        if (mobileSchSelect) mobileSchSelect.value = studentSchedule;
-        saveAttendanceFilterState();
-        await loadAttendanceData();
-    }
-
-    // Scroll to and highlight the student row
-    setTimeout(() => {
-        const rows = document.querySelectorAll('.attendance-student-name, .attendance-row, [data-student-id]');
-        for (const row of rows) {
-            if (row.dataset?.studentId === String(studentId) ||
-                row.textContent?.includes(student.firstName + ' ' + student.lastName)) {
-                const targetRow = row.closest('tr') || row.closest('.attendance-row') || row;
-                targetRow.scrollIntoView({ behavior: 'smooth', block: 'center' });
-                targetRow.style.transition = 'background 0.3s';
-                targetRow.style.background = '#fce7f3';
-                setTimeout(() => { targetRow.style.background = ''; }, 3000);
-                break;
-            }
-        }
-    }, 500);
-}
-
 // Mobile filter handlers - sync with desktop filters
 function onMobileAttendanceBranchChange() {
     const mobileSelect = document.getElementById('mobileBranchFilter');
@@ -8503,8 +8351,10 @@ async function toggleAttendanceCheckbox(studentId, dateStr, cell) {
 // Global variable for dropdown state
 let attendanceSearchDropdownVisible = false;
 
-// Handle attendance search dropdown - shows matching students in dropdown
-function handleAttendanceSearchDropdown(query) {
+// Handle attendance search dropdown — searches ALL students school-wide via
+// window.students (not the currently-loaded calendar slice). Coaches see only
+// students in branches they're assigned to; admins see all.
+async function handleAttendanceSearchDropdown(query) {
     const dropdown = document.getElementById('attendanceSearchDropdown');
     if (!dropdown) return;
 
@@ -8517,46 +8367,55 @@ function handleAttendanceSearchDropdown(query) {
 
     const searchLower = query.toLowerCase().trim();
 
-    // Get all students from current calendar data
-    const allStudents = attendanceCalendarData || [];
+    // Resolve role so the coach-lock filter applies to search results too.
+    await loadAttendanceRoleInfo();
+    const coachLocked = window.attendanceRoleLock &&
+        window.attendanceRoleLock.isCoachLocked(attendanceRoleInfo);
+    const allowedBranches = coachLocked
+        ? window.attendanceRoleLock.coachAllowedBranchNames(attendanceRoleInfo, window.coaches)
+        : null;
 
-    // Filter by schedule assignment (same as calendar logic)
-    let searchableStudents = allStudents;
-    if (attendanceCurrentSchedule && attendanceCurrentSchedule !== 'all' && attendanceCurrentSchedule !== '') {
-        searchableStudents = allStudents.filter(student => {
-            const assignedSchedule = attendanceStudentScheduleAssignments[student.id];
-            return !assignedSchedule || assignedSchedule === attendanceCurrentSchedule;
-        });
-    }
+    const allStudents = Array.isArray(window.students) ? window.students : [];
 
-    // Find matching students
-    const matches = searchableStudents.filter(student => {
-        const fullName = `${student.first_name || ''} ${student.last_name || ''}`.toLowerCase();
+    // Coach-lock filter: only students whose branch is in coach's allowed list.
+    const scoped = coachLocked
+        ? allStudents.filter(s => Array.isArray(allowedBranches) && allowedBranches.includes(s.branch))
+        : allStudents;
+
+    const matches = scoped.filter(s => {
+        const fullName = `${s.firstName || ''} ${s.lastName || ''}`.toLowerCase();
         return fullName.includes(searchLower);
     });
 
-    // Render dropdown
     if (matches.length === 0) {
         dropdown.innerHTML = `<div class="attendance-search-no-results">${t('admin.attendance.noStudentsFound') || 'No students found'}</div>`;
     } else {
-        // Limit to first 10 matches for performance
         const displayMatches = matches.slice(0, 10);
-        dropdown.innerHTML = displayMatches.map(student => {
-            const timeSlotIndex = student.time_slot_index ?? 0;
-            const timeSlots = getTimeSlotsForBranch(attendanceCurrentBranch, attendanceCurrentSchedule, attendanceCurrentCoachName);
-            const timeSlotLabel = timeSlots[timeSlotIndex] || `Slot ${timeSlotIndex + 1}`;
-
+        const branches = Array.isArray(window.branches) ? window.branches : [];
+        const coaches = Array.isArray(window.coaches) ? window.coaches : [];
+        dropdown.innerHTML = displayMatches.map(s => {
+            const branchName = s.branch
+                || branches.find(b => b.id === s.branchId)?.name
+                || '—';
+            const coachName = s.coach
+                || (() => {
+                    const c = coaches.find(c => c.id === s.coachId);
+                    return c ? `${c.firstName || ''} ${c.lastName || ''}`.trim() : '—';
+                })();
+            const translatedBranch = (typeof i18n !== 'undefined' && i18n.translateBranchName)
+                ? i18n.translateBranchName(branchName)
+                : branchName;
             return `
                 <div class="attendance-search-result"
-                     onclick="navigateToAttendanceStudent('${student.id}', ${timeSlotIndex})">
-                    <span class="attendance-search-result-name">${student.first_name} ${student.last_name}</span>
-                    <span class="attendance-search-result-slot">${timeSlotLabel}</span>
+                     onmousedown="navigateToAttendanceStudent('${s.id}')">
+                    <span class="attendance-search-result-name">${s.firstName || ''} ${s.lastName || ''}</span>
+                    <span class="attendance-search-result-slot">${translatedBranch} · ${coachName}</span>
                 </div>
             `;
         }).join('');
 
         if (matches.length > 10) {
-            dropdown.innerHTML += `<div class="attendance-search-more">+${matches.length - 10} more...</div>`;
+            dropdown.innerHTML += `<div class="attendance-search-more">+${matches.length - 10} ${t('admin.attendance.more') || 'more'}...</div>`;
         }
     }
 
@@ -8579,35 +8438,112 @@ function handleAttendanceSearch(query) {
     handleAttendanceSearchDropdown(query);
 }
 
-// Navigate to a specific student in the attendance calendar
-function navigateToAttendanceStudent(studentId, timeSlotIndex) {
-    // 1. Close dropdown
+// Navigate to a student from the global search dropdown. Auto-switches branch,
+// coach, schedule, and time slot, expands the slot group, scrolls and applies
+// the standard yellow pulse highlight.
+async function navigateToAttendanceStudent(studentId) {
+    // 1. Close dropdown + clear input
     const dropdown = document.getElementById('attendanceSearchDropdown');
     if (dropdown) {
         dropdown.style.display = 'none';
     }
     attendanceSearchDropdownVisible = false;
-
-    // 2. Clear search input
     const searchInput = document.getElementById('attendanceStudentSearch');
     if (searchInput) {
         searchInput.value = '';
     }
 
-    // 3. Expand the time slot group if collapsed
-    const slotId = `slot-${timeSlotIndex}`;
-    if (!attendanceExpandedSlots[slotId]) {
-        attendanceExpandedSlots[slotId] = true;
+    const student = (window.students || []).find(s => String(s.id) === String(studentId));
+    if (!student) return;
+
+    // 2. Resolve role and apply coach-lock guardrails.
+    await loadAttendanceRoleInfo();
+    const coachLocked = window.attendanceRoleLock &&
+        window.attendanceRoleLock.isCoachLocked(attendanceRoleInfo);
+
+    // 3. Branch switch
+    if (coachLocked) {
+        const allowedBranches = window.attendanceRoleLock.coachAllowedBranchNames(
+            attendanceRoleInfo, window.coaches
+        );
+        if (!Array.isArray(allowedBranches) || !allowedBranches.includes(student.branch)) {
+            if (typeof showToast === 'function') {
+                showToast(
+                    t('admin.attendance.searchOutOfScope') || 'This student is outside your assigned branches',
+                    'error'
+                );
+            }
+            return;
+        }
+    }
+    if (student.branch) {
+        attendanceCurrentBranch = student.branch;
+        const branchSelect = document.getElementById('attendanceBranchFilter');
+        if (branchSelect) branchSelect.value = student.branch;
+        const mobileBranchSelect = document.getElementById('mobileBranchFilter');
+        if (mobileBranchSelect) mobileBranchSelect.value = student.branch;
+    }
+
+    // 4. Coach switch — locked coaches stay pinned to self.
+    populateAttendanceCoachDropdown();
+    if (coachLocked) {
+        attendanceCurrentCoach = attendanceRoleInfo.coachId;
+        const lockedCoach = window.coaches?.find(c => c.id === attendanceRoleInfo.coachId);
+        attendanceCurrentCoachName = lockedCoach
+            ? `${lockedCoach.firstName} ${lockedCoach.lastName}`
+            : null;
+    } else if (student.coachId && Array.isArray(window.coaches)) {
+        const coach = window.coaches.find(c => c.id === student.coachId);
+        if (coach) {
+            attendanceCurrentCoach = coach.id;
+            attendanceCurrentCoachName = `${coach.firstName} ${coach.lastName}`;
+        } else {
+            attendanceCurrentCoach = 'all';
+            attendanceCurrentCoachName = null;
+        }
+    } else {
+        attendanceCurrentCoach = 'all';
+        attendanceCurrentCoachName = null;
+    }
+    const coachSelect = document.getElementById('attendanceCoachFilter');
+    if (coachSelect) coachSelect.value = attendanceCurrentCoach;
+    const mobileCoachSelect = document.getElementById('mobileCoachFilter');
+    if (mobileCoachSelect) mobileCoachSelect.value = attendanceCurrentCoach;
+
+    // 5. Reset schedule to load schedule assignments first.
+    attendanceCurrentSchedule = '';
+    const scheduleSelect = document.getElementById('attendanceScheduleFilter');
+    if (scheduleSelect) scheduleSelect.value = '';
+    const mobileScheduleSelect = document.getElementById('mobileScheduleFilter');
+    if (mobileScheduleSelect) mobileScheduleSelect.value = '';
+    populateAttendanceScheduleDropdown();
+    populateAttendanceTimeSlots();
+    saveAttendanceFilterState();
+    await loadAttendanceData();
+
+    // 6. Now look up the student's actual schedule and reload with it selected.
+    const studentSchedule = attendanceStudentScheduleAssignments?.[studentId];
+    if (studentSchedule) {
+        attendanceCurrentSchedule = studentSchedule;
+        if (scheduleSelect) scheduleSelect.value = studentSchedule;
+        if (mobileScheduleSelect) mobileScheduleSelect.value = studentSchedule;
+        saveAttendanceFilterState();
+        await loadAttendanceData();
+    }
+
+    // 7. Expand the student's time slot group.
+    const calendarEntry = (attendanceCalendarData || []).find(s => String(s.id) === String(studentId));
+    const timeSlotIndex = calendarEntry?.time_slot_index;
+    if (timeSlotIndex !== undefined && timeSlotIndex !== null) {
+        attendanceExpandedSlots[`slot-${timeSlotIndex}`] = true;
         renderAttendanceCalendar();
     }
 
-    // 4. Scroll to the student row and highlight
+    // 8. Scroll to the student row and apply 2s yellow pulse.
     setTimeout(() => {
         const studentRow = document.querySelector(`tr[data-student-id="${studentId}"]`);
         if (studentRow) {
             studentRow.scrollIntoView({ behavior: 'smooth', block: 'center' });
-
-            // Add highlight animation
             studentRow.classList.add('attendance-row-highlight');
             setTimeout(() => {
                 studentRow.classList.remove('attendance-row-highlight');
