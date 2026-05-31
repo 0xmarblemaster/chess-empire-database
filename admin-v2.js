@@ -7185,8 +7185,9 @@ async function loadAttendanceData() {
                 attendanceCurrentMonth + 1,
                 attendanceCurrentCoach === 'all' ? null : attendanceCurrentCoach
             ),
-            // Load saved time slot assignments from database
-            scheduleFilter ? window.supabaseData?.getTimeSlotAssignments?.(branchObj.id, scheduleFilter) : Promise.resolve([]),
+            // Load saved time slot assignments resolved to the displayed month
+            // (effective-dating from migration 051 — past months see prior versions).
+            scheduleFilter ? window.supabaseData?.getTimeSlotAssignments?.(branchObj.id, scheduleFilter, attendanceCurrentYear, attendanceCurrentMonth) : Promise.resolve([]),
             loadAttendanceStats(branchObj.id),
             loadLowAttendanceAlerts(branchObj.id),
             loadTimeSlotsCache(attendanceCurrentYear, attendanceCurrentMonth)
@@ -8959,15 +8960,26 @@ document.addEventListener('click', (event) => {
     }
 });
 
-// Delete student from attendance calendar (removes from current view and deletes all attendance records)
+// Hide a student from the attendance calendar from the displayed month onward.
+// Past months keep their schedule and attendance.
+// NEVER .delete() attendance rows or .update({time_slot_index: -1}) directly
+// from this path — both retroactively rewrite history. Use the
+// hide_student_versioned RPC from migration 051 (see also
+// PRD_STUDENT_ASSIGNMENTS_VERSIONING.md).
 async function deleteStudentFromCalendar(studentId, studentName) {
-    // Show confirmation dialog
-    const message = t('admin.attendance.confirmDeleteStudent', { name: studentName }) ||
-                    `Are you sure you want to remove "${studentName}" from this attendance calendar? This will delete all their attendance records for this branch.`;
+    const lang = (typeof getLanguage === 'function') ? getLanguage() : 'en';
+    const monthNames = lang === 'ru'
+        ? ['Январь', 'Февраль', 'Март', 'Апрель', 'Май', 'Июнь', 'Июль', 'Август', 'Сентябрь', 'Октябрь', 'Ноябрь', 'Декабрь']
+        : lang === 'kk'
+        ? ['Қаңтар', 'Ақпан', 'Наурыз', 'Сәуір', 'Мамыр', 'Маусым', 'Шілде', 'Тамыз', 'Қыркүйек', 'Қазан', 'Қараша', 'Желтоқсан']
+        : ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+    const monthLabel = `${monthNames[attendanceCurrentMonth]} ${attendanceCurrentYear}`;
+
+    const message = t('admin.attendance.confirmHideStudent', { name: studentName, month: monthLabel }) ||
+                    `Hide "${studentName}" from ${monthLabel} onward? Previous months will keep their schedule.`;
 
     showDeleteConfirmation(message, async () => {
         try {
-            // Find student in calendar data
             const studentIndex = attendanceCalendarData.findIndex(s => s.id === studentId);
             if (studentIndex === -1) {
                 console.error('Student not found in calendar data:', studentId);
@@ -8975,70 +8987,45 @@ async function deleteStudentFromCalendar(studentId, studentName) {
                 return;
             }
 
-            const student = attendanceCalendarData[studentIndex];
-
-            // Delete all attendance records for this student in the current branch
-            if (student.attendance && student.attendance.length > 0 && window.supabaseData) {
-                // Get all attendance record IDs
-                const attendanceIds = student.attendance
-                    .filter(a => a.id)
-                    .map(a => a.id);
-
-                if (attendanceIds.length > 0) {
-                    // Delete from database in batch
-                    const { error } = await window.supabaseClient
-                        .from('attendance')
-                        .delete()
-                        .in('id', attendanceIds);
-
-                    if (error) {
-                        console.error('Error deleting attendance records:', error);
-                        showError(t('admin.attendance.deleteError') || 'Failed to delete attendance records');
-                        return;
-                    }
-                }
+            if (!attendanceCurrentBranch || !attendanceCurrentSchedule) {
+                showError(t('admin.attendance.deleteError') || 'Failed to hide student');
+                return;
             }
 
-            // Remove from local calendar data
-            attendanceCalendarData.splice(studentIndex, 1);
+            const branchObj = window.branches?.find(b => b.name === attendanceCurrentBranch);
+            if (!branchObj?.id) {
+                showError(t('admin.attendance.deleteError') || 'Failed to hide student');
+                return;
+            }
 
-            // Also remove from schedule assignments if present
+            const displayedMonthStart = `${attendanceCurrentYear}-${String(attendanceCurrentMonth + 1).padStart(2, '0')}-01`;
+
+            const { error } = await window.supabaseClient.rpc('hide_student_versioned', {
+                p_student_id: studentId,
+                p_branch_id: branchObj.id,
+                p_schedule_type: attendanceCurrentSchedule,
+                p_time_slot_index: -1,
+                p_effective_from: displayedMonthStart
+            });
+            if (error) {
+                console.error('Error hiding student via RPC:', error);
+                showError(t('admin.attendance.deleteError') || 'Failed to hide student');
+                return;
+            }
+
+            attendanceCalendarData.splice(studentIndex, 1);
             if (attendanceStudentScheduleAssignments[studentId]) {
                 delete attendanceStudentScheduleAssignments[studentId];
             }
 
-            // Mark student as deleted by saving time_slot_index = -1
-            // This ensures they stay deleted even after page refresh
-            if (window.supabaseData && attendanceCurrentBranch && attendanceCurrentSchedule) {
-                try {
-                    // Look up the branch ID from the branch name
-                    const branchObj = window.branches?.find(b => b.name === attendanceCurrentBranch);
-                    if (branchObj && branchObj.id) {
-                        // Use -1 as a special value to indicate "deleted from this schedule"
-                        await window.supabaseData.upsertTimeSlotAssignment(
-                            studentId,
-                            branchObj.id,
-                            attendanceCurrentSchedule,
-                            -1 // Special value: deleted/removed from calendar
-                        );
-                        console.log(`Marked ${studentName} as deleted (time_slot_index = -1)`);
-                    }
-                } catch (err) {
-                    console.error('Error saving deletion marker:', err);
-                    // Continue anyway - the student is already removed from local state
-                }
-            }
-
-            // Re-render calendar
             renderAttendanceCalendar();
 
-            // Show success notification
-            showSuccess(t('admin.attendance.studentDeleted', { name: studentName }) ||
-                       `"${studentName}" has been removed from the attendance calendar`);
+            showSuccess(t('admin.attendance.studentHidden', { name: studentName, month: monthLabel }) ||
+                       `"${studentName}" hidden from ${monthLabel} onward`);
 
         } catch (error) {
-            console.error('Error deleting student from calendar:', error);
-            showError(t('admin.attendance.deleteError') || 'Failed to remove student from calendar');
+            console.error('Error hiding student from calendar:', error);
+            showError(t('admin.attendance.deleteError') || 'Failed to hide student from calendar');
         }
     });
 }

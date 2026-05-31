@@ -2561,18 +2561,38 @@ const supabaseData = {
     // ============================================
 
     /**
-     * Get time slot assignments for students in a branch/schedule
+     * Get time slot assignments for students in a branch/schedule, resolved to
+     * the version effective on/before the displayed month. Mirrors the
+     * effective-dating pattern from migration 049 (time_slots) — see
+     * migration 051 and PRD_STUDENT_ASSIGNMENTS_VERSIONING.md.
+     *
      * @param {string} branchId - Branch UUID
      * @param {string} scheduleType - 'mon_wed', 'tue_thu', or 'sat_sun'
-     * @returns {Array} Array of { studentId, timeSlotIndex }
+     * @param {number} [year] - Displayed calendar year (e.g. 2026)
+     * @param {number} [month] - Displayed calendar month, 0-indexed (e.g. 4 for May)
+     * @returns {Array} Array of { studentId, timeSlotIndex } — one row per student,
+     *   carrying the slot index from the latest version with effective_from <= month-end.
      */
-    async getTimeSlotAssignments(branchId, scheduleType) {
+    async getTimeSlotAssignments(branchId, scheduleType, year, month) {
         try {
+            let monthEnd;
+            if (typeof year === 'number' && typeof month === 'number') {
+                const lastDay = new Date(year, month + 1, 0).getDate();
+                monthEnd = `${year}-${String(month + 1).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`;
+            } else {
+                const d = new Date();
+                const lastDay = new Date(d.getFullYear(), d.getMonth() + 1, 0).getDate();
+                monthEnd = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`;
+            }
+
             const { data, error } = await window.supabaseClient
                 .from('student_time_slot_assignments')
-                .select('student_id, time_slot_index')
+                .select('student_id, time_slot_index, effective_from')
                 .eq('branch_id', branchId)
-                .eq('schedule_type', scheduleType);
+                .eq('schedule_type', scheduleType)
+                .lte('effective_from', monthEnd)
+                .order('student_id')
+                .order('effective_from', { ascending: false });
 
             if (error) {
                 // Table might not exist yet - return empty silently
@@ -2580,10 +2600,18 @@ const supabaseData = {
                 return [];
             }
 
-            return data.map(d => ({
-                studentId: d.student_id,
-                timeSlotIndex: d.time_slot_index
-            }));
+            // Keep only the latest version per student (rows are sorted effective_from DESC).
+            const seen = new Set();
+            const resolved = [];
+            for (const d of data) {
+                if (seen.has(d.student_id)) continue;
+                seen.add(d.student_id);
+                resolved.push({
+                    studentId: d.student_id,
+                    timeSlotIndex: d.time_slot_index
+                });
+            }
+            return resolved;
         } catch (e) {
             // Table might not exist - return empty silently
             return [];
@@ -2599,6 +2627,11 @@ const supabaseData = {
      * @returns {Object} The upserted assignment
      */
     async upsertTimeSlotAssignment(studentId, branchId, scheduleType, timeSlotIndex) {
+        // Effective-dating: writes from non-hide paths (drag-drop, initial seeding)
+        // target the 1970-01-01 baseline row so they apply across all months
+        // historically — same semantic as before migration 051. Hiding is the
+        // only path that must use hide_student_versioned() to scope a change
+        // to a specific month onward; see deleteStudentFromCalendar in admin-v2.js.
         const { data, error } = await window.supabaseClient
             .from('student_time_slot_assignments')
             .upsert([{
@@ -2606,9 +2639,10 @@ const supabaseData = {
                 branch_id: branchId,
                 schedule_type: scheduleType,
                 time_slot_index: timeSlotIndex,
+                effective_from: '1970-01-01',
                 updated_at: new Date().toISOString()
             }], {
-                onConflict: 'student_id,branch_id,schedule_type'
+                onConflict: 'student_id,branch_id,schedule_type,effective_from'
             })
             .select()
             .single();
@@ -2642,13 +2676,14 @@ const supabaseData = {
             branch_id: a.branchId,
             schedule_type: a.scheduleType,
             time_slot_index: a.timeSlotIndex,
+            effective_from: '1970-01-01',
             updated_at: new Date().toISOString()
         }));
 
         const { data, error } = await window.supabaseClient
             .from('student_time_slot_assignments')
             .upsert(insertData, {
-                onConflict: 'student_id,branch_id,schedule_type'
+                onConflict: 'student_id,branch_id,schedule_type,effective_from'
             })
             .select();
 
