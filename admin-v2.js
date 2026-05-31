@@ -5619,7 +5619,7 @@ async function saveTimeSlotEdit() {
     }
 
     try {
-        const { error } = await window.supabaseClient
+        const { data, error } = await window.supabaseClient
             .from('time_slots')
             .update({
                 start_time: `${startVal}:00`,
@@ -5627,8 +5627,12 @@ async function saveTimeSlotEdit() {
                 label: labelVal || null,
                 updated_at: new Date().toISOString()
             })
-            .eq('id', id);
+            .eq('id', id)
+            .select();
         if (error) throw error;
+        if (!data || data.length === 0) {
+            throw new Error(t('admin.attendance.editTimeSlot.errPermission') || 'You do not have permission to edit this slot. Contact an admin.');
+        }
 
         await window.reloadTimeSlotsCache();
         closeEditTimeSlotModal();
@@ -5650,11 +5654,15 @@ async function deleteTimeSlot() {
     const errEl = document.getElementById('editTimeSlotError');
     errEl.style.display = 'none';
     try {
-        const { error } = await window.supabaseClient
+        const { data, error } = await window.supabaseClient
             .from('time_slots')
             .delete()
-            .eq('id', id);
+            .eq('id', id)
+            .select();
         if (error) throw error;
+        if (!data || data.length === 0) {
+            throw new Error(t('admin.attendance.editTimeSlot.errPermission') || 'You do not have permission to edit this slot. Contact an admin.');
+        }
         await window.reloadTimeSlotsCache();
         closeEditTimeSlotModal();
         if (typeof renderAttendanceCalendar === 'function') {
