@@ -10140,14 +10140,25 @@ async function exportRatingsExcel() {
     }
 
     try {
-        const { data, error } = await window.supabaseClient
-            .from('students')
-            .select('first_name, last_name, status, student_current_ratings(rating, rating_date)')
-            .in('status', ['active', 'frozen'])
-            .range(0, 9999);
-
-        if (error) throw error;
-        if (!data || data.length === 0) {
+        // Paginate client-side because PostgREST hard-caps responses
+        // at db-max-rows=1000 (server-side). See ops/students-1000-row-cap-20260531.md.
+        const PAGE = 1000;
+        const HARD_CEILING = 50;
+        const data = [];
+        for (let page = 0; page < HARD_CEILING; page++) {
+            const from = page * PAGE;
+            const to   = from + PAGE - 1;
+            const { data: chunk, error } = await window.supabaseClient
+                .from('students')
+                .select('first_name, last_name, status, student_current_ratings(rating, rating_date)')
+                .in('status', ['active', 'frozen'])
+                .range(from, to);
+            if (error) throw error;
+            if (!chunk || chunk.length === 0) break;
+            data.push(...chunk);
+            if (chunk.length < PAGE) break;
+        }
+        if (data.length === 0) {
             showToast(t('admin.ratings.exportEmpty'), 'info');
             return;
         }

@@ -13,28 +13,41 @@ const supabaseData = {
      * STUDENTS
      */
 
-    // Get all students
+    // Get all students.
+    // Paginates client-side because PostgREST enforces db-max-rows=1000
+    // server-side regardless of Range header / limit param. Loop fetches
+    // 1000-row pages until a short page signals end-of-data.
     async getStudents() {
-        const { data, error } = await window.supabaseClient
-            .from('students')
-            .select(`
-                id, first_name, last_name, age, date_of_birth, gender,
-                photo_url, branch_id, coach_id, razryad, status,
-                current_level, current_lesson, total_lessons,
-                parent_name, parent_phone, parent_email,
-                branch:branches(id, name, location),
-                coach:coaches(id, first_name, last_name)
-            `)
-            .order('created_at', { ascending: false })
-            .range(0, 9999);
+        const PAGE = 1000;
+        const HARD_CEILING = 50;          // refuse to loop more than 50 * 1000 = 50k rows
+        const rows = [];
+        for (let page = 0; page < HARD_CEILING; page++) {
+            const from = page * PAGE;
+            const to   = from + PAGE - 1;
+            const { data, error } = await window.supabaseClient
+                .from('students')
+                .select(`
+                    id, first_name, last_name, age, date_of_birth, gender,
+                    photo_url, branch_id, coach_id, razryad, status,
+                    current_level, current_lesson, total_lessons,
+                    parent_name, parent_phone, parent_email,
+                    branch:branches(id, name, location),
+                    coach:coaches(id, first_name, last_name)
+                `)
+                .order('created_at', { ascending: false })
+                .range(from, to);
 
-        if (error) {
-            console.error('Error fetching students:', error);
-            return [];
+            if (error) {
+                console.error('Error fetching students:', error);
+                return [];
+            }
+            if (!data || data.length === 0) break;
+            rows.push(...data);
+            if (data.length < PAGE) break;
         }
 
         // Transform to match data.js format
-        return data.map(student => ({
+        return rows.map(student => ({
             id: student.id,
             firstName: student.first_name,
             lastName: student.last_name,

@@ -127,7 +127,75 @@ unrelated to this change — `document.querySelector is not a function` in
   Would fix the cap globally, but `.range()` per query is more explicit and
   doesn't silently change behavior for unrelated tables. Keep per-query.
 
+## Correction (later same day, after user re-tested)
+
+**Commit `4baa8ae` did NOT fix the bug.** The user hard-refreshed and the
+Nurym brothers were still missing. Re-investigation revealed:
+
+PostgREST on this Supabase project enforces `db-max-rows=1000` **server-side**.
+Direct curl proves it — even with `Range: 0-9999` header, the response is
+`Content-Range: 0-999/1051` with 1000 rows. The client cannot override
+this cap with `.range()`, with `?limit=5000`, or any other header.
+
+What `.range()` *does* do: scope the SELECT to a window *within* the cap.
+So `.range(0, 999)` returns the first 1000 rows, `.range(1000, 1999)`
+returns the next 51 rows (yes — the Nurym brothers come back in that
+second call). That's the actual mechanism that works.
+
+### Real fix — client-side pagination loop
+
+```js
+const PAGE = 1000;
+const HARD_CEILING = 50;          // safety belt: never loop more than 50k rows
+const rows = [];
+for (let page = 0; page < HARD_CEILING; page++) {
+    const from = page * PAGE;
+    const to   = from + PAGE - 1;
+    const { data, error } = await window.supabaseClient
+        .from('students')
+        .select(...)
+        .order('created_at', { ascending: false })
+        .range(from, to);
+    if (error) { /* return [] */ }
+    if (!data || data.length === 0) break;
+    rows.push(...data);
+    if (data.length < PAGE) break;     // short page = end of data
+}
+```
+
+Applied to both call sites (`getStudents()` and `exportRatings()`).
+
+### Verification
+
+```
+# Direct PostgREST probe with service-role key
+curl -sS -H "Range: 0-9999" .../students?select=id&order=created_at.desc
+  → 1000 rows                       (server cap kicks in, ignores Range upper bound)
+
+curl -sS -H "Range: 1000-1999" .../students?select=id&order=created_at.desc
+  → 51 rows                         (page 2 returns the missing tail)
+
+# Nurym brothers via direct filter
+curl ".../students?first_name=in.(Sungat,Nurmukhamed)&last_name=eq.Nurym"
+  → 2 rows ✓                        (they exist, just past the cap)
+```
+
+After this fix `getStudents()` returns 1051 rows in two HTTP calls
+(1000 + 51), all 24 hidden active students appear in search.
+
+### Why the broken fix slipped through
+
+Test `test-students-pagination-cap.js` was a source-grep that asserted
+the literal string `.range(0, 9999)` was present. The string was there;
+the underlying behavior wasn't tested. Updated test now asserts the
+**pagination loop pattern** (for-loop, computed from/to, short-page
+break) and explicitly rejects the broken `.range(0, 9999)` pattern as
+a regression guard.
+
 ## Commit
 
-`<filled in by commit step>` — adds `.range(0, 9999)` to two queries +
+`4baa8ae` — added the broken `.range(0, 9999)` pattern (kept in history
+as documentation of what doesn't work).
+
+`<filled in by next commit>` — replaces with client-side pagination loop +
 source-grep test + this audit doc.
