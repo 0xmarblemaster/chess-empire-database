@@ -457,34 +457,103 @@
 
     // ----- per-student queries -------------------------------------------
 
+    // Map a `tournaments_uploads` row to the {name, league} shape the legacy
+    // student-card widget expects. `kind` drives the league letter; the
+    // filename (with extension and the importer's _AUT autofix suffix
+    // stripped) becomes the display name. Falls back to a humanised kind
+    // label if the filename is empty.
+    function _deriveTournamentMeta(upload) {
+        const KIND_TO_LEAGUE = { league_a: 'A', league_b: 'B', league_c: 'C' };
+        const KIND_LABELS = {
+            league_a: 'Лига A',
+            league_b: 'Лига B',
+            league_c: 'Лига C',
+            razryad_3: 'Квалификация 3 разряд',
+            razryad_4: 'Квалификация 4 разряд',
+            rated: 'Рейтинговый турнир',
+        };
+        const kind = upload && upload.kind ? String(upload.kind) : null;
+        const league = (kind && KIND_TO_LEAGUE[kind]) || null;
+
+        const rawName = upload && upload.source_filename ? String(upload.source_filename) : '';
+        let name = rawName.replace(/\.(xlsx|xls)$/i, '').replace(/_AUT$/i, '').trim();
+        if (!name) name = (kind && KIND_LABELS[kind]) || null;
+        return { name, league };
+    }
+
+    // Reshape one `tournament_results` row (joined with its
+    // `tournaments_uploads` parent under the `upload` key) into the legacy
+    // {id, place, ratingBefore, ratingAfter, ratingDelta, tournamentId,
+    //  tournamentName, league, date} shape consumed by student.js and the
+    // recent-tournaments table.
+    function _normalizeResultRow(row) {
+        const upload = row && row.upload ? row.upload : null;
+        const meta = _deriveTournamentMeta(upload);
+        const ratingBefore = Number.isFinite(row?.rating_before) ? row.rating_before : null;
+        const ratingDelta = Number.isFinite(row?.rating_delta) ? row.rating_delta : null;
+        const ratingAfter = (ratingBefore !== null && ratingDelta !== null)
+            ? ratingBefore + ratingDelta
+            : null;
+        return {
+            id: row?.id,
+            place: Number.isFinite(row?.rank) ? row.rank : null,
+            ratingBefore,
+            ratingAfter,
+            ratingDelta: ratingDelta === null ? 0 : ratingDelta,
+            tournamentId: upload?.id || null,
+            tournamentName: meta.name,
+            league: meta.league,
+            date: upload?.tournament_date || null,
+        };
+    }
+
+    // Collapse duplicate uploads of the same tournament for one student.
+    // Admins occasionally re-import the same Swiss-Manager export under a
+    // different filename — we key on (tournament_date, kind, rank,
+    // rating_delta) and keep the row whose upload has the most recent
+    // uploaded_at. The input rows are the raw `tournament_results` shape
+    // (with the joined `upload`), not the normalized one.
+    function _dedupeResults(rows) {
+        if (!Array.isArray(rows) || rows.length === 0) return [];
+        const bucket = new Map();
+        for (const r of rows) {
+            if (!r || !r.upload) continue;
+            const u = r.upload;
+            const key = [
+                u.tournament_date || '',
+                u.kind || '',
+                r.rank == null ? '' : r.rank,
+                r.rating_delta == null ? '' : r.rating_delta,
+            ].join('|');
+            const prev = bucket.get(key);
+            if (!prev) { bucket.set(key, r); continue; }
+            const prevAt = (prev.upload && prev.upload.uploaded_at) || '';
+            const currAt = (u.uploaded_at) || '';
+            if (currAt > prevAt) bucket.set(key, r);
+        }
+        return [...bucket.values()];
+    }
+
     async function getStudentTournaments(studentId, limit) {
         limit = limit || 5;
         const client = (typeof window !== 'undefined' && window.supabaseClient) || null;
         if (!client) return [];
         const { data, error } = await client
-            .from('tournament_participants')
+            .from('tournament_results')
             .select(`
-                id, place, rating_before, rating_after, rating_delta,
-                tournament:tournaments(id, name, league, tournament_date)
+                id, rank, rating_before, rating_delta,
+                upload:tournaments_uploads(id, kind, source_filename, tournament_date, uploaded_at)
             `)
-            .eq('student_id', studentId)
-            .order('created_at', { ascending: false })
-            .limit(limit);
+            .eq('student_id', studentId);
         if (error) {
             console.error('getStudentTournaments error', error);
             return [];
         }
-        return (data || []).map(row => ({
-            id: row.id,
-            place: row.place,
-            ratingBefore: row.rating_before,
-            ratingAfter: row.rating_after,
-            ratingDelta: row.rating_delta,
-            tournamentId: row.tournament?.id,
-            tournamentName: row.tournament?.name,
-            league: row.tournament?.league,
-            date: row.tournament?.tournament_date,
-        }));
+        const deduped = _dedupeResults(data || [])
+            .filter(r => r.upload && r.upload.tournament_date)
+            .sort((a, b) => (b.upload.tournament_date || '').localeCompare(a.upload.tournament_date || ''))
+            .slice(0, limit);
+        return deduped.map(_normalizeResultRow);
     }
 
     function _cadenceFromDate(lastDateStr, today) {
@@ -670,15 +739,18 @@
         const empty = { total: 0, ytd: 0, bestPlace: null, avgPlace: null, totalRatingGained: 0, lastDate: null, cadence: 'inactive' };
         if (!client) return empty;
         const { data, error } = await client
-            .from('tournament_participants')
-            .select('place, rating_delta, tournament:tournaments(tournament_date)')
+            .from('tournament_results')
+            .select(`
+                rank, rating_delta,
+                upload:tournaments_uploads(id, kind, tournament_date, uploaded_at)
+            `)
             .eq('student_id', studentId);
         if (error || !data || data.length === 0) return empty;
 
-        const rows = data.map(r => ({
-            place: r.place,
-            delta: r.rating_delta || 0,
-            date: r.tournament?.tournament_date || null,
+        const rows = _dedupeResults(data).map(r => ({
+            place: Number.isFinite(r.rank) ? r.rank : null,
+            delta: Number.isFinite(r.rating_delta) ? r.rating_delta : 0,
+            date: r.upload?.tournament_date || null,
         }));
         return _aggregateFromRows(rows);
     }
@@ -733,28 +805,18 @@
         const client = (typeof window !== 'undefined' && window.supabaseClient) || null;
         if (!client) return [];
         const { data, error } = await client
-            .from('tournament_participants')
+            .from('tournament_results')
             .select(`
-                id, place, rating_before, rating_after, rating_delta,
-                tournament:tournaments(id, name, league, tournament_date)
+                id, rank, rating_before, rating_delta,
+                upload:tournaments_uploads(id, kind, source_filename, tournament_date, uploaded_at)
             `)
             .eq('student_id', studentId);
         if (error || !data) {
             if (error) console.error('getStudentTournamentsAll error', error);
             return [];
         }
-        return data
-            .map(row => ({
-                id: row.id,
-                place: row.place,
-                ratingBefore: row.rating_before,
-                ratingAfter: row.rating_after,
-                ratingDelta: row.rating_delta,
-                tournamentId: row.tournament?.id,
-                tournamentName: row.tournament?.name,
-                league: row.tournament?.league,
-                date: row.tournament?.tournament_date || null,
-            }))
+        return _dedupeResults(data)
+            .map(_normalizeResultRow)
             .filter(r => r.date)
             .sort((a, b) => a.date.localeCompare(b.date));
     }
@@ -869,6 +931,9 @@
             _detectCrossingFromRatings,
             _aggregateLeaderboard,
             _extractDate,
+            _deriveTournamentMeta,
+            _normalizeResultRow,
+            _dedupeResults,
         },
     };
 

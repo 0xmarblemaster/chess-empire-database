@@ -135,15 +135,15 @@ async function loadCoachStudentCadence(students) {
 
     try {
         const { data, error } = await window.supabaseClient
-            .from('tournament_participants')
-            .select('student_id, tournament:tournaments(tournament_date)')
+            .from('tournament_results')
+            .select('student_id, upload:tournaments_uploads(tournament_date)')
             .in('student_id', activeIds);
         if (error) {
             console.error('loadCoachStudentCadence error', error);
             return cadenceMap;
         }
         for (const row of data || []) {
-            const date = row.tournament && row.tournament.tournament_date;
+            const date = row.upload && row.upload.tournament_date;
             if (!date) continue;
             const prev = cadenceMap.get(row.student_id);
             if (!prev || date > prev) cadenceMap.set(row.student_id, date);

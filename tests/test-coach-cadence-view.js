@@ -133,10 +133,10 @@ console.log('\n=== loadCoachStudentCadence groups newest date per student ======
         { id: 'S3', status: 'frozen' },   // should be skipped — only active students are queried
     ];
     const rows = [
-        { student_id: 'S1', tournament: { tournament_date: '2026-04-12' } },
-        { student_id: 'S1', tournament: { tournament_date: '2026-05-03' } },  // newer — should win
-        { student_id: 'S2', tournament: { tournament_date: '2026-03-01' } },
-        { student_id: 'S2', tournament: { tournament_date: null } },          // skip null dates
+        { student_id: 'S1', upload: { tournament_date: '2026-04-12' } },
+        { student_id: 'S1', upload: { tournament_date: '2026-05-03' } },  // newer — should win
+        { student_id: 'S2', upload: { tournament_date: '2026-03-01' } },
+        { student_id: 'S2', upload: { tournament_date: null } },          // skip null dates
     ];
     let captured = null;
     global.window.supabaseClient = {
@@ -155,7 +155,7 @@ console.log('\n=== loadCoachStudentCadence groups newest date per student ======
     };
 
     return loadCoachStudentCadence(students).then(map => {
-        assertEqual(captured.table, 'tournament_participants', 'queries tournament_participants table');
+        assertEqual(captured.table, 'tournament_results', 'queries tournament_results table');
         assertEqual(captured.ids.sort(), ['S1', 'S2'], 'only active student ids queried (S3 skipped)');
         assertEqual(map.get('S1'), '2026-05-03', 'S1 → newest date wins (2026-05-03)');
         assertEqual(map.get('S2'), '2026-03-01', 'S2 → 2026-03-01');

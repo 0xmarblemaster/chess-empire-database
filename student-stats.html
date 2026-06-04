@@ -575,8 +575,8 @@
                 sb.from('survival_scores').select('*').eq('student_id', studentId).eq('mode', 'puzzle_rush').gte('achieved_at', monthStart).lt('achieved_at', monthEnd).order('score', { ascending: false }),
                 sb.from('survival_scores').select('score').eq('student_id', studentId).eq('mode', 'puzzle_rush').order('score', { ascending: false }).limit(1),
                 sb.from('bot_battles').select('bot_name, bot_rating').eq('student_id', studentId).order('bot_rating', { ascending: false }).limit(1),
-                sb.from('tournament_participants')
-                    .select('place, rating_delta, tournament:tournaments(name, league, tournament_date)')
+                sb.from('tournament_results')
+                    .select('rank, rating_delta, upload:tournaments_uploads(id, kind, source_filename, tournament_date, uploaded_at)')
                     .eq('student_id', studentId),
             ]);
 
@@ -617,10 +617,20 @@
             const ratingDelta = (latestRating && firstRating) ? latestRating - firstRating : null;
 
             // Tournament stats — active students only, mirroring student.html gate.
+            // Source: tournament_results joined to tournaments_uploads. Dedupe
+            // duplicate uploads of the same tournament before counting.
             const isActive = (student.status || 'active') === 'active';
-            const allTournaments = (tournamentsRes?.data || []).filter(r => r.tournament?.tournament_date);
+            const rawTournaments = (tournamentsRes?.data || []).filter(r => r.upload?.tournament_date);
+            const dedupedTournaments = (window.tournamentsData && window.tournamentsData._internal && window.tournamentsData._internal._dedupeResults)
+                ? window.tournamentsData._internal._dedupeResults(rawTournaments)
+                : rawTournaments;
+            const allTournaments = dedupedTournaments.map(r => ({
+                place: Number.isFinite(r.rank) ? r.rank : null,
+                rating_delta: Number.isFinite(r.rating_delta) ? r.rating_delta : 0,
+                tournament_date: r.upload?.tournament_date || null,
+            })).filter(r => r.tournament_date);
             const periodTournaments = isActive
-                ? allTournaments.filter(r => r.tournament.tournament_date >= monthStart && r.tournament.tournament_date < monthEnd)
+                ? allTournaments.filter(r => r.tournament_date >= monthStart && r.tournament_date < monthEnd)
                 : [];
             const tournamentCount = periodTournaments.length;
             const tournamentPlaces = periodTournaments.map(r => r.place).filter(p => Number.isFinite(p));
@@ -671,7 +681,7 @@
                 const historyRows = allTournaments.map(r => ({
                     place: r.place,
                     rating_delta: r.rating_delta,
-                    date: r.tournament?.tournament_date,
+                    date: r.tournament_date,
                 }));
                 const streak = window.tournamentsData.computeStreak(historyRows);
                 if (streak && streak.current > 0) {
