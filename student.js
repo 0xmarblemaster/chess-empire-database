@@ -765,24 +765,26 @@ function renderTournamentRecentTable(tournaments) {
         const sign = delta > 0 ? '+' : '';
         const cls = delta > 0 ? 'delta-up' : delta < 0 ? 'delta-down' : 'delta-neutral';
         return `<tr>
-            <td>${formatTournamentDate(tn.date)}</td>
-            <td>${escapeHtmlSafe(tn.tournamentName || '')}</td>
-            <td><span class="league-tag league-${(tn.league || '').toLowerCase()}">${escapeHtmlSafe(tn.league || '')}</span></td>
-            <td>${tn.place ?? '—'}</td>
-            <td class="${cls}">${sign}${delta}</td>
+            <td class="col-date">${formatTournamentDate(tn.date)}</td>
+            <td class="col-name">${escapeHtmlSafe(tn.tournamentName || '')}</td>
+            <td class="col-league"><span class="league-tag league-${(tn.league || '').toLowerCase()}">${escapeHtmlSafe(tn.league || '')}</span></td>
+            <td class="col-place">${tn.place ?? '—'}</td>
+            <td class="col-delta ${cls}">${sign}${delta}</td>
         </tr>`;
     }).join('');
     return `
-        <table class="tournaments-table">
-            <thead><tr>
-                <th>${t('student.tournaments.colDate') || 'Date'}</th>
-                <th>${t('student.tournaments.colName') || 'Tournament'}</th>
-                <th>${t('student.tournaments.colLeague') || 'League'}</th>
-                <th>${t('student.tournaments.colPlace') || 'Place'}</th>
-                <th>${t('student.tournaments.colDelta') || 'Δ rating'}</th>
-            </tr></thead>
-            <tbody>${rows}</tbody>
-        </table>
+        <div class="tournaments-table-wrap">
+            <table class="tournaments-table">
+                <thead><tr>
+                    <th class="col-date">${t('student.tournaments.colDate') || 'Date'}</th>
+                    <th class="col-name">${t('student.tournaments.colName') || 'Tournament'}</th>
+                    <th class="col-league">${t('student.tournaments.colLeague') || 'League'}</th>
+                    <th class="col-place">${t('student.tournaments.colPlace') || 'Place'}</th>
+                    <th class="col-delta">${t('student.tournaments.colDelta') || 'Δ rating'}</th>
+                </tr></thead>
+                <tbody>${rows}</tbody>
+            </table>
+        </div>
     `;
 }
 
