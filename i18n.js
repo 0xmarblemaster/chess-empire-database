@@ -1059,7 +1059,7 @@ const translations = {
         // Public tournament schedule (tournaments.html)
         "tournaments.title": "Tournament Schedule",
         "tournaments.upcoming": "{{count}} upcoming",
-        "tournaments.noUpcoming": "No upcoming tournaments",
+        "tournaments.noUpcoming": "No tournaments",
         "tournaments.registerButton": "Register",
         "tournaments.registrationClosed": "Registration closed",
         "tournaments.registrationFull": "Registration is full",
@@ -2117,7 +2117,7 @@ const translations = {
         // Public tournament schedule (tournaments.html)
         "tournaments.title": "Турнирлер кестесі",
         "tournaments.upcoming": "Алдағы: {{count}}",
-        "tournaments.noUpcoming": "Алдағы турнирлер жоқ",
+        "tournaments.noUpcoming": "Турнир жоқ",
         "tournaments.registerButton": "Тіркелу",
         "tournaments.registrationClosed": "Тіркеу жабылды",
         "tournaments.registrationFull": "Орындар бітті",
@@ -3230,7 +3230,7 @@ const translations = {
         // Public tournament schedule (tournaments.html)
         "tournaments.title": "Расписание турниров",
         "tournaments.upcoming": "Предстоящих: {{count}}",
-        "tournaments.noUpcoming": "Нет предстоящих турниров",
+        "tournaments.noUpcoming": "Нет турниров",
         "tournaments.registerButton": "Регистрация",
         "tournaments.registrationClosed": "Регистрация закрыта",
         "tournaments.registrationFull": "Места закончились",
