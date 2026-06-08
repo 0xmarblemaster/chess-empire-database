@@ -2586,14 +2586,18 @@ const supabaseData = {
      * Get time slot assignments for students in a branch/schedule, resolved to
      * the version effective on/before the displayed month. Mirrors the
      * effective-dating pattern from migration 049 (time_slots) — see
-     * migration 051 and PRD_STUDENT_ASSIGNMENTS_VERSIONING.md.
+     * migrations 051 (per-schedule versioning) and 061 (per-slot versioning
+     * + multi-slot membership) plus COACH_MULTI_GROUP_PRD.md.
      *
      * @param {string} branchId - Branch UUID
      * @param {string} scheduleType - 'mon_wed', 'tue_thu', or 'sat_sun'
      * @param {number} [year] - Displayed calendar year (e.g. 2026)
      * @param {number} [month] - Displayed calendar month, 0-indexed (e.g. 4 for May)
-     * @returns {Array} Array of { studentId, timeSlotIndex } — one row per student,
-     *   carrying the slot index from the latest version with effective_from <= month-end.
+     * @returns {Array} Array of { studentId, timeSlotIndex } — one row per
+     *   (student, slot) pair, carrying the slot index from the latest version
+     *   with effective_from <= month-end. A student in multiple slots returns
+     *   multiple rows; the caller (admin-v2.js loadAttendanceData) groups by
+     *   studentId into student.timeSlotIndexes.
      */
     async getTimeSlotAssignments(branchId, scheduleType, year, month) {
         try {
@@ -2609,7 +2613,7 @@ const supabaseData = {
 
             const { data, error } = await window.supabaseClient
                 .from('student_time_slot_assignments')
-                .select('student_id, time_slot_index, effective_from')
+                .select('student_id, time_slot_index, effective_from, hidden')
                 .eq('branch_id', branchId)
                 .eq('schedule_type', scheduleType)
                 .lte('effective_from', monthEnd)
@@ -2622,12 +2626,34 @@ const supabaseData = {
                 return [];
             }
 
-            // Keep only the latest version per student (rows are sorted effective_from DESC).
+            // Pre-migration-061 "hide entirely from this schedule" markers
+            // (time_slot_index = -1) predate per-slot hides and carry no slot
+            // identity. Honour their original semantic: if the student's
+            // latest row across every slot is one of those -1 rows, the
+            // student is schedule-wide hidden for this month.
+            const scheduleWideHidden = new Set();
+            const latestSeenForStudent = new Set();
+            for (const d of data) {
+                if (latestSeenForStudent.has(d.student_id)) continue;
+                latestSeenForStudent.add(d.student_id);
+                if (d.time_slot_index === -1) {
+                    scheduleWideHidden.add(d.student_id);
+                }
+            }
+
+            // Dedupe by (student_id, time_slot_index) — keep the latest
+            // version per (student, slot) pair via effective_from DESC.
+            // Skip hidden rows and the legacy -1 sentinel rows; the latter
+            // were already accounted for by the schedule-wide hide pass.
             const seen = new Set();
             const resolved = [];
             for (const d of data) {
-                if (seen.has(d.student_id)) continue;
-                seen.add(d.student_id);
+                if (d.time_slot_index < 0) continue;
+                const key = `${d.student_id}|${d.time_slot_index}`;
+                if (seen.has(key)) continue;
+                seen.add(key);
+                if (d.hidden === true) continue;
+                if (scheduleWideHidden.has(d.student_id)) continue;
                 resolved.push({
                     studentId: d.student_id,
                     timeSlotIndex: d.time_slot_index
@@ -2651,9 +2677,12 @@ const supabaseData = {
     async upsertTimeSlotAssignment(studentId, branchId, scheduleType, timeSlotIndex) {
         // Effective-dating: writes from non-hide paths (drag-drop, initial seeding)
         // target the 1970-01-01 baseline row so they apply across all months
-        // historically — same semantic as before migration 051. Hiding is the
-        // only path that must use hide_student_versioned() to scope a change
-        // to a specific month onward; see deleteStudentFromCalendar in admin-v2.js.
+        // historically — same semantic as before migration 051. Multi-slot
+        // membership (migration 061) means each (student, branch, schedule,
+        // slot) row is independent — adding a student to a new slot leaves
+        // their existing slot assignments untouched. Hiding is the only
+        // path that scopes a change to a specific month onward; see
+        // deleteStudentFromCalendar in admin-v2.js.
         const { data, error } = await window.supabaseClient
             .from('student_time_slot_assignments')
             .upsert([{
@@ -2662,9 +2691,10 @@ const supabaseData = {
                 schedule_type: scheduleType,
                 time_slot_index: timeSlotIndex,
                 effective_from: '1970-01-01',
+                hidden: false,
                 updated_at: new Date().toISOString()
             }], {
-                onConflict: 'student_id,branch_id,schedule_type,effective_from'
+                onConflict: 'student_id,branch_id,schedule_type,time_slot_index,effective_from'
             })
             .select()
             .single();
@@ -2674,15 +2704,32 @@ const supabaseData = {
             throw error;
         }
 
-        // Clear any future -1 hide rows for this (student, branch, schedule).
-        // Adding/placing a student onto a slot explicitly contradicts any later
-        // hide marker — without this, the read path (effective_from DESC,
-        // first-row-wins per student in getTimeSlotAssignments above) would
-        // keep returning -1 and the student would stay hidden in the calendar.
-        // Scoped strictly to (student_id, branch_id, schedule_type) and
-        // time_slot_index = -1 so it never touches a sibling schedule's hides
-        // or a positive slot assignment.
-        const { error: clearHidesError } = await window.supabaseClient
+        // Clear any future per-slot hide rows for THIS slot (migration 061
+        // hidden=TRUE rows). Scoped to (student_id, branch_id, schedule_type,
+        // time_slot_index) so adding a student to slot B does NOT un-hide
+        // them from slot A — sibling slot hides are preserved.
+        const { error: clearSlotHidesError } = await window.supabaseClient
+            .from('student_time_slot_assignments')
+            .delete()
+            .eq('student_id', studentId)
+            .eq('branch_id', branchId)
+            .eq('schedule_type', scheduleType)
+            .eq('time_slot_index', timeSlotIndex)
+            .eq('hidden', true)
+            .gt('effective_from', '1970-01-01');
+
+        if (clearSlotHidesError) {
+            console.error('Error clearing future per-slot hide rows after upsert:', clearSlotHidesError);
+            throw clearSlotHidesError;
+        }
+
+        // Clear any legacy schedule-wide hide markers (pre-migration-061
+        // rows with time_slot_index = -1 from the old single-slot hide
+        // path). Explicitly adding a student to a slot contradicts the
+        // "hidden from the entire schedule" semantic those rows carry, so
+        // remove them. Scoped to (student_id, branch_id, schedule_type,
+        // time_slot_index = -1) so sibling schedules are untouched.
+        const { error: clearLegacyHidesError } = await window.supabaseClient
             .from('student_time_slot_assignments')
             .delete()
             .eq('student_id', studentId)
@@ -2691,9 +2738,9 @@ const supabaseData = {
             .eq('time_slot_index', -1)
             .gt('effective_from', '1970-01-01');
 
-        if (clearHidesError) {
-            console.error('Error clearing future hide rows after upsert:', clearHidesError);
-            throw clearHidesError;
+        if (clearLegacyHidesError) {
+            console.error('Error clearing legacy schedule-wide hide rows after upsert:', clearLegacyHidesError);
+            throw clearLegacyHidesError;
         }
 
         return {
@@ -2721,13 +2768,14 @@ const supabaseData = {
             schedule_type: a.scheduleType,
             time_slot_index: a.timeSlotIndex,
             effective_from: '1970-01-01',
+            hidden: false,
             updated_at: new Date().toISOString()
         }));
 
         const { data, error } = await window.supabaseClient
             .from('student_time_slot_assignments')
             .upsert(insertData, {
-                onConflict: 'student_id,branch_id,schedule_type,effective_from'
+                onConflict: 'student_id,branch_id,schedule_type,time_slot_index,effective_from'
             })
             .select();
 

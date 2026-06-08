@@ -6034,8 +6034,11 @@ const DEFAULT_TIME_SLOT_ROWS = 10;      // Default visible rows
 const MAX_TIME_SLOT_CAPACITY = 15;      // Maximum students per slot
 
 // Initialize time slot indices for all students
-// Students without a time_slot_index get assigned based on their array position
-// skipStudentIds: Set of student IDs that already have saved assignments (don't override them)
+// Students without an explicit assignment get auto-seeded by their array
+// position (Halyk Arena only). Writes student.timeSlotIndexes = [slot] —
+// migration 061 multi-slot model.
+// skipStudentIds: Set of student IDs that already have saved assignments
+// (don't override them).
 function initializeStudentTimeSlots(skipStudentIds = new Set()) {
     // Only auto-assign for Halyk Arena
     // All other branches require manual assignment via "Add Student" button
@@ -6056,25 +6059,30 @@ function initializeStudentTimeSlots(skipStudentIds = new Set()) {
             return;
         }
 
-        if (student.time_slot_index === null || student.time_slot_index === undefined) {
+        if (!student.timeSlotIndexes || student.timeSlotIndexes.length === 0) {
             // Assign based on position: first 10 to slot 0, next 10 to slot 1, etc.
-            student.time_slot_index = Math.floor(index / DEFAULT_TIME_SLOT_ROWS);
+            let slot = Math.floor(index / DEFAULT_TIME_SLOT_ROWS);
             // Clamp to available slots (last slot gets overflow)
-            if (student.time_slot_index >= numSlots) {
-                student.time_slot_index = numSlots - 1;
+            if (slot >= numSlots) {
+                slot = numSlots - 1;
             }
+            student.timeSlotIndexes = [slot];
             unassignedCount++;
         }
     });
 
     if (unassignedCount > 0) {
-        console.log(`Initialized time_slot_index for ${unassignedCount} students`);
+        console.log(`Initialized timeSlotIndexes for ${unassignedCount} students`);
     }
 }
 
-// Get students assigned to a specific time slot index
+// Get students assigned to a specific time slot index.
+// Migration 061: a student can be in multiple slots — match if any slot in
+// student.timeSlotIndexes equals the requested slotIndex.
 function getStudentsForTimeSlot(slotIndex, filteredData) {
-    return filteredData.filter(student => student.time_slot_index === slotIndex);
+    return filteredData.filter(student =>
+        Array.isArray(student.timeSlotIndexes) && student.timeSlotIndexes.includes(slotIndex)
+    );
 }
 
 // Get time slots for a specific branch, schedule type, and coach.
@@ -7139,7 +7147,11 @@ async function loadAttendanceData() {
                         first_name: student.firstName,
                         last_name: student.lastName,
                         attendance: attendanceArray,
-                        time_slot_index: null // Will be assigned from database or initialized
+                        // Set of time slot indices this student is assigned to in
+                        // the current branch+schedule. Empty until populated from
+                        // getTimeSlotAssignments (migration 061: multi-slot per
+                        // schedule) or initializeStudentTimeSlots auto-seed.
+                        timeSlotIndexes: []
                     };
                 });
             } else {
@@ -7149,43 +7161,36 @@ async function loadAttendanceData() {
             attendanceCalendarData = [];
         }
 
-        // Apply saved time slot assignments from database
-        // Track which students have been explicitly assigned (from database)
+        // Apply saved time slot assignments from database.
+        // Migration 061: getTimeSlotAssignments returns one row per
+        // (student, slot) pair — already filtered to visible (non-hidden,
+        // non-legacy-schedule-wide-hide) assignments. Group by studentId
+        // into a Set so a student in multiple slots appears in each.
         const assignedStudentIds = new Set();
-        // Track students that have been explicitly deleted (time_slot_index = -1)
-        const deletedStudentIds = new Set();
         // Reset the global set for current schedule students
         attendanceCurrentScheduleStudents = new Set();
 
         if (timeSlotAssignmentsResult.status === 'fulfilled' && timeSlotAssignmentsResult.value) {
             const savedAssignments = timeSlotAssignmentsResult.value;
 
-            // Create a map for quick lookup
-            const assignmentMap = new Map(savedAssignments.map(a => [a.studentId, a.timeSlotIndex]));
+            // Build studentId → Set<slotIndex> map for quick lookup.
+            const assignmentMap = new Map();
+            for (const a of savedAssignments) {
+                if (!assignmentMap.has(a.studentId)) {
+                    assignmentMap.set(a.studentId, new Set());
+                }
+                assignmentMap.get(a.studentId).add(a.timeSlotIndex);
+            }
 
-            // Apply saved assignments to students
             attendanceCalendarData.forEach(student => {
                 if (assignmentMap.has(student.id)) {
-                    const savedSlot = assignmentMap.get(student.id);
-                    if (savedSlot === -1) {
-                        // Student was explicitly deleted from this schedule
-                        deletedStudentIds.add(student.id);
-                    } else {
-                        student.time_slot_index = savedSlot;
-                        // Track that this student has a time slot in the CURRENT schedule
-                        attendanceCurrentScheduleStudents.add(student.id);
-                    }
+                    student.timeSlotIndexes = Array.from(assignmentMap.get(student.id));
+                    attendanceCurrentScheduleStudents.add(student.id);
                     assignedStudentIds.add(student.id);
                 }
             });
 
-            // Filter out deleted students
-            if (deletedStudentIds.size > 0) {
-                attendanceCalendarData = attendanceCalendarData.filter(s => !deletedStudentIds.has(s.id));
-                console.log(`Filtered out ${deletedStudentIds.size} deleted students`);
-            }
-
-            console.log(`Applied ${savedAssignments.length - deletedStudentIds.size} saved time slot assignments`);
+            console.log(`Applied ${savedAssignments.length} saved time slot assignments across ${assignmentMap.size} students`);
         }
 
         // Initialize time slot indices for students that don't have a saved assignment
@@ -7552,10 +7557,11 @@ function renderAttendanceCalendar(preFilteredData = null) {
     const timeSlots = getTimeSlotsForBranch(attendanceCurrentBranch, attendanceCurrentSchedule, attendanceCurrentCoachName);
     const totalColumns = scheduleDates.length + 1; // Student column + date columns
 
-    // Group students into time slot sections by their time_slot_index property
+    // Group students into time slot sections by their timeSlotIndexes set.
+    // Migration 061 multi-slot: a student in multiple slots renders in each.
     // Always show ALL time slots, even if empty
     timeSlots.forEach((timeSlot, slotIndex) => {
-        // Get students assigned to this time slot by their time_slot_index
+        // Get students assigned to this time slot via their timeSlotIndexes
         const slotStudents = getStudentsForTimeSlot(slotIndex, filteredData);
 
         // Create a unique slot ID for collapse functionality
@@ -7648,7 +7654,7 @@ function renderAttendanceCalendar(preFilteredData = null) {
                                 <div class="drag-handle-container" style="position: relative;">
                                     <div class="drag-handle"
                                          style="cursor: grab; color: #94a3b8; display: flex; align-items: center;"
-                                         onclick="event.stopPropagation(); toggleStudentMenu(event, '${student.id}', '${firstName} ${lastName}')">
+                                         onclick="event.stopPropagation(); toggleStudentMenu(event, '${student.id}', '${firstName} ${lastName}', ${slotIndex})">
                                         <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                                             <circle cx="9" cy="5" r="1"></circle>
                                             <circle cx="9" cy="12" r="1"></circle>
@@ -7658,8 +7664,8 @@ function renderAttendanceCalendar(preFilteredData = null) {
                                             <circle cx="15" cy="19" r="1"></circle>
                                         </svg>
                                     </div>
-                                    <div id="student-menu-${student.id}" class="student-action-menu" style="display: none;">
-                                        <button onclick="event.stopPropagation(); deleteStudentFromCalendar('${student.id}', '${firstName} ${lastName}'); closeStudentMenu('${student.id}')">
+                                    <div id="student-menu-${student.id}-slot-${slotIndex}" class="student-action-menu" style="display: none;">
+                                        <button onclick="event.stopPropagation(); deleteStudentFromCalendar('${student.id}', '${firstName} ${lastName}', ${slotIndex}); closeStudentMenu('${student.id}', ${slotIndex})">
                                             <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                                                 <path d="M3 6h18"></path>
                                                 <path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"></path>
@@ -7929,12 +7935,24 @@ function handleSlotDrop(event, targetSlotId, targetSlotIndex) {
         return;
     }
 
-    // Move student to new time slot
-    moveStudentToTimeSlot(draggedStudentId, draggedFromSlotId, targetSlotId, targetSlotIndex);
+    // Migration 061 multi-slot: derive fromSlotIndex from the source slot
+    // DOM id (`time-slot-N`) so the move knows which slot to remove the
+    // student from (vs. which to add to). Without this, dragging from
+    // slot A to slot C while the student is also in B would leak both A
+    // and B into the rendered slot membership.
+    const fromSlotIndex = (() => {
+        if (!draggedFromSlotId) return null;
+        const m = String(draggedFromSlotId).match(/time-slot-(\d+)/);
+        return m ? parseInt(m[1], 10) : null;
+    })();
+
+    moveStudentToTimeSlot(draggedStudentId, fromSlotIndex, targetSlotId, targetSlotIndex);
 }
 
-// Move student from one time slot to another
-async function moveStudentToTimeSlot(studentId, fromSlotId, toSlotId, toSlotIndex) {
+// Move student from one time slot to another (migration 061 multi-slot:
+// removes fromSlotIndex from the student's slot set, adds toSlotIndex —
+// other slots they belong to are untouched).
+async function moveStudentToTimeSlot(studentId, fromSlotIndex, toSlotId, toSlotIndex) {
     // Find the student in the source data (attendanceCalendarData)
     const student = attendanceCalendarData.find(s => s.id === studentId);
     if (!student) {
@@ -7942,20 +7960,26 @@ async function moveStudentToTimeSlot(studentId, fromSlotId, toSlotId, toSlotInde
         return;
     }
 
-    // Get the student's current slot index
-    const currentSlotIndex = student.time_slot_index;
     const studentName = `${student.first_name} ${student.last_name}`;
 
-    // If dropping on the same slot, no action needed
-    if (currentSlotIndex === toSlotIndex) {
+    if (typeof fromSlotIndex !== 'number' || fromSlotIndex < 0) {
+        console.warn('moveStudentToTimeSlot called without a valid fromSlotIndex; skipping hide-from-source step');
+    }
+
+    // No-op when source and target are the same.
+    if (fromSlotIndex === toSlotIndex) {
         console.log('Student already in target slot, no move needed');
         return;
     }
 
-    // Check if target slot has room (max 15 students per slot)
+    // Check if target slot has room (max 15 students per slot).
+    // Exclude the dragged student if they're somehow already in the
+    // target slot, so re-rendering the same membership doesn't trigger
+    // the capacity guard.
     const timeSlots = getTimeSlotsForBranch(attendanceCurrentBranch, attendanceCurrentSchedule, attendanceCurrentCoachName);
     const filteredData = window.attendanceFilteredData || [];
-    const targetSlotStudents = getStudentsForTimeSlot(toSlotIndex, filteredData);
+    const targetSlotStudents = getStudentsForTimeSlot(toSlotIndex, filteredData)
+        .filter(s => s.id !== studentId);
 
     if (targetSlotStudents.length >= MAX_TIME_SLOT_CAPACITY) {
         showToast(
@@ -7967,31 +7991,59 @@ async function moveStudentToTimeSlot(studentId, fromSlotId, toSlotId, toSlotInde
         return;
     }
 
-    // Update the student's time_slot_index locally
-    student.time_slot_index = toSlotIndex;
+    // Update the student's slot membership locally: remove fromSlotIndex,
+    // add toSlotIndex.
+    const applyLocalMove = (s) => {
+        if (!Array.isArray(s.timeSlotIndexes)) s.timeSlotIndexes = [];
+        const next = new Set(s.timeSlotIndexes);
+        if (typeof fromSlotIndex === 'number' && fromSlotIndex >= 0) {
+            next.delete(fromSlotIndex);
+        }
+        next.add(toSlotIndex);
+        s.timeSlotIndexes = Array.from(next);
+    };
+    applyLocalMove(student);
 
     // Also update in filtered data if the student exists there
     const filteredStudent = filteredData.find(s => s.id === studentId);
-    if (filteredStudent) {
-        filteredStudent.time_slot_index = toSlotIndex;
+    if (filteredStudent && filteredStudent !== student) {
+        applyLocalMove(filteredStudent);
     }
 
-    console.log(`Moving ${studentName}: slot ${currentSlotIndex} → slot ${toSlotIndex}`);
+    console.log(`Moving ${studentName}: slot ${fromSlotIndex} → slot ${toSlotIndex}`);
 
     // Re-render the calendar to reflect changes immediately
     renderAttendanceCalendar(filteredData);
 
-    // Save to database in the background
+    // Save to database in the background.
     const branchObj = window.branches?.find(b => b.name === attendanceCurrentBranch);
     const branchId = branchObj?.id;
     const scheduleType = attendanceCurrentSchedule;
 
     if (branchId && scheduleType) {
         try {
+            // 1. Hide from the source slot (versioned per-slot via the
+            //    migration 061 RPC). Skipped when there is no source slot.
+            if (typeof fromSlotIndex === 'number' && fromSlotIndex >= 0) {
+                const displayedMonthStart = `${attendanceCurrentYear}-${String(attendanceCurrentMonth + 1).padStart(2, '0')}-01`;
+                const { error: hideError } = await window.supabaseClient.rpc('hide_student_versioned', {
+                    p_student_id: studentId,
+                    p_branch_id: branchId,
+                    p_schedule_type: scheduleType,
+                    p_time_slot_index: fromSlotIndex,
+                    p_effective_from: displayedMonthStart
+                });
+                if (hideError) {
+                    console.error('Failed to hide student from source slot:', hideError);
+                }
+            }
+
+            // 2. Add (upsert) to the target slot. Independent of the
+            //    source-slot hide so sibling slots survive.
             await supabaseData.upsertTimeSlotAssignment(studentId, branchId, scheduleType, toSlotIndex);
-            console.log(`Saved time slot assignment to database: ${studentName} → slot ${toSlotIndex}`);
+            console.log(`Saved time slot move to database: ${studentName} → slot ${toSlotIndex}`);
         } catch (error) {
-            console.error('Failed to save time slot assignment to database:', error);
+            console.error('Failed to save time slot move to database:', error);
             // Still show success since the UI has already updated
             // The assignment will work for this session but may not persist
             showToast(
@@ -8010,7 +8062,7 @@ async function moveStudentToTimeSlot(studentId, fromSlotId, toSlotId, toSlotInde
         'success'
     );
 
-    console.log(`Moved ${studentName} from slot ${currentSlotIndex} to slot ${toSlotIndex}`);
+    console.log(`Moved ${studentName} from slot ${fromSlotIndex} to slot ${toSlotIndex}`);
 }
 
 // Toggle hide/show empty rows in time slots
@@ -8531,11 +8583,16 @@ async function navigateToAttendanceStudent(studentId) {
         await loadAttendanceData();
     }
 
-    // 7. Expand the student's time slot group.
+    // 7. Expand the student's time slot group(s). Migration 061 multi-slot:
+    //    expand every slot they're in for the current schedule.
     const calendarEntry = (attendanceCalendarData || []).find(s => String(s.id) === String(studentId));
-    const timeSlotIndex = calendarEntry?.time_slot_index;
-    if (timeSlotIndex !== undefined && timeSlotIndex !== null) {
-        attendanceExpandedSlots[`slot-${timeSlotIndex}`] = true;
+    const slotsForExpand = Array.isArray(calendarEntry?.timeSlotIndexes)
+        ? calendarEntry.timeSlotIndexes
+        : [];
+    if (slotsForExpand.length > 0) {
+        for (const idx of slotsForExpand) {
+            attendanceExpandedSlots[`slot-${idx}`] = true;
+        }
         renderAttendanceCalendar();
     }
 
@@ -8828,14 +8885,27 @@ async function submitAddStudentToCalendar() {
             return;
         }
 
-        // Check slot capacity before adding
+        // Check slot capacity before adding.
+        // Migration 061 multi-slot: a student can be in several slots per
+        // schedule, so `assignments[selectedSchedule]` is treated as an
+        // array (or Set) of slot indices; fall back to the legacy scalar
+        // shape for compatibility while the in-memory window.students
+        // representation catches up. Exclude the current student so adding
+        // them to a NEW slot doesn't trip the cap; adding them again to
+        // their existing slot is also a no-op.
         const timeSlotIndex = parseInt(selectedTimeSlotIndex);
         const studentsInSlot = (window.students || []).filter(s => {
             const assignments = s.timeSlotAssignments || {};
+            const slotsForSchedule = assignments[selectedSchedule];
+            const inThisSlot = Array.isArray(slotsForSchedule)
+                ? slotsForSchedule.includes(timeSlotIndex)
+                : slotsForSchedule instanceof Set
+                    ? slotsForSchedule.has(timeSlotIndex)
+                    : slotsForSchedule === timeSlotIndex;
             return s.branchId === branchObj.id &&
                    s.status === 'active' &&
-                   assignments[selectedSchedule] === timeSlotIndex &&
-                   s.id !== studentId; // Exclude current student in case of reassignment
+                   inThisSlot &&
+                   s.id !== studentId;
         });
 
         if (studentsInSlot.length >= MAX_TIME_SLOT_CAPACITY) {
@@ -8922,14 +8992,17 @@ document.addEventListener('click', function(event) {
 });
 
 // Toggle student action menu (shows delete option in drag handle dropdown)
-function toggleStudentMenu(event, studentId, studentName) {
+function toggleStudentMenu(event, studentId, studentName, slotIndex) {
     event.stopPropagation();
-    const menu = document.getElementById(`student-menu-${studentId}`);
+    // Migration 061: a student can appear in multiple slots, so each row
+    // has its own menu element keyed by (studentId, slotIndex).
+    const menuId = `student-menu-${studentId}-slot-${slotIndex}`;
+    const menu = document.getElementById(menuId);
     if (!menu) return;
 
     // Close all other open menus first and return them to their original parents
     document.querySelectorAll('.student-action-menu').forEach(m => {
-        if (m.id !== `student-menu-${studentId}`) {
+        if (m.id !== menuId) {
             m.style.display = 'none';
         }
     });
@@ -8962,9 +9035,9 @@ function toggleStudentMenu(event, studentId, studentName) {
     }
 }
 
-// Close student action menu
-function closeStudentMenu(studentId) {
-    const menu = document.getElementById(`student-menu-${studentId}`);
+// Close student action menu (slot-scoped per migration 061 multi-slot).
+function closeStudentMenu(studentId, slotIndex) {
+    const menu = document.getElementById(`student-menu-${studentId}-slot-${slotIndex}`);
     if (menu) {
         menu.style.display = 'none';
     }
@@ -8979,13 +9052,15 @@ document.addEventListener('click', (event) => {
     }
 });
 
-// Hide a student from the attendance calendar from the displayed month onward.
-// Past months keep their schedule and attendance.
+// Hide a student from ONE specific time slot in the attendance calendar
+// from the displayed month onward (migration 061 multi-slot: removes from
+// THAT group only, not from every group the student is in). Past months
+// keep their schedule and attendance.
 // NEVER .delete() attendance rows or .update({time_slot_index: -1}) directly
 // from this path — both retroactively rewrite history. Use the
-// hide_student_versioned RPC from migration 051 (see also
-// PRD_STUDENT_ASSIGNMENTS_VERSIONING.md).
-async function deleteStudentFromCalendar(studentId, studentName) {
+// hide_student_versioned RPC from migration 051 (refined per-slot in 061).
+// See COACH_MULTI_GROUP_PRD.md and PRD_STUDENT_ASSIGNMENTS_VERSIONING.md.
+async function deleteStudentFromCalendar(studentId, studentName, slotIndex) {
     const lang = (typeof getLanguage === 'function') ? getLanguage() : 'en';
     const monthNames = lang === 'ru'
         ? ['Январь', 'Февраль', 'Март', 'Апрель', 'Май', 'Июнь', 'Июль', 'Август', 'Сентябрь', 'Октябрь', 'Ноябрь', 'Декабрь']
@@ -9011,6 +9086,12 @@ async function deleteStudentFromCalendar(studentId, studentName) {
                 return;
             }
 
+            if (typeof slotIndex !== 'number' || slotIndex < 0) {
+                console.error('deleteStudentFromCalendar called without a valid slotIndex:', slotIndex);
+                showError(t('admin.attendance.deleteError') || 'Failed to hide student');
+                return;
+            }
+
             const branchObj = window.branches?.find(b => b.name === attendanceCurrentBranch);
             if (!branchObj?.id) {
                 showError(t('admin.attendance.deleteError') || 'Failed to hide student');
@@ -9023,7 +9104,7 @@ async function deleteStudentFromCalendar(studentId, studentName) {
                 p_student_id: studentId,
                 p_branch_id: branchObj.id,
                 p_schedule_type: attendanceCurrentSchedule,
-                p_time_slot_index: -1,
+                p_time_slot_index: slotIndex,
                 p_effective_from: displayedMonthStart
             });
             if (error) {
@@ -9032,9 +9113,20 @@ async function deleteStudentFromCalendar(studentId, studentName) {
                 return;
             }
 
-            attendanceCalendarData.splice(studentIndex, 1);
-            if (attendanceStudentScheduleAssignments[studentId]) {
-                delete attendanceStudentScheduleAssignments[studentId];
+            // Remove only this slot from the student's local timeSlotIndexes.
+            // If the student is no longer in any slot for this schedule, drop
+            // them from attendanceCalendarData so the row vanishes entirely.
+            const student = attendanceCalendarData[studentIndex];
+            if (student && Array.isArray(student.timeSlotIndexes)) {
+                student.timeSlotIndexes = student.timeSlotIndexes.filter(i => i !== slotIndex);
+                if (student.timeSlotIndexes.length === 0) {
+                    attendanceCalendarData.splice(studentIndex, 1);
+                    if (attendanceStudentScheduleAssignments[studentId]) {
+                        delete attendanceStudentScheduleAssignments[studentId];
+                    }
+                }
+            } else {
+                attendanceCalendarData.splice(studentIndex, 1);
             }
 
             renderAttendanceCalendar();
@@ -10059,22 +10151,27 @@ async function submitAttendanceImport() {
     }
 }
 
-// Apply time slot assignments from Excel import to students in calendar
+// Apply time slot assignments from Excel import to students in calendar.
+// Migration 061 multi-slot: write into student.timeSlotIndexes (Set-like
+// array). Importing a slot ADDS to the student's slot membership instead
+// of overwriting it, matching the new multi-slot semantics.
 async function applyTimeSlotAssignmentsFromImport(assignments, branchId) {
     console.log(`Applying time slot assignments to ${assignments.size} students`);
 
-    // Update local calendar data immediately
     for (const [studentId, slotInfo] of assignments) {
         const student = attendanceCalendarData.find(s => s.id === studentId);
         if (student) {
-            student.time_slot_index = slotInfo.timeSlotIndex;
+            if (!Array.isArray(student.timeSlotIndexes)) student.timeSlotIndexes = [];
+            const next = new Set(student.timeSlotIndexes);
+            next.add(slotInfo.timeSlotIndex);
+            student.timeSlotIndexes = Array.from(next);
             console.log(`Assigned ${student.first_name} ${student.last_name} to slot ${slotInfo.timeSlotIndex} (${slotInfo.timeSlot})`);
         }
     }
 
-    // Optionally update in database if the students table has time_slot_index column
-    // For now, the assignment persists via the attendance records' time_slot field
-    // and will be reloaded from there when the calendar is refreshed
+    // For now, the assignment persists via the attendance records' time_slot
+    // field and will be reloaded from getTimeSlotAssignments when the
+    // calendar refreshes.
 }
 
 // Export current ratings (active + frozen students) to Excel.

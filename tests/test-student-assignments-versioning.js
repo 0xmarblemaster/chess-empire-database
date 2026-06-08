@@ -153,8 +153,12 @@ assert(/\.rpc\(\s*['"]hide_student_versioned['"]/.test(hideBody),
     'calls hide_student_versioned RPC');
 assert(!/upsertTimeSlotAssignment\s*\([\s\S]{0,200}-1\s*[,)]/.test(hideBody),
     'does NOT call upsertTimeSlotAssignment with -1 anymore');
-assert(/p_time_slot_index\s*:\s*-1/.test(hideBody),
-    'RPC payload sets p_time_slot_index = -1');
+// Migration 061 multi-slot: hide_student_versioned takes p_time_slot_index
+// as a key parameter — the slot being hidden. deleteStudentFromCalendar
+// forwards the row-context `slotIndex` rather than the legacy global -1
+// sentinel. See COACH_MULTI_GROUP_PRD.md.
+assert(/p_time_slot_index\s*:\s*slotIndex/.test(hideBody),
+    'RPC payload sets p_time_slot_index = slotIndex (per-slot hide, migration 061)');
 assert(/p_effective_from\s*:\s*displayedMonthStart/.test(hideBody),
     'RPC payload sets p_effective_from = displayedMonthStart');
 assert(/displayedMonthStart\s*=\s*`\$\{attendanceCurrentYear\}-\$\{String\(attendanceCurrentMonth\s*\+\s*1\)\.padStart\(2,\s*['"]0['"]\)\}-01`/.test(hideBody),
@@ -197,23 +201,24 @@ assert(/\.lte\(\s*['"]effective_from['"]\s*,\s*monthEnd\s*\)/.test(getBody),
 assert(/\.order\(\s*['"]effective_from['"]\s*,\s*\{\s*ascending:\s*false\s*\}\s*\)/.test(getBody),
     'query orders effective_from DESC (latest version per student first)');
 assert(/seen\.has/.test(getBody) && /seen\.add/.test(getBody),
-    'JS-side dedup picks the first (latest) row per student');
+    'JS-side dedup picks the first (latest) row per (student, slot) pair (migration 061)');
 
-// 5b. upsertTimeSlotAssignment writes effective_from = 1970-01-01 to the new constraint
+// 5b. upsertTimeSlotAssignment writes effective_from = 1970-01-01 against
+//     the migration-061 per-slot versioned constraint.
 const upsertBody = methodBody(SDATA_SRC, 'upsertTimeSlotAssignment');
 assert(upsertBody.length > 0, 'located upsertTimeSlotAssignment method body');
 assert(/effective_from:\s*['"]1970-01-01['"]/.test(upsertBody),
     'upsertTimeSlotAssignment writes effective_from = 1970-01-01 (baseline)');
-assert(/onConflict:\s*['"]student_id,branch_id,schedule_type,effective_from['"]/.test(upsertBody),
-    'upsertTimeSlotAssignment uses the new versioned conflict target');
+assert(/onConflict:\s*['"]student_id,branch_id,schedule_type,time_slot_index,effective_from['"]/.test(upsertBody),
+    'upsertTimeSlotAssignment uses the migration-061 per-slot versioned conflict target');
 
 // 5c. bulkUpsertTimeSlotAssignments mirrors the same pattern
 const bulkBody = methodBody(SDATA_SRC, 'bulkUpsertTimeSlotAssignments');
 assert(bulkBody.length > 0, 'located bulkUpsertTimeSlotAssignments method body');
 assert(/effective_from:\s*['"]1970-01-01['"]/.test(bulkBody),
     'bulkUpsertTimeSlotAssignments writes effective_from = 1970-01-01');
-assert(/onConflict:\s*['"]student_id,branch_id,schedule_type,effective_from['"]/.test(bulkBody),
-    'bulkUpsertTimeSlotAssignments uses the new versioned conflict target');
+assert(/onConflict:\s*['"]student_id,branch_id,schedule_type,time_slot_index,effective_from['"]/.test(bulkBody),
+    'bulkUpsertTimeSlotAssignments uses the migration-061 per-slot versioned conflict target');
 
 // ============================================================================
 // 6. i18n — new keys present in en, ru, kk
