@@ -2593,11 +2593,21 @@ const supabaseData = {
      * @param {string} scheduleType - 'mon_wed', 'tue_thu', or 'sat_sun'
      * @param {number} [year] - Displayed calendar year (e.g. 2026)
      * @param {number} [month] - Displayed calendar month, 0-indexed (e.g. 4 for May)
-     * @returns {Array} Array of { studentId, timeSlotIndex } — one row per
-     *   (student, slot) pair, carrying the slot index from the latest version
-     *   with effective_from <= month-end. A student in multiple slots returns
-     *   multiple rows; the caller (admin-v2.js loadAttendanceData) groups by
-     *   studentId into student.timeSlotIndexes.
+     * @returns {{assignments: Array<{studentId: string, timeSlotIndex: number}>, hiddenStudentIds: string[]}}
+     *   `assignments`: one row per visible (student, slot) pair, carrying the
+     *   slot index from the latest version with effective_from <= month-end.
+     *   A student in multiple slots returns multiple rows; the caller
+     *   (admin-v2.js loadAttendanceData) groups by studentId into
+     *   student.timeSlotIndexes.
+     *
+     *   `hiddenStudentIds`: student IDs that have rows in this branch+schedule
+     *   but contribute zero entries to `assignments` after dedupe. Covers both
+     *   the legacy schedule-wide -1 hide and the new per-slot hidden=TRUE
+     *   path (migration 061). admin-v2.js must filter
+     *   `attendanceCalendarData` by this list so Halyk auto-seed cannot
+     *   resurrect an intentionally-hidden student. See
+     *   PRD_ATTENDANCE_DELETE_FIX.md for the regression that motivated the
+     *   shape change.
      */
     async getTimeSlotAssignments(branchId, scheduleType, year, month) {
         try {
@@ -2623,7 +2633,7 @@ const supabaseData = {
             if (error) {
                 // Table might not exist yet - return empty silently
                 console.log('Time slot assignments table not available:', error.message);
-                return [];
+                return { assignments: [], hiddenStudentIds: [] };
             }
 
             // Pre-migration-061 "hide entirely from this schedule" markers
@@ -2647,6 +2657,7 @@ const supabaseData = {
             // were already accounted for by the schedule-wide hide pass.
             const seen = new Set();
             const resolved = [];
+            const contributingStudents = new Set();
             for (const d of data) {
                 if (d.time_slot_index < 0) continue;
                 const key = `${d.student_id}|${d.time_slot_index}`;
@@ -2658,11 +2669,31 @@ const supabaseData = {
                     studentId: d.student_id,
                     timeSlotIndex: d.time_slot_index
                 });
+                contributingStudents.add(d.student_id);
             }
-            return resolved;
+
+            // hiddenStudentIds: every student that has at least one row in
+            // this branch+schedule but no visible slot in `resolved`. Covers
+            // (a) legacy schedule-wide -1 latest-row students and (b)
+            // per-slot hidden=TRUE students whose last visible slot was
+            // drained. Students with at least one visible slot are excluded.
+            // Genuinely-new students (no rows at all) never appear here, so
+            // Halyk auto-seed still works for them.
+            const studentsWithRows = new Set();
+            for (const d of data) {
+                studentsWithRows.add(d.student_id);
+            }
+            const hiddenStudentIds = [];
+            for (const id of studentsWithRows) {
+                if (!contributingStudents.has(id)) {
+                    hiddenStudentIds.push(id);
+                }
+            }
+
+            return { assignments: resolved, hiddenStudentIds };
         } catch (e) {
             // Table might not exist - return empty silently
-            return [];
+            return { assignments: [], hiddenStudentIds: [] };
         }
     },
 

@@ -7162,16 +7162,25 @@ async function loadAttendanceData() {
         }
 
         // Apply saved time slot assignments from database.
-        // Migration 061: getTimeSlotAssignments returns one row per
-        // (student, slot) pair — already filtered to visible (non-hidden,
-        // non-legacy-schedule-wide-hide) assignments. Group by studentId
-        // into a Set so a student in multiple slots appears in each.
+        // Migration 061: getTimeSlotAssignments returns
+        //   { assignments, hiddenStudentIds }
+        // - assignments: one row per visible (student, slot) pair (already
+        //   filtered to non-hidden, non-legacy-schedule-wide-hide). Group by
+        //   studentId into a Set so a student in multiple slots appears in
+        //   each.
+        // - hiddenStudentIds: students with rows in this branch+schedule but
+        //   no visible slot (covers legacy -1 schedule-wide hides AND new
+        //   per-slot hidden=TRUE rows). Must be filtered out of
+        //   attendanceCalendarData BEFORE initializeStudentTimeSlots runs,
+        //   otherwise Halyk Arena auto-seed will resurrect them. See
+        //   PRD_ATTENDANCE_DELETE_FIX.md for the regression context.
         const assignedStudentIds = new Set();
         // Reset the global set for current schedule students
         attendanceCurrentScheduleStudents = new Set();
 
         if (timeSlotAssignmentsResult.status === 'fulfilled' && timeSlotAssignmentsResult.value) {
-            const savedAssignments = timeSlotAssignmentsResult.value;
+            const { assignments: savedAssignments = [], hiddenStudentIds = [] } =
+                timeSlotAssignmentsResult.value || { assignments: [], hiddenStudentIds: [] };
 
             // Build studentId → Set<slotIndex> map for quick lookup.
             const assignmentMap = new Map();
@@ -7189,6 +7198,24 @@ async function loadAttendanceData() {
                     assignedStudentIds.add(student.id);
                 }
             });
+
+            // Filter out students intentionally hidden from this schedule —
+            // either a legacy -1 schedule-wide hide row OR a per-slot
+            // hidden=TRUE row that drained their last visible slot. Without
+            // this filter, initializeStudentTimeSlots auto-seeds them back
+            // on Halyk Arena (PRD_ATTENDANCE_DELETE_FIX.md regression).
+            if (hiddenStudentIds.length > 0) {
+                const hiddenIdSet = new Set(hiddenStudentIds);
+                attendanceCalendarData = attendanceCalendarData.filter(s => !hiddenIdSet.has(s.id));
+                // Match the pre-061 cleanup at the old splice site: clear
+                // any cached schedule assignment for the removed students so
+                // capacity checks and the "Add Student" modal do not see
+                // stale state.
+                for (const id of hiddenIdSet) {
+                    delete attendanceStudentScheduleAssignments[id];
+                }
+                console.log(`Filtered out ${hiddenIdSet.size} hidden students from attendanceCalendarData`);
+            }
 
             console.log(`Applied ${savedAssignments.length} saved time slot assignments across ${assignmentMap.size} students`);
         }

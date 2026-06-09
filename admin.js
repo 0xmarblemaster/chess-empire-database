@@ -5891,7 +5891,15 @@ async function loadAttendanceData() {
         attendanceCurrentScheduleStudents = new Set();
 
         if (timeSlotAssignmentsResult.status === 'fulfilled' && timeSlotAssignmentsResult.value) {
-            const savedAssignments = timeSlotAssignmentsResult.value;
+            // Migration 061 / PRD_ATTENDANCE_DELETE_FIX: getTimeSlotAssignments
+            // now returns { assignments, hiddenStudentIds }. This file is the
+            // legacy admin (NOT loaded by any HTML — admin-v2.js is the only
+            // attendance UI). Read .assignments defensively so an accidental
+            // load does not crash; the per-slot multi-membership semantic is
+            // collapsed back to scalar time_slot_index here because the
+            // legacy path predates multi-slot UI.
+            const raw = timeSlotAssignmentsResult.value;
+            const savedAssignments = Array.isArray(raw) ? raw : (raw && raw.assignments) || [];
 
             // Create a map for quick lookup
             const assignmentMap = new Map(savedAssignments.map(a => [a.studentId, a.timeSlotIndex]));

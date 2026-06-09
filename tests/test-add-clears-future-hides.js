@@ -54,12 +54,30 @@ assert(fnBody.includes('.delete('),
 
 console.log('\n=== DELETE filter chain looks right ==================================\n');
 
-// Capture the delete chain — from .delete( up to the next bare semicolon.
-const deleteIdx = fnBody.indexOf('.delete(');
-const deleteSemicolonIdx = fnBody.indexOf(';', deleteIdx);
-assert(deleteIdx > 0 && deleteSemicolonIdx > deleteIdx,
-    'delete chain has a terminating semicolon');
-const deleteChain = fnBody.slice(deleteIdx, deleteSemicolonIdx);
+// Locate the legacy-hide DELETE chain: post-migration-061, upsertTimeSlotAssignment
+// has TWO .delete() chains — one clears per-slot hidden=TRUE rows for the
+// current slot, the other clears legacy schedule-wide -1 sentinel rows.
+// We want the -1 chain here. Walk every .delete( occurrence and pick the
+// one whose chain (up to the next bare `;`) targets time_slot_index = -1.
+function findDeleteChainMatching(body, predicate) {
+    let cursor = 0;
+    while (true) {
+        const at = body.indexOf('.delete(', cursor);
+        if (at < 0) return { idx: -1, chain: '' };
+        const semi = body.indexOf(';', at);
+        if (semi < 0) return { idx: -1, chain: '' };
+        const chain = body.slice(at, semi);
+        if (predicate(chain)) return { idx: at, chain };
+        cursor = semi + 1;
+    }
+}
+
+const { idx: deleteIdx, chain: deleteChain } = findDeleteChainMatching(
+    fnBody,
+    chain => /\.eq\(\s*['"]time_slot_index['"]\s*,\s*-1\s*\)/.test(chain)
+);
+assert(deleteIdx > 0 && deleteChain.length > 0,
+    'legacy-hide DELETE chain (time_slot_index = -1) exists in upsertTimeSlotAssignment');
 
 // Filter on time_slot_index = -1 (never touch a positive slot row).
 assert(/\.eq\(\s*['"]time_slot_index['"]\s*,\s*-1\s*\)/.test(deleteChain),
