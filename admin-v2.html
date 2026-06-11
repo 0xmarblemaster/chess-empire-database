@@ -15,7 +15,7 @@
     <script src="https://unpkg.com/lucide@latest"></script>
     <link rel="stylesheet" href="admin-styles.css?v=1765960066">
     <link rel="stylesheet" href="modal-styles.css">
-    <script src="i18n.js?v=1781170693"></script>
+    <script src="i18n.js?v=1781195000"></script>
 </head>
 <body>
     <!-- Mobile Menu Toggle -->
@@ -903,9 +903,15 @@
                                 <i data-lucide="users" style="width: 20px; height: 20px;"></i>
                                 <span data-i18n="admin.tournaments.tabRegistrations">Registrations</span>
                             </h2>
-                            <select id="tournamentsAdminRegSelect" class="form-input" style="width: auto; min-width: 280px;" onchange="onTournamentsAdminRegSelectChange()">
-                                <option value="" data-i18n="admin.tournaments.selectTournament">Select a tournament</option>
-                            </select>
+                            <div style="display:flex; gap:0.75rem; align-items:center;">
+                                <select id="tournamentsAdminRegSelect" class="form-input" style="width: auto; min-width: 280px;" onchange="onTournamentsAdminRegSelectChange()">
+                                    <option value="" data-i18n="admin.tournaments.selectTournament">Select a tournament</option>
+                                </select>
+                                <button id="tournamentsAdminRegDownloadBtn" class="btn btn-secondary" onclick="downloadTournamentRegistrationsExcel()" disabled>
+                                    <i data-lucide="download" style="width: 18px; height: 18px;"></i>
+                                    <span data-i18n="admin.tournaments.downloadExcel">Download Excel</span>
+                                </button>
+                            </div>
                         </div>
                     </div>
 
@@ -915,13 +921,18 @@
                                 <thead>
                                     <tr>
                                         <th style="width: 50px;">#</th>
-                                        <th data-i18n="admin.table.student">Student</th>
-                                        <th data-i18n="admin.tournaments.col.date">Registered At</th>
+                                        <th data-i18n="admin.tournaments.col.surname">Surname</th>
+                                        <th data-i18n="admin.tournaments.col.firstName">Name</th>
+                                        <th data-i18n="admin.tournaments.col.rating">Rating</th>
+                                        <th data-i18n="admin.tournaments.col.branch">Branch</th>
+                                        <th data-i18n="admin.tournaments.col.coach">Coach</th>
+                                        <th data-i18n="admin.tournaments.col.age">Age</th>
+                                        <th data-i18n="admin.tournaments.col.registered">Registered At</th>
                                         <th data-i18n="admin.tournaments.col.actions">Actions</th>
                                     </tr>
                                 </thead>
                                 <tbody id="tournamentsAdminRegBody">
-                                    <tr><td colspan="4" style="text-align: center; padding: 2rem; color: #94a3b8;" data-i18n="admin.tournaments.selectTournament">Select a tournament</td></tr>
+                                    <tr><td colspan="9" style="text-align: center; padding: 2rem; color: #94a3b8;" data-i18n="admin.tournaments.selectTournament">Select a tournament</td></tr>
                                 </tbody>
                             </table>
                         </div>
@@ -2917,7 +2928,7 @@
     <script src="crud.js?v=1779360000"></script>
     <script src="crud-handlers.js?v=1779360000"></script>
     <script src="crud-management.js?v=1779360000"></script>
-    <script src="admin-v2.js?v=1781170693"></script>
+    <script src="admin-v2.js?v=1781195000"></script>
     <script>
         // DEBUG: Check DOM values after 3 seconds
         setTimeout(() => {

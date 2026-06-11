@@ -11868,6 +11868,7 @@ let tournamentsAdminList = [];                  // [{ id, branch_id, branch_name
 let tournamentsAdminBranches = [];              // [{ id, name }]
 let tournamentsAdminRegCounts = new Map();      // tournament_id -> count
 let tournamentsAdminCurrentRegRows = [];        // [{ id, registered_at, students: {...} }]
+let tournamentsAdminCurrentTournament = null;   // snapshot of selected tournament for Excel export
 
 function _tt(key) {
     return (typeof t === 'function') ? t(key) : key;
@@ -12006,6 +12007,9 @@ function renderTournamentsAdminTable() {
                 <td>${count} / ${_escapeHtml(String(row.capacity ?? 0))}</td>
                 <td>
                     <div class="action-buttons" style="display:flex; gap:0.4rem;">
+                        <button class="icon-button" onclick="showTournamentParticipants('${_escapeHtml(row.id)}')" title="${_escapeHtml(_tt('admin.tournaments.action.viewParticipants'))}" style="color:#2563eb;">
+                            <i data-lucide="eye"></i>
+                        </button>
                         <button class="icon-button" onclick="showEditTournamentModal('${_escapeHtml(row.id)}')" title="${_escapeHtml(_tt('admin.tournaments.action.edit'))}">
                             <i data-lucide="edit"></i>
                         </button>
@@ -12052,44 +12056,106 @@ async function onTournamentsAdminRegSelectChange() {
     if (!id) {
         const body = document.getElementById('tournamentsAdminRegBody');
         if (body) {
-            body.innerHTML = `<tr><td colspan="4" style="text-align:center; padding:2rem; color:#94a3b8;">${_escapeHtml(_tt('admin.tournaments.selectTournament'))}</td></tr>`;
+            body.innerHTML = `<tr><td colspan="9" style="text-align:center; padding:2rem; color:#94a3b8;">${_escapeHtml(_tt('admin.tournaments.selectTournament'))}</td></tr>`;
         }
+        _setRegDownloadEnabled(false);
         return;
     }
     await showTournamentRegistrations(id);
 }
 window.onTournamentsAdminRegSelectChange = onTournamentsAdminRegSelectChange;
 
+function _setRegDownloadEnabled(enabled) {
+    const btn = document.getElementById('tournamentsAdminRegDownloadBtn');
+    if (btn) btn.disabled = !enabled;
+}
+
+// DOB-prioritised age; falls back to students.age, then blank.
+// refDate = tournament date (so the list reflects age "as of tournament").
+function _computeAge(dob, storedAge, refDate) {
+    if (dob) {
+        const d = new Date(dob);
+        const r = refDate ? new Date(refDate) : new Date();
+        if (!isNaN(d.getTime()) && !isNaN(r.getTime())) {
+            let age = r.getFullYear() - d.getFullYear();
+            const m = r.getMonth() - d.getMonth();
+            if (m < 0 || (m === 0 && r.getDate() < d.getDate())) age--;
+            if (age >= 0 && age < 150) return age;
+        }
+    }
+    if (typeof storedAge === 'number' && storedAge >= 0) return storedAge;
+    if (storedAge != null && storedAge !== '' && !isNaN(parseInt(storedAge, 10))) {
+        return parseInt(storedAge, 10);
+    }
+    return null;
+}
+
 async function showTournamentRegistrations(tournamentId) {
     const supabase = window.supabaseClient;
     const body = document.getElementById('tournamentsAdminRegBody');
     if (!body) return;
     if (!supabase) {
-        body.innerHTML = `<tr><td colspan="4" style="text-align:center; padding:2rem; color:#dc2626;">${_escapeHtml(_tt('admin.tournaments.error'))}</td></tr>`;
+        body.innerHTML = `<tr><td colspan="9" style="text-align:center; padding:2rem; color:#dc2626;">${_escapeHtml(_tt('admin.tournaments.error'))}</td></tr>`;
+        _setRegDownloadEnabled(false);
         return;
     }
+
+    // Snapshot tournament metadata (used by Excel export — title row + filename).
+    const t = tournamentsAdminList.find(x => String(x.id) === String(tournamentId));
+    tournamentsAdminCurrentTournament = t || null;
 
     try {
         const { data, error } = await supabase
             .from('tournament_registrations')
-            .select('id, registered_at, students!inner(first_name, last_name)')
+            .select(`
+                id, registered_at,
+                students!inner(
+                    id, first_name, last_name, age, date_of_birth, branch_id, coach_id,
+                    branches(name),
+                    coaches(first_name, last_name),
+                    student_current_ratings(rating, rating_date)
+                )
+            `)
             .eq('tournament_id', tournamentId)
             .order('registered_at', { ascending: true });
         if (error) throw error;
 
         tournamentsAdminCurrentRegRows = data || [];
         if (tournamentsAdminCurrentRegRows.length === 0) {
-            body.innerHTML = `<tr><td colspan="4" style="text-align:center; padding:2rem; color:#94a3b8;">${_escapeHtml(_tt('admin.tournaments.noRegistrations'))}</td></tr>`;
+            body.innerHTML = `<tr><td colspan="9" style="text-align:center; padding:2rem; color:#94a3b8;">${_escapeHtml(_tt('admin.tournaments.noRegistrations'))}</td></tr>`;
+            _setRegDownloadEnabled(false);
             return;
         }
 
+        const refDate = t?.tournament_date || null;
+        const translateBranch = (window.i18n && typeof window.i18n.translateBranchName === 'function')
+            ? window.i18n.translateBranchName
+            : (n => n);
+
         body.innerHTML = tournamentsAdminCurrentRegRows.map((row, i) => {
-            const name = ((row.students?.last_name || '') + ' ' + (row.students?.first_name || '')).trim();
+            const s = row.students || {};
+            const last = s.last_name || '';
+            const first = s.first_name || '';
+            const ratingObj = Array.isArray(s.student_current_ratings)
+                ? s.student_current_ratings[0]
+                : s.student_current_ratings;
+            const rating = ratingObj?.rating;
+            const branchName = s.branches?.name ? translateBranch(s.branches.name) : '';
+            const coach = s.coaches
+                ? `${s.coaches.last_name || ''} ${s.coaches.first_name || ''}`.trim()
+                : '';
+            const age = _computeAge(s.date_of_birth, s.age, refDate);
             const at = row.registered_at ? String(row.registered_at).replace('T', ' ').slice(0, 16) : '';
+            const dash = '—';
             return `
                 <tr data-registration-id="${_escapeHtml(row.id)}">
                     <td>${i + 1}</td>
-                    <td>${_escapeHtml(name)}</td>
+                    <td>${_escapeHtml(last || dash)}</td>
+                    <td>${_escapeHtml(first || dash)}</td>
+                    <td>${rating != null ? _escapeHtml(String(rating)) : dash}</td>
+                    <td>${branchName ? _escapeHtml(branchName) : dash}</td>
+                    <td>${coach ? _escapeHtml(coach) : dash}</td>
+                    <td>${age != null ? age : dash}</td>
                     <td>${_escapeHtml(at)}</td>
                     <td>
                         <button class="icon-button" onclick="removeRegistration('${_escapeHtml(row.id)}')" title="${_escapeHtml(_tt('admin.tournaments.action.remove'))}" style="color:#dc2626;">
@@ -12099,13 +12165,111 @@ async function showTournamentRegistrations(tournamentId) {
                 </tr>
             `;
         }).join('');
+        _setRegDownloadEnabled(true);
         if (typeof lucide !== 'undefined') lucide.createIcons();
     } catch (e) {
         console.error('Failed to load registrations:', e);
-        body.innerHTML = `<tr><td colspan="4" style="text-align:center; padding:2rem; color:#dc2626;">${_escapeHtml(_tt('admin.tournaments.error'))}</td></tr>`;
+        body.innerHTML = `<tr><td colspan="9" style="text-align:center; padding:2rem; color:#dc2626;">${_escapeHtml(_tt('admin.tournaments.error'))}</td></tr>`;
+        _setRegDownloadEnabled(false);
     }
 }
 window.showTournamentRegistrations = showTournamentRegistrations;
+
+// Eye-icon entry point from the Tournaments tab: switch to Registrations tab,
+// select the tournament in the dropdown, and load its participants.
+async function showTournamentParticipants(tournamentId) {
+    try {
+        if (typeof switchTournamentAdminTab === 'function') {
+            switchTournamentAdminTab('registrations');
+        }
+        // Wait a tick so the dropdown is populated by switchTournamentAdminTab.
+        await new Promise(r => setTimeout(r, 0));
+        const sel = document.getElementById('tournamentsAdminRegSelect');
+        if (sel) sel.value = String(tournamentId);
+        await showTournamentRegistrations(tournamentId);
+    } catch (e) {
+        console.error('showTournamentParticipants failed:', e);
+        _tournamentsAdminToast(_tt('admin.tournaments.error'), 'error');
+    }
+}
+window.showTournamentParticipants = showTournamentParticipants;
+
+function _sanitizeFilename(s) {
+    return String(s || '').replace(/[\\/:*?"<>|]/g, '_').trim();
+}
+
+async function downloadTournamentRegistrationsExcel() {
+    const t = tournamentsAdminCurrentTournament;
+    const rows = tournamentsAdminCurrentRegRows;
+    if (!t || !rows || rows.length === 0) {
+        _tournamentsAdminToast(_tt('admin.tournaments.noRegistrations'), 'info');
+        return;
+    }
+    if (typeof XLSX === 'undefined') {
+        _tournamentsAdminToast(_tt('admin.tournaments.error'), 'error');
+        return;
+    }
+
+    const refDate = t.tournament_date || null;
+    const translateBranch = (window.i18n && typeof window.i18n.translateBranchName === 'function')
+        ? window.i18n.translateBranchName
+        : (n => n);
+
+    const branchLabelForTitle = translateBranch(t.branch_name || '');
+    const titleParts = [t.name, t.tournament_date, t.time_format, branchLabelForTitle]
+        .filter(p => p && String(p).trim());
+    const titleRow = [titleParts.join(' — ')];
+
+    const headerRow = [
+        '#',
+        _tt('admin.tournaments.col.surname'),
+        _tt('admin.tournaments.col.firstName'),
+        _tt('admin.tournaments.col.rating'),
+        _tt('admin.tournaments.col.branch'),
+        _tt('admin.tournaments.col.coach'),
+        _tt('admin.tournaments.col.age'),
+        _tt('admin.tournaments.col.registered')
+    ];
+
+    const aoa = [titleRow, [], headerRow];
+    rows.forEach((row, i) => {
+        const s = row.students || {};
+        const ratingObj = Array.isArray(s.student_current_ratings)
+            ? s.student_current_ratings[0]
+            : s.student_current_ratings;
+        const rating = ratingObj?.rating;
+        const branchName = s.branches?.name ? translateBranch(s.branches.name) : '';
+        const coach = s.coaches
+            ? `${s.coaches.last_name || ''} ${s.coaches.first_name || ''}`.trim()
+            : '';
+        const age = _computeAge(s.date_of_birth, s.age, refDate);
+        const at = row.registered_at ? String(row.registered_at).replace('T', ' ').slice(0, 16) : '';
+        aoa.push([
+            i + 1,
+            s.last_name || '',
+            s.first_name || '',
+            rating != null ? rating : '',
+            branchName || '',
+            coach || '',
+            age != null ? age : '',
+            at
+        ]);
+    });
+
+    const ws = XLSX.utils.aoa_to_sheet(aoa);
+    ws['!cols'] = [
+        { wch: 5 }, { wch: 18 }, { wch: 18 }, { wch: 8 },
+        { wch: 22 }, { wch: 22 }, { wch: 6 }, { wch: 18 }
+    ];
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'Participants');
+
+    const filename = _sanitizeFilename(
+        `${_tt('admin.tournaments.excelFilenamePrefix')} — ${t.name} — ${t.tournament_date || ''}`
+    ) + '.xlsx';
+    XLSX.writeFile(wb, filename);
+}
+window.downloadTournamentRegistrationsExcel = downloadTournamentRegistrationsExcel;
 
 async function removeRegistration(registrationId) {
     if (!confirm(_tt('admin.tournaments.confirmRemove'))) return;
