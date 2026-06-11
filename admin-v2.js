@@ -12279,11 +12279,17 @@ async function removeRegistration(registrationId) {
         return;
     }
     try {
-        const { error } = await supabase
-            .from('tournament_registrations')
-            .delete()
-            .eq('id', registrationId);
+        const { data, error } = await supabase.rpc('admin_remove_tournament_registration', {
+            p_registration_id: registrationId
+        });
         if (error) throw error;
+        if (!data || data.ok !== true) {
+            const reason = (data && data.reason) ? data.reason : 'unknown';
+            const key = `admin.tournaments.removeError.${reason}`;
+            const msg = _tt(key);
+            _tournamentsAdminToast(msg && msg !== key ? msg : _tt('admin.tournaments.error'), 'error');
+            return;
+        }
         _tournamentsAdminToast(_tt('admin.tournaments.registrationRemoved'), 'success');
         // Refresh tournament list (for capacity counter) and current roster.
         const sel = document.getElementById('tournamentsAdminRegSelect');
