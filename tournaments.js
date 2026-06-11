@@ -29,10 +29,12 @@ const tournamentsApp = {
     tournamentsByBranch: new Map(),// branchId -> [tournament]
     rostersByTournament: new Map(),// tournamentId -> [{ student_id, first_name, last_name }]
     expandedBranchId: null,
-    expandedTournamentId: null,
-    activeChannel: null,
+    // When a branch is expanded, every tournament under it renders fully
+    // expanded — there's no separate summary→detail middle step. Live
+    // updates run for every visible tournament concurrently.
+    activeTournamentIds: new Set(),
+    activeChannels: [],            // [{ id, channel }]
     activePollTimer: null,
-    activeTournamentId: null,
 };
 
 (async function init() {
@@ -54,9 +56,6 @@ const tournamentsApp = {
         if (tournamentsApp.expandedBranchId) {
             renderBranchTournaments(tournamentsApp.expandedBranchId);
         }
-        if (tournamentsApp.expandedTournamentId) {
-            renderTournamentDetail(tournamentsApp.expandedTournamentId);
-        }
     });
 
     initModal();
@@ -69,9 +68,6 @@ const tournamentsApp = {
     setInterval(() => {
         if (tournamentsApp.expandedBranchId) {
             renderBranchTournaments(tournamentsApp.expandedBranchId);
-        }
-        if (tournamentsApp.expandedTournamentId) {
-            renderTournamentDetail(tournamentsApp.expandedTournamentId);
         }
     }, 60000);
 })();
@@ -327,16 +323,27 @@ function branchCardHtml(b) {
 }
 
 function toggleBranch(branchId) {
+    teardownLiveUpdates();
     if (tournamentsApp.expandedBranchId === branchId) {
         tournamentsApp.expandedBranchId = null;
-        tournamentsApp.expandedTournamentId = null;
-        teardownLiveUpdates();
     } else {
         tournamentsApp.expandedBranchId = branchId;
-        tournamentsApp.expandedTournamentId = null;
-        teardownLiveUpdates();
     }
     renderBranches();
+    if (tournamentsApp.expandedBranchId) {
+        activateBranchLiveUpdates(tournamentsApp.expandedBranchId);
+    }
+}
+
+// Load rosters + subscribe to Realtime for every tournament in the branch.
+// Called once per branch expansion. The render pass paints the detail
+// panel for every tournament; this populates the live state behind it.
+function activateBranchLiveUpdates(branchId) {
+    const tournaments = tournamentsApp.tournamentsByBranch.get(branchId) || [];
+    const ids = tournaments.map(t => t.id);
+    tournamentsApp.activeTournamentIds = new Set(ids);
+    for (const id of ids) refreshTournamentLive(id);
+    startLiveUpdates(ids);
 }
 
 function renderBranchTournaments(branchId) {
@@ -351,17 +358,16 @@ function renderBranchTournaments(branchId) {
 
     body.innerHTML = `<div class="tournaments-list">${tournaments.map(tournamentRowHtml).join('')}</div>`;
 
-    body.querySelectorAll('.tournament-summary').forEach(el => {
-        el.addEventListener('click', () => toggleTournament(el.dataset.tournamentId));
-    });
-
-    if (tournamentsApp.expandedTournamentId) {
-        renderTournamentDetail(tournamentsApp.expandedTournamentId);
+    for (const t of tournaments) {
+        renderTournamentDetail(t.id);
     }
 }
 
 function tournamentRowHtml(t) {
-    const expanded = t.id === tournamentsApp.expandedTournamentId;
+    // Every row under the active branch renders fully expanded — no
+    // summary→detail click step. Adding `expanded` class triggers the
+    // CSS that lifts the detail panel's max-height.
+    const expanded = true;
     const dateLabel = formatDate(t.tournament_date);
     const timeLabel = formatTime(t.start_time);
     const regCount = t._regCount || 0;
@@ -379,7 +385,7 @@ function tournamentRowHtml(t) {
         : '';
     return `
         <div class="tournament-row ${expanded ? 'expanded' : ''}" data-tournament-row="${escapeAttr(t.id)}">
-            <div class="tournament-summary" data-tournament-id="${escapeAttr(t.id)}" role="button" tabindex="0">
+            <div class="tournament-summary">
                 <div>
                     <div class="tournament-title">${escapeHtml(localizeTournamentName(t.name))}</div>
                     <div class="tournament-meta" style="margin-top:4px;">
@@ -393,21 +399,6 @@ function tournamentRowHtml(t) {
             </div>
             <div class="tournament-detail" data-tournament-detail="${escapeAttr(t.id)}"></div>
         </div>`;
-}
-
-function toggleTournament(tournamentId) {
-    if (tournamentsApp.expandedTournamentId === tournamentId) {
-        tournamentsApp.expandedTournamentId = null;
-        teardownLiveUpdates();
-        renderBranchTournaments(tournamentsApp.expandedBranchId);
-        return;
-    }
-    tournamentsApp.expandedTournamentId = tournamentId;
-    teardownLiveUpdates();
-    renderBranchTournaments(tournamentsApp.expandedBranchId);
-    // Kick off live roster loading.
-    refreshTournamentLive(tournamentId);
-    startLiveUpdates(tournamentId);
 }
 
 async function refreshTournamentLive(tournamentId) {
@@ -513,72 +504,78 @@ function renderLoadError() {
 // ---------------------------------------------------------------------------
 // Live updates — Supabase Realtime + 15s polling fallback
 // ---------------------------------------------------------------------------
-function startLiveUpdates(tournamentId) {
-    tournamentsApp.activeTournamentId = tournamentId;
+function startLiveUpdates(tournamentIds) {
+    const ids = Array.isArray(tournamentIds) ? tournamentIds : [tournamentIds];
+    if (ids.length === 0) return;
     const supabase = window.supabaseClient;
     if (!supabase || typeof supabase.channel !== 'function') {
-        startPolling(tournamentId);
+        startPolling(ids);
         return;
     }
 
-    let subscribed = false;
-    const channel = supabase
-        .channel(`tournament_registrations:${tournamentId}`)
-        .on('postgres_changes', {
-            event: '*',
-            schema: 'public',
-            table: 'tournament_registrations',
-            filter: `tournament_id=eq.${tournamentId}`,
-        }, () => {
-            if (tournamentsApp.activeTournamentId === tournamentId) {
-                refreshTournamentLive(tournamentId);
-                if (tournamentsApp.expandedTournamentId === tournamentId) {
-                    renderTournamentDetail(tournamentId);
+    const subscribed = new Set();
+    for (const id of ids) {
+        const channel = supabase
+            .channel(`tournament_registrations:${id}`)
+            .on('postgres_changes', {
+                event: '*',
+                schema: 'public',
+                table: 'tournament_registrations',
+                filter: `tournament_id=eq.${id}`,
+            }, () => {
+                if (tournamentsApp.activeTournamentIds.has(id)) {
+                    refreshTournamentLive(id);
                 }
-            }
-        })
-        .subscribe(status => {
-            if (status === 'SUBSCRIBED') subscribed = true;
-        });
-    tournamentsApp.activeChannel = channel;
+            })
+            .subscribe(status => {
+                if (status === 'SUBSCRIBED') subscribed.add(id);
+            });
+        tournamentsApp.activeChannels.push({ id, channel });
+    }
 
-    // If Realtime hasn't subscribed within 5s, fall back to polling.
+    // If any subscription hasn't confirmed within 5s, fall back to polling
+    // for the whole batch.
     setTimeout(() => {
-        if (!subscribed && tournamentsApp.activeTournamentId === tournamentId) {
-            console.warn('Realtime did not connect, falling back to polling');
-            startPolling(tournamentId);
+        if (subscribed.size < ids.length
+            && ids.every(id => tournamentsApp.activeTournamentIds.has(id))) {
+            console.warn('Realtime did not connect for all tournaments, falling back to polling');
+            startPolling(ids);
         }
     }, REALTIME_CONNECT_TIMEOUT_MS);
 }
 
-function startPolling(tournamentId) {
+function startPolling(tournamentIds) {
     if (tournamentsApp.activePollTimer) return;
+    const ids = Array.isArray(tournamentIds) ? tournamentIds : [tournamentIds];
     tournamentsApp.activePollTimer = setInterval(() => {
-        if (tournamentsApp.activeTournamentId !== tournamentId) {
+        // Stop polling once the branch collapses.
+        if (![...tournamentsApp.activeTournamentIds].some(id => ids.includes(id))) {
             clearInterval(tournamentsApp.activePollTimer);
             tournamentsApp.activePollTimer = null;
             return;
         }
-        refreshTournamentLive(tournamentId).then(() => {
-            if (tournamentsApp.expandedTournamentId === tournamentId) {
-                renderTournamentDetail(tournamentId);
+        for (const id of ids) {
+            if (tournamentsApp.activeTournamentIds.has(id)) {
+                refreshTournamentLive(id);
             }
-        });
+        }
     }, POLL_INTERVAL_MS);
 }
 
 function teardownLiveUpdates() {
-    tournamentsApp.activeTournamentId = null;
-    if (tournamentsApp.activeChannel) {
-        try {
-            const sb = window.supabaseClient;
-            if (sb && typeof sb.removeChannel === 'function') {
-                sb.removeChannel(tournamentsApp.activeChannel);
-            } else if (typeof tournamentsApp.activeChannel.unsubscribe === 'function') {
-                tournamentsApp.activeChannel.unsubscribe();
-            }
-        } catch (e) { /* swallow */ }
-        tournamentsApp.activeChannel = null;
+    tournamentsApp.activeTournamentIds = new Set();
+    if (tournamentsApp.activeChannels && tournamentsApp.activeChannels.length > 0) {
+        const sb = window.supabaseClient;
+        for (const { channel } of tournamentsApp.activeChannels) {
+            try {
+                if (sb && typeof sb.removeChannel === 'function') {
+                    sb.removeChannel(channel);
+                } else if (channel && typeof channel.unsubscribe === 'function') {
+                    channel.unsubscribe();
+                }
+            } catch (e) { /* swallow */ }
+        }
+        tournamentsApp.activeChannels = [];
     }
     if (tournamentsApp.activePollTimer) {
         clearInterval(tournamentsApp.activePollTimer);
