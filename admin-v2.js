@@ -12239,7 +12239,7 @@ async function submitTournamentAdminForm() {
 
     if (!branchId || !name || !date || !startTime || !timeFormat
         || isNaN(fee) || !rounds || rounds < 1 || !capacity || capacity < 1
-        || !status || !league) {
+        || !status || !league || !registrationDeadline) {
         _tournamentsAdminToast(_tt('admin.tournaments.error'), 'error');
         return;
     }
