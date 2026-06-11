@@ -13,7 +13,7 @@
     <script src="https://unpkg.com/lucide@latest"></script>
     <script src="supabase-config.js?v=9"></script>
     <script src="supabase-client.js?v=9"></script>
-    <script src="i18n.js?v=14"></script>
+    <script src="i18n.js?v=15"></script>
     <link rel="stylesheet" href="styles.css?v=7">
     <style>
         * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -453,6 +453,73 @@
             to   { transform: translateX(0);    opacity: 1; }
         }
 
+        /* Flip-clock countdown — sits between roster and Register button */
+        .countdown-block {
+            margin-bottom: 14px;
+            text-align: center;
+        }
+        .countdown-label {
+            font-size: 0.7rem;
+            text-transform: uppercase;
+            letter-spacing: 0.06em;
+            color: #64748b;
+            font-weight: 700;
+            margin-bottom: 8px;
+        }
+        .countdown-cards {
+            display: flex;
+            justify-content: center;
+            gap: 8px;
+        }
+        .countdown-card {
+            position: relative;
+            flex: 1 1 0;
+            max-width: 88px;
+            background: linear-gradient(180deg, #1e293b 0%, #0f172a 100%);
+            border-radius: 10px;
+            padding: 12px 4px 8px;
+            box-shadow: 0 2px 6px rgba(15,23,42,0.18);
+            overflow: hidden;
+        }
+        .countdown-card::after {
+            content: "";
+            position: absolute;
+            left: 0; right: 0;
+            top: 50%;
+            height: 1px;
+            background: rgba(255,255,255,0.08);
+            pointer-events: none;
+        }
+        .countdown-number {
+            font-family: 'Outfit', sans-serif;
+            font-size: 1.9rem;
+            font-weight: 800;
+            line-height: 1;
+            color: #ffffff;
+            font-variant-numeric: tabular-nums;
+            transition: color 0.2s ease;
+        }
+        .countdown-unit {
+            display: block;
+            margin-top: 6px;
+            font-size: 0.62rem;
+            text-transform: uppercase;
+            letter-spacing: 0.08em;
+            color: #94a3b8;
+            font-weight: 600;
+        }
+        /* Urgent <3h — flips numerals to amber */
+        .countdown-block.urgent .countdown-number { color: #f59e0b; }
+        /* Critical <1h — flips numerals to red, soft pulse */
+        .countdown-block.critical .countdown-number {
+            color: #ef4444;
+            animation: cdPulse 1s ease-in-out infinite;
+        }
+        @keyframes cdPulse {
+            0%, 100% { opacity: 1; }
+            50%      { opacity: 0.7; }
+        }
+
         @media (max-width: 640px) {
             .container { padding: 16px 12px 80px; }
             .header h1 { font-size: 1.5rem; }
@@ -465,6 +532,10 @@
             .detail-grid { grid-template-columns: 1fr; gap: 10px; }
             .toast-stack { right: 12px; top: 12px; left: 12px; }
             .toast { min-width: 0; }
+            .countdown-cards { gap: 6px; }
+            .countdown-card { padding: 10px 2px 7px; }
+            .countdown-number { font-size: 1.5rem; }
+            .countdown-unit { font-size: 0.58rem; }
         }
         @media (max-width: 420px) {
             .branch-header > div:last-child {
@@ -512,7 +583,7 @@
 
     <div class="toast-stack" id="toastStack" aria-live="polite" aria-atomic="false"></div>
 
-    <script src="tournaments.js?v=5"></script>
+    <script src="tournaments.js?v=6"></script>
     <script>
         (async function() {
             try {

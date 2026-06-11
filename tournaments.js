@@ -70,6 +70,11 @@ const tournamentsApp = {
             renderBranchTournaments(tournamentsApp.expandedBranchId);
         }
     }, 60000);
+
+    // Per-second tick for the flip-clock countdown. Updates numerals only —
+    // no DOM rebuild. Fires a one-shot live refresh when a deadline crosses
+    // zero so the panel flips to the closed state.
+    setInterval(tickCountdowns, 1000);
 })();
 
 // ---------------------------------------------------------------------------
@@ -263,6 +268,102 @@ function isDeadlinePassed(t) {
     const d = new Date(t.registration_deadline);
     if (isNaN(d.getTime())) return false;
     return Date.now() > d.getTime();
+}
+
+// Flip-clock countdown markup. Tick is driven by tickCountdowns() once a
+// second; we only render the static skeleton + initial values here. Returns
+// '' when the tournament has no deadline, is already closed, or the deadline
+// has already passed — in those cases the standard closed-state UI handles
+// the messaging.
+function countdownHtml(t) {
+    if (!t || !t.registration_deadline) return '';
+    if (t.status !== 'open') return '';
+    if (isDeadlinePassed(t)) return '';
+    const ms = new Date(t.registration_deadline).getTime() - Date.now();
+    const parts = countdownParts(ms);
+    const urgency = countdownUrgencyClass(ms);
+    return `
+        <div class="countdown-block ${urgency}" data-countdown-for="${escapeAttr(t.id)}" data-countdown-deadline="${escapeAttr(t.registration_deadline)}">
+            <div class="countdown-label">${escapeHtml(tt('tournaments.countdown.label'))}</div>
+            <div class="countdown-cards">
+                <div class="countdown-card">
+                    <div class="countdown-number" data-cd-unit="days">${parts.days}</div>
+                    <span class="countdown-unit" data-i18n="tournaments.countdown.days">${escapeHtml(tt('tournaments.countdown.days'))}</span>
+                </div>
+                <div class="countdown-card">
+                    <div class="countdown-number" data-cd-unit="hours">${parts.hours}</div>
+                    <span class="countdown-unit" data-i18n="tournaments.countdown.hours">${escapeHtml(tt('tournaments.countdown.hours'))}</span>
+                </div>
+                <div class="countdown-card">
+                    <div class="countdown-number" data-cd-unit="minutes">${parts.minutes}</div>
+                    <span class="countdown-unit" data-i18n="tournaments.countdown.minutes">${escapeHtml(tt('tournaments.countdown.minutes'))}</span>
+                </div>
+                <div class="countdown-card">
+                    <div class="countdown-number" data-cd-unit="seconds">${parts.seconds}</div>
+                    <span class="countdown-unit" data-i18n="tournaments.countdown.seconds">${escapeHtml(tt('tournaments.countdown.seconds'))}</span>
+                </div>
+            </div>
+        </div>`;
+}
+
+function countdownParts(ms) {
+    if (ms < 0) ms = 0;
+    const totalSec = Math.floor(ms / 1000);
+    const days    = Math.floor(totalSec / 86400);
+    const hours   = Math.floor((totalSec % 86400) / 3600);
+    const minutes = Math.floor((totalSec % 3600) / 60);
+    const seconds = totalSec % 60;
+    const pad = n => String(n).padStart(2, '0');
+    return {
+        days:    String(days).padStart(2, '0'),
+        hours:   pad(hours),
+        minutes: pad(minutes),
+        seconds: pad(seconds),
+    };
+}
+
+// Amber under 3h, red + pulse under 1h. Mirrors the page's existing
+// warn-amber + close-red conventions.
+function countdownUrgencyClass(ms) {
+    if (ms < 60 * 60 * 1000) return 'critical';
+    if (ms < 3 * 60 * 60 * 1000) return 'urgent';
+    return '';
+}
+
+// One global 1s tick. Only writes numerals + toggles urgency classes —
+// never re-renders the panel. When a deadline crosses zero it fires a
+// one-shot live refresh so the panel flips to the closed state.
+function tickCountdowns() {
+    const blocks = document.querySelectorAll('[data-countdown-for]');
+    if (blocks.length === 0) return;
+    const now = Date.now();
+    blocks.forEach(block => {
+        const deadlineRaw = block.getAttribute('data-countdown-deadline');
+        if (!deadlineRaw) return;
+        const deadline = new Date(deadlineRaw).getTime();
+        if (isNaN(deadline)) return;
+        const ms = deadline - now;
+        if (ms <= 0) {
+            if (!block.dataset.fired) {
+                block.dataset.fired = '1';
+                const id = block.getAttribute('data-countdown-for');
+                if (id) refreshTournamentLive(id);
+            }
+            return;
+        }
+        const parts = countdownParts(ms);
+        const d = block.querySelector('[data-cd-unit="days"]');
+        const h = block.querySelector('[data-cd-unit="hours"]');
+        const m = block.querySelector('[data-cd-unit="minutes"]');
+        const s = block.querySelector('[data-cd-unit="seconds"]');
+        if (d) d.textContent = parts.days;
+        if (h) h.textContent = parts.hours;
+        if (m) m.textContent = parts.minutes;
+        if (s) s.textContent = parts.seconds;
+        const cls = countdownUrgencyClass(ms);
+        block.classList.toggle('urgent',   cls === 'urgent');
+        block.classList.toggle('critical', cls === 'critical');
+    });
 }
 
 // Localized "Closes <date> <time>" for the upcoming-state deadline label.
@@ -485,6 +586,7 @@ function renderTournamentDetail(tournamentId) {
                 <div class="label">${escapeHtml(tt('tournaments.fields.roster'))}</div>
             </div>
             <div class="roster">${rosterHtml}</div>
+            ${countdownHtml(t)}
             <button type="button" class="register-btn" data-register-for="${escapeAttr(t.id)}" ${isClosed ? 'disabled' : ''}>
                 ${escapeHtml(btnLabel)}
             </button>
