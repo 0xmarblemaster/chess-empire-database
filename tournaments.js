@@ -92,6 +92,35 @@ function applyI18nLabels() {
     });
 }
 
+// Localize a branch name using the shared dictionary in i18n.js.
+// Falls back to the raw DB value when the helper or key is missing.
+function localizeBranchName(name) {
+    if (!name) return name;
+    if (window.i18n && typeof window.i18n.translateBranchName === 'function') {
+        return window.i18n.translateBranchName(name);
+    }
+    return name;
+}
+
+// Tournament titles stored as exact league labels ("League A+", "League A",
+// "League B", "League C") are mapped to the localized league name. Any other
+// tournament name is returned untouched so custom titles keep their original
+// wording.
+const LEAGUE_NAME_KEYS = {
+    'League A+': 'leagues.leagueAPlus',
+    'League A': 'leagues.leagueA',
+    'League B': 'leagues.leagueB',
+    'League C': 'leagues.leagueC',
+};
+
+function localizeTournamentName(name) {
+    if (!name) return name;
+    const key = LEAGUE_NAME_KEYS[name.trim()];
+    if (!key) return name;
+    const translated = tt(key);
+    return translated && translated !== key ? translated : name;
+}
+
 function initLanguageSwitcher() {
     document.querySelectorAll('.lang-btn').forEach(btn => {
         btn.addEventListener('click', () => {
@@ -250,7 +279,7 @@ function branchCardHtml(b) {
     return `
         <div class="branch-card ${expanded ? 'expanded' : ''}" data-branch-card="${escapeAttr(b.id)}">
             <div class="branch-header" data-branch-id="${escapeAttr(b.id)}" role="button" tabindex="0" aria-expanded="${expanded}">
-                <div class="branch-name">${escapeHtml(b.name)}</div>
+                <div class="branch-name">${escapeHtml(localizeBranchName(b.name))}</div>
                 <div style="display:flex; align-items:center; gap:10px;">
                     ${badge}
                     <svg class="branch-chevron" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><polyline points="6 9 12 15 18 9"></polyline></svg>
@@ -311,7 +340,7 @@ function tournamentRowHtml(t) {
         <div class="tournament-row ${expanded ? 'expanded' : ''}" data-tournament-row="${escapeAttr(t.id)}">
             <div class="tournament-summary" data-tournament-id="${escapeAttr(t.id)}" role="button" tabindex="0">
                 <div>
-                    <div class="tournament-title">${escapeHtml(t.name)}</div>
+                    <div class="tournament-title">${escapeHtml(localizeTournamentName(t.name))}</div>
                     <div class="tournament-meta" style="margin-top:4px;">
                         <span>${escapeHtml(dateLabel)}</span>
                         <span>·</span>
@@ -561,7 +590,7 @@ function renderModalBody() {
         const student = modalState.confirmStudent;
         const t = findTournament(modalState.tournamentId);
         const fullName = (student.first_name + ' ' + student.last_name).trim();
-        const tournLabel = `${t.name} — ${formatDate(t.tournament_date)}`;
+        const tournLabel = `${localizeTournamentName(t.name)} — ${formatDate(t.tournament_date)}`;
         body.innerHTML = `
             <div class="confirm-box">
                 <p>${escapeHtml(tt('tournaments.confirmRegister', { name: fullName, tournament: tournLabel }))}</p>
@@ -624,7 +653,7 @@ async function doSearch(q) {
     results.innerHTML = modalState.results.map(s => `
         <div class="search-row" data-student-id="${escapeAttr(s.id)}">
             <div class="name">${escapeHtml((s.first_name + ' ' + s.last_name).trim())}</div>
-            <span class="branch-chip">${escapeHtml(s.branches?.name || '')}</span>
+            <span class="branch-chip">${escapeHtml(localizeBranchName(s.branches?.name || ''))}</span>
         </div>`).join('');
     results.querySelectorAll('.search-row').forEach(row => {
         row.addEventListener('click', () => {
