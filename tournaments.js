@@ -778,6 +778,8 @@ function formatTime(t) {
 }
 
 function formatFee(fee) {
-    const amount = Number(fee || 0).toLocaleString(currentLang() === 'en' ? 'en-US' : 'ru-RU');
+    const n = Number(fee || 0);
+    if (n === 0) return tt('tournaments.fee.free');
+    const amount = n.toLocaleString(currentLang() === 'en' ? 'en-US' : 'ru-RU');
     return tt('tournaments.fee.kzt', { amount });
 }

@@ -203,7 +203,7 @@ BEGIN
             time_format, registration_fee, rounds, capacity, status, league
         ) VALUES (
             v_branch_id, 'League C', '', v_sat + (i * 7),
-            '14:00', 'Rapid 15+5', 2000, 7, 24, 'open', 'C'
+            '14:00', 'Rapid 10+5', 0, 6, 24, 'open', 'C'
         )
         ON CONFLICT (branch_id, tournament_date, name) DO NOTHING;
     END LOOP;
