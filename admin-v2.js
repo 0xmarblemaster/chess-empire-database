@@ -11943,7 +11943,7 @@ async function loadTournamentsAdminList() {
         // Fetch all tournaments.
         const { data: tData, error: tErr } = await supabase
             .from('tournaments')
-            .select('id, branch_id, name, info, tournament_date, start_time, time_format, registration_fee, rounds, capacity, status, league')
+            .select('id, branch_id, name, info, tournament_date, start_time, time_format, registration_fee, rounds, capacity, status, league, registration_deadline')
             .order('tournament_date', { ascending: false });
         if (tErr) throw tErr;
 
@@ -12137,6 +12137,16 @@ async function removeRegistration(registrationId) {
 }
 window.removeRegistration = removeRegistration;
 
+// Convert an ISO timestamp (or null) to the "YYYY-MM-DDTHH:mm" string
+// expected by <input type="datetime-local"> in the browser's local timezone.
+function _isoToLocalDatetimeInput(iso) {
+    if (!iso) return '';
+    const d = new Date(iso);
+    if (isNaN(d.getTime())) return '';
+    const pad = n => String(n).padStart(2, '0');
+    return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+
 function showCreateTournamentModal() {
     const modal = document.getElementById('tournamentAdminModal');
     if (!modal) return;
@@ -12153,6 +12163,7 @@ function showCreateTournamentModal() {
     document.getElementById('tournamentAdminCapacity').value = '24';
     document.getElementById('tournamentAdminStatus').value = 'open';
     document.getElementById('tournamentAdminLeague').value = 'C';
+    document.getElementById('tournamentAdminDeadline').value = '';
 
     _populateTournamentsAdminBranchSelect(null);
 
@@ -12185,6 +12196,8 @@ function showEditTournamentModal(tournamentId) {
     document.getElementById('tournamentAdminCapacity').value = row.capacity ?? 24;
     document.getElementById('tournamentAdminStatus').value = row.status || 'open';
     document.getElementById('tournamentAdminLeague').value = row.league || 'C';
+    // datetime-local needs local "YYYY-MM-DDTHH:mm" (no seconds, no Z).
+    document.getElementById('tournamentAdminDeadline').value = _isoToLocalDatetimeInput(row.registration_deadline);
 
     _populateTournamentsAdminBranchSelect(row.branch_id);
 
@@ -12221,6 +12234,8 @@ async function submitTournamentAdminForm() {
     const capacity = parseInt(document.getElementById('tournamentAdminCapacity').value, 10);
     const status = document.getElementById('tournamentAdminStatus').value;
     const league = document.getElementById('tournamentAdminLeague').value.trim();
+    const deadlineRaw = document.getElementById('tournamentAdminDeadline').value;
+    const registrationDeadline = deadlineRaw ? new Date(deadlineRaw).toISOString() : null;
 
     if (!branchId || !name || !date || !startTime || !timeFormat
         || isNaN(fee) || !rounds || rounds < 1 || !capacity || capacity < 1
@@ -12241,6 +12256,7 @@ async function submitTournamentAdminForm() {
         capacity,
         status,
         league,
+        registration_deadline: registrationDeadline,
     };
 
     try {

@@ -63,6 +63,17 @@ const tournamentsApp = {
     await loadBranches();
     renderBranches();
     applyI18nLabels();
+
+    // Re-render every 60s so registration-deadline transitions flip the UI
+    // even when the page sits idle (no Realtime event, no user interaction).
+    setInterval(() => {
+        if (tournamentsApp.expandedBranchId) {
+            renderBranchTournaments(tournamentsApp.expandedBranchId);
+        }
+        if (tournamentsApp.expandedTournamentId) {
+            renderTournamentDetail(tournamentsApp.expandedTournamentId);
+        }
+    }, 60000);
 })();
 
 // ---------------------------------------------------------------------------
@@ -164,7 +175,7 @@ async function loadBranches() {
     if (branchIds.length > 0) {
         const { data: tdata, error: terr } = await supabase
             .from('tournaments')
-            .select('id, branch_id, name, info, tournament_date, start_time, time_format, registration_fee, rounds, capacity, status')
+            .select('id, branch_id, name, info, tournament_date, start_time, time_format, registration_fee, rounds, capacity, status, registration_deadline')
             .in('branch_id', branchIds)
             .gte('tournament_date', today)
             .order('tournament_date', { ascending: true });
@@ -237,7 +248,7 @@ async function refreshTournamentRow(tournamentId) {
     const supabase = window.supabaseClient;
     const { data, error } = await supabase
         .from('tournaments')
-        .select('id, branch_id, status, capacity')
+        .select('id, branch_id, status, capacity, registration_deadline')
         .eq('id', tournamentId)
         .maybeSingle();
     if (error || !data) return;
@@ -246,6 +257,32 @@ async function refreshTournamentRow(tournamentId) {
     if (found) {
         found.status = data.status;
         found.capacity = data.capacity;
+        found.registration_deadline = data.registration_deadline;
+    }
+}
+
+// True when a deadline is set and the current moment is past it.
+function isDeadlinePassed(t) {
+    if (!t || !t.registration_deadline) return false;
+    const d = new Date(t.registration_deadline);
+    if (isNaN(d.getTime())) return false;
+    return Date.now() > d.getTime();
+}
+
+// Localized "Closes <date> <time>" for the upcoming-state deadline label.
+function formatDeadline(iso) {
+    if (!iso) return '';
+    const d = new Date(iso);
+    if (isNaN(d.getTime())) return '';
+    const lang = currentLang();
+    const map = { en: 'en-US', ru: 'ru-RU', kk: 'kk-KZ' };
+    try {
+        return d.toLocaleString(map[lang] || 'en-US', {
+            day: 'numeric', month: 'short',
+            hour: '2-digit', minute: '2-digit',
+        });
+    } catch (e) {
+        return d.toISOString();
     }
 }
 
@@ -329,13 +366,17 @@ function tournamentRowHtml(t) {
     const timeLabel = formatTime(t.start_time);
     const regCount = t._regCount || 0;
     const isFull = regCount >= t.capacity;
-    const isClosed = t.status !== 'open';
+    const deadlinePassed = isDeadlinePassed(t);
+    const isClosed = t.status !== 'open' || deadlinePassed;
     let pillHtml;
     if (isClosed || isFull) {
         pillHtml = `<span class="pill full">${regCount}/${t.capacity}</span>`;
     } else {
         pillHtml = `<span class="pill">${regCount}/${t.capacity}</span>`;
     }
+    const deadlineNote = t.registration_deadline && !deadlinePassed
+        ? `<span>·</span><span>${escapeHtml(tt('tournaments.registration.closesAt', { datetime: formatDeadline(t.registration_deadline) }))}</span>`
+        : '';
     return `
         <div class="tournament-row ${expanded ? 'expanded' : ''}" data-tournament-row="${escapeAttr(t.id)}">
             <div class="tournament-summary" data-tournament-id="${escapeAttr(t.id)}" role="button" tabindex="0">
@@ -345,6 +386,7 @@ function tournamentRowHtml(t) {
                         <span>${escapeHtml(dateLabel)}</span>
                         <span>·</span>
                         <span>${escapeHtml(timeLabel)}</span>
+                        ${deadlineNote}
                     </div>
                 </div>
                 <div class="tournament-meta">${pillHtml}</div>
@@ -400,7 +442,8 @@ function renderTournamentDetail(tournamentId) {
     const roster = tournamentsApp.rostersByTournament.get(tournamentId) || [];
     const regCount = roster.length || t._regCount || 0;
     const isFull = regCount >= t.capacity;
-    const isClosed = t.status !== 'open' || isFull;
+    const deadlinePassed = isDeadlinePassed(t);
+    const isClosed = t.status !== 'open' || isFull || deadlinePassed;
 
     const fillPct = Math.min(100, Math.round((regCount / Math.max(1, t.capacity)) * 100));
     let fillClass = '';
@@ -672,6 +715,18 @@ async function doRegister() {
     const tournamentId = modalState.tournamentId;
     const studentId = modalState.confirmStudent.id;
     const btn = document.getElementById('confirmRegisterBtn');
+
+    // Client-side deadline guard — defense in depth. The RPC will reject too,
+    // but this avoids a needless round-trip when the deadline expired with
+    // the modal open.
+    const tNow = findTournament(tournamentId);
+    if (tNow && isDeadlinePassed(tNow)) {
+        showToast(tt('tournaments.registrationClosed'), 'info');
+        closeRegisterModal();
+        refreshTournamentLive(tournamentId);
+        return;
+    }
+
     if (btn) { btn.disabled = true; btn.textContent = '…'; }
 
     const { data, error } = await supabase.rpc('register_for_tournament', {
@@ -704,6 +759,7 @@ function handleRegisterResult(data, tournamentId) {
             refreshTournamentLive(tournamentId);
             break;
         case 'closed':
+        case 'deadline_passed':
             showToast(tt('tournaments.registrationClosed'), 'info');
             closeRegisterModal();
             refreshTournamentLive(tournamentId);
