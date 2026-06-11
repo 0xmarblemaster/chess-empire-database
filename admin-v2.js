@@ -5086,6 +5086,18 @@ function switchRatingsView(view) {
     if (typeof lucide !== 'undefined') lucide.createIcons();
 }
 
+function _setUploadHistoryStatus(message, color) {
+    const tbody = document.getElementById('uploadHistoryTableBody');
+    const cards = document.getElementById('mobileUploadHistoryCards');
+    const safe = escapeHtml(message);
+    if (tbody) {
+        tbody.innerHTML = `<tr><td colspan="8" style="text-align: center; padding: 2rem; color: ${color};">${safe}</td></tr>`;
+    }
+    if (cards) {
+        cards.innerHTML = `<div class="mobile-upload-empty" style="color: ${color};">${safe}</div>`;
+    }
+}
+
 async function loadUploadHistory(forceRefresh = false) {
     const tbody = document.getElementById('uploadHistoryTableBody');
     if (!tbody) return;
@@ -5096,7 +5108,7 @@ async function loadUploadHistory(forceRefresh = false) {
         return;
     }
 
-    tbody.innerHTML = '<tr><td colspan="8" style="text-align: center; padding: 2rem; color: #94a3b8;">Loading…</td></tr>';
+    _setUploadHistoryStatus('Loading…', '#94a3b8');
 
     try {
         const { data: rows, error } = await window.supabaseClient
@@ -5108,7 +5120,7 @@ async function loadUploadHistory(forceRefresh = false) {
         if (error) {
             const msg = (error.message || '').toLowerCase();
             if (error.code === '42P01' || error.code === 'PGRST205' || msg.includes('does not exist') || msg.includes('not found')) {
-                tbody.innerHTML = `<tr><td colspan="8" style="text-align: center; padding: 2rem; color: #b45309;">unified_uploads view missing — apply migration 041_upload_history.sql in Supabase.</td></tr>`;
+                _setUploadHistoryStatus('unified_uploads view missing — apply migration 041_upload_history.sql in Supabase.', '#b45309');
                 return;
             }
             throw error;
@@ -5130,12 +5142,43 @@ async function loadUploadHistory(forceRefresh = false) {
         renderUploadHistory();
     } catch (err) {
         console.error('loadUploadHistory failed:', err);
-        tbody.innerHTML = `<tr><td colspan="8" style="text-align: center; padding: 2rem; color: #ef4444;">Failed to load: ${err && err.message ? err.message : 'unknown error'}</td></tr>`;
+        _setUploadHistoryStatus(`Failed to load: ${err && err.message ? err.message : 'unknown error'}`, '#ef4444');
     }
+}
+
+function _uploadHistoryViewModel(r, idx, uploadersById, unknownUser) {
+    const isTournament = r.type === 'tournament';
+    const docName = r.source_filename || r.label || '—';
+    const typeText = isTournament ? (r.label || 'tournament') : 'rating_csv';
+    const typeBadgeStyle = isTournament
+        ? 'background:#dbeafe;color:#1d4ed8;'
+        : 'background:#fef3c7;color:#92400e;';
+    const effDate = r.effective_date ? formatUploadDate(r.effective_date) : '—';
+    const uploadedAt = r.uploaded_at ? formatUploadDateTime(r.uploaded_at) : '—';
+    const hasUploader = !!r.uploaded_by;
+    const uploaderText = hasUploader
+        ? (uploadersById[r.uploaded_by] || r.uploaded_by.slice(0, 8) + '…')
+        : unknownUser;
+    const rowCount = (r.row_count !== null && r.row_count !== undefined) ? String(r.row_count) : '—';
+    return {
+        idx: idx + 1,
+        id: r.id,
+        type: r.type,
+        label: r.source_filename || r.label || '',
+        docName,
+        typeText,
+        typeBadgeStyle,
+        effDate,
+        uploadedAt,
+        uploaderText,
+        hasUploader,
+        rowCount
+    };
 }
 
 function renderUploadHistory() {
     const tbody = document.getElementById('uploadHistoryTableBody');
+    const cards = document.getElementById('mobileUploadHistoryCards');
     if (!tbody || !_uploadHistoryCache) return;
 
     const filterEl = document.getElementById('uploadHistoryFilter');
@@ -5143,39 +5186,36 @@ function renderUploadHistory() {
     const rows = _uploadHistoryCache.rows.filter(r => filter === 'all' || r.type === filter);
 
     if (rows.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="8" style="text-align: center; padding: 2rem; color: #94a3b8;">No uploads yet</td></tr>';
+        const empty = t('admin.ratings.empty') || 'No uploads yet';
+        _setUploadHistoryStatus(empty, '#94a3b8');
         if (typeof lucide !== 'undefined') lucide.createIcons();
         return;
     }
 
     const unknownUser = t('admin.ratings.unknownUser') || 'Unknown';
     const openLabel = t('admin.ratings.openBatch') || 'Open';
+    const uploadersById = _uploadHistoryCache.uploadersById || {};
 
-    tbody.innerHTML = rows.map((r, idx) => {
-        const docName = escapeHtml(r.source_filename || (r.label || '—'));
-        const typeBadge = r.type === 'tournament'
-            ? `<span class="status-badge active" style="background:#dbeafe;color:#1d4ed8;">${escapeHtml(r.label || 'tournament')}</span>`
-            : `<span class="status-badge active" style="background:#fef3c7;color:#92400e;">rating_csv</span>`;
-        const effDate = r.effective_date ? formatUploadDate(r.effective_date) : '—';
-        const uploadedAt = r.uploaded_at ? formatUploadDateTime(r.uploaded_at) : '—';
-        const uploader = r.uploaded_by
-            ? escapeHtml(_uploadHistoryCache.uploadersById[r.uploaded_by] || r.uploaded_by.slice(0, 8) + '…')
-            : `<span style="color:#94a3b8;">${escapeHtml(unknownUser)}</span>`;
-        const rowCount = (r.row_count !== null && r.row_count !== undefined) ? r.row_count : '—';
+    const vm = rows.map((r, idx) => _uploadHistoryViewModel(r, idx, uploadersById, unknownUser));
+
+    tbody.innerHTML = vm.map(v => {
+        const uploaderCell = v.hasUploader
+            ? escapeHtml(v.uploaderText)
+            : `<span style="color:#94a3b8;">${escapeHtml(v.uploaderText)}</span>`;
         return `
             <tr>
-                <td>${idx + 1}</td>
-                <td style="font-weight: 500;">${docName}</td>
-                <td>${typeBadge}</td>
-                <td>${effDate}</td>
-                <td>${uploader}</td>
-                <td>${uploadedAt}</td>
-                <td>${rowCount}</td>
+                <td>${v.idx}</td>
+                <td style="font-weight: 500;">${escapeHtml(v.docName)}</td>
+                <td><span class="status-badge active" style="${v.typeBadgeStyle}">${escapeHtml(v.typeText)}</span></td>
+                <td>${escapeHtml(v.effDate)}</td>
+                <td>${uploaderCell}</td>
+                <td>${escapeHtml(v.uploadedAt)}</td>
+                <td>${escapeHtml(v.rowCount)}</td>
                 <td>
                     <button class="btn btn-secondary upload-history-open-btn" style="padding: 0.35rem 0.75rem; font-size: 0.85rem;"
-                            data-upload-id="${escapeHtml(r.id)}"
-                            data-upload-type="${escapeHtml(r.type)}"
-                            data-upload-label="${escapeHtml(r.source_filename || r.label || '')}">
+                            data-upload-id="${escapeHtml(v.id)}"
+                            data-upload-type="${escapeHtml(v.type)}"
+                            data-upload-label="${escapeHtml(v.label)}">
                         <i data-lucide="external-link" style="width: 14px; height: 14px;"></i>
                         <span>${escapeHtml(openLabel)}</span>
                     </button>
@@ -5184,14 +5224,59 @@ function renderUploadHistory() {
         `;
     }).join('');
 
-    tbody.querySelectorAll('.upload-history-open-btn').forEach(btn => {
-        btn.addEventListener('click', () => {
+    if (cards) {
+        cards.innerHTML = vm.map(v => {
+            const rowsLabel = t('admin.ratings.colRows') || 'Rows';
+            const uploadedLabel = t('admin.ratings.colUploadedAt') || 'Uploaded';
+            const effLabel = t('admin.ratings.colEffectiveDate') || 'Effective';
+            return `
+                <div class="mobile-upload-card upload-history-open-btn"
+                     role="button" tabindex="0"
+                     data-upload-id="${escapeHtml(v.id)}"
+                     data-upload-type="${escapeHtml(v.type)}"
+                     data-upload-label="${escapeHtml(v.label)}">
+                    <div class="mobile-upload-card-top">
+                        <div class="mobile-upload-card-title">${escapeHtml(v.docName)}</div>
+                        <span class="mobile-upload-card-type" style="${v.typeBadgeStyle}">${escapeHtml(v.typeText)}</span>
+                    </div>
+                    <div class="mobile-upload-card-meta">
+                        <span class="mobile-upload-card-meta-item">${escapeHtml(effLabel)}: ${escapeHtml(v.effDate)}</span>
+                        <span class="mobile-upload-card-meta-sep">·</span>
+                        <span class="mobile-upload-card-meta-item">${escapeHtml(rowsLabel)}: ${escapeHtml(v.rowCount)}</span>
+                    </div>
+                    <div class="mobile-upload-card-meta">
+                        <span class="mobile-upload-card-meta-item">${escapeHtml(uploadedLabel)}: ${escapeHtml(v.uploadedAt)}</span>
+                    </div>
+                    <div class="mobile-upload-card-meta mobile-upload-card-meta-faint">
+                        <span class="mobile-upload-card-meta-item">${escapeHtml(v.uploaderText)}</span>
+                    </div>
+                    <div class="mobile-upload-card-actions">
+                        <span class="mobile-upload-card-cta">
+                            <i data-lucide="external-link" style="width: 14px; height: 14px;"></i>
+                            ${escapeHtml(openLabel)}
+                        </span>
+                    </div>
+                </div>
+            `;
+        }).join('');
+    }
+
+    const triggers = document.querySelectorAll('.upload-history-open-btn');
+    triggers.forEach(el => {
+        const handler = (e) => {
+            e.preventDefault();
             openUploadDetail(
-                btn.getAttribute('data-upload-id'),
-                btn.getAttribute('data-upload-type'),
-                btn.getAttribute('data-upload-label')
+                el.getAttribute('data-upload-id'),
+                el.getAttribute('data-upload-type'),
+                el.getAttribute('data-upload-label')
             );
-        });
+        };
+        el.addEventListener('click', handler);
+        if (el.classList.contains('mobile-upload-card')) {
+            el.addEventListener('keydown', (e) => {
+                if (e.key === 'Enter' || e.key === ' ') handler(e);
+            });
+        }
     });
 
     if (typeof lucide !== 'undefined') lucide.createIcons();
