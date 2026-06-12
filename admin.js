@@ -2987,7 +2987,7 @@ function toggleMobileLanguageMenu(event) {
         menu.classList.toggle('open');
 
         // Update active state based on current language
-        const currentLang = localStorage.getItem('ce_language') || localStorage.getItem('chess-empire-language') || localStorage.getItem('language') || 'en';
+        const currentLang = localStorage.getItem('ce_language') || localStorage.getItem('chess-empire-language') || localStorage.getItem('language') || 'ru';
         menu.querySelectorAll('.language-option').forEach(btn => {
             btn.classList.remove('active');
             const lang = btn.getAttribute('data-lang') || btn.getAttribute('onclick')?.match(/'(\w+)'/)?.[1] || '';

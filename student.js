@@ -202,7 +202,7 @@ function getLeagueInfo(rating) {
 
 // Get survival tier info with translated label
 function getSurvivalInfo(score) {
-    const lang = window.currentLanguage || 'en';
+    const lang = window.currentLanguage || 'ru';
 
     if (!score) return { label: t('puzzleRush.tierBeginner') || 'Beginner', tier: 'beginner', color: '#94a3b8' };
 

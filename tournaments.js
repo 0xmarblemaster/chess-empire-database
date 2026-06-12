@@ -103,7 +103,7 @@ function currentLang() {
     if (window.i18n && typeof window.i18n.getCurrentLanguage === 'function') {
         return window.i18n.getCurrentLanguage();
     }
-    return localStorage.getItem('ce_language') || 'en';
+    return localStorage.getItem('ce_language') || 'ru';
 }
 
 function applyI18nLabels() {

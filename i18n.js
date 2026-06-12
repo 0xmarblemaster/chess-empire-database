@@ -3357,9 +3357,18 @@ const translations = {
     }
 };
 
+// One-time migration: clear auto-persisted 'en' so the new 'ru' default takes effect
+// for users who never explicitly chose a language. Users who toggle later will set
+// their own preference and won't be re-migrated.
+if (!localStorage.getItem('ce_lang_default_v2')) {
+    localStorage.removeItem('ce_language');
+    localStorage.removeItem('chess-empire-language');
+    localStorage.setItem('ce_lang_default_v2', '1');
+}
+
 let currentLanguage = localStorage.getItem('ce_language')
     || localStorage.getItem('chess-empire-language')
-    || 'en';
+    || 'ru';
 
 localStorage.setItem('ce_language', currentLanguage);
 localStorage.setItem('chess-empire-language', currentLanguage);
@@ -4435,7 +4444,7 @@ window.translateStatus = translateStatus;
         if (stored && SUPPORTED_LANGUAGES.includes(stored)) {
             return stored;
         }
-        return navigator.language && navigator.language.startsWith('ru') ? 'ru' : 'en';
+        return 'ru';
     }
 
     let currentLanguage = getStoredLanguage();
