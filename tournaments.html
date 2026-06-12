@@ -6,19 +6,29 @@
     <title>Tournament Schedule - Chess Empire</title>
     <link rel="icon" type="image/png" href="chess-empire-logo.png">
     <link rel="shortcut icon" href="chess-empire-logo.png">
+    <link rel="preconnect" href="https://papgcizhfkngubwofjuo.supabase.co" crossorigin>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=Outfit:wght@600;700;800&display=swap" rel="stylesheet">
-    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-    <script src="https://unpkg.com/lucide@latest"></script>
-    <script src="supabase-config.js?v=9"></script>
-    <script src="supabase-client.js?v=9"></script>
-    <script src="i18n.js?v=16"></script>
+    <!-- Non-render-blocking webfont swap. Body falls back to the system stack
+         until Inter/Outfit load, then swaps in without blocking first paint. -->
+    <link rel="preload"
+          as="style"
+          href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=Outfit:wght@600;700;800&display=swap"
+          onload="this.onload=null;this.rel='stylesheet'">
+    <noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=Outfit:wght@600;700;800&display=swap"></noscript>
+    <script defer src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.0"></script>
+    <script defer src="supabase-config.js?v=9"></script>
+    <script defer src="supabase-client.js?v=10"></script>
+    <script defer src="i18n.js?v=16"></script>
     <link rel="stylesheet" href="styles.css?v=7">
     <style>
         * { box-sizing: border-box; margin: 0; padding: 0; }
         body {
-            font-family: 'Inter', sans-serif;
+            /* System stack first; Inter swaps in once Google Fonts finishes
+               loading (see <link rel="preload"> in <head>). This keeps the
+               first paint non-blocking. */
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto,
+                         'Inter', sans-serif;
             background: linear-gradient(135deg, #f5f7fa 0%, #e4e9f0 100%);
             min-height: 100vh;
             color: #1e293b;
@@ -121,6 +131,19 @@
             background: #e2e8f0;
             color: #64748b;
             box-shadow: none;
+        }
+        /* Skeleton "Loading…" pill on the pre-RPC shell — soft shimmer so the
+           user knows data is in flight (no "No tournaments" flash). */
+        .count-badge.skeleton {
+            background: linear-gradient(90deg, #e2e8f0 0%, #f1f5f9 50%, #e2e8f0 100%);
+            background-size: 200% 100%;
+            color: #94a3b8;
+            box-shadow: none;
+            animation: shellShimmer 1.4s ease-in-out infinite;
+        }
+        @keyframes shellShimmer {
+            0%   { background-position: 100% 0; }
+            100% { background-position: -100% 0; }
         }
         .branch-body {
             max-height: 0;
@@ -560,10 +583,63 @@
             </div>
         </div>
 
+        <!-- Pre-RPC shell: the 5 visible branches are hard-coded so the page
+             paints instantly. tournaments.js replaces this once
+             get_public_tournament_schedule resolves. Branches NIS and
+             Zhandosova are intentionally omitted — see EXCLUDED_BRANCHES
+             in tournaments.js. -->
         <div id="branchesContainer">
-            <div class="loading">
-                <div class="spinner"></div>
-                <span data-i18n="common.loading">Loading...</span>
+            <div class="branches">
+                <div class="branch-card" data-branch-card="b183c2b5-e4ca-4456-8633-5f690490af82">
+                    <div class="branch-header" data-branch-id="b183c2b5-e4ca-4456-8633-5f690490af82" role="button" tabindex="0" aria-expanded="false">
+                        <div class="branch-name" data-shell-branch-name="Almaty Arena">Almaty Arena</div>
+                        <div style="display:flex; align-items:center; gap:10px;">
+                            <span class="count-badge skeleton" data-shell-loading>Loading...</span>
+                            <svg class="branch-chevron" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><polyline points="6 9 12 15 18 9"></polyline></svg>
+                        </div>
+                    </div>
+                    <div class="branch-body" data-branch-body="b183c2b5-e4ca-4456-8633-5f690490af82"></div>
+                </div>
+                <div class="branch-card" data-branch-card="7d1946c8-183b-4ad9-8f49-77402bac2210">
+                    <div class="branch-header" data-branch-id="7d1946c8-183b-4ad9-8f49-77402bac2210" role="button" tabindex="0" aria-expanded="false">
+                        <div class="branch-name" data-shell-branch-name="Almaty-1">Almaty-1</div>
+                        <div style="display:flex; align-items:center; gap:10px;">
+                            <span class="count-badge skeleton" data-shell-loading>Loading...</span>
+                            <svg class="branch-chevron" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><polyline points="6 9 12 15 18 9"></polyline></svg>
+                        </div>
+                    </div>
+                    <div class="branch-body" data-branch-body="7d1946c8-183b-4ad9-8f49-77402bac2210"></div>
+                </div>
+                <div class="branch-card" data-branch-card="efe3df27-257f-4205-beae-b40d5c2b3fa4">
+                    <div class="branch-header" data-branch-id="efe3df27-257f-4205-beae-b40d5c2b3fa4" role="button" tabindex="0" aria-expanded="false">
+                        <div class="branch-name" data-shell-branch-name="Debut">Debut</div>
+                        <div style="display:flex; align-items:center; gap:10px;">
+                            <span class="count-badge skeleton" data-shell-loading>Loading...</span>
+                            <svg class="branch-chevron" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><polyline points="6 9 12 15 18 9"></polyline></svg>
+                        </div>
+                    </div>
+                    <div class="branch-body" data-branch-body="efe3df27-257f-4205-beae-b40d5c2b3fa4"></div>
+                </div>
+                <div class="branch-card" data-branch-card="93bbd1be-8c11-4623-943f-d283894b2f91">
+                    <div class="branch-header" data-branch-id="93bbd1be-8c11-4623-943f-d283894b2f91" role="button" tabindex="0" aria-expanded="false">
+                        <div class="branch-name" data-shell-branch-name="Gagarin Park">Gagarin Park</div>
+                        <div style="display:flex; align-items:center; gap:10px;">
+                            <span class="count-badge skeleton" data-shell-loading>Loading...</span>
+                            <svg class="branch-chevron" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><polyline points="6 9 12 15 18 9"></polyline></svg>
+                        </div>
+                    </div>
+                    <div class="branch-body" data-branch-body="93bbd1be-8c11-4623-943f-d283894b2f91"></div>
+                </div>
+                <div class="branch-card" data-branch-card="b146c01e-4a37-440e-84e7-4540358a21b9">
+                    <div class="branch-header" data-branch-id="b146c01e-4a37-440e-84e7-4540358a21b9" role="button" tabindex="0" aria-expanded="false">
+                        <div class="branch-name" data-shell-branch-name="Halyk Arena">Halyk Arena</div>
+                        <div style="display:flex; align-items:center; gap:10px;">
+                            <span class="count-badge skeleton" data-shell-loading>Loading...</span>
+                            <svg class="branch-chevron" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><polyline points="6 9 12 15 18 9"></polyline></svg>
+                        </div>
+                    </div>
+                    <div class="branch-body" data-branch-body="b146c01e-4a37-440e-84e7-4540358a21b9"></div>
+                </div>
             </div>
         </div>
     </div>
@@ -583,22 +659,36 @@
 
     <div class="toast-stack" id="toastStack" aria-live="polite" aria-atomic="false"></div>
 
-    <script src="tournaments.js?v=6"></script>
+    <script defer src="tournaments.js?v=7"></script>
     <script>
-        (async function() {
-            try {
-                if (window.supabaseClient) {
-                    const { data: { session } } = await window.supabaseClient.auth.getSession();
-                    if (session || (document.referrer && document.referrer.includes(location.host))) {
+        // Wired after supabase-client.js dispatches `supabaseClientReady`
+        // (or immediately if it already did). Falls back to referrer-only
+        // detection if the client never initializes.
+        (function() {
+            async function check() {
+                try {
+                    if (window.supabaseClient) {
+                        const { data: { session } } = await window.supabaseClient.auth.getSession();
+                        if (session || (document.referrer && document.referrer.includes(location.host))) {
+                            document.getElementById('backButtonContainer').style.display = 'block';
+                        }
+                    } else if (document.referrer && document.referrer.includes(location.host)) {
                         document.getElementById('backButtonContainer').style.display = 'block';
                     }
-                } else if (document.referrer && document.referrer.includes(location.host)) {
-                    document.getElementById('backButtonContainer').style.display = 'block';
+                } catch(e) {
+                    if (document.referrer && document.referrer.includes(location.host)) {
+                        document.getElementById('backButtonContainer').style.display = 'block';
+                    }
                 }
-            } catch(e) {
-                if (document.referrer && document.referrer.includes(location.host)) {
-                    document.getElementById('backButtonContainer').style.display = 'block';
-                }
+            }
+            if (window.__supabaseClientReady) {
+                check();
+            } else {
+                window.addEventListener('supabaseClientReady', check, { once: true });
+                // Last-resort fallback if the client never initializes.
+                window.addEventListener('DOMContentLoaded', () => {
+                    if (!window.__supabaseClientReady) check();
+                }, { once: true });
             }
         })();
     </script>

@@ -29,6 +29,9 @@ const tournamentsApp = {
     tournamentsByBranch: new Map(),// branchId -> [tournament]
     rostersByTournament: new Map(),// tournamentId -> [{ student_id, first_name, last_name }]
     expandedBranchId: null,
+    // Flips true after the schedule RPC resolves. Renders gated on this
+    // keep the HTML shell visible (so "No tournaments" never flashes).
+    loaded: false,
     // When a branch is expanded, every tournament under it renders fully
     // expanded — there's no separate summary→detail middle step. Live
     // updates run for every visible tournament concurrently.
@@ -38,11 +41,13 @@ const tournamentsApp = {
 };
 
 (async function init() {
-    // Wait for supabase client (matches ratings.js pattern).
-    let retries = 0;
-    while (!window.supabaseClient && retries < 30) {
-        await new Promise(r => setTimeout(r, 200));
-        retries++;
+    // Wait for the Supabase client without busy-waiting. supabase-client.js
+    // dispatches `supabaseClientReady` the moment the global is assigned.
+    if (!window.supabaseClient) {
+        await new Promise(resolve => {
+            if (window.__supabaseClientReady) return resolve();
+            window.addEventListener('supabaseClientReady', resolve, { once: true });
+        });
     }
     if (!window.supabaseClient) {
         renderLoadError();
@@ -52,14 +57,23 @@ const tournamentsApp = {
     initLanguageSwitcher();
     document.addEventListener('languagechange', () => {
         applyI18nLabels();
-        renderBranches();
-        if (tournamentsApp.expandedBranchId) {
-            renderBranchTournaments(tournamentsApp.expandedBranchId);
+        localizeShell();
+        if (tournamentsApp.loaded) {
+            renderBranches();
+            if (tournamentsApp.expandedBranchId) {
+                renderBranchTournaments(tournamentsApp.expandedBranchId);
+            }
         }
     });
 
     initModal();
-    await loadBranches();
+    // Localize the HTML shell (branch names + "Loading…" pills) so the
+    // pre-RPC paint matches the current language. The shell stays visible
+    // until the RPC resolves — no "No tournaments" flash.
+    applyI18nLabels();
+    localizeShell();
+
+    await loadTournamentSchedule();
     renderBranches();
     applyI18nLabels();
 
@@ -101,6 +115,20 @@ function applyI18nLabels() {
     const lang = currentLang();
     document.querySelectorAll('.lang-btn').forEach(btn => {
         btn.classList.toggle('active', btn.dataset.lang === lang);
+    });
+}
+
+// Localize the static shell rendered straight into tournaments.html so the
+// pre-RPC paint shows the right language. Once loadTournamentSchedule()
+// resolves, renderBranches() replaces the shell — so this is only relevant
+// for the moments between first paint and the RPC finishing.
+function localizeShell() {
+    document.querySelectorAll('[data-shell-branch-name]').forEach(el => {
+        const raw = el.getAttribute('data-shell-branch-name');
+        el.textContent = localizeBranchName(raw);
+    });
+    document.querySelectorAll('[data-shell-loading]').forEach(el => {
+        el.textContent = tt('common.loading');
     });
 }
 
@@ -151,81 +179,37 @@ function initLanguageSwitcher() {
 // ---------------------------------------------------------------------------
 // Data loading
 // ---------------------------------------------------------------------------
-async function loadBranches() {
+// Single RPC call replaces the previous 3 sequential round-trips
+// (branches → tournaments → registration_counts). See
+// supabase/migrations/20260612120000_get_public_tournament_schedule.sql.
+async function loadTournamentSchedule() {
     const supabase = window.supabaseClient;
-    const today = new Date().toISOString().slice(0, 10);
-
-    // Fetch all branches; filter client-side to keep the EXCLUDED_BRANCHES
-    // list as the single source of truth.
-    const { data: branches, error } = await supabase
-        .from('branches')
-        .select('id, name')
-        .order('name', { ascending: true });
-
+    const { data, error } = await supabase.rpc('get_public_tournament_schedule');
     if (error) {
-        console.error('Failed to load branches:', error);
+        console.error('Failed to load tournament schedule:', error);
         renderLoadError();
         return;
     }
 
-    const visible = (branches || []).filter(b => !EXCLUDED_BRANCHES.includes(b.name));
+    const branches = (data && Array.isArray(data.branches)) ? data.branches : [];
+    const visible = branches.filter(b => !EXCLUDED_BRANCHES.includes(b.name));
 
-    // Fetch upcoming tournaments for all visible branches in one query.
-    const branchIds = visible.map(b => b.id);
-    let tournaments = [];
-    if (branchIds.length > 0) {
-        const { data: tdata, error: terr } = await supabase
-            .from('tournaments')
-            .select('id, branch_id, name, info, tournament_date, start_time, time_format, registration_fee, rounds, capacity, status, registration_deadline')
-            .in('branch_id', branchIds)
-            .gte('tournament_date', today)
-            .order('tournament_date', { ascending: true });
-        if (terr) {
-            console.error('Failed to load tournaments:', terr);
-        } else {
-            tournaments = tdata || [];
-        }
-    }
-
-    const countByBranch = new Map();
     const byBranch = new Map();
-    for (const t of tournaments) {
-        countByBranch.set(t.branch_id, (countByBranch.get(t.branch_id) || 0) + 1);
-        if (!byBranch.has(t.branch_id)) byBranch.set(t.branch_id, []);
-        byBranch.get(t.branch_id).push(t);
+    for (const b of visible) {
+        const list = (b.upcoming_tournaments || []).map(t => ({
+            ...t,
+            _regCount: typeof t.registration_count === 'number' ? t.registration_count : 0,
+        }));
+        byBranch.set(b.id, list);
     }
 
+    tournamentsApp.tournamentsByBranch = byBranch;
     tournamentsApp.branches = visible.map(b => ({
         id: b.id,
         name: b.name,
-        upcomingCount: countByBranch.get(b.id) || 0,
+        upcomingCount: (byBranch.get(b.id) || []).length,
     }));
-    tournamentsApp.tournamentsByBranch = byBranch;
-
-    // Pre-compute registration counts for visible tournaments so the
-    // capacity pill is accurate on first render.
-    await loadRegistrationCounts(tournaments.map(t => t.id));
-}
-
-async function loadRegistrationCounts(tournamentIds) {
-    if (!tournamentIds || tournamentIds.length === 0) return;
-    const supabase = window.supabaseClient;
-    const { data, error } = await supabase
-        .from('tournament_registrations')
-        .select('tournament_id')
-        .in('tournament_id', tournamentIds);
-    if (error) { console.error('reg count load failed:', error); return; }
-
-    const counts = new Map();
-    for (const r of data || []) {
-        counts.set(r.tournament_id, (counts.get(r.tournament_id) || 0) + 1);
-    }
-    for (const [, list] of tournamentsApp.tournamentsByBranch) {
-        for (const t of list) {
-            if (counts.has(t.id)) t._regCount = counts.get(t.id);
-            else if (typeof t._regCount === 'undefined') t._regCount = 0;
-        }
-    }
+    tournamentsApp.loaded = true;
 }
 
 async function loadRoster(tournamentId) {

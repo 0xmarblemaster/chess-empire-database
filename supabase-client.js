@@ -38,6 +38,9 @@ try {
 
         // Make client globally available
         window.supabaseClient = supabaseClient;
+        // Signal readiness so pages can skip a busy-wait polling loop.
+        window.__supabaseClientReady = true;
+        window.dispatchEvent(new CustomEvent('supabaseClientReady'));
 
         // Helper to update session header (call after login sets currentSessionId)
         window.updateSupabaseSessionHeader = function() {
