@@ -1097,6 +1097,8 @@ const translations = {
         "tournaments.confirm": "Confirm",
         "tournaments.cancel": "Cancel",
         "tournaments.searchHint": "Type at least 2 characters",
+        "tournaments.statusTab.active": "Active",
+        "tournaments.statusTab.closed": "Closed",
 
         // Admin: Tournament Management (CRUD)
         "admin.tournaments.title": "Tournament Management",
@@ -2181,6 +2183,8 @@ const translations = {
         "tournaments.confirm": "Растау",
         "tournaments.cancel": "Бас тарту",
         "tournaments.searchHint": "Кемінде 2 таңба теріңіз",
+        "tournaments.statusTab.active": "Белсенді",
+        "tournaments.statusTab.closed": "Жабық",
 
         // Admin: Tournament Management (CRUD)
         "admin.tournaments.title": "Турнирлерді басқару",
@@ -3320,6 +3324,8 @@ const translations = {
         "tournaments.confirm": "Подтвердить",
         "tournaments.cancel": "Отмена",
         "tournaments.searchHint": "Введите не менее 2 символов",
+        "tournaments.statusTab.active": "Активные",
+        "tournaments.statusTab.closed": "Закрытые",
 
         // Admin: Tournament Management (CRUD)
         "admin.tournaments.title": "Управление турнирами",

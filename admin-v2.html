@@ -873,6 +873,10 @@
 
                 <!-- Tournaments Tab -->
                 <div id="tournamentsAdminTabTournaments">
+                    <div class="kpi-view-switcher" role="tablist" aria-label="Tournament status filter" style="margin-bottom: 1rem;">
+                        <button type="button" class="kpi-view-btn is-active" data-tournaments-admin-status-tab="active" role="tab" aria-selected="true" onclick="switchTournamentsAdminStatusTab('active')" data-i18n="tournaments.statusTab.active">Active</button>
+                        <button type="button" class="kpi-view-btn" data-tournaments-admin-status-tab="closed" role="tab" aria-selected="false" onclick="switchTournamentsAdminStatusTab('closed')" data-i18n="tournaments.statusTab.closed">Closed</button>
+                    </div>
                     <div class="table-container">
                         <div class="table-wrapper">
                             <table>

@@ -11960,6 +11960,7 @@ let tournamentsAdminBranches = [];              // [{ id, name }]
 let tournamentsAdminRegCounts = new Map();      // tournament_id -> count
 let tournamentsAdminCurrentRegRows = [];        // [{ id, registered_at, students: {...} }]
 let tournamentsAdminCurrentTournament = null;   // snapshot of selected tournament for Excel export
+let tournamentsAdminStatusTab = 'active';       // 'active' | 'closed' — sub-tab filter inside the Tournaments tab
 
 function _tt(key) {
     return (typeof t === 'function') ? t(key) : key;
@@ -11984,8 +11985,13 @@ async function showTournamentManagement(updateHash = true) {
     const navItem = document.getElementById('menuTournamentsAdmin');
     if (navItem) navItem.classList.add('active');
 
-    // Default to the tournaments tab
+    // Default to the tournaments tab, and reset the status sub-tab to Active
+    // on every dashboard load so admins always land on the actionable view.
+    tournamentsAdminStatusTab = 'active';
     switchTournamentAdminTab('tournaments');
+    if (typeof switchTournamentsAdminStatusTab === 'function') {
+        switchTournamentsAdminStatusTab('active', /*skipRender=*/true);
+    }
 
     await loadTournamentsAdminList();
 
@@ -12013,6 +12019,24 @@ function switchTournamentAdminTab(tabName) {
     }
 }
 window.switchTournamentAdminTab = switchTournamentAdminTab;
+
+// Sub-tab strip inside the Tournaments tab — splits the list into
+// Active (status = 'open') and Closed (status in {'closed','cancelled'}).
+function switchTournamentsAdminStatusTab(tabName, skipRender) {
+    const normalized = (tabName === 'closed') ? 'closed' : 'active';
+    tournamentsAdminStatusTab = normalized;
+
+    document.querySelectorAll('[data-tournaments-admin-status-tab]').forEach(btn => {
+        const active = btn.getAttribute('data-tournaments-admin-status-tab') === normalized;
+        btn.classList.toggle('is-active', active);
+        btn.setAttribute('aria-selected', active ? 'true' : 'false');
+    });
+
+    if (!skipRender && typeof renderTournamentsAdminTable === 'function') {
+        renderTournamentsAdminTable();
+    }
+}
+window.switchTournamentsAdminStatusTab = switchTournamentsAdminStatusTab;
 
 async function loadTournamentsAdminList() {
     const tbody = document.getElementById('tournamentsAdminTableBody');
@@ -12087,6 +12111,16 @@ function renderTournamentsAdminTable() {
         return;
     }
 
+    const statusTab = (tournamentsAdminStatusTab === 'closed') ? 'closed' : 'active';
+    const filteredRows = tournamentsAdminList.filter(row => {
+        if (statusTab === 'active') return row.status === 'open';
+        return row.status === 'closed' || row.status === 'cancelled';
+    });
+    if (filteredRows.length === 0) {
+        tbody.innerHTML = `<tr><td colspan="10" style="text-align:center; padding:1.5rem; color:#94a3b8;">${_escapeHtml(_tt('admin.tournaments.noTournaments'))}</td></tr>`;
+        return;
+    }
+
     const _composeName = (window.i18n && typeof window.i18n.composeTournamentName === 'function')
         ? window.i18n.composeTournamentName
         : ((t) => t && t.name ? t.name : '');
@@ -12096,7 +12130,7 @@ function renderTournamentsAdminTable() {
     const _translateBranchAdmin = (window.i18n && typeof window.i18n.translateBranchName === 'function')
         ? window.i18n.translateBranchName
         : (n => n);
-    tbody.innerHTML = tournamentsAdminList.map(row => {
+    tbody.innerHTML = filteredRows.map(row => {
         const count = tournamentsAdminRegCounts.get(row.id) || 0;
         const statusLabel = _tt('admin.tournaments.status.' + row.status) || row.status;
         const statusColor = row.status === 'open' ? '#16a34a'

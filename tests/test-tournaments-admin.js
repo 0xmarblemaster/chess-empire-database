@@ -438,6 +438,7 @@ function makeSandbox(fakeDoc, supabaseClient, supabaseAuth, toastCalls, confirmR
         let tournamentsAdminBranches = [];
         let tournamentsAdminRegCounts = new Map();
         let tournamentsAdminCurrentRegRows = [];
+        let tournamentsAdminStatusTab = 'active';
     `;
 
     const body = `
