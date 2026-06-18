@@ -58,6 +58,30 @@ assert(/status\s*=\s*'open'/.test(MIG),
     "only `status = 'open'` rows are considered (cancelled rows preserved)");
 assert(/status\s*=\s*'closed'/.test(MIG),
     "transitions matched rows to `status = 'closed'`");
+
+// --- cancelled bypass invariant (source contract) --------------------------
+// The PRD's last checklist item — "No `cancelled` row was ever touched by the
+// function" — hinges on the UPDATE having a `status = 'open'` predicate AND no
+// disjunction that could broaden it. Lock that in here so a future edit can't
+// silently widen the gate to include `cancelled`.
+{
+    // Extract the body of close_expired_tournaments() and inspect it in isolation
+    // — otherwise the regexes would also see the register_for_tournament block.
+    const fnMatch = MIG.match(/CREATE OR REPLACE FUNCTION close_expired_tournaments\(\)[\s\S]*?\$\$;/);
+    assert(!!fnMatch,
+        'close_expired_tournaments() body extractable for cancelled-bypass audit');
+    const fnBody = fnMatch ? fnMatch[0] : '';
+
+    assert(/UPDATE\s+tournaments[\s\S]+?WHERE\s+status\s*=\s*'open'/.test(fnBody),
+        "UPDATE's first WHERE predicate is status = 'open' (cancelled is filtered out)");
+    assert(!/status\s*=\s*'cancelled'/i.test(fnBody),
+        "close_expired_tournaments() never references the literal 'cancelled'");
+    assert(!/status\s*<>\s*'closed'/i.test(fnBody)
+        && !/status\s*!=\s*'closed'/i.test(fnBody),
+        "no broadened gate like status <> 'closed' (would sweep cancelled too)");
+    assert(!/status\s+IN\s*\([^)]*'cancelled'[^)]*\)/i.test(fnBody),
+        "no status IN (...) clause that includes 'cancelled'");
+}
 assert(/tournament_date\s*<\s*\(NOW\(\) AT TIME ZONE 'Asia\/Almaty'\)::DATE/.test(MIG),
     'condition 1: tournament_date < today(Asia/Almaty)');
 assert(/registration_deadline IS NOT NULL[\s\S]{0,40}NOW\(\)\s*>\s*registration_deadline/.test(MIG),
@@ -251,6 +275,64 @@ function freshFixture() {
         'cancelled rows are NEVER overwritten — even when date is in the past');
 }
 
+// --- cancelled bypass across ALL three close conditions --------------------
+// Covers the PRD's last verification-checklist item: "No `cancelled` row was
+// ever touched by the function". The single fixture above only exercises
+// condition 1 (date passed). Below we hit each condition in isolation AND in
+// combination, then assert the returned count never includes cancelled rows.
+{
+    const cancelledRows = [
+        // Condition 1 only: past date, no deadline, no start_time.
+        { id: 'c-date',     status: 'cancelled',
+          tournament_date: '2026-06-13', start_time: null,
+          registration_deadline: null },
+        // Condition 2 only: future date, past deadline.
+        { id: 'c-deadline', status: 'cancelled',
+          tournament_date: '2026-07-01', start_time: null,
+          registration_deadline: '2026-06-17T23:59:00.000Z' },
+        // Condition 3 only: today, start_time elapsed.
+        { id: 'c-started',  status: 'cancelled',
+          tournament_date: TODAY_ALMATY, start_time: '10:00',
+          registration_deadline: null },
+        // All three at once: past date, past deadline, past start_time.
+        { id: 'c-all',      status: 'cancelled',
+          tournament_date: '2026-06-13', start_time: '10:00',
+          registration_deadline: '2026-06-17T23:59:00.000Z' },
+    ];
+    const snapshot = JSON.stringify(cancelledRows);
+    const n = closeExpired(cancelledRows);
+
+    assertEqual(n, 0,
+        'cancelled-only input returns 0 — cancelled rows do not count as affected');
+    assertEqual(JSON.stringify(cancelledRows), snapshot,
+        'cancelled rows byte-identical after close_expired_tournaments() — none touched');
+    for (const t of cancelledRows) {
+        assertEqual(t.status, 'cancelled',
+            `${t.id}: cancelled status preserved despite trigger conditions being true`);
+    }
+}
+
+// --- cancelled rows stay cancelled when mixed with open expiring rows ------
+// A row that should close MUST close; a cancelled row alongside it MUST NOT
+// be inadvertently swept in by the same UPDATE.
+{
+    const rows = [
+        { id: 'mix-open-past',      status: 'open',
+          tournament_date: '2026-06-13', start_time: null,
+          registration_deadline: null },
+        { id: 'mix-cancelled-past', status: 'cancelled',
+          tournament_date: '2026-06-13', start_time: null,
+          registration_deadline: null },
+    ];
+    const n = closeExpired(rows);
+    assertEqual(n, 1,
+        'mixed batch: only the open row is counted (cancelled excluded)');
+    assertEqual(rows.find(r => r.id === 'mix-open-past').status, 'closed',
+        'mixed batch: open expiring row closes');
+    assertEqual(rows.find(r => r.id === 'mix-cancelled-past').status, 'cancelled',
+        'mixed batch: cancelled row alongside stays cancelled');
+}
+
 // --- does NOT touch future tournaments -------------------------------------
 {
     const rows = freshFixture();
@@ -377,6 +459,36 @@ function register(tournament, regs, opts, now = NOW_UTC) {
         'register before start_time succeeds');
     assertEqual(t.status, 'open',
         "row stays open when start_time is in the future");
+}
+
+// --- cancelled row passes through register_for_tournament untouched --------
+// Critical for the cancelled-bypass invariant: even though the auto-close
+// gate inside register_for_tournament has UPDATEs, the early `v_status <> 'open'`
+// return must short-circuit BEFORE any UPDATE runs. The status must remain
+// 'cancelled' afterwards (not silently rewritten to 'closed').
+{
+    const t = { id: 'tC', status: 'cancelled', tournament_date: '2026-06-13', start_time: '10:00', registration_deadline: '2026-06-17T23:59:00.000Z', capacity: 24 };
+    const out = register(t, [], { p_student_id: '11111111-1111-1111-1111-111111111111' });
+    assertEqual(out.reason, 'closed',
+        'cancelled tournament → reason=closed (registration rejected)');
+    assertEqual(t.status, 'cancelled',
+        'cancelled status is NEVER rewritten to closed by register_for_tournament');
+}
+
+// Source-contract: in the SQL, the `v_status <> 'open'` early-return MUST
+// appear before the time-based UPDATE statements, otherwise a cancelled row
+// could be silently rewritten to 'closed'.
+{
+    const fnMatch = MIG.match(/CREATE OR REPLACE FUNCTION register_for_tournament[\s\S]*?\$\$;/);
+    const fnBody = fnMatch ? fnMatch[0] : '';
+    const earlyReturnIdx = fnBody.search(/v_status\s*<>\s*'open'[\s\S]{0,200}RETURN/);
+    const firstUpdateIdx = fnBody.search(/UPDATE\s+tournaments\s+SET\s+status\s*=\s*'closed'/);
+    assert(earlyReturnIdx >= 0,
+        "register_for_tournament has an early `v_status <> 'open'` return");
+    assert(firstUpdateIdx >= 0,
+        'register_for_tournament has a status=closed UPDATE (the gate to skip)');
+    assert(earlyReturnIdx < firstUpdateIdx,
+        "the v_status<>'open' early return precedes every status=closed UPDATE — cancelled rows can't be rewritten");
 }
 
 // --- existing reasons preserved --------------------------------------------
