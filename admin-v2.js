@@ -229,6 +229,15 @@ function updateMenuVisibility() {
         }
     }
 
+    // Tournaments management
+    if (userRole.can_manage_tournaments === true) {
+        if (menuTournamentsAdmin) {
+            menuTournamentsAdmin.style.display = 'flex';
+            hasAnyManagementAccess = true;
+        }
+        if (moreMenuTournamentsAdmin) moreMenuTournamentsAdmin.style.display = 'flex';
+    }
+
     // Coach Performance counts toward Management section title visibility
     // when the canViewCoachKpi gate (above) showed the nav item.
     if (menuCoachPerformance && canViewKpi) {
@@ -11973,7 +11982,8 @@ function _tournamentsAdminToast(msg, type) {
 async function showTournamentManagement(updateHash = true) {
     const userRole = window.supabaseAuth?.getCurrentUserRole();
     const isAdmin = userRole?.role === 'admin';
-    if (!userRole || !isAdmin) {
+    const canManageTournaments = userRole?.can_manage_tournaments === true;
+    if (!userRole || (!isAdmin && !canManageTournaments)) {
         _tournamentsAdminToast(_tt('admin.tournaments.accessDenied'), 'error');
         return;
     }
