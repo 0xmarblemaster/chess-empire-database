@@ -74,8 +74,17 @@ assert(/'tournament_auto_close_5min'/.test(MIG),
     "job name is 'tournament_auto_close_5min'");
 assert(/cron\.schedule\([\s\S]{0,200}'\*\/5 \* \* \* \*'/.test(MIG),
     'cron expression is every 5 minutes');
+// Verification-checklist item: "pg_cron job registered (or NOTICE emitted)".
+// Both branches of the guard MUST emit a RAISE NOTICE so operators always see
+// either a "Scheduled …" confirmation or an "extension not installed" fallback
+// in psql/CLI output — no silent skip.
+assert(/RAISE NOTICE\s+'Scheduled pg_cron job tournament_auto_close_5min/i.test(MIG),
+    'success branch emits RAISE NOTICE confirming job registration');
 assert(/RAISE NOTICE[\s\S]{0,400}pg_cron extension not installed/i.test(MIG),
     'fallback RAISE NOTICE when pg_cron is missing');
+// Cron body must invoke the function (not a stale name).
+assert(/cron\.schedule\([\s\S]{0,300}SELECT close_expired_tournaments\(\)/.test(MIG),
+    'scheduled job body calls close_expired_tournaments()');
 
 // --- initial backfill -------------------------------------------------------
 const backfillMatches = MIG.match(/SELECT close_expired_tournaments\(\)/g) || [];
