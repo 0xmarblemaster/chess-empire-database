@@ -655,6 +655,12 @@ console.log('\n=== regression guard: real window.i18n.t resolves Coach KPI keys 
     assert(global.window.i18n && typeof global.window.i18n.t === 'function',
         'i18n.js exposes window.i18n.t after load');
 
+    // App default is Russian — flip to English explicitly before asserting
+    // English copy. Pre-2026-06-12 the default was English; the regression
+    // guard's job is to verify keys resolve in every locale, not to assert
+    // any particular default.
+    global.window.i18n.setLanguage('en', { silent: true });
+
     // Coach KPI keys MUST NOT return the literal key string — they must
     // resolve to actual translated copy from the active tree.
     const enWindow = global.window.i18n.t('coachKpiTimeWindow30d');

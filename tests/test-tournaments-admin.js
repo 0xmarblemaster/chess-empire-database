@@ -318,14 +318,14 @@ const regFn = (() => {
 })();
 assert(/\.from\(['"]tournament_registrations['"]\)/.test(regFn),
     'showTournamentRegistrations queries tournament_registrations');
-assert(/students!inner\(first_name,\s*last_name\)/.test(regFn),
+assert(/students!inner\([\s\S]*?\bfirst_name\b[\s\S]*?\blast_name\b/.test(regFn),
     'showTournamentRegistrations joins to students for full names');
 
 const removeFn = (() => {
     const s = JS.indexOf('async function removeRegistration(');
     return JS.slice(s, s + 1500);
 })();
-assert(/\.from\(['"]tournament_registrations['"]\)[\s\S]*?\.delete\(\)/.test(removeFn),
+assert(/\.rpc\(['"]admin_remove_tournament_registration['"]/.test(removeFn),
     'removeRegistration deletes from tournament_registrations');
 
 // ---------------------------------------------------------------------------
@@ -396,7 +396,14 @@ function makeSupabase({ tournamentsData = [], regData = [], regError = null } = 
         calls.push(op);
         return op;
     }
-    const client = { from(table) { return builder('from', table); } };
+    const client = {
+        from(table) { return builder('from', table); },
+        rpc(name, params) {
+            const op = { _op: 'rpc', _name: name, _params: params };
+            calls.push(op);
+            return Promise.resolve({ data: { ok: true }, error: null });
+        },
+    };
     return { client, calls };
 }
 
@@ -511,6 +518,7 @@ return {
         el('tournamentAdminCapacity').value = '24';
         el('tournamentAdminStatus').value = 'open';
         el('tournamentAdminLeague').value = 'C';
+        el('tournamentAdminDeadline').value = '2026-06-05T18:00';
 
         const toastCalls4 = [];
         const { client, calls } = makeSupabase();
@@ -613,10 +621,10 @@ return {
         const auth = { getCurrentUserRole: () => ({ role: 'admin' }) };
         const api = makeSandbox(document, client, auth, toastCalls9, true);
         return api.removeRegistration('r-1').then(() => {
-            const del = calls.find(c => c._op === 'delete' && c._table === 'tournament_registrations');
-            assert(!!del, 'removeRegistration calls .from("tournament_registrations").delete()');
-            const filter = del._filters.find(f => f[0] === 'eq' && f[1] === 'id' && f[2] === 'r-1');
-            assert(!!filter, 'removeRegistration filters by id = r-1');
+            const rpc = calls.find(c => c._op === 'rpc' && c._name === 'admin_remove_tournament_registration');
+            assert(!!rpc, 'removeRegistration calls rpc("admin_remove_tournament_registration")');
+            assertEqual(rpc._params.p_registration_id, 'r-1',
+                'removeRegistration passes p_registration_id = r-1');
             const removed = toastCalls9.find(c => c.msg === 'admin.tournaments.registrationRemoved' && c.type === 'success');
             assert(!!removed, 'registrationRemoved toast fires on success');
         });

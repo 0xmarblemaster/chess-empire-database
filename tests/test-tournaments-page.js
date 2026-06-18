@@ -224,13 +224,13 @@ console.log('\n=== tournaments.html script wiring ==============================
 
 const HTML = fs.readFileSync(path.join(ROOT, 'tournaments.html'), 'utf8');
 
-assert(/<script src="supabase-config\.js/.test(HTML),
+assert(/<script[^>]*\bsrc="supabase-config\.js/.test(HTML),
     'tournaments.html loads supabase-config.js');
-assert(/<script src="supabase-client\.js/.test(HTML),
+assert(/<script[^>]*\bsrc="supabase-client\.js/.test(HTML),
     'tournaments.html loads supabase-client.js');
-assert(/<script src="i18n\.js/.test(HTML),
+assert(/<script[^>]*\bsrc="i18n\.js/.test(HTML),
     'tournaments.html loads i18n.js');
-assert(/<script src="tournaments\.js/.test(HTML),
+assert(/<script[^>]*\bsrc="tournaments\.js/.test(HTML),
     'tournaments.html loads tournaments.js');
 assert(/data-i18n="tournaments\.title"/.test(HTML),
     'page header binds to tournaments.title i18n key');

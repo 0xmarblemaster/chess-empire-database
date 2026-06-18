@@ -87,8 +87,8 @@ function sliceLocale(src, locale) {
 }
 
 const EXPECTED_LABELS = {
-    en: { 'admin.ratings.exportButton': 'Export Excel' },
-    ru: { 'admin.ratings.exportButton': 'Скачать Excel' },
+    en: { 'admin.ratings.exportButton': 'Current rating List' },
+    ru: { 'admin.ratings.exportButton': 'Текущий рейтинг лист' },
     kk: { 'admin.ratings.exportButton': null }, // any non-empty string is acceptable
 };
 const REQUIRED_KEYS = [
@@ -201,6 +201,7 @@ const studentRows = [
 ];
 
 const fakeQuery = {
+    _filtered: null,
     select() { return this; },
     in(col, values) {
         assertEqual(col, 'status',
@@ -208,8 +209,14 @@ const fakeQuery = {
         assertEqual(values.sort(), ['active', 'frozen'].sort(),
             'function filters students.status IN [active, frozen]');
         // Apply the filter ourselves so the test mirrors the real RLS behaviour.
-        const filtered = studentRows.filter(s => values.includes(s.status));
-        return Promise.resolve({ data: filtered, error: null });
+        this._filtered = studentRows.filter(s => values.includes(s.status));
+        return this;
+    },
+    // Production code paginates via .range(from, to). Honor the slice so
+    // the second page returns empty and the loop terminates.
+    range(from, to) {
+        const slice = (this._filtered || []).slice(from, to + 1);
+        return Promise.resolve({ data: slice, error: null });
     },
 };
 const supabaseClient = { from(tbl) {
