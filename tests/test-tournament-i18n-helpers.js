@@ -94,6 +94,21 @@ for (const k of TIME_FORMAT_KEYS) {
         `tournaments.timeFormat.${k} key appears 3 times in language blocks (saw ${occurrences})`);
 }
 
+// Grey-strip labels on the public tournament card — must include the
+// "Registration" / "Start" prefix in every locale.
+assert(/"tournaments\.registration\.closesAt":\s*"Registration Closes \{\{datetime\}\}"/.test(SRC),
+    'EN: tournaments.registration.closesAt prefixes "Registration Closes"');
+assert(/"tournaments\.registration\.closesAt":\s*"Закрытие регистрации: \{\{datetime\}\}"/.test(SRC),
+    'RU: tournaments.registration.closesAt reads "Закрытие регистрации"');
+assert(/"tournaments\.registration\.closesAt":\s*"Тіркеу жабылады: \{\{datetime\}\}"/.test(SRC),
+    'KK: tournaments.registration.closesAt reads "Тіркеу жабылады"');
+assert(/"tournaments\.startAt":\s*"Start \{\{time\}\}"/.test(SRC),
+    'EN: tournaments.startAt → "Start {{time}}"');
+assert(/"tournaments\.startAt":\s*"Старт \{\{time\}\}"/.test(SRC),
+    'RU: tournaments.startAt → "Старт {{time}}"');
+assert(/"tournaments\.startAt":\s*"Басталу \{\{time\}\}"/.test(SRC),
+    'KK: tournaments.startAt → "Басталу {{time}}"');
+
 // ---------------------------------------------------------------------------
 // Behavioural — translateTimeFormat
 // ---------------------------------------------------------------------------
@@ -225,6 +240,9 @@ assert(/window\.localizeTournamentName\s*=\s*localizeTournamentName/.test(TJS),
 // The branchName must be threaded through tournamentRowHtml.
 assert(/function tournamentRowHtml\(t, branchName\)/.test(TJS),
     'tournamentRowHtml accepts branchName parameter');
+// Grey strip wraps the start time with the localized "Start" prefix key.
+assert(/tt\('tournaments\.startAt',\s*\{\s*time:\s*timeLabel\s*\}\)/.test(TJS),
+    'tournamentRowHtml renders timeLabel via tournaments.startAt');
 
 // ---------------------------------------------------------------------------
 // admin-v2.js wire-up

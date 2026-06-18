@@ -542,7 +542,7 @@ function tournamentRowHtml(t, branchName) {
                     <div class="tournament-meta" style="margin-top:4px;">
                         <span>${escapeHtml(dateLabel)}</span>
                         <span>·</span>
-                        <span>${escapeHtml(timeLabel)}</span>
+                        <span>${escapeHtml(tt('tournaments.startAt', { time: timeLabel }))}</span>
                         ${deadlineNote}
                     </div>
                 </div>
