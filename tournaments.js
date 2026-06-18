@@ -254,6 +254,34 @@ function isDeadlinePassed(t) {
     return Date.now() > d.getTime();
 }
 
+// Asia/Almaty is UTC+5, no DST — shift `now` and slice YYYY-MM-DD.
+function todayInAlmaty(now) {
+    const t = typeof now === 'number' ? now : Date.now();
+    return new Date(t + 5 * 3600 * 1000).toISOString().slice(0, 10);
+}
+
+// True when `tournament_date + start_time` interpreted in Asia/Almaty has
+// already elapsed. Returns false when either field is missing.
+function tournamentStartPassed(t, now) {
+    if (!t || !t.tournament_date || !t.start_time) return false;
+    const raw = String(t.start_time);
+    const timeStr = raw.length === 5 ? `${raw}:00` : raw;
+    const ts = new Date(`${t.tournament_date}T${timeStr}+05:00`);
+    if (isNaN(ts.getTime())) return false;
+    return ts.getTime() <= (typeof now === 'number' ? now : Date.now());
+}
+
+// Display-side mirror of close_expired_tournaments(): true when either
+// (a) tournament_date < today (Almaty), or (b) the (date + start_time)
+// Almaty instant has elapsed. The DB cron + admin pre-call persist the
+// status flip; this lets the public page render the correct state in
+// the meantime, even on rows the cron hasn't reached yet.
+function tournamentIsExpired(t, now) {
+    if (!t || !t.tournament_date) return false;
+    if (t.tournament_date < todayInAlmaty(now)) return true;
+    return tournamentStartPassed(t, now);
+}
+
 // Flip-clock countdown markup. Tick is driven by tickCountdowns() once a
 // second; we only render the static skeleton + initial values here. Returns
 // '' when the tournament has no deadline, is already closed, or the deadline
@@ -263,6 +291,7 @@ function countdownHtml(t) {
     if (!t || !t.registration_deadline) return '';
     if (t.status !== 'open') return '';
     if (isDeadlinePassed(t)) return '';
+    if (tournamentIsExpired(t)) return '';
     const ms = new Date(t.registration_deadline).getTime() - Date.now();
     const parts = countdownParts(ms);
     const urgency = countdownUrgencyClass(ms);
@@ -458,14 +487,15 @@ function tournamentRowHtml(t) {
     const regCount = t._regCount || 0;
     const isFull = regCount >= t.capacity;
     const deadlinePassed = isDeadlinePassed(t);
-    const isClosed = t.status !== 'open' || deadlinePassed;
+    const expired = tournamentIsExpired(t);
+    const isClosed = t.status !== 'open' || deadlinePassed || expired;
     let pillHtml;
     if (isClosed || isFull) {
         pillHtml = `<span class="pill full">${regCount}/${t.capacity}</span>`;
     } else {
         pillHtml = `<span class="pill">${regCount}/${t.capacity}</span>`;
     }
-    const deadlineNote = t.registration_deadline && !deadlinePassed
+    const deadlineNote = t.registration_deadline && !deadlinePassed && !expired
         ? `<span>·</span><span>${escapeHtml(tt('tournaments.registration.closesAt', { datetime: formatDeadline(t.registration_deadline) }))}</span>`
         : '';
     return `
@@ -519,7 +549,8 @@ function renderTournamentDetail(tournamentId) {
     const regCount = roster.length || t._regCount || 0;
     const isFull = regCount >= t.capacity;
     const deadlinePassed = isDeadlinePassed(t);
-    const isClosed = t.status !== 'open' || isFull || deadlinePassed;
+    const expired = tournamentIsExpired(t);
+    const isClosed = t.status !== 'open' || isFull || deadlinePassed || expired;
 
     const fillPct = Math.min(100, Math.round((regCount / Math.max(1, t.capacity)) * 100));
     let fillClass = '';
@@ -800,10 +831,10 @@ async function doRegister() {
     const btn = document.getElementById('confirmRegisterBtn');
 
     // Client-side deadline guard — defense in depth. The RPC will reject too,
-    // but this avoids a needless round-trip when the deadline expired with
-    // the modal open.
+    // but this avoids a needless round-trip when the deadline expired or the
+    // tournament date/start_time passed while the modal was open.
     const tNow = findTournament(tournamentId);
-    if (tNow && isDeadlinePassed(tNow)) {
+    if (tNow && (isDeadlinePassed(tNow) || tournamentIsExpired(tNow))) {
         showToast(tt('tournaments.registrationClosed'), 'info');
         closeRegisterModal();
         refreshTournamentLive(tournamentId);

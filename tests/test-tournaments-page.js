@@ -265,6 +265,112 @@ assert(/'duplicate'/.test(JS) && /'full'/.test(JS) && /'closed'/.test(JS) && /'n
     'tournaments.js handles all four register_for_tournament failure reasons');
 
 // ---------------------------------------------------------------------------
+// 7. tournaments.js — public UI treats expired tournaments as closed
+// ---------------------------------------------------------------------------
+//
+// The DB-side cron in migration 047 persists `status = 'closed'` for rows
+// whose tournament_date or start_time has passed in Asia/Almaty, but the
+// public page must still render the right thing for rows the cron has not
+// yet caught (or before the next 5-minute tick). `tournamentIsExpired(t)`
+// is the display-side mirror — used alongside `isDeadlinePassed(t)` to
+// drive the closed/disabled state of the row pill, detail panel, register
+// button, deadline label, countdown block, and modal-open guard.
+console.log('\n=== tournaments.js — expired-tournament display state ===============\n');
+
+assert(/function tournamentIsExpired\(/.test(JS),
+    'tournamentIsExpired(t) helper is defined in tournaments.js');
+assert(/function todayInAlmaty\(/.test(JS),
+    'todayInAlmaty(now) helper is defined');
+assert(/function tournamentStartPassed\(/.test(JS),
+    'tournamentStartPassed(t, now) helper is defined');
+
+// All four sites that previously gated UI on `deadlinePassed` must now also
+// consult `tournamentIsExpired` (countdown, row pill, detail panel, modal
+// guard). Use a single regex that matches both calls being OR'd together.
+const expiredCallSites = JS.match(/tournamentIsExpired\(/g) || [];
+assert(expiredCallSites.length >= 5,
+    'tournamentIsExpired is invoked from at least 5 sites (decl + 4 gates)');
+assert(/countdownHtml[\s\S]{0,400}tournamentIsExpired\(/.test(JS),
+    'countdownHtml suppresses the countdown when the tournament is expired');
+assert(/tournamentRowHtml[\s\S]{0,800}tournamentIsExpired\(/.test(JS),
+    'tournamentRowHtml consults tournamentIsExpired for the closed pill + deadline label');
+assert(/renderTournamentDetail[\s\S]{0,800}tournamentIsExpired\(/.test(JS),
+    'renderTournamentDetail consults tournamentIsExpired for the register button');
+assert(/isDeadlinePassed\(tNow\) \|\| tournamentIsExpired\(tNow\)/.test(JS),
+    'doRegister modal guard checks both isDeadlinePassed and tournamentIsExpired');
+
+// Behavioral exercise of the helper. Extracts the function body from
+// tournaments.js, plus the two helpers it depends on, and runs them
+// against a deterministic "now" (2026-06-18T07:00:00Z == 12:00 Almaty).
+function extractFn(src, name) {
+    const start = src.indexOf(`function ${name}(`);
+    if (start < 0) return null;
+    let depth = 0;
+    let i = src.indexOf('{', start);
+    const begin = start;
+    for (; i < src.length; i++) {
+        if (src[i] === '{') depth++;
+        else if (src[i] === '}') {
+            depth--;
+            if (depth === 0) return src.slice(begin, i + 1);
+        }
+    }
+    return null;
+}
+
+const helperBundle = [
+    extractFn(JS, 'todayInAlmaty'),
+    extractFn(JS, 'tournamentStartPassed'),
+    extractFn(JS, 'tournamentIsExpired'),
+].join('\n\n');
+assert(helperBundle.includes('tournamentIsExpired'),
+    'helper bundle extracted from tournaments.js');
+
+// 2026-06-18 12:00 Almaty == 07:00 UTC.
+const NOW = new Date('2026-06-18T07:00:00.000Z').getTime();
+const TODAY_ALMATY = '2026-06-18';
+
+const harness = `
+${helperBundle}
+return {
+    today: todayInAlmaty(NOW),
+    pastDate: tournamentIsExpired({ tournament_date: '2026-06-13', start_time: '14:00' }, NOW),
+    todayBeforeStart: tournamentIsExpired({ tournament_date: '${TODAY_ALMATY}', start_time: '14:00' }, NOW),
+    todayAfterStart: tournamentIsExpired({ tournament_date: '${TODAY_ALMATY}', start_time: '11:00' }, NOW),
+    todayAtStartExact: tournamentIsExpired({ tournament_date: '${TODAY_ALMATY}', start_time: '12:00' }, NOW),
+    todayNoStartTime: tournamentIsExpired({ tournament_date: '${TODAY_ALMATY}', start_time: null }, NOW),
+    futureDate: tournamentIsExpired({ tournament_date: '2026-07-01', start_time: '14:00' }, NOW),
+    futureNoStart: tournamentIsExpired({ tournament_date: '2026-07-01', start_time: null }, NOW),
+    nullTournament: tournamentIsExpired(null, NOW),
+    noDate: tournamentIsExpired({ start_time: '14:00' }, NOW),
+    secondsFormat: tournamentIsExpired({ tournament_date: '${TODAY_ALMATY}', start_time: '11:00:00' }, NOW),
+};`;
+const results = (new Function('NOW', harness))(NOW);
+
+assertEqual(results.today, TODAY_ALMATY,
+    'todayInAlmaty(NOW=12:00 UTC+5) returns the correct Almaty YYYY-MM-DD');
+assertEqual(results.pastDate, true,
+    'tournament whose date has passed is treated as expired');
+assertEqual(results.todayBeforeStart, false,
+    "today's tournament whose start_time is still in the future is NOT expired");
+assertEqual(results.todayAfterStart, true,
+    "today's tournament whose start_time has elapsed is expired");
+assertEqual(results.todayAtStartExact, true,
+    'start_time == now (exact) is expired (<= comparison matches SQL)');
+assertEqual(results.todayNoStartTime, false,
+    "today's tournament with NULL start_time is NOT expired (cond 3 requires start_time)");
+assertEqual(results.futureDate, false,
+    'future tournament is not expired');
+assertEqual(results.futureNoStart, false,
+    'future tournament with NULL start_time is not expired');
+assertEqual(results.nullTournament, false,
+    'null tournament input returns false (no crash)');
+assertEqual(results.noDate, false,
+    'missing tournament_date returns false');
+assertEqual(results.secondsFormat, true,
+    'start_time with seconds suffix (HH:MM:SS) is handled');
+
+// ---------------------------------------------------------------------------
 // Summary
 // ---------------------------------------------------------------------------
 console.log(`\n=== Summary ===\n  passed: ${passed}\n  failed: ${failed}\n`);
