@@ -595,6 +595,13 @@ const translations = {
         "leagues.leagueA": "League A",
         "leagues.leagueAPlus": "League A+",
 
+        // Tournament time-format category words (suffix kept verbatim)
+        "tournaments.timeFormat.rapid": "Rapid",
+        "tournaments.timeFormat.blitz": "Blitz",
+        "tournaments.timeFormat.classical": "Classical",
+        "tournaments.timeFormat.bullet": "Bullet",
+        "tournaments.timeFormat.armageddon": "Armageddon",
+
         // Admin Ratings
         "admin.ratings.title": "Ratings Management",
         "admin.ratings.viewMain": "Ratings",
@@ -1123,6 +1130,7 @@ const translations = {
         "admin.tournaments.status.cancelled": "Cancelled",
         "admin.tournaments.form.branch": "Branch",
         "admin.tournaments.form.name": "Tournament Name",
+        "admin.tournaments.form.nameOptional": "Tournament Name (optional — auto-filled from league + branch)",
         "admin.tournaments.form.info": "Description",
         "admin.tournaments.form.date": "Date",
         "admin.tournaments.form.startTime": "Start Time",
@@ -1681,6 +1689,13 @@ const translations = {
         "leagues.leagueA": "Лига A",
         "leagues.leagueAPlus": "Лига A+",
 
+        // Tournament time-format category words (suffix kept verbatim)
+        "tournaments.timeFormat.rapid": "Рапид",
+        "tournaments.timeFormat.blitz": "Блиц",
+        "tournaments.timeFormat.classical": "Классика",
+        "tournaments.timeFormat.bullet": "Пуля",
+        "tournaments.timeFormat.armageddon": "Армагеддон",
+
         // Admin Ratings
         "admin.ratings.title": "Рейтингтерді басқару",
         "admin.ratings.viewMain": "Рейтингтер",
@@ -2199,6 +2214,7 @@ const translations = {
         "admin.tournaments.status.cancelled": "Бас тартылды",
         "admin.tournaments.form.branch": "Филиал",
         "admin.tournaments.form.name": "Турнир атауы",
+        "admin.tournaments.form.nameOptional": "Турнир атауы (міндетті емес — лига мен филиалдан автотолтырылады)",
         "admin.tournaments.form.info": "Сипаттама",
         "admin.tournaments.form.date": "Күні",
         "admin.tournaments.form.startTime": "Басталу уақыты",
@@ -2801,6 +2817,13 @@ const translations = {
         "leagues.leagueA": "Лига A",
         "leagues.leagueAPlus": "Лига A+",
 
+        // Tournament time-format category words (suffix kept verbatim)
+        "tournaments.timeFormat.rapid": "Рапид",
+        "tournaments.timeFormat.blitz": "Блиц",
+        "tournaments.timeFormat.classical": "Классика",
+        "tournaments.timeFormat.bullet": "Пуля",
+        "tournaments.timeFormat.armageddon": "Армагеддон",
+
         // Admin Ratings
         "admin.ratings.title": "Управление рейтингами",
         "admin.ratings.viewMain": "Рейтинги",
@@ -3330,6 +3353,7 @@ const translations = {
         "admin.tournaments.status.cancelled": "Отменен",
         "admin.tournaments.form.branch": "Филиал",
         "admin.tournaments.form.name": "Название турнира",
+        "admin.tournaments.form.nameOptional": "Название турнира (необязательно — заполнится автоматически из лиги и филиала)",
         "admin.tournaments.form.info": "Описание",
         "admin.tournaments.form.date": "Дата",
         "admin.tournaments.form.startTime": "Время начала",
@@ -3430,6 +3454,91 @@ function t(key, params) {
 
     return value || '';
 }
+
+// Resolve the active language by preferring the localStorage value (which
+// both setLanguage variants persist on every switch) before falling back to
+// the module-scope `currentLanguage` snapshot. Keeps the display helpers
+// correct even when only the IIFE-local setLanguage was invoked.
+function _activeLanguage() {
+    try {
+        const stored = (typeof localStorage !== 'undefined')
+            ? (localStorage.getItem('ce_language') || localStorage.getItem('chess-empire-language'))
+            : null;
+        if (stored && translations[stored]) return stored;
+    } catch (_) { /* localStorage may be unavailable (SSR) */ }
+    return currentLanguage;
+}
+
+// Raw flat-key lookup against the outer `translations` dictionary. Falls
+// back to EN when the active language is missing the key, then to null.
+// Used by the tournament display helpers below — those need a missing-key
+// signal (so we can fall back to the original word/raw name), which the
+// public `t()` masks by returning the key itself.
+function _lookupTranslation(key) {
+    const lang = _activeLanguage();
+    const locale = translations[lang];
+    if (locale && typeof locale[key] === 'string') return locale[key];
+    if (translations.en && typeof translations.en[key] === 'string') return translations.en[key];
+    return null;
+}
+
+const BRANCH_NAME_TRANSLATIONS = {
+    'Gagarin Park': { en: 'Gagarin Park', ru: 'Гагарин Парк', kk: 'Гагарин паркі' },
+    'Debut': { en: 'Debut', ru: 'Дебют', kk: 'Дебют' },
+    'Almaty Arena': { en: 'Almaty Arena', ru: 'Алматы Арена', kk: 'Алматы Арена' },
+    'Halyk Arena': { en: 'Halyk Arena', ru: 'Халык Арена', kk: 'Халық Арена' },
+    'Zhandosova': { en: 'Zhandosova', ru: 'Жандосова', kk: 'Жандосов' },
+    'Abaya Rozybakieva': { en: 'Abaya Rozybakieva', ru: 'Абая Розыбакиева', kk: 'Абай – Розыбакиев' },
+    'Almaty 1': { en: 'Almaty 1', ru: 'Алматы 1', kk: 'Алматы 1' },
+    'Almaty-1': { en: 'Almaty-1', ru: 'Алматы-1', kk: 'Алматы-1' }
+};
+function _translateBranchNameTopLevel(name) {
+    if (!name) return name;
+    const m = BRANCH_NAME_TRANSLATIONS[name];
+    if (!m) return name;
+    return m[_activeLanguage()] || m.en || name;
+}
+
+// Translates the leading category word of a time-format string (e.g.
+// "Rapid 10+5" → "Рапид 10+5" in RU) while leaving the numeric suffix
+// untouched. Unknown formats are passed through verbatim.
+function translateTimeFormatTopLevel(format) {
+    if (!format) return format;
+    const m = /^\s*(Rapid|Blitz|Classical|Bullet|Armageddon)\s*(.*)$/i.exec(format);
+    if (!m) return format;
+    const key = 'tournaments.timeFormat.' + m[1].toLowerCase();
+    const localized = _lookupTranslation(key);
+    const word = localized || m[1];
+    return m[2] ? `${word} ${m[2]}`.trim() : word;
+}
+
+const LEAGUE_NAME_KEYS_FOR_COMPOSER = {
+    'A+': 'leagues.leagueAPlus',
+    'A': 'leagues.leagueA',
+    'B': 'leagues.leagueB',
+    'C': 'leagues.leagueC',
+};
+
+// Compose a localized tournament title from the structured league letter
+// + branch name when both are present; falls back to per-string lookup of
+// the stored DB name for legacy/custom rows where league is null.
+function composeTournamentNameTopLevel(tournament, branchName) {
+    const league = tournament && tournament.league ? String(tournament.league).trim() : '';
+    const name = tournament && tournament.name ? tournament.name : '';
+    if (league && LEAGUE_NAME_KEYS_FOR_COMPOSER[league]) {
+        const leagueLabel = _lookupTranslation(LEAGUE_NAME_KEYS_FOR_COMPOSER[league])
+            || ('League ' + league);
+        const branchLabel = branchName ? _translateBranchNameTopLevel(branchName) : '';
+        return branchLabel ? `${leagueLabel} — ${branchLabel}` : leagueLabel;
+    }
+    if (typeof window !== 'undefined' && typeof window.localizeTournamentName === 'function') {
+        return window.localizeTournamentName(name);
+    }
+    return name;
+}
+
+window.translateTimeFormat = translateTimeFormatTopLevel;
+window.composeTournamentName = composeTournamentNameTopLevel;
 
 function applyTranslations(root = document) {
     root.querySelectorAll('[data-i18n]').forEach(el => {
@@ -4637,9 +4746,13 @@ window.translateStatus = translateStatus;
         translateRazryad,
         translateBranchName,
         translateBranchLocation,
+        translateTimeFormat: translateTimeFormatTopLevel,
+        composeTournamentName: composeTournamentNameTopLevel,
         getRazryadChartLabels,
         getLevelDatasetLabel,
         getTooltipStudentsLabel
     };
+    window.translateTimeFormat = translateTimeFormatTopLevel;
+    window.composeTournamentName = composeTournamentNameTopLevel;
 })();
 

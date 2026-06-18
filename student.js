@@ -760,14 +760,23 @@ function renderTournamentRecentTable(tournaments) {
             <p>${t('student.tournaments.none') || 'No tournaments yet'}</p>
         </div>`;
     }
+    const composeName = (window.i18n && typeof window.i18n.composeTournamentName === 'function')
+        ? window.i18n.composeTournamentName
+        : (tn => tn && tn.name ? tn.name : '');
     const rows = tournaments.map(tn => {
         const delta = Number.isFinite(tn.ratingDelta) ? tn.ratingDelta : 0;
         const sign = delta > 0 ? '+' : '';
         const cls = delta > 0 ? 'delta-up' : delta < 0 ? 'delta-down' : 'delta-neutral';
+        const displayName = composeName({ league: tn.league, name: tn.tournamentName }) || (tn.tournamentName || '');
+        const leagueLetter = tn.league || '';
+        const leagueKey = leagueLetter === 'A+' ? 'leagues.leagueAPlus'
+            : leagueLetter ? `leagues.league${leagueLetter}`
+            : null;
+        const leagueLabel = leagueKey ? (t(leagueKey) || leagueLetter) : '';
         return `<tr>
             <td class="col-date">${formatTournamentDate(tn.date)}</td>
-            <td class="col-name">${escapeHtmlSafe(tn.tournamentName || '')}</td>
-            <td class="col-league"><span class="league-tag league-${(tn.league || '').toLowerCase()}">${escapeHtmlSafe(tn.league || '')}</span></td>
+            <td class="col-name">${escapeHtmlSafe(displayName)}</td>
+            <td class="col-league"><span class="league-tag league-${leagueLetter.toLowerCase()}">${escapeHtmlSafe(leagueLabel)}</span></td>
             <td class="col-place">${tn.place ?? '—'}</td>
             <td class="col-delta ${cls}">${sign}${delta}</td>
         </tr>`;

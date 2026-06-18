@@ -160,6 +160,41 @@ function localizeTournamentName(name) {
     const translated = tt(key);
     return translated && translated !== key ? translated : name;
 }
+// Expose so i18n.js's composeTournamentName can use it as a fallback for
+// legacy/custom tournament names (where league is null).
+if (typeof window !== 'undefined') {
+    window.localizeTournamentName = localizeTournamentName;
+}
+
+// Resolve a branch name for `branchId` by checking the in-memory branches
+// list loaded from the public schedule RPC. Returns '' when not found.
+function branchNameById(branchId) {
+    if (!branchId) return '';
+    const b = (tournamentsApp.branches || []).find(x => x.id === branchId);
+    return b ? b.name : '';
+}
+
+// Compose a tournament display name from the structured (league, branch)
+// pair when both are present. Falls back to per-string lookup of the stored
+// DB name for legacy/custom rows.
+function composeTournamentTitle(t, branchName) {
+    if (window.i18n && typeof window.i18n.composeTournamentName === 'function') {
+        return window.i18n.composeTournamentName(
+            { league: t.league, name: t.name },
+            branchName,
+        );
+    }
+    return localizeTournamentName(t.name);
+}
+
+// Translate the leading category word of a time-format string. Falls back
+// to the raw value when the helper or key is missing.
+function localizeTimeFormat(format) {
+    if (window.i18n && typeof window.i18n.translateTimeFormat === 'function') {
+        return window.i18n.translateTimeFormat(format);
+    }
+    return format;
+}
 
 function initLanguageSwitcher() {
     document.querySelectorAll('.lang-btn').forEach(btn => {
@@ -470,14 +505,15 @@ function renderBranchTournaments(branchId) {
         return;
     }
 
-    body.innerHTML = `<div class="tournaments-list">${tournaments.map(tournamentRowHtml).join('')}</div>`;
+    const branchName = branchNameById(branchId);
+    body.innerHTML = `<div class="tournaments-list">${tournaments.map(t => tournamentRowHtml(t, branchName)).join('')}</div>`;
 
     for (const t of tournaments) {
         renderTournamentDetail(t.id);
     }
 }
 
-function tournamentRowHtml(t) {
+function tournamentRowHtml(t, branchName) {
     // Every row under the active branch renders fully expanded — no
     // summary→detail click step. Adding `expanded` class triggers the
     // CSS that lifts the detail panel's max-height.
@@ -502,7 +538,7 @@ function tournamentRowHtml(t) {
         <div class="tournament-row ${expanded ? 'expanded' : ''}" data-tournament-row="${escapeAttr(t.id)}">
             <div class="tournament-summary">
                 <div>
-                    <div class="tournament-title">${escapeHtml(localizeTournamentName(t.name))}</div>
+                    <div class="tournament-title">${escapeHtml(composeTournamentTitle(t, branchName))}</div>
                     <div class="tournament-meta" style="margin-top:4px;">
                         <span>${escapeHtml(dateLabel)}</span>
                         <span>·</span>
@@ -581,7 +617,7 @@ function renderTournamentDetail(tournamentId) {
                 </div>
                 <div class="detail-item">
                     <div class="label">${escapeHtml(tt('tournaments.fields.format'))}</div>
-                    <div class="value">${escapeHtml(t.time_format || '—')}</div>
+                    <div class="value">${escapeHtml(localizeTimeFormat(t.time_format) || '—')}</div>
                 </div>
                 <div class="detail-item">
                     <div class="label">${escapeHtml(tt('tournaments.fields.fee'))}</div>
@@ -747,7 +783,7 @@ function renderModalBody() {
         const student = modalState.confirmStudent;
         const t = findTournament(modalState.tournamentId);
         const fullName = (student.first_name + ' ' + student.last_name).trim();
-        const tournLabel = `${localizeTournamentName(t.name)} — ${formatDate(t.tournament_date)}`;
+        const tournLabel = `${composeTournamentTitle(t, branchNameById(t.branch_id))} — ${formatDate(t.tournament_date)}`;
         body.innerHTML = `
             <div class="confirm-box">
                 <p>${escapeHtml(tt('tournaments.confirmRegister', { name: fullName, tournament: tournLabel }))}</p>

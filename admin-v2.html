@@ -2534,8 +2534,8 @@
                             </select>
                         </div>
                         <div class="form-group">
-                            <label class="form-label" data-i18n="admin.tournaments.form.name">Tournament Name</label>
-                            <input type="text" id="tournamentAdminName" class="form-input" required>
+                            <label class="form-label" data-i18n="admin.tournaments.form.nameOptional">Tournament Name (optional — auto-filled from league + branch)</label>
+                            <input type="text" id="tournamentAdminName" class="form-input">
                         </div>
                     </div>
 
@@ -2588,7 +2588,12 @@
                         </div>
                         <div class="form-group">
                             <label class="form-label" data-i18n="admin.tournaments.form.league">League</label>
-                            <input type="text" id="tournamentAdminLeague" class="form-input" value="C" required>
+                            <select id="tournamentAdminLeague" class="form-input" required>
+                                <option value="A+">A+</option>
+                                <option value="A">A</option>
+                                <option value="B">B</option>
+                                <option value="C" selected>C</option>
+                            </select>
                         </div>
                     </div>
 

@@ -116,7 +116,7 @@ assert(HTML.includes('id="tournamentAdminModal"'),
     'tournament create/edit modal exists');
 const modalBlock = (() => {
     const start = HTML.indexOf('id="tournamentAdminModal"');
-    return HTML.slice(start, start + 6000);
+    return HTML.slice(start, start + 8000);
 })();
 const REQUIRED_FORM_FIELDS = [
     'tournamentAdminBranch', 'tournamentAdminName', 'tournamentAdminInfo',

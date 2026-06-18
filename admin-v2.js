@@ -346,6 +346,12 @@ document.addEventListener('languagechange', () => {
     populateBranchDropdown();
     populateCoachDropdown();
     loadStudents();
+    if (typeof renderTournamentsAdminTable === 'function'
+        && Array.isArray(tournamentsAdminList)
+        && tournamentsAdminList.length > 0) {
+        renderTournamentsAdminTable();
+        _populateTournamentsAdminRegDropdown();
+    }
     lucide.createIcons();
 });
 
@@ -12081,19 +12087,31 @@ function renderTournamentsAdminTable() {
         return;
     }
 
+    const _composeName = (window.i18n && typeof window.i18n.composeTournamentName === 'function')
+        ? window.i18n.composeTournamentName
+        : ((t) => t && t.name ? t.name : '');
+    const _translateTimeFormat = (window.i18n && typeof window.i18n.translateTimeFormat === 'function')
+        ? window.i18n.translateTimeFormat
+        : (f => f);
+    const _translateBranchAdmin = (window.i18n && typeof window.i18n.translateBranchName === 'function')
+        ? window.i18n.translateBranchName
+        : (n => n);
     tbody.innerHTML = tournamentsAdminList.map(row => {
         const count = tournamentsAdminRegCounts.get(row.id) || 0;
         const statusLabel = _tt('admin.tournaments.status.' + row.status) || row.status;
         const statusColor = row.status === 'open' ? '#16a34a'
             : row.status === 'cancelled' ? '#dc2626' : '#64748b';
         const time = row.start_time ? String(row.start_time).slice(0, 5) : '—';
+        const displayName = _composeName({ league: row.league, name: row.name }, row.branch_name);
+        const displayTimeFormat = _translateTimeFormat(row.time_format || '');
+        const displayBranch = _translateBranchAdmin(row.branch_name || '');
         return `
             <tr data-tournament-id="${_escapeHtml(row.id)}">
-                <td>${_escapeHtml(row.branch_name)}</td>
-                <td>${_escapeHtml(row.name)}</td>
+                <td>${_escapeHtml(displayBranch)}</td>
+                <td>${_escapeHtml(displayName)}</td>
                 <td>${_escapeHtml(row.tournament_date || '')}</td>
                 <td>${_escapeHtml(time)}</td>
-                <td>${_escapeHtml(row.time_format || '')}</td>
+                <td>${_escapeHtml(displayTimeFormat)}</td>
                 <td>${_escapeHtml(String(row.registration_fee ?? 0))}</td>
                 <td>${_escapeHtml(String(row.rounds ?? ''))}</td>
                 <td><span style="color:${statusColor}; font-weight:600;">${_escapeHtml(statusLabel)}</span></td>
@@ -12132,13 +12150,62 @@ function _populateTournamentsAdminBranchSelect(selectedId) {
     sel.innerHTML = opts.join('');
 }
 
+// Build the auto-fill name from the structured (league, branch) pair using
+// English branch names so the stored DB value is locale-independent — the
+// display layer composes a localized title at render time.
+function _autoTournamentName(league, branchName) {
+    if (!league) return '';
+    return branchName ? `League ${league} — ${branchName}` : `League ${league}`;
+}
+
+// Wire one-time listeners on the create/edit modal so that whenever the
+// admin changes league or branch, the name field auto-fills from those
+// values — but only when the field is empty OR still holds the value we
+// last auto-filled. An admin's custom name is never silently overwritten.
+function _wireTournamentAutoFillName() {
+    if (window.__tournamentAutoFillWired) return;
+    const branchEl = document.getElementById('tournamentAdminBranch');
+    const leagueEl = document.getElementById('tournamentAdminLeague');
+    const nameEl = document.getElementById('tournamentAdminName');
+    if (!branchEl || !leagueEl || !nameEl) return;
+    window.__tournamentAutoFillWired = true;
+
+    const refresh = () => {
+        const league = (leagueEl.value || '').trim();
+        const branch = tournamentsAdminBranches.find(b => b.id === branchEl.value);
+        const branchName = branch ? branch.name : '';
+        const auto = _autoTournamentName(league, branchName);
+        if (!auto) return;
+        const cur = nameEl.value.trim();
+        const lastAuto = nameEl.dataset.autoFilled || '';
+        if (cur && cur !== lastAuto) return;  // preserve admin custom name
+        nameEl.value = auto;
+        nameEl.dataset.autoFilled = auto;
+    };
+    branchEl.addEventListener('change', refresh);
+    leagueEl.addEventListener('change', refresh);
+    nameEl.addEventListener('input', () => {
+        if (nameEl.value.trim() !== (nameEl.dataset.autoFilled || '')) {
+            delete nameEl.dataset.autoFilled;
+        }
+    });
+}
+
 function _populateTournamentsAdminRegDropdown() {
     const sel = document.getElementById('tournamentsAdminRegSelect');
     if (!sel) return;
     const placeholder = `<option value="">${_escapeHtml(_tt('admin.tournaments.selectTournament'))}</option>`;
-    const opts = tournamentsAdminList.map(t =>
-        `<option value="${_escapeHtml(t.id)}">${_escapeHtml(t.branch_name)} — ${_escapeHtml(t.name)} (${_escapeHtml(t.tournament_date || '')})</option>`
-    );
+    const _composeName = (window.i18n && typeof window.i18n.composeTournamentName === 'function')
+        ? window.i18n.composeTournamentName
+        : ((t) => t && t.name ? t.name : '');
+    const _translateBranch = (window.i18n && typeof window.i18n.translateBranchName === 'function')
+        ? window.i18n.translateBranchName
+        : (n => n);
+    const opts = tournamentsAdminList.map(t => {
+        const displayBranch = _translateBranch(t.branch_name || '');
+        const displayName = _composeName({ league: t.league, name: t.name }, t.branch_name);
+        return `<option value="${_escapeHtml(t.id)}">${_escapeHtml(displayBranch)} — ${_escapeHtml(displayName)} (${_escapeHtml(t.tournament_date || '')})</option>`;
+    });
     sel.innerHTML = placeholder + opts.join('');
 }
 
@@ -12416,7 +12483,9 @@ function showCreateTournamentModal() {
 
     // Reset form
     document.getElementById('tournamentAdminId').value = '';
-    document.getElementById('tournamentAdminName').value = '';
+    const nameEl = document.getElementById('tournamentAdminName');
+    nameEl.value = '';
+    delete nameEl.dataset.autoFilled;
     document.getElementById('tournamentAdminInfo').value = '';
     document.getElementById('tournamentAdminDate').value = '';
     document.getElementById('tournamentAdminStartTime').value = '14:00';
@@ -12429,6 +12498,7 @@ function showCreateTournamentModal() {
     document.getElementById('tournamentAdminDeadline').value = '';
 
     _populateTournamentsAdminBranchSelect(null);
+    _wireTournamentAutoFillName();
 
     const titleEl = document.getElementById('tournamentAdminModalTitle');
     if (titleEl) titleEl.textContent = _tt('admin.tournaments.newButton');
@@ -12448,7 +12518,11 @@ function showEditTournamentModal(tournamentId) {
     if (!modal) return;
 
     document.getElementById('tournamentAdminId').value = row.id;
-    document.getElementById('tournamentAdminName').value = row.name || '';
+    const nameEl = document.getElementById('tournamentAdminName');
+    nameEl.value = row.name || '';
+    // Clear auto-fill memo so we never overwrite an admin's chosen name when
+    // they edit a tournament (any non-empty value is treated as custom).
+    delete nameEl.dataset.autoFilled;
     document.getElementById('tournamentAdminInfo').value = row.info || '';
     document.getElementById('tournamentAdminDate').value = row.tournament_date || '';
     document.getElementById('tournamentAdminStartTime').value = row.start_time
@@ -12463,6 +12537,7 @@ function showEditTournamentModal(tournamentId) {
     document.getElementById('tournamentAdminDeadline').value = _isoToLocalDatetimeInput(row.registration_deadline);
 
     _populateTournamentsAdminBranchSelect(row.branch_id);
+    _wireTournamentAutoFillName();
 
     const titleEl = document.getElementById('tournamentAdminModalTitle');
     if (titleEl) titleEl.textContent = _tt('admin.tournaments.action.edit');
@@ -12487,7 +12562,7 @@ async function submitTournamentAdminForm() {
 
     const id = document.getElementById('tournamentAdminId').value || null;
     const branchId = document.getElementById('tournamentAdminBranch').value || null;
-    const name = document.getElementById('tournamentAdminName').value.trim();
+    let name = document.getElementById('tournamentAdminName').value.trim();
     const info = document.getElementById('tournamentAdminInfo').value.trim();
     const date = document.getElementById('tournamentAdminDate').value;
     const startTime = document.getElementById('tournamentAdminStartTime').value;
@@ -12499,6 +12574,15 @@ async function submitTournamentAdminForm() {
     const league = document.getElementById('tournamentAdminLeague').value.trim();
     const deadlineRaw = document.getElementById('tournamentAdminDeadline').value;
     const registrationDeadline = deadlineRaw ? new Date(deadlineRaw).toISOString() : null;
+
+    // Name is now optional in the UI; derive it from league + branch when
+    // omitted so the unique-name DB constraint still gets a sensible value
+    // (display layer composes a localized title at render time).
+    if (!name && branchId && league) {
+        const branch = tournamentsAdminBranches.find(b => b.id === branchId);
+        const branchName = branch ? branch.name : '';
+        name = branchName ? `League ${league} — ${branchName}` : `League ${league}`;
+    }
 
     if (!branchId || !name || !date || !startTime || !timeFormat
         || isNaN(fee) || !rounds || rounds < 1 || !capacity || capacity < 1
