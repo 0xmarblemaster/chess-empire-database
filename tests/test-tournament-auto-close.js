@@ -393,5 +393,112 @@ function register(tournament, regs, opts, now = NOW_UTC) {
         'past registration_deadline (future tournament) → reason=deadline_passed');
 }
 
-console.log(`\n=== Summary ===\n  passed: ${passed}\n  failed: ${failed}\n`);
-if (failed > 0) process.exit(1);
+// ============================================================================
+// 4. Admin loader integration — close_expired_tournaments is invoked before
+//    the tournaments list is fetched, so the rendered table reflects current
+//    state even if pg_cron hasn't fired since the last expiry.
+// ============================================================================
+console.log('\n=== admin-v2.js loadTournamentsAdminList — RPC pre-call ==============\n');
+
+const ADMIN_JS = fs.readFileSync(path.join(ROOT, 'admin-v2.js'), 'utf8');
+
+function extractFn(src, name) {
+    const start = src.indexOf(`async function ${name}(`);
+    if (start < 0) return null;
+    let depth = 0;
+    let i = src.indexOf('{', start);
+    const begin = start;
+    for (; i < src.length; i++) {
+        if (src[i] === '{') depth++;
+        else if (src[i] === '}') {
+            depth--;
+            if (depth === 0) return src.slice(begin, i + 1);
+        }
+    }
+    return null;
+}
+
+const loaderSrc = extractFn(ADMIN_JS, 'loadTournamentsAdminList');
+assert(!!loaderSrc, 'loadTournamentsAdminList is defined in admin-v2.js');
+
+// Source-contract: RPC name is invoked.
+assert(/supabase\.rpc\(\s*['"]close_expired_tournaments['"]/.test(loaderSrc),
+    'loadTournamentsAdminList invokes supabase.rpc("close_expired_tournaments")');
+
+// Ordering: the RPC must appear BEFORE the tournaments table is queried,
+// otherwise the rendered rows wouldn't reflect the auto-close. Use string
+// indices on the function body.
+const rpcIdx = loaderSrc.search(/supabase\.rpc\(\s*['"]close_expired_tournaments['"]/);
+const fromTournamentsIdx = loaderSrc.search(/\.from\(\s*['"]tournaments['"]\s*\)/);
+assert(rpcIdx >= 0 && fromTournamentsIdx >= 0 && rpcIdx < fromTournamentsIdx,
+    'RPC pre-call happens BEFORE .from("tournaments")');
+
+// Behavioral: run the loader against a fake supabase and assert the call
+// sequence: rpc('close_expired_tournaments') → from('branches') → from('tournaments').
+{
+    const callOrder = [];
+    function makeBuilder(table, data) {
+        const builder = {
+            _table: table,
+            select() { return builder; },
+            order() { return builder; },
+            in() { return Promise.resolve({ data: [], error: null }); },
+            then(resolve) { return resolve({ data, error: null }); },
+        };
+        return builder;
+    }
+    const fakeSupabase = {
+        rpc(name) {
+            callOrder.push(`rpc:${name}`);
+            return Promise.resolve({ data: 0, error: null });
+        },
+        from(table) {
+            callOrder.push(`from:${table}`);
+            const data = table === 'branches'
+                ? [{ id: 'b1', name: 'Halyk Arena' }]
+                : table === 'tournaments'
+                    ? [{ id: 't1', branch_id: 'b1', name: 'Test', tournament_date: '2026-06-13',
+                        start_time: '14:00', time_format: 'Rapid 15+5', registration_fee: 0,
+                        rounds: 7, capacity: 24, status: 'closed', league: 'C',
+                        registration_deadline: null, info: null }]
+                    : [];
+            return makeBuilder(table, data);
+        },
+    };
+
+    const fakeTbody = { innerHTML: '' };
+    const fakeDocument = {
+        getElementById: (id) => id === 'tournamentsAdminTableBody' ? fakeTbody : null,
+        querySelectorAll: () => ({ forEach: () => {} }),
+        querySelector: () => null,
+    };
+
+    const harness = `
+'use strict';
+let tournamentsAdminBranches = [];
+let tournamentsAdminList = [];
+let tournamentsAdminRegCounts = new Map();
+function _escapeHtml(s) { return String(s || ''); }
+function _tt(k) { return k; }
+function renderTournamentsAdminTable() {}
+const document = fakeDocument;
+const window = { supabaseClient: fakeSupabase };
+const console = { log() {}, warn() {}, error() {} };
+${loaderSrc}
+return loadTournamentsAdminList();
+`;
+    const runner = new Function('fakeDocument', 'fakeSupabase', harness);
+    return runner(fakeDocument, fakeSupabase).then(() => {
+        const rpcPos = callOrder.indexOf('rpc:close_expired_tournaments');
+        const tournamentsPos = callOrder.indexOf('from:tournaments');
+        assert(rpcPos >= 0, 'fake supabase saw rpc("close_expired_tournaments")');
+        assert(tournamentsPos >= 0, 'fake supabase saw from("tournaments")');
+        assert(rpcPos < tournamentsPos,
+            'rpc("close_expired_tournaments") fires BEFORE from("tournaments") at runtime');
+    }).then(finish, (e) => { console.error(e); failed++; finish(); });
+
+    function finish() {
+        console.log(`\n=== Summary ===\n  passed: ${passed}\n  failed: ${failed}\n`);
+        if (failed > 0) process.exit(1);
+    }
+}

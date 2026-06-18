@@ -12018,6 +12018,14 @@ async function loadTournamentsAdminList() {
     }
 
     try {
+        // Auto-close any expired tournaments so the admin view reflects current
+        // state immediately — pg_cron handles the long-tail, this catches rows
+        // whose deadlines elapsed since the last cron tick. Failure here must
+        // never block the read path (e.g. cron-only env without the RPC grant).
+        try {
+            await supabase.rpc('close_expired_tournaments');
+        } catch (_) { /* non-fatal — proceed to read */ }
+
         // Fetch branches (all of them, including excluded ones for admin view).
         const { data: branchesData, error: bErr } = await supabase
             .from('branches')
