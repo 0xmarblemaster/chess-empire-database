@@ -918,6 +918,16 @@ function handleRegisterResult(data, tournamentId) {
             showToast(tt('tournaments.alreadyRegistered'), 'info');
             closeRegisterModal();
             break;
+        case 'ineligible': {
+            const msg = tt('tournaments.ineligibleForLeague', {
+                rating: result.student_rating ?? '—',
+                league: result.tournament_league,
+                studentLeague: result.student_league,
+            });
+            showToast(msg, 'warning');
+            closeRegisterModal();
+            break;
+        }
         case 'not_found':
             showToast(tt('tournaments.tournamentNotFound'), 'error');
             closeRegisterModal();

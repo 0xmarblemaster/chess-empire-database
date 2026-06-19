@@ -80,6 +80,38 @@ assert(/GRANT EXECUTE ON FUNCTION[\s\S]+?register_for_tournament\(UUID, UUID, TE
     'new RPC granted to anon, authenticated, service_role');
 
 // ============================================================================
+// 1b. Migration 049 — league eligibility check (source contract)
+// ============================================================================
+console.log('\n=== migration 049_tournament_eligibility_check.sql ====================\n');
+
+const MIG_049_PATH = path.join(ROOT, 'migrations/049_tournament_eligibility_check.sql');
+assert(fs.existsSync(MIG_049_PATH), 'migrations/049_tournament_eligibility_check.sql exists');
+const MIG_049 = fs.readFileSync(MIG_049_PATH, 'utf8');
+
+assert(/CREATE OR REPLACE FUNCTION register_for_tournament/.test(MIG_049),
+    '049 re-creates register_for_tournament (single source of truth)');
+assert(/calc_league_from_rating/.test(MIG_049),
+    '049 calls calc_league_from_rating to derive the student league');
+assert(/student_current_ratings/.test(MIG_049),
+    '049 reads student rating from student_current_ratings view');
+assert(/'reason',\s*'ineligible'/.test(MIG_049),
+    "049 returns reason='ineligible' when student league differs from tournament league");
+assert(/'student_rating'/.test(MIG_049),
+    '049 surfaces student_rating in the ineligible response');
+assert(/'student_league'/.test(MIG_049),
+    '049 surfaces student_league in the ineligible response');
+assert(/'tournament_league'/.test(MIG_049),
+    '049 surfaces tournament_league in the ineligible response');
+assert(/p_student_id IS NOT NULL/.test(MIG_049),
+    '049 only enforces the rating check when p_student_id is set (walk-ins bypass)');
+assert(/v_tournament_league IS NOT NULL/.test(MIG_049),
+    '049 skips the check when the tournament has no league tag');
+assert(/COALESCE\(v_student_rating,\s*0\)/.test(MIG_049),
+    '049 treats NULL rating as 0 (forces League C bucket)');
+assert(/GRANT EXECUTE ON FUNCTION[\s\S]+?register_for_tournament\(UUID, UUID, TEXT, TEXT, TEXT\)[\s\S]+?TO anon, authenticated, service_role/.test(MIG_049),
+    '049 re-grants execute to anon, authenticated, service_role');
+
+// ============================================================================
 // 2. Edge function — source contract
 // ============================================================================
 console.log('\n=== supabase/functions/tournaments-api/index.ts ======================\n');
@@ -99,10 +131,12 @@ assert(/x-api-key/.test(FN), 'CORS allows x-api-key header');
 assert(/x-source/.test(FN), 'CORS allows x-source header');
 assert(/OPTIONS/.test(FN), 'handles OPTIONS preflight');
 
-const REASONS_ENUM = ['unauthorized', 'not_found', 'closed', 'full', 'duplicate', 'invalid_input', 'server_error'];
+const REASONS_ENUM = ['unauthorized', 'not_found', 'closed', 'full', 'duplicate', 'ineligible', 'invalid_input', 'server_error'];
 for (const r of REASONS_ENUM) {
     assert(new RegExp(`'${r}'`).test(FN), `reason enum includes '${r}'`);
 }
+assert(/reason === 'ineligible'\s*\?\s*409/.test(FN),
+    "edge function maps reason='ineligible' to HTTP 409");
 
 assert(/'\/branches'/.test(FN), 'routes /branches');
 assert(/'\/tournaments'/.test(FN), 'routes /tournaments');
@@ -175,8 +209,9 @@ assert((stat.mode & 0o111) !== 0, 'deploy script is executable (chmod +x)');
 console.log('\n=== register_for_tournament logic (in-memory simulation) =============\n');
 
 function makeStore() {
-    const tournaments = new Map();      // id -> { capacity, status, name, ... }
+    const tournaments = new Map();      // id -> { capacity, status, name, league, ... }
     const registrations = [];           // { id, tournament_id, student_id, player_name, source, external_contact, registered_at }
+    const studentRatings = new Map();   // student_id -> rating
     let regSeq = 0;
 
     function addTournament(t) {
@@ -187,12 +222,25 @@ function makeStore() {
             time_format: t.time_format || 'Rapid 15+5',
             capacity: t.capacity || 24, status: t.status || 'open',
             branch_id: t.branch_id || null,
+            league: t.league === undefined ? null : t.league,
         };
         tournaments.set(t.id, row);
         return row;
     }
 
-    // Mirrors the plpgsql body in migrations/044_tournament_api.sql exactly.
+    function setStudentRating(student_id, rating) {
+        studentRatings.set(student_id, rating);
+    }
+
+    // Mirrors calc_league_from_rating() in migration 038.
+    function calcLeagueFromRating(rating) {
+        if (rating === null || rating === undefined) return null;
+        if (rating > 800) return 'A';
+        if (rating >= 450) return 'B';
+        return 'C';
+    }
+
+    // Mirrors the plpgsql body in migrations/044_tournament_api.sql + 049_tournament_eligibility_check.sql.
     function register(p_tournament_id, p_student_id = null, p_player_name = null, p_source = 'web', p_external_contact = null) {
         if (!p_student_id && (!p_player_name || !p_player_name.trim())) {
             return { ok: false, reason: 'invalid_input' };
@@ -214,6 +262,21 @@ function makeStore() {
                 r.tournament_id === p_tournament_id && r.student_id === p_student_id
             );
             if (dup) return { ok: false, reason: 'duplicate' };
+
+            // League eligibility check — mirrors migration 049.
+            if (t.league) {
+                const studentRating = studentRatings.has(p_student_id) ? studentRatings.get(p_student_id) : null;
+                const requiredLeague = calcLeagueFromRating(studentRating === null ? 0 : studentRating);
+                if (requiredLeague !== t.league) {
+                    return {
+                        ok: false,
+                        reason: 'ineligible',
+                        student_rating: studentRating,
+                        student_league: requiredLeague,
+                        tournament_league: t.league,
+                    };
+                }
+            }
         }
 
         const id = `reg-${++regSeq}`;
@@ -255,7 +318,7 @@ function makeStore() {
         return { ok: true };
     }
 
-    return { tournaments, registrations, addTournament, register, deleteRegistration };
+    return { tournaments, registrations, studentRatings, addTournament, setStudentRating, register, deleteRegistration };
 }
 
 const STUDENT_A = '11111111-1111-1111-1111-111111111111';
@@ -314,6 +377,91 @@ assertEqual(smallStore.tournaments.get(T_SMALL).status, 'open',
     'tournament re-opens when a seat is freed by deletion');
 const delMiss = smallStore.deleteRegistration('non-existent');
 assertEqual(delMiss.reason, 'not_found', 'delete of unknown id → not_found');
+
+// ----------------------------------------------------------------------------
+// 6b. League eligibility (migration 049) — behavior
+// ----------------------------------------------------------------------------
+console.log('\n=== league eligibility (in-memory simulation) =========================\n');
+
+const T_LEAGUE_A = 'a0000000-0000-0000-0000-0000000000aa';
+const T_LEAGUE_B = 'b0000000-0000-0000-0000-0000000000bb';
+const T_LEAGUE_C = 'c0000000-0000-0000-0000-0000000000cc';
+const T_NO_LEAGUE = 'd0000000-0000-0000-0000-0000000000dd';
+
+const S_RATED_LOW    = '11111111-aaaa-aaaa-aaaa-111111111111'; // 300 → League C
+const S_RATED_MID    = '22222222-aaaa-aaaa-aaaa-222222222222'; // 600 → League B
+const S_RATED_HIGH   = '33333333-aaaa-aaaa-aaaa-333333333333'; // 1000 → League A
+const S_RATED_EDGE_B = '44444444-aaaa-aaaa-aaaa-444444444444'; // 450 → League B (inclusive lower)
+const S_RATED_EDGE_C = '55555555-aaaa-aaaa-aaaa-555555555555'; // 449 → League C (just below)
+const S_NO_RATING    = '66666666-aaaa-aaaa-aaaa-666666666666'; // null → treated as 0 → League C
+
+const leagueStore = makeStore();
+leagueStore.addTournament({ id: T_LEAGUE_A, capacity: 24, league: 'A' });
+leagueStore.addTournament({ id: T_LEAGUE_B, capacity: 24, league: 'B' });
+leagueStore.addTournament({ id: T_LEAGUE_C, capacity: 24, league: 'C' });
+leagueStore.addTournament({ id: T_NO_LEAGUE, capacity: 24, league: null });
+
+leagueStore.setStudentRating(S_RATED_LOW, 300);
+leagueStore.setStudentRating(S_RATED_MID, 600);
+leagueStore.setStudentRating(S_RATED_HIGH, 1000);
+leagueStore.setStudentRating(S_RATED_EDGE_B, 450);
+leagueStore.setStudentRating(S_RATED_EDGE_C, 449);
+// S_NO_RATING intentionally left unset.
+
+// Wrong league registration is blocked with ineligible reason + context.
+const elig1 = leagueStore.register(T_LEAGUE_C, S_RATED_MID);
+assertEqual(elig1.ok, false, 'rating 600 → League C tournament: blocked');
+assertEqual(elig1.reason, 'ineligible', 'rating 600 → League C: reason=ineligible');
+assertEqual(elig1.student_rating, 600, 'ineligible response surfaces student_rating');
+assertEqual(elig1.student_league, 'B', 'ineligible response surfaces correct student_league');
+assertEqual(elig1.tournament_league, 'C', 'ineligible response surfaces tournament_league');
+
+const elig2 = leagueStore.register(T_LEAGUE_C, S_RATED_HIGH);
+assertEqual(elig2.reason, 'ineligible', 'rating 1000 → League C: ineligible');
+assertEqual(elig2.student_league, 'A', 'rating 1000 → student_league=A');
+
+const elig3 = leagueStore.register(T_LEAGUE_B, S_RATED_LOW);
+assertEqual(elig3.reason, 'ineligible', 'rating 300 → League B: ineligible');
+assertEqual(elig3.student_league, 'C', 'rating 300 → student_league=C');
+
+const elig4 = leagueStore.register(T_LEAGUE_A, S_RATED_MID);
+assertEqual(elig4.reason, 'ineligible', 'rating 600 → League A: ineligible');
+
+// Correct league registration is allowed.
+const elig5 = leagueStore.register(T_LEAGUE_C, S_RATED_LOW);
+assertEqual(elig5.ok, true, 'rating 300 → League C: allowed');
+
+const elig6 = leagueStore.register(T_LEAGUE_B, S_RATED_MID);
+assertEqual(elig6.ok, true, 'rating 600 → League B: allowed');
+
+const elig7 = leagueStore.register(T_LEAGUE_A, S_RATED_HIGH);
+assertEqual(elig7.ok, true, 'rating 1000 → League A: allowed');
+
+// Boundary at 450 — inclusive in League B per user spec + calc_league_from_rating.
+const elig8 = leagueStore.register(T_LEAGUE_B, S_RATED_EDGE_B);
+assertEqual(elig8.ok, true, 'rating 450 (boundary) → League B: allowed');
+
+const elig9 = leagueStore.register(T_LEAGUE_C, S_RATED_EDGE_C);
+assertEqual(elig9.ok, true, 'rating 449 → League C: allowed');
+
+// Tournament with NULL league skips the check entirely.
+const eligNull = leagueStore.register(T_NO_LEAGUE, S_RATED_HIGH);
+assertEqual(eligNull.ok, true, 'league IS NULL tournament: rating check skipped');
+
+// Walk-in (no student_id) bypasses the check.
+const eligWalkIn = leagueStore.register(T_LEAGUE_C, null, 'Off-System Player', 'admin');
+assertEqual(eligWalkIn.ok, true, 'walk-in (player_name only): rating check skipped');
+
+// Student with no rating row is treated as rating 0 → League C only.
+const eligNoRatingC = leagueStore.register(T_LEAGUE_C, S_NO_RATING);
+assertEqual(eligNoRatingC.ok, true, 'student with no rating: League C accepted');
+
+const eligNoRatingB = makeStore();
+eligNoRatingB.addTournament({ id: T_LEAGUE_B, capacity: 24, league: 'B' });
+const eligNoRatingBRes = eligNoRatingB.register(T_LEAGUE_B, S_NO_RATING);
+assertEqual(eligNoRatingBRes.reason, 'ineligible', 'student with no rating: League B blocked');
+assertEqual(eligNoRatingBRes.student_league, 'C', 'no rating maps to League C bucket');
+assertEqual(eligNoRatingBRes.student_rating, null, 'no rating surfaces as student_rating=null');
 
 // ============================================================================
 // 7. JS port of route dispatching — behavior
@@ -436,7 +584,7 @@ function createMockSupabase(state) {
 }
 
 // --- mirror of edge-function helpers ---------------------------------------
-const REASONS = ['unauthorized', 'not_found', 'closed', 'full', 'duplicate', 'invalid_input', 'server_error'];
+const REASONS = ['unauthorized', 'not_found', 'closed', 'full', 'duplicate', 'ineligible', 'invalid_input', 'server_error'];
 const SOURCES = new Set(['web', 'telegram', 'whatsapp', 'online', 'admin']);
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const isUuid = s => !!s && UUID_RE.test(s);
@@ -559,7 +707,7 @@ async function handle(req, supabase) {
         if (data && data.ok) return { status: 200, body: data };
         const r = String((data || {}).reason || 'server_error');
         const status = r === 'not_found' ? 404 :
-                       r === 'duplicate' || r === 'full' || r === 'closed' ? 409 :
+                       r === 'duplicate' || r === 'full' || r === 'closed' || r === 'ineligible' ? 409 :
                        r === 'invalid_input' ? 400 : 500;
         return { status, body: data || { ok: false, reason: 'server_error' } };
     }
