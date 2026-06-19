@@ -12346,7 +12346,7 @@ async function showTournamentRegistrations(tournamentId) {
             const rating = ratingObj?.rating;
             const branchName = s.branches?.name ? translateBranch(s.branches.name) : '';
             const coach = s.coaches
-                ? `${s.coaches.last_name || ''} ${s.coaches.first_name || ''}`.trim()
+                ? `${s.coaches.first_name || ''} ${s.coaches.last_name || ''}`.trim()
                 : '';
             const age = _computeAge(s.date_of_birth, s.age, refDate);
             const at = row.registered_at ? String(row.registered_at).replace('T', ' ').slice(0, 16) : '';
@@ -12444,7 +12444,7 @@ async function downloadTournamentRegistrationsExcel() {
         const rating = ratingObj?.rating;
         const branchName = s.branches?.name ? translateBranch(s.branches.name) : '';
         const coach = s.coaches
-            ? `${s.coaches.last_name || ''} ${s.coaches.first_name || ''}`.trim()
+            ? `${s.coaches.first_name || ''} ${s.coaches.last_name || ''}`.trim()
             : '';
         const age = _computeAge(s.date_of_birth, s.age, refDate);
         const at = row.registered_at ? String(row.registered_at).replace('T', ' ').slice(0, 16) : '';
