@@ -500,7 +500,7 @@
 
                     const { data: userRole, error: roleError } = await supabaseClient
                         .from('user_roles')
-                        .select('role')
+                        .select('*')
                         .eq('user_id', session.user.id)
                         .single();
 
@@ -609,7 +609,7 @@
                 // Check user role
                 const { data: userRole, error: roleError } = await supabaseClient
                     .from('user_roles')
-                    .select('role, can_view_all_students, can_edit_students')
+                    .select('*')
                     .eq('user_id', data.user.id)
                     .single();
 
