@@ -401,7 +401,7 @@ function populateFilterDropdowns() {
     const branchFilter = document.getElementById('branchFilter');
     const currentBranchValue = branchFilter.value;
     branchFilter.querySelectorAll('option[data-branch]').forEach(option => option.remove());
-    const branches = [...new Set(students.map(s => s.branch))];
+    const branches = [...new Set(students.map(s => s.branch).filter(b => b && String(b).trim()))];
     branches.forEach(branch => {
         const option = document.createElement('option');
         option.value = branch;
@@ -417,7 +417,7 @@ function populateFilterDropdowns() {
     const coachFilter = document.getElementById('coachFilter');
     const currentCoachValue = coachFilter.value;
     coachFilter.querySelectorAll('option[data-coach]').forEach(option => option.remove());
-    const coachNames = [...new Set(students.map(s => s.coach))];
+    const coachNames = [...new Set(students.map(s => s.coach).filter(c => c && String(c).trim()))];
     coachNames.forEach(coach => {
         const option = document.createElement('option');
         option.value = coach;
