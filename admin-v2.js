@@ -6504,9 +6504,14 @@ function populateAttendanceCoachDropdown() {
     //   - single-coach branch → selector hidden, pinned to self (original lock).
     //   - multi-coach branch → selector visible+enabled, options = coaches at
     //     that branch only (no "All"), default = self.
-    if (window.attendanceRoleLock && window.attendanceRoleLock.isCoachLocked(attendanceRoleInfo)) {
+    // Admins always fall through to the admin path below, which seeds the
+    // "All Coaches" option — even if some upstream bug fabricates a coachId
+    // on an admin roleInfo, isAdmin must short-circuit the locked path.
+    const isAdminUser = !!(attendanceRoleInfo && attendanceRoleInfo.isAdmin);
+    if (!isAdminUser && window.attendanceRoleLock
+        && window.attendanceRoleLock.isCoachLocked(attendanceRoleInfo)) {
         const vis = window.attendanceRoleLock.coachSelectorVisibilityForBranch(
-            attendanceRoleInfo, window.coaches, attendanceCurrentBranch
+            attendanceRoleInfo, window.coaches, attendanceCurrentBranch, window.branches
         );
         if (vis.hidden) {
             select.innerHTML = '';
@@ -6517,8 +6522,20 @@ function populateAttendanceCoachDropdown() {
         }
         // Multi-coach branch: render only the branch's coaches (no "All").
         const branchCoaches = window.attendanceRoleLock.coachesAtBranch(
-            window.coaches, attendanceCurrentBranch
+            window.coaches, attendanceCurrentBranch, window.branches
         );
+        // Defensive guard: if the branch resolves to zero coaches, hide the
+        // selector rather than rendering an empty <select>. Without this the
+        // dropdown shows as a blank box with no options and no placeholder.
+        if (branchCoaches.length === 0) {
+            console.warn('[attendance] coachesAtBranch returned [] for', attendanceCurrentBranch,
+                '— hiding coach filter. Likely cause: coach record missing branchNames join.');
+            select.innerHTML = '';
+            select.disabled = true;
+            if (filterGroup) filterGroup.style.display = 'none';
+            syncMobileCoachFilter();
+            return;
+        }
         select.innerHTML = '';
         branchCoaches.forEach(c => {
             const option = document.createElement('option');

@@ -403,7 +403,7 @@ const supabaseData = {
         });
 
         // Convert map to array and set first branch for backwards compat
-        return Array.from(coachesMap.values()).map(coach => {
+        const result = Array.from(coachesMap.values()).map(coach => {
             if (coach.branches.length > 0) {
                 coach.branch = coach.branches[0].name;
                 coach.branchName = coach.branches[0].name;
@@ -411,6 +411,18 @@ const supabaseData = {
             }
             return coach;
         });
+
+        // Surface coach records with no branchNames so the attendance coach
+        // dropdown's empty-options bug (caused by a missing coach_branches
+        // join) is noisy in the console instead of silent.
+        const orphaned = result.filter(c => !c.branchNames || c.branchNames.length === 0);
+        if (orphaned.length > 0) {
+            console.warn('[supabase-data] getCoaches: %d coach record(s) loaded with empty branchNames:',
+                orphaned.length,
+                orphaned.map(c => ({ id: c.id, name: c.fullName, email: c.email })));
+        }
+
+        return result;
     },
 
     async getCoachById(coachId) {

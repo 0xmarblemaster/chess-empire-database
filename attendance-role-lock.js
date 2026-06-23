@@ -98,21 +98,35 @@
      * Coaches assigned to a specific branch (by branch name, from coach_branches).
      *   - Returns an array of {id, name} for every coach whose branchNames
      *     contains `branchName`.
+     *   - Fallback: when no coach matches by branchNames AND `branches` (the live
+     *     branch list) is supplied, the branch is resolved to an id and coaches
+     *     are matched by `branchIds`. This protects against stale or missing
+     *     branchNames data without losing the locked-coach selector.
      *   - Empty array if no match, or if inputs are missing/malformed.
      *
-     * @param {Array<{id: string, firstName?: string, lastName?: string, fullName?: string, branchNames?: string[]}>} coaches
+     * @param {Array<{id: string, firstName?: string, lastName?: string, fullName?: string, branchNames?: string[], branchIds?: string[]}>} coaches
      * @param {string} branchName
+     * @param {Array<{id: string, name: string}>} [branches]
      * @returns {Array<{id: string, name: string}>}
      */
-    function coachesAtBranch(coaches, branchName) {
+    function coachesAtBranch(coaches, branchName, branches) {
         if (!branchName) return [];
         const list = Array.isArray(coaches) ? coaches : [];
-        return list
-            .filter(c => c && Array.isArray(c.branchNames) && c.branchNames.includes(branchName))
-            .map(c => ({
-                id: c.id,
-                name: c.fullName || `${c.firstName || ''} ${c.lastName || ''}`.trim(),
-            }));
+        let matched = list.filter(
+            c => c && Array.isArray(c.branchNames) && c.branchNames.includes(branchName)
+        );
+        if (matched.length === 0 && Array.isArray(branches)) {
+            const branchObj = branches.find(b => b && b.name === branchName);
+            if (branchObj && branchObj.id) {
+                matched = list.filter(
+                    c => c && Array.isArray(c.branchIds) && c.branchIds.includes(branchObj.id)
+                );
+            }
+        }
+        return matched.map(c => ({
+            id: c.id,
+            name: c.fullName || `${c.firstName || ''} ${c.lastName || ''}`.trim(),
+        }));
     }
 
     /**
@@ -120,9 +134,9 @@
      * two coaches assigned (i.e. the coach is allowed to switch among peers at
      * this branch). Admins and unlocked users return false.
      */
-    function isMultiCoachBranchForCoach(roleInfo, coaches, branchName) {
+    function isMultiCoachBranchForCoach(roleInfo, coaches, branchName, branches) {
         if (!isCoachLocked(roleInfo)) return false;
-        return coachesAtBranch(coaches, branchName).length >= 2;
+        return coachesAtBranch(coaches, branchName, branches).length >= 2;
     }
 
     /**
@@ -135,11 +149,11 @@
      *
      * @returns {{hidden: boolean, disabled: boolean, allowedCoachIds: string[]|null}}
      */
-    function coachSelectorVisibilityForBranch(roleInfo, coaches, branchName) {
+    function coachSelectorVisibilityForBranch(roleInfo, coaches, branchName, branches) {
         if (!isCoachLocked(roleInfo)) {
             return { hidden: false, disabled: false, allowedCoachIds: null };
         }
-        const branchCoaches = coachesAtBranch(coaches, branchName);
+        const branchCoaches = coachesAtBranch(coaches, branchName, branches);
         if (branchCoaches.length >= 2) {
             return {
                 hidden: false,
@@ -159,11 +173,11 @@
      *         previously-selected peer survives a branch hop);
      *       * otherwise fall back to the coach's own id.
      */
-    function resolveCoachFilterForBranch(roleInfo, coaches, branchName, currentValue) {
+    function resolveCoachFilterForBranch(roleInfo, coaches, branchName, currentValue, branches) {
         if (!isCoachLocked(roleInfo)) {
             return currentValue == null ? 'all' : currentValue;
         }
-        const branchCoaches = coachesAtBranch(coaches, branchName);
+        const branchCoaches = coachesAtBranch(coaches, branchName, branches);
         if (branchCoaches.length >= 2) {
             const allowed = branchCoaches.map(c => c.id);
             if (currentValue && allowed.includes(currentValue)) return currentValue;
