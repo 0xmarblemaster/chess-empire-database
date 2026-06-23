@@ -740,11 +740,6 @@ body {
     gap: 0.5rem;
 }
 
-#attendanceCoachFilterGroup {
-    display: flex !important;
-    flex-direction: column !important;
-}
-
 .filter-label {
     font-size: 0.8125rem;
     font-weight: 600;

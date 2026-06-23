@@ -372,5 +372,19 @@ console.log('\n=== source-pattern guards (admin-v2.js) =========================
         'coachSelectorVisibilityForBranch is invoked with window.branches threaded through');
 }
 
+// ---------------------------------------------------------------------------
+// (5) CSS guard — admin-styles.css must NOT re-introduce a `display: flex
+//     !important` rule scoped to #attendanceCoachFilterGroup. The !important
+//     overrode the JS hide path (filterGroup.style.display = 'none'), leaving
+//     a visible-but-disabled blank dropdown. Fail loudly if it comes back.
+// ---------------------------------------------------------------------------
+console.log('\n=== admin-styles.css guard (no !important on filter group) ===========\n');
+
+{
+    const cssSrc = fs.readFileSync(path.join(ROOT, 'admin-styles.css'), 'utf8');
+    assert(!/#attendanceCoachFilterGroup\s*\{[^}]*!important/.test(cssSrc),
+        'admin-styles.css has no #attendanceCoachFilterGroup rule using !important');
+}
+
 console.log(`\n--- ${passed} passed, ${failed} failed ---\n`);
 if (failed > 0) process.exit(1);
