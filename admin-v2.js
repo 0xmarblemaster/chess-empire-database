@@ -6333,6 +6333,31 @@ async function showAttendanceManagement(updateHash = true) {
         if (savedState.coach) attendanceCurrentCoach = savedState.coach;
         if (savedState.year !== undefined) attendanceCurrentYear = savedState.year;
         if (savedState.month !== undefined) attendanceCurrentMonth = savedState.month;
+
+        // Validate restored ids against live data. A deleted coach/branch id
+        // left in localStorage otherwise leaves the corresponding <select>
+        // silently blank (no matching <option>, so `select.value = <stale-id>`
+        // is a no-op) and downstream code can't resolve
+        // attendanceCurrentCoachName — breaking the time-slot cache key and
+        // the edit-slot pencil logic.
+        const liveCoaches = Array.isArray(window.coaches) ? window.coaches : [];
+        const liveBranches = Array.isArray(window.branches) ? window.branches : [];
+        let cleaned = false;
+        if (attendanceCurrentCoach
+            && attendanceCurrentCoach !== 'all'
+            && attendanceCurrentCoach !== 'unassigned'
+            && !liveCoaches.some(c => c && c.id === attendanceCurrentCoach)) {
+            attendanceCurrentCoach = (roleInfo && roleInfo.isAdmin === false && roleInfo.coachId)
+                ? roleInfo.coachId
+                : 'all';
+            cleaned = true;
+        }
+        if (attendanceCurrentBranch
+            && !liveBranches.some(b => b && b.name === attendanceCurrentBranch)) {
+            attendanceCurrentBranch = null;
+            cleaned = true;
+        }
+        if (cleaned) saveAttendanceFilterState();
     }
 
     // Coach lock: discard a saved branch that's outside the coach's
