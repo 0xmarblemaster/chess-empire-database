@@ -9,7 +9,6 @@
  *   - isCoachLocked: true only for non-admin coach with a resolved coachId
  *   - resolveCoachFilter: locked overrides 'all' / other coach id from storage
  *   - resolveCoachFilter: unlocked preserves caller's value
- *   - coachSelectorVisibility: locked → hidden+disabled; unlocked → visible
  *   - coachOnBranchChange: locked keeps coachId; unlocked resets to 'all'
  *   - coachAllowedBranchNames: returns coach's branchNames (from coach_branches)
  *     when locked, null when unlocked
@@ -41,7 +40,6 @@ const ANON = { isAdmin: false, coachId: null, email: null };
 console.log('\n=== smoke ==============================================================\n');
 assert(typeof lock.isCoachLocked === 'function', 'isCoachLocked exported');
 assert(typeof lock.resolveCoachFilter === 'function', 'resolveCoachFilter exported');
-assert(typeof lock.coachSelectorVisibility === 'function', 'coachSelectorVisibility exported');
 assert(typeof lock.coachOnBranchChange === 'function', 'coachOnBranchChange exported');
 assert(typeof lock.coachAllowedBranchNames === 'function', 'coachAllowedBranchNames exported');
 assert(typeof lock.resolveBranchSelection === 'function', 'resolveBranchSelection exported');
@@ -80,16 +78,6 @@ assertEqual(lock.resolveCoachFilter(ANON, 'all'), 'all',
 assertEqual(lock.resolveCoachFilter(null, 'all'), 'all',
     'null roleInfo: preserves "all"');
 
-console.log('\n=== coachSelectorVisibility ===========================================\n');
-assertEqual(lock.coachSelectorVisibility(COACH), { hidden: true, disabled: true },
-    'locked: selector is hidden and disabled');
-assertEqual(lock.coachSelectorVisibility(ADMIN), { hidden: false, disabled: false },
-    'admin: selector left to existing visibility logic');
-assertEqual(lock.coachSelectorVisibility(ANON), { hidden: false, disabled: false },
-    'anon: selector left to existing visibility logic');
-assertEqual(lock.coachSelectorVisibility(null), { hidden: false, disabled: false },
-    'null: selector left to existing visibility logic');
-
 console.log('\n=== coachOnBranchChange — survives branch change ======================\n');
 // The original bug: on branch change, attendanceCurrentCoach was reset to 'all'
 // for everyone — including coaches, who would briefly see another coach's data.
@@ -117,10 +105,6 @@ console.log('\n=== end-to-end behavioral scenarios =============================
     attendanceCurrentCoach = lock.coachOnBranchChange(role);
     assertEqual(attendanceCurrentCoach, 'coach-uuid-1',
         'init → branch change: coach filter survives, still pinned to coach id');
-
-    // Selector visibility holds for both.
-    assertEqual(lock.coachSelectorVisibility(role), { hidden: true, disabled: true },
-        'init: selector hidden+disabled');
 }
 
 // Scenario: admin user — existing UX unchanged.
@@ -255,11 +239,6 @@ console.log('\n=== admin keeps current behavior: full visibility + working dropd
     assertEqual(filteredAvailable, AVAILABLE,
         'admin: branch dropdown contains every available branch (full visibility)');
 
-    // Working dropdown — coach selector is visible and enabled. The signed-in
-    // admin sees the full coach list with the "All" option intact.
-    assertEqual(lock.coachSelectorVisibility(role), { hidden: false, disabled: false },
-        'admin: coach selector is visible and enabled (working dropdown)');
-
     // localStorage values for both coach and branch must survive init —
     // resolveCoachFilter does not override admin saves, resolveBranchSelection
     // keeps the admin's previous branch.
@@ -280,7 +259,6 @@ console.log('\n=== admin keeps current behavior: full visibility + working dropd
     // shouts before the UI does.
     assert(allowed === null
         && !lock.isCoachLocked(role)
-        && lock.coachSelectorVisibility(role).hidden === false
         && lock.coachOnBranchChange(role) === 'all',
         'admin: every policy returns its unlocked default — no admin path is ever scoped');
 }

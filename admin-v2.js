@@ -6495,129 +6495,69 @@ function populateAttendanceBranchDropdown() {
 }
 
 // Populate coach dropdown for attendance
+//
+// Role-agnostic: every role (admin, locked coach) sees the same wrapper —
+// always visible, always seeded with "All Coaches" plus every coach assigned
+// to the currently selected branch. Branch-scoping for locked coaches is
+// handled by the branch dropdown, not by hiding this one.
 function populateAttendanceCoachDropdown() {
     const select = document.getElementById('attendanceCoachFilter');
     const filterGroup = document.getElementById('attendanceCoachFilterGroup');
     if (!select) return;
 
-    // Coach lock with branch awareness:
-    //   - single-coach branch → selector hidden, pinned to self (original lock).
-    //   - multi-coach branch → selector visible+enabled, options = coaches at
-    //     that branch only (no "All"), default = self.
-    // Admins always fall through to the admin path below, which seeds the
-    // "All Coaches" option — even if some upstream bug fabricates a coachId
-    // on an admin roleInfo, isAdmin must short-circuit the locked path.
-    const isAdminUser = !!(attendanceRoleInfo && attendanceRoleInfo.isAdmin);
-    if (!isAdminUser && window.attendanceRoleLock
-        && window.attendanceRoleLock.isCoachLocked(attendanceRoleInfo)) {
-        const vis = window.attendanceRoleLock.coachSelectorVisibilityForBranch(
-            attendanceRoleInfo, window.coaches, attendanceCurrentBranch, window.branches
-        );
-        if (vis.hidden) {
-            select.innerHTML = '';
-            select.disabled = true;
-            if (filterGroup) filterGroup.style.display = 'none';
-            syncMobileCoachFilter();
-            return;
-        }
-        // Multi-coach branch: render only the branch's coaches (no "All").
-        const branchCoaches = window.attendanceRoleLock.coachesAtBranch(
-            window.coaches, attendanceCurrentBranch, window.branches
-        );
-        // Defensive guard: if the branch resolves to zero coaches, hide the
-        // selector rather than rendering an empty <select>. Without this the
-        // dropdown shows as a blank box with no options and no placeholder.
-        if (branchCoaches.length === 0) {
-            console.warn('[attendance] coachesAtBranch returned [] for', attendanceCurrentBranch,
-                '— hiding coach filter. Likely cause: coach record missing branchNames join.');
-            select.innerHTML = '';
-            select.disabled = true;
-            if (filterGroup) filterGroup.style.display = 'none';
-            syncMobileCoachFilter();
-            return;
-        }
-        select.innerHTML = '';
-        branchCoaches.forEach(c => {
-            const option = document.createElement('option');
-            option.value = c.id;
-            option.textContent = c.name;
-            if (attendanceCurrentCoach === c.id) option.selected = true;
-            select.appendChild(option);
-        });
-        select.disabled = false;
-        if (filterGroup) filterGroup.style.display = 'flex';
+    if (filterGroup) filterGroup.style.display = 'flex';
+    select.innerHTML = `<option value="all">${t('admin.attendance.allCoaches')}</option>`;
+
+    if (!attendanceCurrentBranch) {
+        select.disabled = true;
         syncMobileCoachFilter();
         return;
     }
 
-    // Clear dropdown
-    select.innerHTML = `<option value="all">${t('admin.attendance.allCoaches')}</option>`;
-
-    // Hide and disable if no branch selected
-    if (!attendanceCurrentBranch) {
-        select.disabled = true;
-        if (filterGroup) filterGroup.style.display = 'none';
-        return;
-    }
-
-    // Get branch object
     const branchObj = window.branches.find(b => b.name === attendanceCurrentBranch);
     if (!branchObj) {
         select.disabled = true;
-        if (filterGroup) filterGroup.style.display = 'none';
+        syncMobileCoachFilter();
         return;
     }
 
-    // Get coaches for selected branch
     const branchCoaches = window.coaches.filter(c =>
         c.branchIds && c.branchIds.includes(branchObj.id)
     );
 
-    // Hide filter if only 0-1 coaches
-    if (branchCoaches.length <= 1) {
-        if (filterGroup) filterGroup.style.display = 'none';
+    if (branchCoaches.length === 0) {
         select.disabled = true;
-        // Auto-pin the only coach so the edit-time-slot pencil works for admins
-        // at single-coach branches (the dropdown is hidden, so admin can't pick
-        // a coach manually).
-        if (branchCoaches.length === 1) {
-            const only = branchCoaches[0];
-            attendanceCurrentCoach = only.id;
-            attendanceCurrentCoachName = `${only.firstName} ${only.lastName}`;
-            select.value = only.id;
-        } else {
-            attendanceCurrentCoachName = null;
-        }
+        attendanceCurrentCoachName = null;
         syncMobileCoachFilter();
         return;
     }
 
-    // Show and enable filter for multiple coaches
-    if (filterGroup) filterGroup.style.display = 'flex';
     select.disabled = false;
 
-    // Admins on multi-coach branches: default to the first coach so the
-    // edit-time-slot pencil works out of the box. "All Coaches" remains
-    // selectable from the dropdown as a read-only unified view.
     const isAdmin = !!(attendanceRoleInfo && attendanceRoleInfo.isAdmin);
-    if (isAdmin && (!attendanceCurrentCoach || attendanceCurrentCoach === 'all')) {
+
+    // Admin auto-pin: at a single-coach branch always pin so the edit-time-slot
+    // pencil works; at multi-coach branches pin only when the current selection
+    // is empty or 'all' (so a previously chosen coach is preserved).
+    if (isAdmin && branchCoaches.length === 1) {
+        const only = branchCoaches[0];
+        attendanceCurrentCoach = only.id;
+        attendanceCurrentCoachName = `${only.firstName} ${only.lastName}`;
+    } else if (isAdmin && branchCoaches.length > 1
+        && (!attendanceCurrentCoach || attendanceCurrentCoach === 'all')) {
         const firstCoach = branchCoaches[0];
         attendanceCurrentCoach = firstCoach.id;
         attendanceCurrentCoachName = `${firstCoach.firstName} ${firstCoach.lastName}`;
     }
 
-    // Add coach options
     branchCoaches.forEach(coach => {
         const option = document.createElement('option');
         option.value = coach.id;
         option.textContent = `${coach.firstName} ${coach.lastName}`;
-        if (attendanceCurrentCoach === coach.id) {
-            option.selected = true;
-        }
+        if (attendanceCurrentCoach === coach.id) option.selected = true;
         select.appendChild(option);
     });
 
-    // Add "Unassigned" option if any students lack coach
     const hasUnassignedStudents = window.students.some(
         s => s.branchId === branchObj.id && !s.coachId && s.status === 'active'
     );
@@ -6628,10 +6568,8 @@ function populateAttendanceCoachDropdown() {
         select.appendChild(option);
     }
 
-    // Reflect the resolved selection back to the dropdown.
     if (attendanceCurrentCoach) select.value = attendanceCurrentCoach;
 
-    // Sync mobile filter
     syncMobileCoachFilter();
 }
 
@@ -6849,22 +6787,6 @@ function onAttendanceTimeSlotChange() {
 // Handle coach filter change
 function onAttendanceCoachChange() {
     const select = document.getElementById('attendanceCoachFilter');
-    // Coach lock with branch awareness:
-    //   - single-coach branch (vis.hidden) → reject (the selector is hidden, so
-    //     any change is programmatic / stale).
-    //   - multi-coach branch → allow switching to any coach at that branch;
-    //     reject ids outside allowedCoachIds (defense-in-depth).
-    if (window.attendanceRoleLock && window.attendanceRoleLock.isCoachLocked(attendanceRoleInfo)) {
-        const vis = window.attendanceRoleLock.coachSelectorVisibilityForBranch(
-            attendanceRoleInfo, window.coaches, attendanceCurrentBranch
-        );
-        if (vis.hidden) return;
-        const requested = select.value;
-        if (!Array.isArray(vis.allowedCoachIds) || !vis.allowedCoachIds.includes(requested)) {
-            select.value = attendanceCurrentCoach;
-            return;
-        }
-    }
     attendanceCurrentCoach = select.value;
 
     // Get coach name for time slot logic
@@ -6971,20 +6893,6 @@ function onMobileAttendanceCoachChange() {
     const mobileSelect = document.getElementById('mobileCoachFilter');
     const desktopSelect = document.getElementById('attendanceCoachFilter');
 
-    // Coach lock (see onAttendanceCoachChange): block at single-coach branches,
-    // validate against allowedCoachIds at multi-coach branches.
-    if (window.attendanceRoleLock && window.attendanceRoleLock.isCoachLocked(attendanceRoleInfo)) {
-        const vis = window.attendanceRoleLock.coachSelectorVisibilityForBranch(
-            attendanceRoleInfo, window.coaches, attendanceCurrentBranch
-        );
-        if (vis.hidden) return;
-        const requested = mobileSelect.value;
-        if (!Array.isArray(vis.allowedCoachIds) || !vis.allowedCoachIds.includes(requested)) {
-            mobileSelect.value = attendanceCurrentCoach;
-            return;
-        }
-    }
-
     attendanceCurrentCoach = mobileSelect.value;
     if (desktopSelect) desktopSelect.value = mobileSelect.value;
 
@@ -7001,7 +6909,8 @@ function onMobileAttendanceCoachChange() {
     loadAttendanceData();
 }
 
-// Sync mobile coach filter with desktop
+// Sync mobile coach filter with desktop. Mobile mirrors desktop unconditionally
+// — copy options, sync value, always visible.
 function syncMobileCoachFilter() {
     const mobileSelect = document.getElementById('mobileCoachFilter');
     const desktopSelect = document.getElementById('attendanceCoachFilter');
@@ -7009,37 +6918,10 @@ function syncMobileCoachFilter() {
 
     if (!mobileSelect || !desktopSelect) return;
 
-    // Coach lock: mirror the desktop selector. At single-coach branches the
-    // desktop is hidden+empty, so blank the mobile too. At multi-coach branches
-    // the desktop has options and we copy them across.
-    if (window.attendanceRoleLock && window.attendanceRoleLock.isCoachLocked(attendanceRoleInfo)) {
-        const vis = window.attendanceRoleLock.coachSelectorVisibilityForBranch(
-            attendanceRoleInfo, window.coaches, attendanceCurrentBranch
-        );
-        if (vis.hidden) {
-            mobileSelect.innerHTML = '';
-            mobileSelect.disabled = true;
-            if (mobileCard) mobileCard.style.display = 'none';
-            return;
-        }
-        mobileSelect.innerHTML = desktopSelect.innerHTML;
-        mobileSelect.value = attendanceCurrentCoach;
-        mobileSelect.disabled = false;
-        if (mobileCard) mobileCard.style.display = 'block';
-        return;
-    }
-
-    // Copy options from desktop to mobile
     mobileSelect.innerHTML = desktopSelect.innerHTML;
     mobileSelect.value = attendanceCurrentCoach;
-
-    // Show/hide mobile card based on desktop visibility
-    if (mobileCard) {
-        const filterGroup = document.getElementById('attendanceCoachFilterGroup');
-        // Use 'block' for mobile cards (not 'flex' like desktop)
-        const isVisible = filterGroup?.style.display === 'flex';
-        mobileCard.style.display = isVisible ? 'block' : 'none';
-    }
+    mobileSelect.disabled = desktopSelect.disabled;
+    if (mobileCard) mobileCard.style.display = 'block';
 }
 
 // Populate mobile branch filter

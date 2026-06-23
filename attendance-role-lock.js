@@ -33,18 +33,6 @@
     }
 
     /**
-     * What to do with the coach selector dropdown(s).
-     *   - Locked → hide and disable; coach can't switch.
-     *   - Unlocked → leave it to the existing visibility logic.
-     */
-    function coachSelectorVisibility(roleInfo) {
-        if (isCoachLocked(roleInfo)) {
-            return { hidden: true, disabled: true };
-        }
-        return { hidden: false, disabled: false };
-    }
-
-    /**
      * Decide what attendanceCurrentCoach becomes when the branch changes.
      *   - Locked → keep coach id (do NOT reset to 'all').
      *   - Unlocked → reset to 'all' (preserves existing branch-change UX).
@@ -189,7 +177,6 @@
     const api = {
         isCoachLocked,
         resolveCoachFilter,
-        coachSelectorVisibility,
         coachOnBranchChange,
         coachAllowedBranchNames,
         resolveBranchSelection,

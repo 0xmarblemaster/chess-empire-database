@@ -1,27 +1,22 @@
 /**
- * Regression tests for the attendance coach-dropdown empty-options bug.
+ * Regression tests for the role-agnostic Attendance coach dropdown.
  *
- * Background — see /root/.claude/plans/floating-weaving-snowflake.md:
- * a locked coach (admin-v2.js:6507 path) at a multi-coach branch could render
- * a fully blank <select> when coachesAtBranch returned []. The dropdown showed
- * no options *and* no placeholder, an unrecoverable dead-end UI.
+ * The coach selector must always be visible (display: flex) for every role —
+ * admin and locked coach alike — and seeded with "All Coaches" plus every
+ * coach assigned to the currently selected branch. Hiding the wrapper was
+ * the source of the dead-end "blank dropdown" bug; the fix is to never set
+ * display: none in the first place.
  *
- * This file exercises the three defensive fixes shipped together:
+ * Scenarios (each asserts filterGroup.style.display === 'flex'):
+ *   - Admin on 0-coach branch        → All Coaches only, disabled.
+ *   - Admin on 1-coach branch        → All Coaches + coach, enabled, auto-pinned.
+ *   - Admin on multi-coach branch    → All Coaches + every coach (+ Unassigned), enabled.
+ *   - Locked coach on 1-coach branch → All Coaches + coach, enabled, NOT pinned.
+ *   - Locked coach on multi-coach    → All Coaches + every coach, enabled.
+ *   - No branch selected             → All Coaches placeholder only, disabled.
  *
- *  1. attendance-role-lock.js coachesAtBranch — when no coach matches by
- *     branchNames, the function now falls back to resolving the branch by id
- *     (via the optional `branches` arg) and matching coaches by branchIds.
- *
- *  2. admin-v2.js populateAttendanceCoachDropdown locked path — if
- *     branchCoaches.length === 0 after the fallback also fails, the function
- *     hides the filter group (display: none), disables the select, logs a
- *     console.warn naming the empty branch, and returns. The blank-box
- *     dead-end is now a clean hidden-filter state.
- *
- *  3. admin-v2.js populateAttendanceCoachDropdown — if attendanceRoleInfo
- *     reports isAdmin === true, the locked path is skipped *unconditionally*,
- *     even if a coachId is also present. Admins always get the admin path
- *     (which seeds the "All Coaches" option).
+ * Plus a CSS guard: admin-styles.css must not re-introduce a !important
+ * display rule on #attendanceCoachFilterGroup.
  *
  * Run: node tests/test-attendance-coach-dropdown-empty.js
  */
@@ -33,7 +28,6 @@ const path = require('path');
 
 const ROOT = path.resolve(__dirname, '..');
 const ADMIN_V2_SRC = fs.readFileSync(path.join(ROOT, 'admin-v2.js'), 'utf8');
-const lock = require('../attendance-role-lock.js');
 
 let passed = 0;
 let failed = 0;
@@ -87,19 +81,25 @@ function makeGroup(initial) {
 }
 
 /**
+ * Inspect select state after populate completes: returns the values in the
+ * order they were appended, plus the placeholder seeded via innerHTML.
+ */
+function selectValues(select) {
+    return select._options.map(o => o.value);
+}
+function placeholderHasAll(select) {
+    return /value="all"/.test(select.innerHTML);
+}
+
+/**
  * Build a callable populateAttendanceCoachDropdown that pulls its globals
  * (window, document, t, attendanceRoleInfo, …) from an injected scope object.
- * Returns { invoke(scope), warnings: [] }.
+ * Returns invoke(scope). attendanceCurrentCoach mutations inside the function
+ * cannot be observed from the test (the parameter is local to the sandbox),
+ * so auto-pin is verified via select.value, which the function writes at the
+ * end of the populate path.
  */
-function loadPopulate() {
-    const fnSrc = extractFn(ADMIN_V2_SRC, 'populateAttendanceCoachDropdown');
-    if (!fnSrc) throw new Error('populateAttendanceCoachDropdown not found in admin-v2.js');
-
-    const warnings = [];
-    const consoleStub = { warn: (...args) => warnings.push(args), log() {}, error() {} };
-
-    // Wrap the extracted function so its free identifiers resolve to the
-    // sandbox we pass in. `t` is a no-op translator returning the key.
+function loadPopulate(fnSrc) {
     const body = `
 'use strict';
 ${fnSrc}
@@ -107,12 +107,13 @@ return populateAttendanceCoachDropdown;
 `;
     const factory = new Function(
         'window', 'document', 't',
-        'attendanceRoleInfo', 'attendanceCurrentBranch', 'attendanceCurrentCoach',
-        'attendanceCurrentCoachName', 'syncMobileCoachFilter', 'console',
+        'attendanceRoleInfo', 'attendanceCurrentBranch',
+        'attendanceCurrentCoach', 'attendanceCurrentCoachName',
+        'syncMobileCoachFilter', 'console',
         body
     );
 
-    function invoke(scope) {
+    return function invoke(scope) {
         const fn = factory(
             scope.window,
             scope.document,
@@ -122,176 +123,35 @@ return populateAttendanceCoachDropdown;
             scope.attendanceCurrentCoach,
             scope.attendanceCurrentCoachName,
             scope.syncMobileCoachFilter || (() => {}),
-            consoleStub
+            scope.console || console
         );
         return fn();
-    }
-
-    return { invoke, warnings };
-}
-
-// ---------------------------------------------------------------------------
-// (1) Pure-function: coachesAtBranch fallback via branchIds when branchNames
-//     is empty — Case B from the plan.
-// ---------------------------------------------------------------------------
-console.log('\n=== coachesAtBranch fallback (Case B) =================================\n');
-
-{
-    // Alex is assigned to Halyk Arena via branchIds, but the supabase-data join
-    // somehow returned an empty branchNames array. The old code would treat him
-    // as unassigned at every branch.
-    const coaches = [{
-        id: 'alex', firstName: 'Alex', lastName: 'X', fullName: 'Alex X',
-        branchNames: [], branchIds: ['b-halyk'],
-    }];
-    const branches = [{ id: 'b-halyk', name: 'Halyk Arena' }];
-
-    // Without the branches arg, the original behavior must be preserved
-    // (empty array) — we don't want to silently change the contract for
-    // callers that don't pass branches.
-    assertEqual(lock.coachesAtBranch(coaches, 'Halyk Arena'), [],
-        'no branches arg → original behavior (empty array) preserved');
-
-    // With branches, the fallback kicks in and the coach is recovered.
-    assertEqual(lock.coachesAtBranch(coaches, 'Halyk Arena', branches),
-        [{ id: 'alex', name: 'Alex X' }],
-        'fallback: branchNames empty but branchIds matches → coach recovered');
-}
-
-{
-    // When branchNames DOES match, branches is irrelevant — the primary lookup
-    // wins and the result is the same. (Defensive: the fallback must not run
-    // when the primary already succeeded, or it could double-count.)
-    const coaches = [{
-        id: 'alex', firstName: 'Alex', lastName: 'X', fullName: 'Alex X',
-        branchNames: ['Halyk Arena'], branchIds: ['b-halyk'],
-    }];
-    const branches = [{ id: 'b-halyk', name: 'Halyk Arena' }];
-    assertEqual(lock.coachesAtBranch(coaches, 'Halyk Arena', branches),
-        [{ id: 'alex', name: 'Alex X' }],
-        'primary branchNames match → branches arg is ignored (no double-count)');
-}
-
-{
-    // No coach assigned via either path → empty array even with the fallback.
-    const coaches = [{
-        id: 'alex', firstName: 'Alex', lastName: 'X', fullName: 'Alex X',
-        branchNames: [], branchIds: [],
-    }];
-    const branches = [{ id: 'b-halyk', name: 'Halyk Arena' }];
-    assertEqual(lock.coachesAtBranch(coaches, 'Halyk Arena', branches), [],
-        'no match by name OR id → still empty (defensive fallback does not invent matches)');
-}
-
-{
-    // Branch name not present in branches → fallback can't resolve an id and
-    // bails out with empty. (Guards against the fallback accidentally matching
-    // every coach when branchObj is undefined.)
-    const coaches = [{
-        id: 'alex', firstName: 'Alex', lastName: 'X', fullName: 'Alex X',
-        branchNames: [], branchIds: ['b-halyk'],
-    }];
-    const branches = [{ id: 'b-other', name: 'Other Branch' }];
-    assertEqual(lock.coachesAtBranch(coaches, 'Halyk Arena', branches), [],
-        'branch not in branches list → fallback bails out, empty result');
-}
-
-{
-    // Branches is not an array → fallback is skipped (existing contract).
-    const coaches = [{
-        id: 'alex', firstName: 'Alex', lastName: 'X', fullName: 'Alex X',
-        branchNames: [], branchIds: ['b-halyk'],
-    }];
-    assertEqual(lock.coachesAtBranch(coaches, 'Halyk Arena', null), [],
-        'branches = null → original behavior, no fallback');
-    assertEqual(lock.coachesAtBranch(coaches, 'Halyk Arena', undefined), [],
-        'branches = undefined → original behavior, no fallback');
-}
-
-// ---------------------------------------------------------------------------
-// (2) populateAttendanceCoachDropdown — locked path with branchCoaches=[]
-//     hides the group (Case D, the defensive guard).
-// ---------------------------------------------------------------------------
-console.log('\n=== populateAttendanceCoachDropdown locked-empty guard (Case D) ======\n');
-
-{
-    // We isolate the new defensive guard (path B) by stubbing the lock module
-    // so coachSelectorVisibilityForBranch reports hidden=false (visible
-    // selector) while coachesAtBranch returns []. In live data the two
-    // helpers are computed off the same source, so triggering this exact
-    // mismatch organically is hard — but the defensive guard exists precisely
-    // to catch an impossible-looking case, and the test must exercise it.
-    const { invoke, warnings } = loadPopulate();
-    warnings.length = 0;
-
-    const select = makeSelect();
-    const group = makeGroup('flex');
-    const document = {
-        getElementById(id) {
-            if (id === 'attendanceCoachFilter') return select;
-            if (id === 'attendanceCoachFilterGroup') return group;
-            return null;
-        },
     };
-
-    const window = {
-        attendanceRoleLock: {
-            isCoachLocked: lock.isCoachLocked,
-            coachSelectorVisibilityForBranch: () => ({
-                hidden: false, disabled: false, allowedCoachIds: ['alex'],
-            }),
-            coachesAtBranch: () => [],
-        },
-        coaches: [{
-            id: 'alex', firstName: 'Alex', lastName: 'X', fullName: 'Alex X',
-            branchNames: [], branchIds: [],
-        }],
-        branches: [{ id: 'b-halyk', name: 'Halyk Arena' }],
-        students: [],
-    };
-
-    let mobileSyncCalled = 0;
-    invoke({
-        window, document,
-        attendanceRoleInfo: { isAdmin: false, coachId: 'alex' },
-        attendanceCurrentBranch: 'Halyk Arena',
-        attendanceCurrentCoach: 'alex',
-        attendanceCurrentCoachName: 'Alex X',
-        syncMobileCoachFilter: () => { mobileSyncCalled++; },
-    });
-
-    assertEqual(group.style.display, 'none',
-        'filterGroup is hidden when branchCoaches=[] in locked path');
-    assertEqual(select.disabled, true,
-        'select is disabled (no options to choose from)');
-    assertEqual(select.innerHTML, '',
-        'select is cleared (no stale options left behind)');
-    assertEqual(select._options.length, 0,
-        'no <option> elements appended');
-    assert(mobileSyncCalled === 1,
-        'syncMobileCoachFilter() is called so the mobile filter mirrors desktop');
-
-    const warned = warnings.some(w =>
-        String(w[0]).includes('[attendance]') &&
-        w.some(arg => arg === 'Halyk Arena')
-    );
-    assert(warned,
-        'console.warn fires naming the empty branch (Halyk Arena)');
 }
 
 // ---------------------------------------------------------------------------
-// (3) populateAttendanceCoachDropdown — admin always skips the locked path
-//     (Case A defense-in-depth).
+// Shared test fixtures
 // ---------------------------------------------------------------------------
-console.log('\n=== populateAttendanceCoachDropdown admin always skips locked path ===\n');
 
-{
-    const { invoke, warnings } = loadPopulate();
-    warnings.length = 0;
+const BRANCH_HALYK = { id: 'b-halyk', name: 'Halyk Arena' };
+const BRANCH_DEBUT = { id: 'b-debut', name: 'Debut' };
+const BRANCH_GHOST = { id: 'b-ghost', name: 'Ghost Branch' }; // no coaches
 
-    const select = makeSelect();
-    const group = makeGroup('none');
-    const document = {
+const COACH_ALICE = {
+    id: 'alice', firstName: 'Alice', lastName: 'A', fullName: 'Alice A',
+    branchNames: ['Halyk Arena', 'Debut'], branchIds: ['b-halyk', 'b-debut'],
+};
+const COACH_BOB = {
+    id: 'bob', firstName: 'Bob', lastName: 'B', fullName: 'Bob B',
+    branchNames: ['Debut'], branchIds: ['b-debut'],
+};
+const COACH_DAN = {
+    id: 'dan', firstName: 'Dan', lastName: 'D', fullName: 'Dan D',
+    branchNames: ['Halyk Arena'], branchIds: ['b-halyk'],
+};
+
+function makeDocument(select, group) {
+    return {
         getElementById(id) {
             if (id === 'attendanceCoachFilter') return select;
             if (id === 'attendanceCoachFilterGroup') return group;
@@ -301,82 +161,197 @@ console.log('\n=== populateAttendanceCoachDropdown admin always skips locked pat
             return { tagName: tag, value: '', textContent: '', selected: false };
         },
     };
+}
 
-    // Adversarial roleInfo: isAdmin=true AND a coachId is set. Without the
-    // explicit admin short-circuit, isCoachLocked already returns false here
-    // (admin flag wins), but the source-pattern check below verifies the guard
-    // is present. This functional check verifies admins ALWAYS see the
-    // admin path's "All Coaches" seed regardless of how the lock module
-    // interprets a hybrid roleInfo.
-    const window = {
-        attendanceRoleLock: lock,
-        coaches: [{
-            id: 'alex', firstName: 'Alex', lastName: 'X', fullName: 'Alex X',
-            branchNames: ['Halyk Arena'], branchIds: ['b-halyk'],
-        }, {
-            id: 'bob', firstName: 'Bob', lastName: 'Y', fullName: 'Bob Y',
-            branchNames: ['Halyk Arena'], branchIds: ['b-halyk'],
-        }],
-        branches: [{ id: 'b-halyk', name: 'Halyk Arena' }],
-        students: [],
-    };
+function runPopulate({ roleInfo, branch, coach = 'all', coaches, students = [], branches }) {
+    const invoke = loadPopulate(extractFn(ADMIN_V2_SRC, 'populateAttendanceCoachDropdown'));
+    const select = makeSelect();
+    const group = makeGroup('none'); // start hidden — populate should flip to flex
+    const document = makeDocument(select, group);
+    const window = { coaches, branches, students };
+    let mobileSyncCalled = 0;
 
     invoke({
         window, document,
-        attendanceRoleInfo: { isAdmin: true, coachId: 'alex' }, // hybrid
-        attendanceCurrentBranch: 'Halyk Arena',
-        attendanceCurrentCoach: 'all',
+        attendanceRoleInfo: roleInfo,
+        attendanceCurrentBranch: branch,
+        attendanceCurrentCoach: coach,
         attendanceCurrentCoachName: null,
-        syncMobileCoachFilter: () => {},
+        syncMobileCoachFilter: () => { mobileSyncCalled++; },
     });
 
-    // Admin path seeds an "All Coaches" option. The locked path would have
-    // wiped that and rendered the branch's coaches (or shown a blank box if
-    // branchCoaches=[]). Asserting that the admin "all" option exists proves
-    // the admin path ran.
-    assert(/value="all"/.test(select.innerHTML),
-        'admin path seeds <option value="all"> (locked path was skipped)');
+    return { select, group, mobileSyncCalled };
 }
 
 // ---------------------------------------------------------------------------
-// (4) Source-pattern guards — fast-failing checks so a future refactor that
-//     removes the admin short-circuit or the empty-branchCoaches guard
-//     trips this test instead of regressing in production.
+// (1) Admin scenarios
 // ---------------------------------------------------------------------------
-console.log('\n=== source-pattern guards (admin-v2.js) ==============================\n');
+console.log('\n=== Admin scenarios ===================================================\n');
+
+const ADMIN = { isAdmin: true, coachId: null };
 
 {
-    const populateSrc = extractFn(ADMIN_V2_SRC, 'populateAttendanceCoachDropdown');
-    assert(populateSrc.length > 0,
-        'populateAttendanceCoachDropdown located in admin-v2.js');
+    // 0-coach branch: visible, only "All Coaches", disabled.
+    const { select, group } = runPopulate({
+        roleInfo: ADMIN,
+        branch: 'Ghost Branch',
+        coaches: [COACH_ALICE, COACH_BOB, COACH_DAN],
+        branches: [BRANCH_HALYK, BRANCH_DEBUT, BRANCH_GHOST],
+    });
+    assertEqual(group.style.display, 'flex',
+        'admin / 0-coach branch: filterGroup is visible (display: flex)');
+    assert(placeholderHasAll(select),
+        'admin / 0-coach branch: All Coaches placeholder seeded');
+    assertEqual(selectValues(select), [],
+        'admin / 0-coach branch: no coach <option> elements appended');
+    assertEqual(select.disabled, true,
+        'admin / 0-coach branch: select disabled');
+}
 
-    // Explicit admin short-circuit on the locked-path gate.
-    assert(/attendanceRoleInfo\s*&&\s*attendanceRoleInfo\.isAdmin/.test(populateSrc),
-        'locked-path gate reads attendanceRoleInfo.isAdmin (explicit admin short-circuit)');
-    assert(/!isAdminUser\s*&&\s*window\.attendanceRoleLock\s*&&\s*window\.attendanceRoleLock\.isCoachLocked/.test(populateSrc),
-        'gate is `!isAdminUser && ... isCoachLocked(...)` (admin always skips locked path)');
+{
+    // 1-coach branch: visible, All Coaches + that coach, enabled, auto-pinned.
+    const branches = [BRANCH_HALYK, BRANCH_DEBUT];
+    const { select, group } = runPopulate({
+        roleInfo: ADMIN,
+        branch: 'Halyk Arena',
+        coach: 'all',
+        coaches: [COACH_DAN],
+        branches,
+    });
+    assertEqual(group.style.display, 'flex',
+        'admin / 1-coach branch: filterGroup is visible (display: flex)');
+    assert(placeholderHasAll(select),
+        'admin / 1-coach branch: All Coaches placeholder seeded');
+    assertEqual(selectValues(select), ['dan'],
+        'admin / 1-coach branch: the only coach appended as an option');
+    assertEqual(select.disabled, false,
+        'admin / 1-coach branch: select enabled');
+    assertEqual(select.value, 'dan',
+        'admin / 1-coach branch: auto-pinned to the only coach');
+    // The option marked selected should be the auto-pinned coach.
+    assert(select._options[0].selected === true,
+        'admin / 1-coach branch: the coach option is marked selected');
+}
 
-    // Defensive empty-branchCoaches guard with console.warn.
-    assert(/branchCoaches\.length\s*===\s*0/.test(populateSrc),
-        'locked path guards branchCoaches.length === 0 explicitly');
-    assert(/console\.warn\([^)]*\[attendance\]/.test(populateSrc),
-        'console.warn fires with [attendance] tag when guard trips');
-    assert(/filterGroup\.style\.display\s*=\s*'none'/.test(populateSrc),
-        'guard hides filterGroup (display: none) — not the blank-box dead-end');
+{
+    // Multi-coach branch + unassigned student: visible, All Coaches + every
+    // coach + Unassigned, enabled.
+    const students = [{
+        branchId: 'b-debut', coachId: null, status: 'active',
+    }];
+    const { select, group } = runPopulate({
+        roleInfo: ADMIN,
+        branch: 'Debut',
+        coach: 'all',
+        coaches: [COACH_ALICE, COACH_BOB],
+        branches: [BRANCH_HALYK, BRANCH_DEBUT],
+        students,
+    });
+    assertEqual(group.style.display, 'flex',
+        'admin / multi-coach branch: filterGroup is visible (display: flex)');
+    assert(placeholderHasAll(select),
+        'admin / multi-coach branch: All Coaches placeholder seeded');
+    assertEqual(selectValues(select), ['alice', 'bob', 'unassigned'],
+        'admin / multi-coach branch: every coach + Unassigned appended');
+    assertEqual(select.disabled, false,
+        'admin / multi-coach branch: select enabled');
+}
 
-    // The fallback branches arg is threaded through to coachesAtBranch and
-    // coachSelectorVisibilityForBranch so the fix actually engages at runtime.
-    assert(/coachesAtBranch\(\s*window\.coaches\s*,\s*attendanceCurrentBranch\s*,\s*window\.branches\s*\)/.test(populateSrc),
-        'coachesAtBranch is invoked with window.branches as the fallback source');
-    assert(/coachSelectorVisibilityForBranch\([^)]*window\.branches\s*\)/.test(populateSrc),
-        'coachSelectorVisibilityForBranch is invoked with window.branches threaded through');
+{
+    // Multi-coach branch with no unassigned students: no Unassigned option.
+    const { select, group } = runPopulate({
+        roleInfo: ADMIN,
+        branch: 'Debut',
+        coach: 'all',
+        coaches: [COACH_ALICE, COACH_BOB],
+        branches: [BRANCH_HALYK, BRANCH_DEBUT],
+        students: [],
+    });
+    assertEqual(group.style.display, 'flex',
+        'admin / multi-coach branch (no unassigned): filterGroup visible');
+    assertEqual(selectValues(select), ['alice', 'bob'],
+        'admin / multi-coach branch (no unassigned): only coach options appended');
 }
 
 // ---------------------------------------------------------------------------
-// (5) CSS guard — admin-styles.css must NOT re-introduce a `display: flex
-//     !important` rule scoped to #attendanceCoachFilterGroup. The !important
-//     overrode the JS hide path (filterGroup.style.display = 'none'), leaving
-//     a visible-but-disabled blank dropdown. Fail loudly if it comes back.
+// (2) Locked coach scenarios — same dropdown UX as admin
+// ---------------------------------------------------------------------------
+console.log('\n=== Locked coach scenarios ============================================\n');
+
+const LOCKED_ALICE = { isAdmin: false, coachId: 'alice' };
+
+{
+    // Locked coach on 1-coach branch: visible, All Coaches + coach, enabled,
+    // NOT pinned (the user's saved 'all' selection sticks).
+    const { select, group } = runPopulate({
+        roleInfo: LOCKED_ALICE,
+        branch: 'Halyk Arena',
+        coach: 'all',
+        coaches: [COACH_DAN],
+        branches: [BRANCH_HALYK],
+    });
+    assertEqual(group.style.display, 'flex',
+        'locked / 1-coach branch: filterGroup is visible (display: flex)');
+    assert(placeholderHasAll(select),
+        'locked / 1-coach branch: All Coaches placeholder seeded');
+    assertEqual(selectValues(select), ['dan'],
+        'locked / 1-coach branch: the only coach appended as an option');
+    assertEqual(select.disabled, false,
+        'locked / 1-coach branch: select enabled');
+    // NOT pinned — value stays at the placeholder ('all'); no auto-mutation
+    // of attendanceCurrentCoach for the locked role.
+    assert(select.value !== 'dan',
+        'locked / 1-coach branch: NOT auto-pinned to the only coach');
+}
+
+{
+    // Locked coach on multi-coach branch: visible, All Coaches + every coach,
+    // enabled.
+    const { select, group } = runPopulate({
+        roleInfo: LOCKED_ALICE,
+        branch: 'Debut',
+        coach: 'all',
+        coaches: [COACH_ALICE, COACH_BOB],
+        branches: [BRANCH_HALYK, BRANCH_DEBUT],
+        students: [],
+    });
+    assertEqual(group.style.display, 'flex',
+        'locked / multi-coach branch: filterGroup is visible (display: flex)');
+    assert(placeholderHasAll(select),
+        'locked / multi-coach branch: All Coaches placeholder seeded');
+    assertEqual(selectValues(select), ['alice', 'bob'],
+        'locked / multi-coach branch: every coach appended');
+    assertEqual(select.disabled, false,
+        'locked / multi-coach branch: select enabled');
+}
+
+// ---------------------------------------------------------------------------
+// (3) No branch selected — both roles
+// ---------------------------------------------------------------------------
+console.log('\n=== No branch selected ================================================\n');
+
+for (const [label, roleInfo] of [['admin', ADMIN], ['locked coach', LOCKED_ALICE]]) {
+    const { select, group } = runPopulate({
+        roleInfo,
+        branch: null,
+        coaches: [COACH_ALICE, COACH_BOB],
+        branches: [BRANCH_HALYK, BRANCH_DEBUT],
+    });
+    assertEqual(group.style.display, 'flex',
+        `${label} / no branch: filterGroup is visible (display: flex)`);
+    assert(placeholderHasAll(select),
+        `${label} / no branch: All Coaches placeholder seeded`);
+    assertEqual(selectValues(select), [],
+        `${label} / no branch: no coach <option> elements appended`);
+    assertEqual(select.disabled, true,
+        `${label} / no branch: select disabled`);
+}
+
+// ---------------------------------------------------------------------------
+// (4) CSS guard — admin-styles.css must NOT re-introduce a `display: flex
+//     !important` rule scoped to #attendanceCoachFilterGroup. Even though
+//     the wrapper is always visible now, an !important override would
+//     prevent a future legitimate hide path from working.
 // ---------------------------------------------------------------------------
 console.log('\n=== admin-styles.css guard (no !important on filter group) ===========\n');
 
@@ -384,6 +359,22 @@ console.log('\n=== admin-styles.css guard (no !important on filter group) ======
     const cssSrc = fs.readFileSync(path.join(ROOT, 'admin-styles.css'), 'utf8');
     assert(!/#attendanceCoachFilterGroup\s*\{[^}]*!important/.test(cssSrc),
         'admin-styles.css has no #attendanceCoachFilterGroup rule using !important');
+}
+
+// ---------------------------------------------------------------------------
+// (5) Source guard — populate must never set display: none on the wrapper.
+//     Catches a future refactor that re-introduces hiding behavior.
+// ---------------------------------------------------------------------------
+console.log('\n=== populateAttendanceCoachDropdown source guard =====================\n');
+
+{
+    const populateSrc = extractFn(ADMIN_V2_SRC, 'populateAttendanceCoachDropdown');
+    assert(populateSrc.length > 0,
+        'populateAttendanceCoachDropdown located in admin-v2.js');
+    assert(!/filterGroup\.style\.display\s*=\s*['"]none['"]/.test(populateSrc),
+        'populate never sets filterGroup.style.display = "none"');
+    assert(/filterGroup\.style\.display\s*=\s*['"]flex['"]/.test(populateSrc),
+        'populate sets filterGroup.style.display = "flex"');
 }
 
 console.log(`\n--- ${passed} passed, ${failed} failed ---\n`);
