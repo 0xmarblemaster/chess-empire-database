@@ -2647,7 +2647,8 @@ const supabaseData = {
                 .eq('schedule_type', scheduleType)
                 .lte('effective_from', monthEnd)
                 .order('student_id')
-                .order('effective_from', { ascending: false });
+                .order('effective_from', { ascending: false })
+                .order('updated_at', { ascending: false });
 
             if (error) {
                 // Table might not exist yet - return empty silently
@@ -2785,8 +2786,7 @@ const supabaseData = {
             .eq('student_id', studentId)
             .eq('branch_id', branchId)
             .eq('schedule_type', scheduleType)
-            .eq('time_slot_index', -1)
-            .gt('effective_from', '1970-01-01');
+            .eq('time_slot_index', -1);
 
         if (clearLegacyHidesError) {
             console.error('Error clearing legacy schedule-wide hide rows after upsert:', clearLegacyHidesError);
