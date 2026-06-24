@@ -2133,13 +2133,20 @@ const supabaseData = {
         const lastDay = new Date(year, month, 0).getDate();
         const endDate = `${year}-${String(month).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`;
 
-        // Build attendance query
+        // Build attendance query.
+        // Order ascending by updated_at so older rows are processed first and the
+        // most-recently-updated row wins the final overwrite in attendanceMap.
+        // Without this, a duplicate (student_id, date, schedule_type) group with
+        // NULL time_slot collapses to whichever row Postgres' heap scan returns
+        // last, which can be the stale row instead of the latest click. (Postgres
+        // treats NULLs as distinct in UNIQUE constraints, so dup rows accumulate.)
         let attendanceQuery = window.supabaseClient
             .from('attendance')
             .select('*')
             .eq('branch_id', branchId)
             .gte('attendance_date', startDate)
-            .lte('attendance_date', endDate);
+            .lte('attendance_date', endDate)
+            .order('updated_at', { ascending: true, nullsFirst: true });
 
         if (scheduleType) {
             attendanceQuery = attendanceQuery.eq('schedule_type', scheduleType);
