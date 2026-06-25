@@ -914,6 +914,10 @@
                                 <select id="tournamentsAdminRegSelect" class="form-input" style="width: auto; min-width: 280px;" onchange="onTournamentsAdminRegSelectChange()">
                                     <option value="" data-i18n="admin.tournaments.selectTournament">Select a tournament</option>
                                 </select>
+                                <button id="tournamentsAdminAddGuestBtn" class="btn btn-primary" onclick="openAddGuestModal()" disabled>
+                                    <i data-lucide="user-plus" style="width: 18px; height: 18px;"></i>
+                                    <span data-i18n="admin.tournaments.addGuest">+ Add guest</span>
+                                </button>
                                 <button id="tournamentsAdminRegDownloadBtn" class="btn btn-secondary" onclick="downloadTournamentRegistrationsExcel()" disabled>
                                     <i data-lucide="download" style="width: 18px; height: 18px;"></i>
                                     <span data-i18n="admin.tournaments.downloadExcel">Download Excel</span>
@@ -2618,6 +2622,61 @@
                     <span data-i18n="common.saveChanges">Save Changes</span>
                 </button>
             </div>
+        </div>
+    </div>
+
+    <!-- Add Guest Player Modal (admin-only walk-in registration) -->
+    <div id="addGuestModal" class="modal">
+        <div class="modal-overlay" onclick="closeAddGuestModal()"></div>
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2 class="modal-title" data-i18n="admin.tournaments.guestModal.title">Add guest player</h2>
+                <button class="modal-close" onclick="closeAddGuestModal()">
+                    <i data-lucide="x" style="width: 24px; height: 24px;"></i>
+                </button>
+            </div>
+
+            <form id="addGuestForm" class="modal-body" onsubmit="submitAddGuest(event)">
+                <div class="form-section">
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label class="form-label" data-i18n="admin.tournaments.guestForm.firstName">First name</label>
+                            <input name="first_name" type="text" class="form-input" required maxlength="60">
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label" data-i18n="admin.tournaments.guestForm.lastName">Last name</label>
+                            <input name="last_name" type="text" class="form-input" required maxlength="60">
+                        </div>
+                    </div>
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label class="form-label" data-i18n="admin.tournaments.guestForm.phone">Phone</label>
+                            <input name="phone" type="tel" class="form-input" required pattern="^\+?[0-9 ()\-]{7,20}$">
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label" data-i18n="admin.tournaments.guestForm.email">Email</label>
+                            <input name="email" type="email" class="form-input" required>
+                        </div>
+                    </div>
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label class="form-label" data-i18n="admin.tournaments.guestForm.age">Age</label>
+                            <input name="age" type="number" class="form-input" required min="4" max="99">
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label" data-i18n="admin.tournaments.guestForm.rating">Rating (optional)</label>
+                            <input name="rating" type="number" class="form-input" min="0" max="3500">
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn-secondary" onclick="closeAddGuestModal()" data-i18n="common.cancel">Cancel</button>
+                    <button type="submit" class="btn-primary">
+                        <i data-lucide="user-plus" style="width: 18px; height: 18px;"></i>
+                        <span data-i18n="admin.tournaments.guestForm.submit">Register guest</span>
+                    </button>
+                </div>
+            </form>
         </div>
     </div>
 

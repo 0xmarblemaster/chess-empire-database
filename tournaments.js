@@ -249,16 +249,19 @@ async function loadTournamentSchedule() {
 
 async function loadRoster(tournamentId) {
     const supabase = window.supabaseClient;
+    // Left-join students so guest rows (student_id IS NULL) survive — they
+    // still occupy capacity and need to render as "Firstname L." on the public roster.
     const { data, error } = await supabase
         .from('tournament_registrations')
-        .select('student_id, registered_at, students!inner(first_name, last_name)')
+        .select('student_id, display_name, registered_at, students(first_name, last_name)')
         .eq('tournament_id', tournamentId)
         .order('registered_at', { ascending: true });
     if (error) { console.error('roster load failed:', error); return []; }
     return (data || []).map(r => ({
         student_id: r.student_id,
-        first_name: r.students?.first_name || '',
-        last_name: r.students?.last_name || '',
+        display: r.student_id
+            ? `${r.students?.first_name || ''} ${r.students?.last_name || ''}`.trim()
+            : (r.display_name || ''),
     }));
 }
 
@@ -596,7 +599,7 @@ function renderTournamentDetail(tournamentId) {
     const rosterHtml = roster.length === 0
         ? `<div class="roster-empty">${escapeHtml(tt('tournaments.noResults'))}</div>`
         : `<div class="roster-list">${roster.map((r, i) =>
-              `<div class="roster-item"><span class="roster-num">${i + 1}.</span><span>${escapeHtml((r.first_name + ' ' + r.last_name).trim())}</span></div>`
+              `<div class="roster-item"><span class="roster-num">${i + 1}.</span><span>${escapeHtml(r.display || '')}</span></div>`
             ).join('')}</div>`;
 
     const btnLabel = isClosed

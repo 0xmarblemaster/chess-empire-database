@@ -318,8 +318,14 @@ const regFn = (() => {
 })();
 assert(/\.from\(['"]tournament_registrations['"]\)/.test(regFn),
     'showTournamentRegistrations queries tournament_registrations');
-assert(/students!inner\([\s\S]*?\bfirst_name\b[\s\S]*?\blast_name\b/.test(regFn),
-    'showTournamentRegistrations joins to students for full names');
+// Migration 050 added guest registrations (student_id IS NULL) — the join
+// must be a left join so guest rows survive. `students!inner` would silently
+// drop them and the public-facing capacity meter would lie.
+assert(/students\([\s\S]*?\bfirst_name\b[\s\S]*?\blast_name\b/.test(regFn)
+       && !/students!inner/.test(regFn),
+    'showTournamentRegistrations left-joins students (no !inner) so guests survive');
+assert(/tournament_guest_contacts\(/.test(regFn),
+    'showTournamentRegistrations joins tournament_guest_contacts for guest PII');
 
 const removeFn = (() => {
     const s = JS.indexOf('async function removeRegistration(');

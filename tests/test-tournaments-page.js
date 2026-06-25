@@ -250,11 +250,14 @@ assert(/supabase\.rpc\('register_for_tournament'/.test(JS),
     'tournaments.js calls the register_for_tournament RPC');
 assert(/p_tournament_id/.test(JS) && /p_student_id/.test(JS),
     'RPC payload uses positional parameter names p_tournament_id, p_student_id');
-assert(/students\?\.\(?first_name|students!inner\(first_name, last_name\)/.test(JS) ||
-       /students!inner\(first_name, last_name\)/.test(JS),
-    'roster query joins students with first_name + last_name (NOT initials only)');
-assert(/first_name \+ ' ' \+ r\.last_name|r\.first_name.*r\.last_name/.test(JS),
-    'roster renders full first + last name');
+// Migration 050 added guest registrations — the join must be a left join so
+// guest rows (student_id IS NULL) survive and the public capacity meter stays
+// truthful. Roster items expose a `display` field (full name for students,
+// "Firstname L." for guests) instead of raw first/last.
+assert(/students\(first_name, last_name\)/.test(JS) && !/students!inner/.test(JS),
+    'roster query left-joins students with first_name + last_name (no !inner)');
+assert(/display_name/.test(JS) && /r\.display/.test(JS),
+    'roster renders via the `display` field (handles student + guest in one path)');
 assert(/POLL_INTERVAL_MS\s*=\s*15000/.test(JS),
     '15s polling fallback when Realtime is unavailable');
 assert(/REALTIME_CONNECT_TIMEOUT_MS\s*=\s*5000/.test(JS),

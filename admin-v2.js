@@ -12187,14 +12187,24 @@ async function onTournamentsAdminRegSelectChange() {
             body.innerHTML = `<tr><td colspan="9" style="text-align:center; padding:2rem; color:#94a3b8;">${_escapeHtml(_tt('admin.tournaments.selectTournament'))}</td></tr>`;
         }
         _setRegDownloadEnabled(false);
+        _setRegAddGuestEnabled(false);
         return;
     }
+    _setRegAddGuestEnabled(true);
     await showTournamentRegistrations(id);
 }
 window.onTournamentsAdminRegSelectChange = onTournamentsAdminRegSelectChange;
 
 function _setRegDownloadEnabled(enabled) {
     const btn = document.getElementById('tournamentsAdminRegDownloadBtn');
+    if (btn) btn.disabled = !enabled;
+}
+
+// Add-guest button shares the "select a tournament first" gate with the
+// Download button, but stays enabled when a tournament has zero registrations
+// — that's exactly the moment an admin wants to add the first guest.
+function _setRegAddGuestEnabled(enabled) {
+    const btn = document.getElementById('tournamentsAdminAddGuestBtn');
     if (btn) btn.disabled = !enabled;
 }
 
@@ -12233,16 +12243,19 @@ async function showTournamentRegistrations(tournamentId) {
     tournamentsAdminCurrentTournament = t || null;
 
     try {
+        // Left-join students AND tournament_guest_contacts so guest rows
+        // (student_id IS NULL) survive — an inner join would silently drop them.
         const { data, error } = await supabase
             .from('tournament_registrations')
             .select(`
-                id, registered_at,
-                students!inner(
+                id, registered_at, student_id, display_name, source,
+                students(
                     id, first_name, last_name, age, date_of_birth, branch_id, coach_id,
                     branches(name),
                     coaches(first_name, last_name),
                     student_current_ratings(rating, rating_date)
-                )
+                ),
+                tournament_guest_contacts(first_name, last_name, rating, age, phone, email)
             `)
             .eq('tournament_id', tournamentId)
             .order('registered_at', { ascending: true });
@@ -12252,6 +12265,7 @@ async function showTournamentRegistrations(tournamentId) {
         if (tournamentsAdminCurrentRegRows.length === 0) {
             body.innerHTML = `<tr><td colspan="9" style="text-align:center; padding:2rem; color:#94a3b8;">${_escapeHtml(_tt('admin.tournaments.noRegistrations'))}</td></tr>`;
             _setRegDownloadEnabled(false);
+            _setRegAddGuestEnabled(true);
             return;
         }
 
@@ -12259,8 +12273,42 @@ async function showTournamentRegistrations(tournamentId) {
         const translateBranch = (window.i18n && typeof window.i18n.translateBranchName === 'function')
             ? window.i18n.translateBranchName
             : (n => n);
+        const guestBadge = _tt('admin.tournaments.guestBadge');
 
         body.innerHTML = tournamentsAdminCurrentRegRows.map((row, i) => {
+            const at = row.registered_at ? String(row.registered_at).replace('T', ' ').slice(0, 16) : '';
+            const dash = '—';
+            const isGuest = !row.student_id;
+
+            if (isGuest) {
+                // PostgREST may return the joined PII row as object or single-element array.
+                const g = Array.isArray(row.tournament_guest_contacts)
+                    ? row.tournament_guest_contacts[0]
+                    : row.tournament_guest_contacts;
+                const gFirst = g?.first_name || '';
+                const gLast  = g?.last_name  || '';
+                const gAge   = (g && g.age != null) ? g.age : null;
+                const gRating = (g && g.rating != null) ? g.rating : null;
+                const contactTip = [g?.phone, g?.email].filter(Boolean).join(' • ');
+                return `
+                <tr data-registration-id="${_escapeHtml(row.id)}" class="guest-row">
+                    <td>${i + 1}</td>
+                    <td title="${_escapeHtml(contactTip)}">${_escapeHtml(gLast || dash)}</td>
+                    <td>${_escapeHtml(gFirst || dash)}</td>
+                    <td>${gRating != null ? _escapeHtml(String(gRating)) : dash}</td>
+                    <td><span class="badge badge-guest">${_escapeHtml(guestBadge)}</span></td>
+                    <td>${dash}</td>
+                    <td>${gAge != null ? gAge : dash}</td>
+                    <td>${_escapeHtml(at)}</td>
+                    <td>
+                        <button class="icon-button" onclick="removeRegistration('${_escapeHtml(row.id)}')" title="${_escapeHtml(_tt('admin.tournaments.action.remove'))}" style="color:#dc2626;">
+                            <i data-lucide="trash-2"></i>
+                        </button>
+                    </td>
+                </tr>
+                `;
+            }
+
             const s = row.students || {};
             const last = s.last_name || '';
             const first = s.first_name || '';
@@ -12273,8 +12321,6 @@ async function showTournamentRegistrations(tournamentId) {
                 ? `${s.coaches.first_name || ''} ${s.coaches.last_name || ''}`.trim()
                 : '';
             const age = _computeAge(s.date_of_birth, s.age, refDate);
-            const at = row.registered_at ? String(row.registered_at).replace('T', ' ').slice(0, 16) : '';
-            const dash = '—';
             return `
                 <tr data-registration-id="${_escapeHtml(row.id)}">
                     <td>${i + 1}</td>
@@ -12294,6 +12340,7 @@ async function showTournamentRegistrations(tournamentId) {
             `;
         }).join('');
         _setRegDownloadEnabled(true);
+        _setRegAddGuestEnabled(true);
         if (typeof lucide !== 'undefined') lucide.createIcons();
     } catch (e) {
         console.error('Failed to load registrations:', e);
@@ -12348,6 +12395,7 @@ async function downloadTournamentRegistrationsExcel() {
         .filter(p => p && String(p).trim());
     const titleRow = [titleParts.join(' — ')];
 
+    const guestBadge = _tt('admin.tournaments.guestBadge');
     const headerRow = [
         '#',
         _tt('admin.tournaments.col.surname'),
@@ -12356,11 +12404,33 @@ async function downloadTournamentRegistrationsExcel() {
         _tt('admin.tournaments.col.branch'),
         _tt('admin.tournaments.col.coach'),
         _tt('admin.tournaments.col.age'),
-        _tt('admin.tournaments.col.registered')
+        _tt('admin.tournaments.col.registered'),
+        _tt('admin.tournaments.col.phone'),
+        _tt('admin.tournaments.col.email')
     ];
 
     const aoa = [titleRow, [], headerRow];
     rows.forEach((row, i) => {
+        const at = row.registered_at ? String(row.registered_at).replace('T', ' ').slice(0, 16) : '';
+        const isGuest = !row.student_id;
+        if (isGuest) {
+            const g = Array.isArray(row.tournament_guest_contacts)
+                ? row.tournament_guest_contacts[0]
+                : row.tournament_guest_contacts;
+            aoa.push([
+                i + 1,
+                g?.last_name || '',
+                g?.first_name || '',
+                (g && g.rating != null) ? g.rating : '',
+                guestBadge,
+                '',
+                (g && g.age != null) ? g.age : '',
+                at,
+                g?.phone || '',
+                g?.email || ''
+            ]);
+            return;
+        }
         const s = row.students || {};
         const ratingObj = Array.isArray(s.student_current_ratings)
             ? s.student_current_ratings[0]
@@ -12371,7 +12441,6 @@ async function downloadTournamentRegistrationsExcel() {
             ? `${s.coaches.first_name || ''} ${s.coaches.last_name || ''}`.trim()
             : '';
         const age = _computeAge(s.date_of_birth, s.age, refDate);
-        const at = row.registered_at ? String(row.registered_at).replace('T', ' ').slice(0, 16) : '';
         aoa.push([
             i + 1,
             s.last_name || '',
@@ -12380,14 +12449,17 @@ async function downloadTournamentRegistrationsExcel() {
             branchName || '',
             coach || '',
             age != null ? age : '',
-            at
+            at,
+            '',
+            ''
         ]);
     });
 
     const ws = XLSX.utils.aoa_to_sheet(aoa);
     ws['!cols'] = [
         { wch: 5 }, { wch: 18 }, { wch: 18 }, { wch: 8 },
-        { wch: 22 }, { wch: 22 }, { wch: 6 }, { wch: 18 }
+        { wch: 22 }, { wch: 22 }, { wch: 6 }, { wch: 18 },
+        { wch: 18 }, { wch: 26 }
     ];
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, 'Participants');
@@ -12434,6 +12506,108 @@ async function removeRegistration(registrationId) {
     }
 }
 window.removeRegistration = removeRegistration;
+
+// -------------------------------------------------------------
+// Guest player registration (admin-only walk-in flow)
+// -------------------------------------------------------------
+
+function _normalisePhone(raw) {
+    const v = String(raw || '').trim();
+    return v;
+}
+
+function _handleGuestRpcReason(data) {
+    const reason = (data && data.reason) ? data.reason : 'unknown';
+    let msg;
+    if (reason === 'invalid_input') {
+        const field = data.field || '';
+        const key = `admin.tournaments.invalid_${field}`;
+        const t = _tt(key);
+        msg = (t && t !== key) ? t : _tt('admin.tournaments.error');
+    } else if (reason === 'duplicate_guest') {
+        msg = _tt('admin.tournaments.duplicateGuest');
+    } else if (reason === 'ineligible') {
+        const lg = data.tournament_league || '';
+        const rg = data.student_league || '';
+        const tmpl = _tt('admin.tournaments.ineligibleGuest');
+        msg = tmpl
+            .replace('{tournament_league}', lg)
+            .replace('{guest_league}', rg);
+    } else {
+        const key = `admin.tournaments.removeError.${reason}`;
+        const t = _tt(key);
+        msg = (t && t !== key) ? t : _tt('admin.tournaments.error');
+    }
+    _tournamentsAdminToast(msg, 'error');
+}
+
+function openAddGuestModal() {
+    const sel = document.getElementById('tournamentsAdminRegSelect');
+    if (!sel || !sel.value) return;
+    const modal = document.getElementById('addGuestModal');
+    const form = document.getElementById('addGuestForm');
+    if (!modal || !form) return;
+    form.reset();
+    modal.classList.add('active');
+    if (typeof lucide !== 'undefined') lucide.createIcons();
+}
+window.openAddGuestModal = openAddGuestModal;
+
+function closeAddGuestModal() {
+    const modal = document.getElementById('addGuestModal');
+    if (modal) modal.classList.remove('active');
+}
+window.closeAddGuestModal = closeAddGuestModal;
+
+async function submitAddGuest(ev) {
+    if (ev && typeof ev.preventDefault === 'function') ev.preventDefault();
+    const sel = document.getElementById('tournamentsAdminRegSelect');
+    const tournamentId = sel ? sel.value : null;
+    if (!tournamentId) {
+        _tournamentsAdminToast(_tt('admin.tournaments.selectTournament'), 'error');
+        return false;
+    }
+    const supabase = window.supabaseClient;
+    if (!supabase) {
+        _tournamentsAdminToast(_tt('admin.tournaments.error'), 'error');
+        return false;
+    }
+    const f = (ev && ev.target) || document.getElementById('addGuestForm');
+    const ratingRaw = f.rating ? String(f.rating.value).trim() : '';
+    const payload = {
+        p_tournament_id:    tournamentId,
+        p_guest_first_name: f.first_name.value.trim(),
+        p_guest_last_name:  f.last_name.value.trim(),
+        p_guest_phone:      _normalisePhone(f.phone.value),
+        p_guest_email:      f.email.value.trim().toLowerCase(),
+        p_guest_age:        parseInt(f.age.value, 10),
+        p_guest_rating:     ratingRaw ? parseInt(ratingRaw, 10) : null,
+        p_source:           'admin'
+    };
+    try {
+        const { data, error } = await supabase.rpc('register_for_tournament', payload);
+        if (error) {
+            console.error('register_for_tournament (guest) failed:', error);
+            _tournamentsAdminToast(error.message || _tt('admin.tournaments.error'), 'error');
+            return false;
+        }
+        if (data && data.ok === true) {
+            _tournamentsAdminToast(_tt('admin.tournaments.guestRegistered'), 'success');
+            closeAddGuestModal();
+            await loadTournamentsAdminList();
+            _populateTournamentsAdminRegDropdown();
+            if (sel) sel.value = tournamentId;
+            await showTournamentRegistrations(tournamentId);
+        } else {
+            _handleGuestRpcReason(data || {});
+        }
+    } catch (e) {
+        console.error('submitAddGuest failed:', e);
+        _tournamentsAdminToast(_tt('admin.tournaments.error'), 'error');
+    }
+    return false;
+}
+window.submitAddGuest = submitAddGuest;
 
 // Convert an ISO timestamp (or null) to the "YYYY-MM-DDTHH:mm" string
 // expected by <input type="datetime-local"> in the browser's local timezone.
