@@ -4670,6 +4670,21 @@ const ATTENDANCE_TIME_SLOTS_GAGARIN_MON_WED = [
 
 const DEFAULT_TIME_SLOT_ROWS = 10;      // Default visible rows
 const MAX_TIME_SLOT_CAPACITY = 15;      // Maximum students per slot
+const DEBUT_DEFAULT_TIME_SLOT_ROWS = 20; // Default visible rows (Debut branch)
+const DEBUT_MAX_TIME_SLOT_CAPACITY = 20; // Maximum students per slot (Debut branch)
+
+function isDebutCurrentBranch() {
+    const name = (attendanceCurrentBranch || '').toLowerCase();
+    return name.includes('debut') || name.includes('дебют');
+}
+
+function getDefaultRows() {
+    return isDebutCurrentBranch() ? DEBUT_DEFAULT_TIME_SLOT_ROWS : DEFAULT_TIME_SLOT_ROWS;
+}
+
+function getMaxCapacity() {
+    return isDebutCurrentBranch() ? DEBUT_MAX_TIME_SLOT_CAPACITY : MAX_TIME_SLOT_CAPACITY;
+}
 
 // Initialize time slot indices for all students
 // Students without a time_slot_index get assigned based on their array position
@@ -4696,6 +4711,10 @@ function initializeStudentTimeSlots(skipStudentIds = new Set()) {
 
         if (student.time_slot_index === null || student.time_slot_index === undefined) {
             // Assign based on position: first 10 to slot 0, next 10 to slot 1, etc.
+            // Use DEFAULT_TIME_SLOT_ROWS (10) — this code path is gated by the
+            // attendanceCurrentBranch === 'Halyk Arena' check above, so Debut
+            // never reaches here. Bucketing is also persisted via time_slot_index,
+            // so changing the divisor would shift previously saved slot indices.
             student.time_slot_index = Math.floor(index / DEFAULT_TIME_SLOT_ROWS);
             // Clamp to available slots (last slot gets overflow)
             if (student.time_slot_index >= numSlots) {
@@ -6326,7 +6345,7 @@ function renderAttendanceCalendar(preFilteredData = null) {
                             <polyline points="12 6 12 12 16 14"></polyline>
                         </svg>
                         <span>${timeSlot}</span>
-                        <span class="time-slot-count">(${studentCount}/${MAX_TIME_SLOT_CAPACITY})</span>
+                        <span class="time-slot-count">(${studentCount}/${getMaxCapacity()})</span>
                     </div>
                 </td>
         `;
@@ -6341,7 +6360,7 @@ function renderAttendanceCalendar(preFilteredData = null) {
 
         // Calculate how many rows to render for this slot
         const actualStudentCount = slotStudents.length;
-        const rowsToRender = Math.max(DEFAULT_TIME_SLOT_ROWS, Math.min(actualStudentCount, MAX_TIME_SLOT_CAPACITY));
+        const rowsToRender = Math.max(getDefaultRows(), Math.min(actualStudentCount, getMaxCapacity()));
 
         // Render student slots (filled with actual students or empty placeholders)
         for (let rowIndex = 0; rowIndex < rowsToRender; rowIndex++) {
@@ -6679,11 +6698,11 @@ async function moveStudentToTimeSlot(studentId, fromSlotId, toSlotId, toSlotInde
     const filteredData = window.attendanceFilteredData || [];
     const targetSlotStudents = getStudentsForTimeSlot(toSlotIndex, filteredData);
 
-    if (targetSlotStudents.length >= MAX_TIME_SLOT_CAPACITY) {
+    if (targetSlotStudents.length >= getMaxCapacity()) {
         showToast(
             (t('admin.attendance.slotFull') || 'Time slot {slot} is full (15 students max)')
                 .replace('{slot}', timeSlots[toSlotIndex] || `Slot ${toSlotIndex + 1}`)
-                .replace('10', MAX_TIME_SLOT_CAPACITY.toString()),
+                .replace('10', getMaxCapacity().toString()),
             'error'
         );
         return;
@@ -7450,7 +7469,11 @@ async function submitAddStudentToCalendar() {
                    s.id !== studentId; // Exclude current student in case of reassignment
         });
 
-        if (studentsInSlot.length >= MAX_TIME_SLOT_CAPACITY) {
+        const selectedBranchName = (selectedBranch || '').toLowerCase();
+        const selectedBranchIsDebut = selectedBranchName.includes('debut') || selectedBranchName.includes('дебют');
+        const selectedBranchMaxCapacity = selectedBranchIsDebut ? DEBUT_MAX_TIME_SLOT_CAPACITY : MAX_TIME_SLOT_CAPACITY;
+
+        if (studentsInSlot.length >= selectedBranchMaxCapacity) {
             // Get coach name for the selected student
             const student = window.students?.find(s => s.id === studentId);
             let coachName = null;
@@ -7462,7 +7485,7 @@ async function submitAddStudentToCalendar() {
             const timeSlots = getTimeSlotsForBranch(selectedBranch, selectedSchedule, coachName);
             const slotName = timeSlots[timeSlotIndex] || `Slot ${timeSlotIndex + 1}`;
             showToast(
-                `Time slot ${slotName} is full (${MAX_TIME_SLOT_CAPACITY} students max). Please select a different time slot.`,
+                `Time slot ${slotName} is full (${selectedBranchMaxCapacity} students max). Please select a different time slot.`,
                 'error'
             );
             return;
