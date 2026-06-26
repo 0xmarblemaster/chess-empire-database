@@ -250,7 +250,8 @@ async function loadTournamentSchedule() {
 async function loadRoster(tournamentId) {
     const supabase = window.supabaseClient;
     // Left-join students so guest rows (student_id IS NULL) survive — they
-    // still occupy capacity and need to render as "Firstname L." on the public roster.
+    // still occupy capacity. Since migration 051 display_name holds the full
+    // "Firstname Lastname" for guests (same shape as student rows render).
     const { data, error } = await supabase
         .from('tournament_registrations')
         .select('student_id, display_name, registered_at, students(first_name, last_name)')

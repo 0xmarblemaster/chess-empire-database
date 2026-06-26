@@ -1,8 +1,10 @@
 /**
- * Tests for the guest-registration feature (migration 050 + admin UI + public roster).
+ * Tests for the guest-registration feature (migrations 050+051 + admin UI + public roster).
  *
  * Coverage:
  *  (a) migration 050 — schema + RPC shape + RLS policy + display_name column.
+ *      migration 051 — RPC replacement so guest display_name holds the full
+ *      "Firstname Lastname" + backfill of existing guest rows.
  *  (b) admin-v2.html — Add-guest button, modal markup, six required fields.
  *  (c) admin-v2.js — left-join shape, render branch for guest rows,
  *      Phone/Email columns in Excel export, openAddGuestModal / closeAddGuestModal
@@ -37,6 +39,7 @@ function assertEqual(actual, expected, msg) {
 
 const ROOT = path.resolve(__dirname, '..');
 const MIG  = fs.readFileSync(path.join(ROOT, 'migrations', '050_tournament_guest_registrations.sql'), 'utf8');
+const MIG051 = fs.readFileSync(path.join(ROOT, 'migrations', '051_tournament_guest_full_name.sql'), 'utf8');
 const HTML = fs.readFileSync(path.join(ROOT, 'admin-v2.html'), 'utf8');
 const JS   = fs.readFileSync(path.join(ROOT, 'admin-v2.js'), 'utf8');
 const TJS  = fs.readFileSync(path.join(ROOT, 'tournaments.js'), 'utf8');
@@ -91,10 +94,16 @@ assert(/'invalid_input'/.test(MIG) && /'field'/.test(MIG),
     'RPC returns invalid_input with a field hint');
 assert(/calc_league_from_rating\(p_guest_rating\)/.test(MIG),
     'RPC enforces league gate when guest rating + tournament league known');
-assert(/v_display_name\s*:=\s*v_first\s*\|\|\s*' '\s*\|\|\s*upper\(left\(v_last,\s*1\)\)\s*\|\|\s*'\.'/.test(MIG),
-    'guest display_name composed as "Firstname L."');
 assert(/INSERT INTO tournament_guest_contacts/.test(MIG),
     'RPC inserts into tournament_guest_contacts on guest path');
+
+// Migration 051: full guest name in display_name + backfill.
+assert(/v_full_name\s*:=\s*v_first\s*\|\|\s*' '\s*\|\|\s*v_last/.test(MIG051),
+    'migration 051 composes v_full_name as "Firstname Lastname"');
+assert(/INSERT INTO tournament_registrations[\s\S]*?display_name[\s\S]*?VALUES[\s\S]*?v_full_name,\s*\n\s*v_full_name/.test(MIG051),
+    'migration 051 writes v_full_name into both player_name and display_name on guest INSERT');
+assert(/UPDATE tournament_registrations[\s\S]*?SET display_name\s*=\s*player_name[\s\S]*?WHERE student_id IS NULL/.test(MIG051),
+    'migration 051 backfills existing guest rows (display_name := player_name where student_id IS NULL)');
 assert(/DROP FUNCTION IF EXISTS register_for_tournament\(UUID, UUID, TEXT, TEXT, TEXT\)/.test(MIG),
     'old 5-arg overload dropped so PostgREST dispatches to the new signature');
 assert(/GRANT EXECUTE ON FUNCTION[\s\S]*register_for_tournament\(UUID, UUID, TEXT, TEXT, TEXT, TEXT, TEXT, INT, INT, TEXT, TEXT\)/.test(MIG),
