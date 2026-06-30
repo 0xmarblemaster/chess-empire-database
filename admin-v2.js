@@ -5654,7 +5654,7 @@ async function loadTimeSlotsCache(year, month) {
                 .from('time_slots')
                 .select(`
                     id, branch_id, coach_id, schedule_type, slot_index,
-                    start_time, end_time, label, effective_from,
+                    start_time, end_time, label, effective_from, deleted_at,
                     branches!inner(name),
                     coaches!time_slots_coach_id_fkey(first_name, last_name)
                 `)
@@ -5682,6 +5682,9 @@ async function loadTimeSlotsCache(year, month) {
                 const slotKey = `${row.branch_id}|${row.coach_id}|${row.schedule_type}|${row.slot_index}`;
                 if (seenSlot.has(slotKey)) continue; // earlier (later effective_from) wins
                 seenSlot.add(slotKey);
+                // Tombstone wins: if the latest version is soft-deleted, hide the
+                // slot for this month — don't fall through to older versions.
+                if (row.deleted_at) continue;
                 const branchName = (row.branches?.name || '').toLowerCase();
                 const coachFirst = row.coaches?.first_name || '';
                 const coachLast = row.coaches?.last_name || '';
@@ -5914,17 +5917,22 @@ async function deleteTimeSlot() {
     if (!confirm(t('admin.attendance.editTimeSlot.deleteConfirm') || 'Delete this time slot? Any students assigned to this index will lose their slot mapping.')) return;
     const errEl = document.getElementById('editTimeSlotError');
     errEl.style.display = 'none';
+    // Soft-delete: insert a tombstone version effective from the displayed
+    // month's first day. Past months keep showing the prior version, current
+    // and future months hide the slot. Hard DELETE would erase history and
+    // leave a silent gap in the calendar (see migration 065).
+    const currentMonthStart = `${attendanceCurrentYear}-${String(attendanceCurrentMonth + 1).padStart(2, '0')}-01`;
     try {
         const { data, error } = await window.supabaseClient
-            .from('time_slots')
-            .delete()
-            .eq('id', id)
-            .select();
+            .rpc('delete_time_slot_versioned', {
+                p_slot_id: id,
+                p_effective_from: currentMonthStart
+            });
         if (error) throw error;
-        if (!data || data.length === 0) {
+        if (!data) {
             throw new Error(t('admin.attendance.editTimeSlot.errPermission') || 'You do not have permission to edit this slot. Contact an admin.');
         }
-        await window.reloadTimeSlotsCache();
+        await window.reloadTimeSlotsCache(attendanceCurrentYear, attendanceCurrentMonth);
         closeEditTimeSlotModal();
         if (typeof renderAttendanceCalendar === 'function') {
             renderAttendanceCalendar();
