@@ -104,31 +104,55 @@ serve(async (req) => {
     }
 
     if (action === 'ranking') {
-      const { data: student, error: e1 } = await supabase.from('students').select('id, rating, branch_id').eq('id', studentId).maybeSingle()
+      const { data: student, error: e1 } = await supabase
+        .from('students').select('id, branch_id, status').eq('id', studentId).maybeSingle()
       if (e1) throw e1
-      if (!student || !student.rating) return json({ success: false, error: 'Student not found or no rating' }, 404)
+      if (!student) return json({ success: false, error: 'Student not found' }, 404)
 
-      // Branch rank
-      const { count: branchHigher } = await supabase.from('students').select('id', { count: 'exact', head: true })
-        .eq('branch_id', student.branch_id).eq('status', 'active').gt('rating', student.rating)
-      const { count: branchTotal } = await supabase.from('students').select('id', { count: 'exact', head: true })
-        .eq('branch_id', student.branch_id).eq('status', 'active').not('rating', 'is', null)
+      const { data: peers, error: e2 } = await supabase
+        .from('students').select('id, branch_id').eq('status', 'active')
+      if (e2) throw e2
+      const activePeers = peers || []
+      const activeIds = activePeers.map(p => p.id)
 
-      // School rank
-      const { count: schoolHigher } = await supabase.from('students').select('id', { count: 'exact', head: true })
-        .eq('status', 'active').gt('rating', student.rating)
-      const { count: schoolTotal } = await supabase.from('students').select('id', { count: 'exact', head: true })
-        .eq('status', 'active').not('rating', 'is', null)
+      const branchPeerIds = new Set(activePeers.filter(p => p.branch_id === student.branch_id).map(p => p.id))
+
+      const CHUNK = 100
+      const latest = new Map<string, number>()
+      for (let i = 0; i < activeIds.length; i += CHUNK) {
+        const slice = activeIds.slice(i, i + CHUNK)
+        const { data: rows, error: e3 } = await supabase
+          .from('student_ratings')
+          .select('student_id, rating, rating_date, created_at')
+          .in('student_id', slice)
+          .order('rating_date', { ascending: false })
+          .order('created_at', { ascending: false })
+        if (e3) throw e3
+        for (const r of rows || []) {
+          if (!latest.has(r.student_id)) latest.set(r.student_id, r.rating)
+        }
+      }
+
+      const myRating = latest.get(studentId) ?? null
+      const branchWithRating = [...branchPeerIds].filter(id => latest.has(id))
+      const schoolWithRating = activeIds.filter(id => latest.has(id))
+
+      let branchRank: number | null = null
+      let schoolRank: number | null = null
+      if (myRating !== null) {
+        branchRank = branchWithRating.filter(id => id !== studentId && (latest.get(id) as number) > myRating).length + 1
+        schoolRank = schoolWithRating.filter(id => id !== studentId && (latest.get(id) as number) > myRating).length + 1
+      }
 
       return json({
         success: true,
         data: {
           student_id: student.id,
-          rating: student.rating,
-          branch_rank: (branchHigher || 0) + 1,
-          branch_total: branchTotal || 0,
-          school_rank: (schoolHigher || 0) + 1,
-          school_total: schoolTotal || 0,
+          rating: myRating,
+          branch_rank: branchRank,
+          branch_size: branchWithRating.length,
+          school_rank: schoolRank,
+          school_size: schoolWithRating.length,
         },
       })
     }
