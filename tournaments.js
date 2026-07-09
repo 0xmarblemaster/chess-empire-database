@@ -922,6 +922,15 @@ function handleRegisterResult(data, tournamentId) {
             showToast(tt('tournaments.alreadyRegistered'), 'info');
             closeRegisterModal();
             break;
+        case 'level_too_low': {
+            const msg = tt('tournaments.levelTooLow', {
+                level: result.student_level ?? '—',
+                required: result.required_level ?? 2,
+            });
+            showToast(msg, 'warning');
+            closeRegisterModal();
+            break;
+        }
         case 'ineligible': {
             const msg = tt('tournaments.ineligibleForLeague', {
                 rating: result.student_rating ?? '—',
