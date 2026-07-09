@@ -157,7 +157,52 @@ serve(async (req) => {
       })
     }
 
-    return json({ success: false, error: 'Invalid action. Use: profile, ratings, achievements, ranking' }, 400)
+    if (action === 'progress_ranking') {
+      const { data: students, error } = await supabase
+        .from('students')
+        .select('id, branch_id, current_level, current_lesson, last_name, first_name')
+        .eq('status', 'active')
+      if (error) throw error
+
+      const list = students || []
+      list.sort((a, b) => {
+        if ((b.current_level || 1) !== (a.current_level || 1)) return (b.current_level || 1) - (a.current_level || 1)
+        if ((b.current_lesson || 1) !== (a.current_lesson || 1)) return (b.current_lesson || 1) - (a.current_lesson || 1)
+        const lastCmp = (a.last_name || '').localeCompare(b.last_name || '')
+        if (lastCmp !== 0) return lastCmp
+        return (a.first_name || '').localeCompare(b.first_name || '')
+      })
+
+      const idx = list.findIndex(s => s.id === studentId)
+      if (idx === -1) {
+        return json({
+          success: true,
+          data: {
+            student_id: studentId,
+            school_rank: null,
+            school_size: list.length,
+            branch_rank: null,
+            branch_size: null,
+          },
+        })
+      }
+
+      const branchList = list.filter(s => s.branch_id === list[idx].branch_id)
+      const branchIdx = branchList.findIndex(s => s.id === studentId)
+
+      return json({
+        success: true,
+        data: {
+          student_id: studentId,
+          school_rank: idx + 1,
+          school_size: list.length,
+          branch_rank: branchIdx + 1,
+          branch_size: branchList.length,
+        },
+      })
+    }
+
+    return json({ success: false, error: 'Invalid action. Use: profile, ratings, achievements, ranking, progress_ranking' }, 400)
   } catch (error) {
     return json({ success: false, error: error.message }, 500)
   }
