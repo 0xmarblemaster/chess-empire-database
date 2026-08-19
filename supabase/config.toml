@@ -2,3 +2,27 @@ project_id = "papgcizhfkngubwofjuo"
 
 [functions.tournaments-api]
 verify_jwt = false
+
+[functions.analytics-attendance]
+verify_jwt = false
+
+[functions.analytics-audit]
+verify_jwt = false
+
+[functions.analytics-leaderboards]
+verify_jwt = false
+
+[functions.analytics-sessions]
+verify_jwt = false
+
+[functions.analytics-status]
+verify_jwt = false
+
+[functions.analytics-students]
+verify_jwt = false
+
+[functions.analytics-tournaments]
+verify_jwt = false
+
+[functions.analytics-users]
+verify_jwt = false
