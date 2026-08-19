@@ -8,9 +8,19 @@ const corsHeaders = {
 
 const API_KEY = 'ce-api-2026-k8x9m2p4q7w1'
 const SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
+const CE_SECRET_KEY = Deno.env.get('CE_SECRET_KEY') ?? ''
+const DB_KEY = CE_SECRET_KEY || SERVICE_ROLE_KEY
+const LEGACY_SERVICE_KEY = Deno.env.get('CE_LEGACY_SERVICE_KEY') ?? ''
+function validBearer(header: string | null): boolean {
+  if (!header) return false
+  if (SERVICE_ROLE_KEY !== '' && header === `Bearer ${SERVICE_ROLE_KEY}`) return true
+  if (CE_SECRET_KEY !== '' && header === `Bearer ${CE_SECRET_KEY}`) return true
+  return LEGACY_SERVICE_KEY !== '' && header === `Bearer ${LEGACY_SERVICE_KEY}`
+}
+
 
 function authenticate(req: Request): boolean {
-  return req.headers.get('x-api-key') === API_KEY || req.headers.get('authorization') === `Bearer ${SERVICE_ROLE_KEY}`
+  return req.headers.get('x-api-key') === API_KEY || validBearer(req.headers.get('authorization'))
 }
 
 function json(data: unknown, status = 200) {
@@ -22,7 +32,7 @@ serve(async (req) => {
   if (!authenticate(req)) return json({ success: false, error: 'Unauthorized' }, 401)
 
   try {
-    const supabase = createClient(Deno.env.get('SUPABASE_URL') ?? '', SERVICE_ROLE_KEY, { auth: { autoRefreshToken: false, persistSession: false } })
+    const supabase = createClient(Deno.env.get('SUPABASE_URL') ?? '', DB_KEY, { auth: { autoRefreshToken: false, persistSession: false } })
     const url = new URL(req.url)
     const p = (k: string) => url.searchParams.get(k)
     const action = p('action') || 'profile'

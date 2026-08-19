@@ -26,3 +26,14 @@ verify_jwt = false
 
 [functions.analytics-users]
 verify_jwt = false
+
+[functions.complete-registration]
+# Callers are unauthenticated (pre-registration); real auth is the single-use,
+# email-bound invitation token validated inside the function.
+verify_jwt = false
+
+[functions.delete-user]
+verify_jwt = true
+
+[functions.send-invitation]
+verify_jwt = true

@@ -18,6 +18,8 @@ const corsHeaders = {
 
 const API_KEY = Deno.env.get('CHESS_EMPIRE_API_KEY') ?? 'ce-api-2026-k8x9m2p4q7w1'
 const SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
+const CE_SECRET_KEY = Deno.env.get('CE_SECRET_KEY') ?? ''
+const DB_KEY = CE_SECRET_KEY || SERVICE_ROLE_KEY
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL') ?? ''
 
 const REASONS = [
@@ -558,7 +560,7 @@ export async function handle(req: Request): Promise<Response> {
       const r = json(OPENAPI_SPEC, 200); status = r.status; return r
     }
 
-    const supabase = createClient(SUPABASE_URL, SERVICE_ROLE_KEY, {
+    const supabase = createClient(SUPABASE_URL, DB_KEY, {
       auth: { autoRefreshToken: false, persistSession: false },
     })
     const ctx: Ctx = { supabase, req }
