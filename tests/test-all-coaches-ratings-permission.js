@@ -91,7 +91,7 @@ try {
 }
 
 const SUPABASE_URL = 'https://papgcizhfkngubwofjuo.supabase.co';
-const SERVICE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InBhcGdjaXpoZmtuZ3Vid29manVvIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc2MTkzMDM1MSwiZXhwIjoyMDc3NTA2MzUxfQ.XwEjEJIxZ6J_3C9UZQ3hvrlm3GsfOCxMz3lYUK_trKg';
+const SERVICE_KEY = process.env.CE_SECRET_KEY;
 
 async function withSyntheticUser(supabase, fn) {
     const email = `test-mig-060-${Date.now()}-${Math.floor(Math.random() * 1e6)}@test-fixture.invalid`;
@@ -112,6 +112,10 @@ async function withSyntheticUser(supabase, fn) {
 async function runLive() {
     if (!createClient) {
         console.log('\n=== Live DB tests skipped (no @supabase/supabase-js) ==========\n');
+        return;
+    }
+    if (!SERVICE_KEY) {
+        console.log('\n=== Live DB tests skipped (CE_SECRET_KEY not set) =============\n');
         return;
     }
     const supabase = createClient(SUPABASE_URL, SERVICE_KEY);

@@ -475,8 +475,12 @@ async function runLive() {
         console.log('\n=== Live DB tests SKIPPED (no @supabase/supabase-js available) ===\n');
         return;
     }
+    const SERVICE_KEY = process.env.CE_SECRET_KEY;
+    if (!SERVICE_KEY) {
+        console.log('\n=== Live DB tests SKIPPED (CE_SECRET_KEY not set) ===\n');
+        return;
+    }
     const SUPABASE_URL = 'https://papgcizhfkngubwofjuo.supabase.co';
-    const SERVICE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InBhcGdjaXpoZmtuZ3Vid29manVvIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc2MTkzMDM1MSwiZXhwIjoyMDc3NTA2MzUxfQ.XwEjEJIxZ6J_3C9UZQ3hvrlm3GsfOCxMz3lYUK_trKg';
     const supabase = createClient(SUPABASE_URL, SERVICE_KEY);
 
     // Use a test student + branch from the live project. The migration's

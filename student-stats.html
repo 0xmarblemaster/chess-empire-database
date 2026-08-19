@@ -355,10 +355,11 @@
     </div>
 
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="supabase-config.js"></script>
     <script src="supabase-data-tournaments.js?v=1771500000"></script>
     <script>
-    const SUPABASE_URL = 'https://papgcizhfkngubwofjuo.supabase.co';
-    const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InBhcGdjaXpoZmtuZ3Vid29manVvIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjE5MzAzNTEsImV4cCI6MjA3NzUwNjM1MX0.lN94-p4L3gUTU1vw_odZt6ruv_K40lOIKXXE80LIS_U';
+    const SUPABASE_URL = window.supabaseConfig.url;
+    const SUPABASE_KEY = window.supabaseConfig.anonKey;
     const sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
     const MONTHS_RU = ['Январь','Февраль','Март','Апрель','Май','Июнь','Июль','Август','Сентябрь','Октябрь','Ноябрь','Декабрь'];

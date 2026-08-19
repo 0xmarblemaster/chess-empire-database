@@ -168,8 +168,8 @@
         try {
             // Call Edge Function to create user with auto-confirmed email
             // This uses the admin API which bypasses email confirmation requirements
-            const supabaseUrl = 'https://papgcizhfkngubwofjuo.supabase.co';
-            const supabaseAnonKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InBhcGdjaXpoZmtuZ3Vid29manVvIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjE5MzAzNTEsImV4cCI6MjA3NzUwNjM1MX0.lN94-p4L3gUTU1vw_odZt6ruv_K40lOIKXXE80LIS_U';
+            const supabaseUrl = window.supabaseConfig.url;
+            const supabaseAnonKey = window.supabaseConfig.anonKey;
 
             const response = await fetch(`${supabaseUrl}/functions/v1/complete-registration`, {
                 method: 'POST',
