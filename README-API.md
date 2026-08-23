@@ -5,7 +5,7 @@ Base URL: `https://papgcizhfkngubwofjuo.supabase.co/functions/v1`
 ## Authentication
 
 All endpoints require one of:
-- Header: `x-api-key: ce-api-2026-k8x9m2p4q7w1`
+- Header: `x-api-key: <CHESS_EMPIRE_API_KEY — see supabase secrets>`
 - Header: `Authorization: Bearer <service_role_key>`
 
 ---
@@ -26,15 +26,15 @@ All endpoints require one of:
 
 ```bash
 # List recent audit entries
-curl -H "x-api-key: ce-api-2026-k8x9m2p4q7w1" \
+curl -H "x-api-key: <CHESS_EMPIRE_API_KEY — see supabase secrets>" \
   "https://papgcizhfkngubwofjuo.supabase.co/functions/v1/analytics-audit?action=recent&limit=10"
 
 # Entity history
-curl -H "x-api-key: ce-api-2026-k8x9m2p4q7w1" \
+curl -H "x-api-key: <CHESS_EMPIRE_API_KEY — see supabase secrets>" \
   "https://papgcizhfkngubwofjuo.supabase.co/functions/v1/analytics-audit?action=entity&entity_type=students&entity_id=123"
 
 # Audit stats
-curl -H "x-api-key: ce-api-2026-k8x9m2p4q7w1" \
+curl -H "x-api-key: <CHESS_EMPIRE_API_KEY — see supabase secrets>" \
   "https://papgcizhfkngubwofjuo.supabase.co/functions/v1/analytics-audit?action=stats"
 ```
 
@@ -54,11 +54,11 @@ curl -H "x-api-key: ce-api-2026-k8x9m2p4q7w1" \
 
 ```bash
 # Status transitions summary
-curl -H "x-api-key: ce-api-2026-k8x9m2p4q7w1" \
+curl -H "x-api-key: <CHESS_EMPIRE_API_KEY — see supabase secrets>" \
   "https://papgcizhfkngubwofjuo.supabase.co/functions/v1/analytics-status?action=transitions"
 
 # Freeze periods for a student
-curl -H "x-api-key: ce-api-2026-k8x9m2p4q7w1" \
+curl -H "x-api-key: <CHESS_EMPIRE_API_KEY — see supabase secrets>" \
   "https://papgcizhfkngubwofjuo.supabase.co/functions/v1/analytics-status?action=freezes&student_id=42"
 ```
 
@@ -80,11 +80,11 @@ curl -H "x-api-key: ce-api-2026-k8x9m2p4q7w1" \
 
 ```bash
 # Session stats
-curl -H "x-api-key: ce-api-2026-k8x9m2p4q7w1" \
+curl -H "x-api-key: <CHESS_EMPIRE_API_KEY — see supabase secrets>" \
   "https://papgcizhfkngubwofjuo.supabase.co/functions/v1/analytics-sessions?action=stats"
 
 # Session detail with actions
-curl -H "x-api-key: ce-api-2026-k8x9m2p4q7w1" \
+curl -H "x-api-key: <CHESS_EMPIRE_API_KEY — see supabase secrets>" \
   "https://papgcizhfkngubwofjuo.supabase.co/functions/v1/analytics-sessions?action=detail&session_id=abc-123"
 ```
 
@@ -102,11 +102,11 @@ curl -H "x-api-key: ce-api-2026-k8x9m2p4q7w1" \
 
 ```bash
 # List all admin/coach users
-curl -H "x-api-key: ce-api-2026-k8x9m2p4q7w1" \
+curl -H "x-api-key: <CHESS_EMPIRE_API_KEY — see supabase secrets>" \
   "https://papgcizhfkngubwofjuo.supabase.co/functions/v1/analytics-users?action=list"
 
 # User summary
-curl -H "x-api-key: ce-api-2026-k8x9m2p4q7w1" \
+curl -H "x-api-key: <CHESS_EMPIRE_API_KEY — see supabase secrets>" \
   "https://papgcizhfkngubwofjuo.supabase.co/functions/v1/analytics-users?action=summary&email=coach@example.com"
 ```
 
@@ -130,15 +130,15 @@ curl -H "x-api-key: ce-api-2026-k8x9m2p4q7w1" \
 
 ```bash
 # Attendance rates by branch
-curl -H "x-api-key: ce-api-2026-k8x9m2p4q7w1" \
+curl -H "x-api-key: <CHESS_EMPIRE_API_KEY — see supabase secrets>" \
   "https://papgcizhfkngubwofjuo.supabase.co/functions/v1/analytics-attendance?action=rates&branch_id=1"
 
 # Low attendance alerts
-curl -H "x-api-key: ce-api-2026-k8x9m2p4q7w1" \
+curl -H "x-api-key: <CHESS_EMPIRE_API_KEY — see supabase secrets>" \
   "https://papgcizhfkngubwofjuo.supabase.co/functions/v1/analytics-attendance?action=alerts&branch_id=1&threshold=60"
 
 # Calendar view
-curl -H "x-api-key: ce-api-2026-k8x9m2p4q7w1" \
+curl -H "x-api-key: <CHESS_EMPIRE_API_KEY — see supabase secrets>" \
   "https://papgcizhfkngubwofjuo.supabase.co/functions/v1/analytics-attendance?action=calendar&branch_id=1&year=2026&month=2"
 ```
 
@@ -157,15 +157,15 @@ curl -H "x-api-key: ce-api-2026-k8x9m2p4q7w1" \
 
 ```bash
 # Top rated students
-curl -H "x-api-key: ce-api-2026-k8x9m2p4q7w1" \
+curl -H "x-api-key: <CHESS_EMPIRE_API_KEY — see supabase secrets>" \
   "https://papgcizhfkngubwofjuo.supabase.co/functions/v1/analytics-leaderboards?action=ratings&limit=10"
 
 # Survival leaderboard
-curl -H "x-api-key: ce-api-2026-k8x9m2p4q7w1" \
+curl -H "x-api-key: <CHESS_EMPIRE_API_KEY — see supabase secrets>" \
   "https://papgcizhfkngubwofjuo.supabase.co/functions/v1/analytics-leaderboards?action=survival&mode=blitz"
 
 # Bot battles leaderboard
-curl -H "x-api-key: ce-api-2026-k8x9m2p4q7w1" \
+curl -H "x-api-key: <CHESS_EMPIRE_API_KEY — see supabase secrets>" \
   "https://papgcizhfkngubwofjuo.supabase.co/functions/v1/analytics-leaderboards?action=bot_battles"
 ```
 
@@ -183,19 +183,19 @@ curl -H "x-api-key: ce-api-2026-k8x9m2p4q7w1" \
 
 ```bash
 # Full student profile
-curl -H "x-api-key: ce-api-2026-k8x9m2p4q7w1" \
+curl -H "x-api-key: <CHESS_EMPIRE_API_KEY — see supabase secrets>" \
   "https://papgcizhfkngubwofjuo.supabase.co/functions/v1/analytics-students?action=profile&student_id=42"
 
 # Rating history with trend
-curl -H "x-api-key: ce-api-2026-k8x9m2p4q7w1" \
+curl -H "x-api-key: <CHESS_EMPIRE_API_KEY — see supabase secrets>" \
   "https://papgcizhfkngubwofjuo.supabase.co/functions/v1/analytics-students?action=ratings&student_id=42&days=90"
 
 # Achievements
-curl -H "x-api-key: ce-api-2026-k8x9m2p4q7w1" \
+curl -H "x-api-key: <CHESS_EMPIRE_API_KEY — see supabase secrets>" \
   "https://papgcizhfkngubwofjuo.supabase.co/functions/v1/analytics-students?action=achievements&student_id=42"
 
 # Ranking
-curl -H "x-api-key: ce-api-2026-k8x9m2p4q7w1" \
+curl -H "x-api-key: <CHESS_EMPIRE_API_KEY — see supabase secrets>" \
   "https://papgcizhfkngubwofjuo.supabase.co/functions/v1/analytics-students?action=ranking&student_id=42"
 ```
 
@@ -262,14 +262,14 @@ curl 'https://app.chessempire.kz/api/tournaments-api/students/search?q=ad'
 
 # 3. Register a known student
 curl -X POST https://app.chessempire.kz/api/tournaments-api/tournaments/<uuid>/register \
-  -H 'x-api-key: ce-api-2026-k8x9m2p4q7w1' \
+  -H 'x-api-key: <CHESS_EMPIRE_API_KEY — see supabase secrets>' \
   -H 'x-source: telegram' \
   -H 'content-type: application/json' \
   -d '{"student_id":"<uuid>"}'
 
 # 4. Or register a free-text player not in the DB
 curl -X POST https://app.chessempire.kz/api/tournaments-api/tournaments/<uuid>/register \
-  -H 'x-api-key: ce-api-2026-k8x9m2p4q7w1' \
+  -H 'x-api-key: <CHESS_EMPIRE_API_KEY — see supabase secrets>' \
   -H 'x-source: whatsapp' \
   -H 'content-type: application/json' \
   -d '{"player_name":"Walk-In Wendy","external_contact":"+77001234567"}'
@@ -290,6 +290,6 @@ supabase functions deploy analytics-leaderboards
 supabase functions deploy analytics-students
 
 # Tournament registration API (or run scripts/deploy-tournaments-api.sh)
-supabase secrets set CHESS_EMPIRE_API_KEY='ce-api-2026-k8x9m2p4q7w1'
+supabase secrets set CHESS_EMPIRE_API_KEY='<CHESS_EMPIRE_API_KEY — see supabase secrets>'
 supabase functions deploy tournaments-api
 ```

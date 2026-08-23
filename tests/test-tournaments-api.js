@@ -619,7 +619,7 @@ function makeReq(method, urlPath, { body, headers } = {}) {
     };
 }
 
-const API_KEY = 'ce-api-2026-k8x9m2p4q7w1';
+const API_KEY = 'ce-api-2026-08c2e0bf820443dd436c';
 
 async function handle(req, supabase) {
     if (req.method === 'OPTIONS') return { status: 204, body: null };

@@ -8,5 +8,5 @@
 window.supabaseConfig = {
     url: 'https://papgcizhfkngubwofjuo.supabase.co',
     anonKey: 'sb_publishable_beDjQ-plNitUkdGYgzMGjw_gBPjHEUl',
-    apiKey: 'ce-api-2026-k8x9m2p4q7w1'
+    apiKey: 'ce-api-2026-08c2e0bf820443dd436c'
 };

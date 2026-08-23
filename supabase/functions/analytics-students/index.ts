@@ -6,7 +6,7 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, x-api-key, x-session-id',
 }
 
-const API_KEY = 'ce-api-2026-k8x9m2p4q7w1'
+const API_KEYS = [Deno.env.get('CHESS_EMPIRE_API_KEY') ?? '', 'ce-api-2026-k8x9m2p4q7w1'].filter((k) => k !== '')
 const SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
 const CE_SECRET_KEY = Deno.env.get('CE_SECRET_KEY') ?? ''
 const DB_KEY = CE_SECRET_KEY || SERVICE_ROLE_KEY
@@ -20,7 +20,7 @@ function validBearer(header: string | null): boolean {
 
 
 function authenticate(req: Request): boolean {
-  return req.headers.get('x-api-key') === API_KEY || validBearer(req.headers.get('authorization'))
+  return API_KEYS.includes(req.headers.get('x-api-key') ?? '') || validBearer(req.headers.get('authorization'))
 }
 
 function json(data: unknown, status = 200) {

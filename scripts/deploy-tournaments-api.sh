@@ -6,7 +6,7 @@
 #   - supabase CLI authenticated on this VPS (`supabase login`)
 #   - project linked (`supabase link --project-ref papgcizhfkngubwofjuo`)
 #   - CHESS_EMPIRE_API_KEY set in the function's secrets:
-#       supabase secrets set CHESS_EMPIRE_API_KEY='ce-api-2026-k8x9m2p4q7w1'
+#       supabase secrets set CHESS_EMPIRE_API_KEY='<CHESS_EMPIRE_API_KEY — see supabase secrets>'
 
 set -euo pipefail
 

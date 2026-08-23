@@ -16,7 +16,7 @@
 
 const path = require('path');
 
-const HARDCODED_EDGE_KEY = 'ce-api-2026-k8x9m2p4q7w1';
+const HARDCODED_EDGE_KEY = 'ce-api-2026-08c2e0bf820443dd436c';
 const TEST_JWT = 'test-anon-jwt';
 
 let passed = 0;

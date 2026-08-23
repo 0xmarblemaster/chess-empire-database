@@ -36,7 +36,7 @@ function assertEqual(actual, expected, msg) {
 
 // === source contract =====================================================
 console.log('\n=== source contract ====================================================\n');
-assert(SRC.includes("const API_KEY = 'ce-api-2026-k8x9m2p4q7w1'"), 'API key matches analytics-students');
+assert(SRC.includes("const API_KEYS = [Deno.env.get('CHESS_EMPIRE_API_KEY') ?? ''"), 'API key read from CHESS_EMPIRE_API_KEY env (matches analytics-students)');
 assert(SRC.includes("x-api-key"), 'CORS allows x-api-key header');
 assert(/Access-Control-Allow-Origin/.test(SRC), 'CORS Allow-Origin present');
 assert(SRC.includes('SUPABASE_URL'), 'reads SUPABASE_URL env');
@@ -116,7 +116,7 @@ function createMockClient(initial) {
 }
 
 // === port of the handler (mirror of supabase/functions/analytics-tournaments/index.ts) ====
-const API_KEY = 'ce-api-2026-k8x9m2p4q7w1';
+const API_KEY = 'ce-api-2026-08c2e0bf820443dd436c';
 function makeRequest(urlStr, headers = {}, method = 'GET') {
     return {
         method,

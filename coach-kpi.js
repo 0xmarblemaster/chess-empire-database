@@ -383,7 +383,7 @@
         if (!fetchFn) return { success: false, error: 'fetch unavailable' };
         const config = o.config || (typeof window !== 'undefined' && window.supabaseConfig) || {};
         const url = config.url || '';
-        const edgeApiKey = config.apiKey || 'ce-api-2026-k8x9m2p4q7w1';
+        const edgeApiKey = config.apiKey || 'ce-api-2026-08c2e0bf820443dd436c';
         const gatewayJwt = config.anonKey || '';
         const endpoint = `${url}/functions/v1/analytics-tournaments?${encodeQuery(query)}`;
         try {
