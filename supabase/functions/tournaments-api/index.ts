@@ -16,7 +16,7 @@ const corsHeaders = {
   'Access-Control-Allow-Methods': 'GET, POST, DELETE, OPTIONS',
 }
 
-const API_KEYS = [Deno.env.get('CHESS_EMPIRE_API_KEY') ?? '', 'ce-api-2026-k8x9m2p4q7w1'].filter((k) => k !== '')
+const API_KEYS = [Deno.env.get('CHESS_EMPIRE_API_KEY') ?? ''].filter((k) => k !== '')
 const SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
 const CE_SECRET_KEY = Deno.env.get('CE_SECRET_KEY') ?? ''
 const DB_KEY = CE_SECRET_KEY || SERVICE_ROLE_KEY
