@@ -345,10 +345,16 @@ function editCoach(coachId) {
 async function saveCoach(event) {
     event.preventDefault();
 
+    // The coachBranch select stores branch names; resolve to the id because
+    // the Supabase write path needs branch_id (and coach_branches sync).
+    const selectedBranchName = document.getElementById('coachBranch').value;
+    const selectedBranch = (window.branches || branches || []).find(b => b.name === selectedBranchName);
+
     const coachData = {
         firstName: document.getElementById('coachFirstName').value.trim(),
         lastName: document.getElementById('coachLastName').value.trim(),
-        branch: document.getElementById('coachBranch').value,
+        branch: selectedBranchName,
+        branchId: selectedBranch?.id || null,
         email: document.getElementById('coachEmail').value.trim(),
         phone: document.getElementById('coachPhone').value.trim(),
         bio: document.getElementById('coachBio')?.value.trim() || null,

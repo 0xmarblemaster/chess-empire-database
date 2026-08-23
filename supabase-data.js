@@ -515,6 +515,18 @@ const supabaseData = {
             throw error;
         }
 
+        // The attendance dropdown resolves branch assignments exclusively from
+        // coach_branches (see getCoaches), so the junction row must be created
+        // alongside the legacy branch_id column or the coach stays invisible there.
+        if (data.branch_id) {
+            const { error: junctionError } = await window.supabaseClient
+                .from('coach_branches')
+                .insert([{ coach_id: data.id, branch_id: data.branch_id }]);
+            if (junctionError) {
+                console.error('Error syncing coach_branches on add:', junctionError);
+            }
+        }
+
         // Transform to match data.js format
         return {
             id: data.id,
@@ -560,6 +572,17 @@ const supabaseData = {
         if (error) {
             console.error('Error updating coach:', error);
             throw error;
+        }
+
+        // Keep coach_branches aligned with the (single-select) branch UI so the
+        // attendance dropdown reflects branch changes; junction failure is
+        // non-fatal since the coach row itself was already updated.
+        if (data.branch_id) {
+            try {
+                await this.updateCoachBranches(id, [data.branch_id]);
+            } catch (junctionError) {
+                console.error('Error syncing coach_branches on update:', junctionError);
+            }
         }
 
         // Transform to match data.js format
