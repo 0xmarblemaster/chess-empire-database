@@ -195,12 +195,9 @@ const REQUIRED_KEYS = [
     'tournaments.noUpcoming',
     'tournaments.registerButton',
     'tournaments.registrationClosed',
-    'tournaments.registrationFull',
-    'tournaments.searchStudent',
-    'tournaments.confirmRegister',
-    'tournaments.registeredSuccess',
-    'tournaments.alreadyRegistered',
-    'tournaments.tournamentNotFound',
+    // Registration moved into the Chess Empire app — the public page shows
+    // this note beneath the (redirect) Register button. See ce-tourn-gate-p4.
+    'tournaments.appRegisterNote',
     'tournaments.fields.info',
     'tournaments.fields.date',
     'tournaments.fields.time',
@@ -236,36 +233,51 @@ assert(/data-i18n="tournaments\.title"/.test(HTML),
     'page header binds to tournaments.title i18n key');
 assert(/data-lang="en"/.test(HTML) && /data-lang="ru"/.test(HTML) && /data-lang="kk"/.test(HTML),
     'language switcher exposes en / ru / kk buttons');
-assert(/id="registerModal"/.test(HTML),
-    'register modal markup present');
-assert(/id="toastStack"/.test(HTML),
-    'toast stack container present');
+// Phase 4: the name-search registration modal + toast flow was removed from
+// the public page — registration now happens in the Chess Empire app.
+assert(!/id="registerModal"/.test(HTML),
+    'register modal markup removed (registration moved to the app)');
+assert(!/id="toastStack"/.test(HTML),
+    'toast stack removed (no in-page registration to report on)');
 
 // ---------------------------------------------------------------------------
 // 6. tournaments.js — RPC name + roster behavior
 // ---------------------------------------------------------------------------
-console.log('\n=== tournaments.js — RPC + roster contract ===========================\n');
+console.log('\n=== tournaments.js — read paths + app redirect contract ==============\n');
 
-assert(/supabase\.rpc\('register_for_tournament'/.test(JS),
-    'tournaments.js calls the register_for_tournament RPC');
-assert(/p_tournament_id/.test(JS) && /p_student_id/.test(JS),
-    'RPC payload uses positional parameter names p_tournament_id, p_student_id');
-// Migration 050 added guest registrations — the join must be a left join so
-// guest rows (student_id IS NULL) survive and the public capacity meter stays
-// truthful. Roster items expose a `display` field (full name for students,
-// "Firstname L." for guests) instead of raw first/last.
+// Phase 4: the browser no longer calls the register_for_tournament RPC or the
+// student-search flow — registration happens in the Chess Empire app.
+assert(!/register_for_tournament/.test(JS),
+    'tournaments.js no longer calls the register_for_tournament RPC');
+assert(!/studentSearchInput/.test(JS) && !/onSearchInput/.test(JS),
+    'the name-search modal flow is fully removed from tournaments.js');
+assert(!/showToast/.test(JS),
+    'toast helper removed (no in-page registration result to report)');
+
+// Register button now deep-links into the app with the tournament id.
+assert(/APP_TOURNAMENTS_URL\s*=\s*'https:\/\/chess-empire\.chesster\.io\/tournaments'/.test(JS),
+    'tournaments.js targets the app tournaments URL');
+assert(/window\.location\.href\s*=\s*appRegisterUrl\(/.test(JS),
+    'Register button redirects to the app (same tab)');
+assert(/tournament=\$\{encodeURIComponent\(tournamentId\)\}/.test(JS),
+    'app URL deep-links the tournament id as ?tournament=<id>');
+assert(/tt\('tournaments\.appRegisterNote'\)/.test(JS),
+    'the app-registration note renders near the Register button');
+
+// Read paths must be untouched. Migration 050 added guest registrations — the
+// roster join must remain a left join so guest rows (student_id IS NULL)
+// survive and the public capacity meter stays truthful. Roster items expose a
+// `display` field (full name for students, guest display_name otherwise).
 assert(/students\(first_name, last_name\)/.test(JS) && !/students!inner/.test(JS),
     'roster query left-joins students with first_name + last_name (no !inner)');
 assert(/display_name/.test(JS) && /r\.display/.test(JS),
     'roster renders via the `display` field (handles student + guest in one path)');
+assert(/get_public_tournament_schedule/.test(JS),
+    'schedule RPC read path retained');
 assert(/POLL_INTERVAL_MS\s*=\s*15000/.test(JS),
     '15s polling fallback when Realtime is unavailable');
 assert(/REALTIME_CONNECT_TIMEOUT_MS\s*=\s*5000/.test(JS),
     '5s Realtime connect timeout before falling back to polling');
-assert(/SEARCH_DEBOUNCE_MS\s*=\s*250/.test(JS),
-    'student search is debounced to 250ms');
-assert(/'duplicate'/.test(JS) && /'full'/.test(JS) && /'closed'/.test(JS) && /'not_found'/.test(JS),
-    'tournaments.js handles all four register_for_tournament failure reasons');
 
 // ---------------------------------------------------------------------------
 // 7. tournaments.js — public UI treats expired tournaments as closed
@@ -287,20 +299,18 @@ assert(/function todayInAlmaty\(/.test(JS),
 assert(/function tournamentStartPassed\(/.test(JS),
     'tournamentStartPassed(t, now) helper is defined');
 
-// All four sites that previously gated UI on `deadlinePassed` must now also
-// consult `tournamentIsExpired` (countdown, row pill, detail panel, modal
-// guard). Use a single regex that matches both calls being OR'd together.
+// The sites that gate UI on `deadlinePassed` must also consult
+// `tournamentIsExpired` (countdown, row pill, detail panel). The Phase-4
+// modal-guard site was removed with the modal. Count: decl + 3 gates.
 const expiredCallSites = JS.match(/tournamentIsExpired\(/g) || [];
-assert(expiredCallSites.length >= 5,
-    'tournamentIsExpired is invoked from at least 5 sites (decl + 4 gates)');
+assert(expiredCallSites.length >= 4,
+    'tournamentIsExpired is invoked from at least 4 sites (decl + 3 gates)');
 assert(/countdownHtml[\s\S]{0,400}tournamentIsExpired\(/.test(JS),
     'countdownHtml suppresses the countdown when the tournament is expired');
 assert(/tournamentRowHtml[\s\S]{0,800}tournamentIsExpired\(/.test(JS),
     'tournamentRowHtml consults tournamentIsExpired for the closed pill + deadline label');
 assert(/renderTournamentDetail[\s\S]{0,800}tournamentIsExpired\(/.test(JS),
     'renderTournamentDetail consults tournamentIsExpired for the register button');
-assert(/isDeadlinePassed\(tNow\) \|\| tournamentIsExpired\(tNow\)/.test(JS),
-    'doRegister modal guard checks both isDeadlinePassed and tournamentIsExpired');
 
 // Behavioral exercise of the helper. Extracts the function body from
 // tournaments.js, plus the two helpers it depends on, and runs them

@@ -5,7 +5,8 @@
  *  - Branch click → expand to show upcoming tournaments (sorted by date).
  *  - Tournament click → detail panel with capacity meter, full-name roster,
  *    and a Register button.
- *  - Register modal → debounced student search → confirm → atomic RPC.
+ *  - Register button deep-links into the Chess Empire app, where Clerk-gated,
+ *    verified members self-register. This page is a read-only schedule viewer.
  *  - Live roster via Supabase Realtime with a 15s polling fallback.
  *
  * Vanilla JS, no build step. Designed to mirror ratings.js conventions.
@@ -19,10 +20,14 @@ const EXCLUDED_BRANCHES = ['НИШ', 'Zhandosova'];
 const POLL_INTERVAL_MS = 15000;
 // Time we wait for Realtime CHANNEL_SUBSCRIBED before activating polling.
 const REALTIME_CONNECT_TIMEOUT_MS = 5000;
-// Search debounce (ms) per task spec.
-const SEARCH_DEBOUNCE_MS = 250;
-const SEARCH_LIMIT = 8;
-const MIN_SEARCH_CHARS = 2;
+
+// Registration lives in the Chess Empire app (Clerk-gated, verified members
+// only). The Register button deep-links here with the tournament id so the
+// app can preselect it.
+const APP_TOURNAMENTS_URL = 'https://chess-empire.chesster.io/tournaments';
+function appRegisterUrl(tournamentId) {
+    return `${APP_TOURNAMENTS_URL}?tournament=${encodeURIComponent(tournamentId)}`;
+}
 
 const tournamentsApp = {
     branches: [],                  // [{ id, name, upcomingCount }]
@@ -66,7 +71,6 @@ const tournamentsApp = {
         }
     });
 
-    initModal();
     // Localize the HTML shell (branch names + "Loading…" pills) so the
     // pre-RPC paint matches the current language. The shell stays visible
     // until the RPC resolves — no "No tournaments" flash.
@@ -645,11 +649,16 @@ function renderTournamentDetail(tournamentId) {
             <button type="button" class="register-btn" data-register-for="${escapeAttr(t.id)}" ${isClosed ? 'disabled' : ''}>
                 ${escapeHtml(btnLabel)}
             </button>
+            <p class="register-note">${escapeHtml(tt('tournaments.appRegisterNote'))}</p>
         </div>`;
 
     const btn = panel.querySelector('[data-register-for]');
     if (btn && !btn.disabled) {
-        btn.addEventListener('click', () => openRegisterModal(t.id));
+        // Registration moved into the Chess Empire app — deep-link there with
+        // the tournament id, in the same tab.
+        btn.addEventListener('click', () => {
+            window.location.href = appRegisterUrl(t.id);
+        });
     }
 }
 
@@ -738,235 +747,6 @@ function teardownLiveUpdates() {
         clearInterval(tournamentsApp.activePollTimer);
         tournamentsApp.activePollTimer = null;
     }
-}
-
-// ---------------------------------------------------------------------------
-// Registration modal
-// ---------------------------------------------------------------------------
-let modalState = { tournamentId: null, mode: 'search', searchTimer: null, results: [] };
-
-function initModal() {
-    const overlay = document.getElementById('registerModal');
-    overlay.addEventListener('click', (e) => {
-        if (e.target === overlay) closeRegisterModal();
-    });
-    document.getElementById('registerModalClose').addEventListener('click', closeRegisterModal);
-}
-
-function openRegisterModal(tournamentId) {
-    modalState.tournamentId = tournamentId;
-    modalState.mode = 'search';
-    modalState.results = [];
-    renderModalBody();
-    document.getElementById('registerModal').classList.add('open');
-}
-
-function closeRegisterModal() {
-    document.getElementById('registerModal').classList.remove('open');
-    if (modalState.searchTimer) {
-        clearTimeout(modalState.searchTimer);
-        modalState.searchTimer = null;
-    }
-    modalState = { tournamentId: null, mode: 'search', searchTimer: null, results: [] };
-}
-
-function renderModalBody() {
-    const body = document.getElementById('registerModalBody');
-    if (modalState.mode === 'search') {
-        body.innerHTML = `
-            <input type="text" class="search-input" id="studentSearchInput"
-                placeholder="${escapeAttr(tt('tournaments.searchStudent'))}"
-                autocomplete="off"
-                autocapitalize="off">
-            <div class="search-hint" id="studentSearchHint">${escapeHtml(tt('tournaments.searchHint'))}</div>
-            <div class="search-results" id="studentSearchResults"></div>`;
-        const input = document.getElementById('studentSearchInput');
-        input.focus();
-        input.addEventListener('input', onSearchInput);
-    } else if (modalState.mode === 'confirm') {
-        const student = modalState.confirmStudent;
-        const t = findTournament(modalState.tournamentId);
-        const fullName = (student.first_name + ' ' + student.last_name).trim();
-        const tournLabel = `${composeTournamentTitle(t, branchNameById(t.branch_id))} — ${formatDate(t.tournament_date)}`;
-        body.innerHTML = `
-            <div class="confirm-box">
-                <p>${escapeHtml(tt('tournaments.confirmRegister', { name: fullName, tournament: tournLabel }))}</p>
-                <div class="confirm-actions">
-                    <button type="button" class="btn-secondary" id="confirmCancelBtn">${escapeHtml(tt('tournaments.cancel'))}</button>
-                    <button type="button" class="btn-primary" id="confirmRegisterBtn">${escapeHtml(tt('tournaments.confirm'))}</button>
-                </div>
-            </div>`;
-        document.getElementById('confirmCancelBtn').addEventListener('click', () => {
-            modalState.mode = 'search';
-            renderModalBody();
-        });
-        document.getElementById('confirmRegisterBtn').addEventListener('click', doRegister);
-    }
-}
-
-function onSearchInput(e) {
-    const q = e.target.value.trim();
-    if (modalState.searchTimer) clearTimeout(modalState.searchTimer);
-    const hint = document.getElementById('studentSearchHint');
-    const results = document.getElementById('studentSearchResults');
-
-    if (q.length < MIN_SEARCH_CHARS) {
-        if (hint) { hint.style.display = ''; hint.textContent = tt('tournaments.searchHint'); }
-        results.innerHTML = '';
-        return;
-    }
-
-    modalState.searchTimer = setTimeout(() => doSearch(q), SEARCH_DEBOUNCE_MS);
-}
-
-async function doSearch(q) {
-    const supabase = window.supabaseClient;
-    const hint = document.getElementById('studentSearchHint');
-    const results = document.getElementById('studentSearchResults');
-    if (!results) return;
-
-    const sanitized = q.replace(/[%_]/g, ''); // strip SQL LIKE wildcards
-    const filter = `first_name.ilike.%${sanitized}%,last_name.ilike.%${sanitized}%`;
-    const { data, error } = await supabase
-        .from('students')
-        .select('id, first_name, last_name, status, branch_id, branches(name)')
-        .or(filter)
-        .in('status', ['active', 'frozen'])
-        .order('last_name', { ascending: true })
-        .limit(SEARCH_LIMIT);
-
-    if (error) {
-        console.error('student search failed:', error);
-        if (hint) { hint.style.display = ''; hint.textContent = tt('tournaments.loadError'); }
-        return;
-    }
-    modalState.results = data || [];
-    if (modalState.results.length === 0) {
-        if (hint) { hint.style.display = ''; hint.textContent = tt('tournaments.noResults'); }
-        results.innerHTML = '';
-        return;
-    }
-    if (hint) hint.style.display = 'none';
-    results.innerHTML = modalState.results.map(s => `
-        <div class="search-row" data-student-id="${escapeAttr(s.id)}">
-            <div class="name">${escapeHtml((s.first_name + ' ' + s.last_name).trim())}</div>
-            <span class="branch-chip">${escapeHtml(localizeBranchName(s.branches?.name || ''))}</span>
-        </div>`).join('');
-    results.querySelectorAll('.search-row').forEach(row => {
-        row.addEventListener('click', () => {
-            const id = row.dataset.studentId;
-            const student = modalState.results.find(r => r.id === id);
-            if (!student) return;
-            modalState.mode = 'confirm';
-            modalState.confirmStudent = student;
-            renderModalBody();
-        });
-    });
-}
-
-async function doRegister() {
-    const supabase = window.supabaseClient;
-    const tournamentId = modalState.tournamentId;
-    const studentId = modalState.confirmStudent.id;
-    const btn = document.getElementById('confirmRegisterBtn');
-
-    // Client-side deadline guard — defense in depth. The RPC will reject too,
-    // but this avoids a needless round-trip when the deadline expired or the
-    // tournament date/start_time passed while the modal was open.
-    const tNow = findTournament(tournamentId);
-    if (tNow && (isDeadlinePassed(tNow) || tournamentIsExpired(tNow))) {
-        showToast(tt('tournaments.registrationClosed'), 'info');
-        closeRegisterModal();
-        refreshTournamentLive(tournamentId);
-        return;
-    }
-
-    if (btn) { btn.disabled = true; btn.textContent = '…'; }
-
-    const { data, error } = await supabase.rpc('register_for_tournament', {
-        p_tournament_id: tournamentId,
-        p_student_id: studentId,
-    });
-
-    if (error) {
-        console.error('register RPC error:', error);
-        showToast(tt('tournaments.loadError'), 'error');
-        if (btn) { btn.disabled = false; btn.textContent = tt('tournaments.confirm'); }
-        return;
-    }
-
-    handleRegisterResult(data, tournamentId);
-}
-
-function handleRegisterResult(data, tournamentId) {
-    const result = data || {};
-    if (result.ok) {
-        showToast(tt('tournaments.registeredSuccess'), 'success');
-        closeRegisterModal();
-        refreshTournamentLive(tournamentId);
-        return;
-    }
-    switch (result.reason) {
-        case 'full':
-            showToast(tt('tournaments.registrationFull'), 'warning');
-            closeRegisterModal();
-            refreshTournamentLive(tournamentId);
-            break;
-        case 'closed':
-        case 'deadline_passed':
-            showToast(tt('tournaments.registrationClosed'), 'info');
-            closeRegisterModal();
-            refreshTournamentLive(tournamentId);
-            break;
-        case 'duplicate':
-            showToast(tt('tournaments.alreadyRegistered'), 'info');
-            closeRegisterModal();
-            break;
-        case 'level_too_low': {
-            const msg = tt('tournaments.levelTooLow', {
-                level: result.student_level ?? '—',
-                required: result.required_level ?? 2,
-            });
-            showToast(msg, 'warning');
-            closeRegisterModal();
-            break;
-        }
-        case 'ineligible': {
-            const msg = tt('tournaments.ineligibleForLeague', {
-                rating: result.student_rating ?? '—',
-                league: result.tournament_league,
-                studentLeague: result.student_league,
-            });
-            showToast(msg, 'warning');
-            closeRegisterModal();
-            break;
-        }
-        case 'not_found':
-            showToast(tt('tournaments.tournamentNotFound'), 'error');
-            closeRegisterModal();
-            break;
-        default:
-            showToast(tt('tournaments.loadError'), 'error');
-            closeRegisterModal();
-    }
-}
-
-// ---------------------------------------------------------------------------
-// Toast notifications
-// ---------------------------------------------------------------------------
-function showToast(message, type) {
-    const stack = document.getElementById('toastStack');
-    if (!stack) return;
-    const toast = document.createElement('div');
-    toast.className = `toast ${type || 'info'}`;
-    toast.textContent = message;
-    stack.appendChild(toast);
-    setTimeout(() => {
-        toast.style.opacity = '0';
-        toast.style.transform = 'translateX(100%)';
-        toast.style.transition = 'all 0.25s ease-in';
-    }, 2750);
-    setTimeout(() => { toast.remove(); }, 3000);
 }
 
 // ---------------------------------------------------------------------------
