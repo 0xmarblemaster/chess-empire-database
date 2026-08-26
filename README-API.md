@@ -247,6 +247,7 @@ Each response uses a consistent envelope:
 | `GET` | `/tournaments/:id` | — | One tournament |
 | `GET` | `/tournaments/:id/registrations` | — | Roster — `{id, source, registered_at, display_name}` (no `external_contact`) |
 | `GET` | `/students/search?q=&limit=` | — | Autocomplete active+frozen students |
+| `GET` | `/students/:student_id/registrations` | key | This student's registrations — `{id, tournament_id, registered_at}`, `registered_at` ascending. Empty array if none. Key-gated (links registrations to student identity) |
 | `POST` | `/tournaments/:id/register` | key | Body: `{ student_id }` OR `{ player_name }`. Optional `external_contact`. Header `x-source: telegram\|whatsapp\|online\|web` |
 | `DELETE` | `/registrations/:registration_id` | key | Cancel a registration; reopens the tournament if it was full |
 | `GET` | `/openapi.json` | — | Hand-written OpenAPI 3.0.3 contract |
@@ -273,6 +274,10 @@ curl -X POST https://app.chessempire.kz/api/tournaments-api/tournaments/<uuid>/r
   -H 'x-source: whatsapp' \
   -H 'content-type: application/json' \
   -d '{"player_name":"Walk-In Wendy","external_contact":"+77001234567"}'
+
+# 5. Check what a student is registered for (key-gated → resolves the id for self-cancel)
+curl 'https://app.chessempire.kz/api/tournaments-api/students/<uuid>/registrations' \
+  -H 'x-api-key: <CHESS_EMPIRE_API_KEY — see supabase secrets>'
 ```
 
 The OpenAPI spec at `/openapi.json` is the source of truth for request/response

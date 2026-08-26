@@ -278,6 +278,28 @@ const OPENAPI_SPEC = {
         },
       },
     },
+    '/students/{student_id}/registrations': {
+      get: {
+        summary: "List a student's tournament registrations (key-gated — links registrations to student identity)",
+        security: [{ ApiKeyAuth: [] }],
+        parameters: [{ name: 'student_id', in: 'path', required: true, schema: { type: 'string', format: 'uuid' } }],
+        responses: {
+          '200': { description: 'OK', content: { 'application/json': { schema: {
+            type: 'object',
+            properties: { ok: { type: 'boolean' }, registrations: { type: 'array', items: {
+              type: 'object',
+              properties: {
+                id: { type: 'string', format: 'uuid' },
+                tournament_id: { type: 'string', format: 'uuid' },
+                registered_at: { type: 'string', format: 'date-time' },
+              },
+            } } },
+          } } } },
+          '400': { description: 'Bad request',  content: { 'application/json': { schema: { $ref: '#/components/schemas/Error' } } } },
+          '401': { description: 'Unauthorized', content: { 'application/json': { schema: { $ref: '#/components/schemas/Error' } } } },
+        },
+      },
+    },
     '/openapi.json': {
       get: { summary: 'This document', responses: { '200': { description: 'OpenAPI spec' } } },
     },
@@ -447,6 +469,29 @@ async function searchStudents(ctx: Ctx, url: URL): Promise<Response> {
   return ok({ students })
 }
 
+// Key-gated: links registrations to a student identity, so it must NOT be
+// publicly readable. Returns only that student's rows (never any other
+// student's data), so no student_id leaks into a public response.
+async function getStudentRegistrations(ctx: Ctx, studentId: string): Promise<Response> {
+  if (!authorized(ctx.req)) return err('unauthorized', 401)
+  if (!isUuid(studentId)) return err('invalid_input', 400)
+
+  const { data, error } = await ctx.supabase
+    .from('tournament_registrations')
+    .select('id, tournament_id, registered_at')
+    .eq('student_id', studentId)
+    .order('registered_at', { ascending: true })
+  if (error) throw error
+
+  const registrations = (data || []).map((r: any) => ({
+    id: r.id,
+    tournament_id: r.tournament_id,
+    registered_at: r.registered_at,
+  }))
+
+  return ok({ registrations })
+}
+
 async function registerPlayer(ctx: Ctx, tournamentId: string): Promise<Response> {
   if (!authorized(ctx.req)) return err('unauthorized', 401)
   if (!isUuid(tournamentId)) return err('invalid_input', 400)
@@ -587,6 +632,9 @@ export async function handle(req: Request): Promise<Response> {
     }
     if (method === 'GET' && path === '/students/search') {
       const r = await searchStudents(ctx, url); status = r.status; return r
+    }
+    if (method === 'GET' && (m = matchPath('/students/:student_id/registrations', path))) {
+      const r = await getStudentRegistrations(ctx, m.student_id); status = r.status; return r
     }
 
     const r = err('not_found', 404); status = r.status; return r

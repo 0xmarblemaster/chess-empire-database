@@ -145,6 +145,7 @@ assert(/'\/tournaments\/:id\/registrations'/.test(FN), 'routes /tournaments/:id/
 assert(/'\/tournaments\/:id\/register'/.test(FN), 'routes POST /tournaments/:id/register');
 assert(/'\/registrations\/:registration_id'/.test(FN), 'routes DELETE /registrations/:registration_id');
 assert(/'\/students\/search'/.test(FN), 'routes /students/search');
+assert(/'\/students\/:student_id\/registrations'/.test(FN), 'routes /students/:student_id/registrations');
 assert(/'\/openapi\.json'/.test(FN), 'routes /openapi.json');
 
 assert(/НИШ/.test(FN), 'branches filter excludes НИШ');
@@ -740,6 +741,13 @@ async function handle(req, supabase) {
         });
         return ok({ students });
     }
+    if (method === 'GET' && (m = matchPath('/students/:student_id/registrations', path))) {
+        if (!auth()) return fail('unauthorized', 401);
+        if (!isUuid(m.student_id)) return fail('invalid_input', 400);
+        const { data } = await supabase.from('tournament_registrations').select('id, tournament_id, registered_at').eq('student_id', m.student_id);
+        const registrations = (data || []).map(r => ({ id: r.id, tournament_id: r.tournament_id, registered_at: r.registered_at }));
+        return ok({ registrations });
+    }
     return fail('not_found', 404);
 }
 
@@ -891,6 +899,42 @@ async function handle(req, supabase) {
     const delNoKey = await handle(makeReq('DELETE', `/tournaments-api/registrations/${cap1.body.registration_id}`), makeClient());
     assertEqual(delNoKey.status, 401, 'DELETE without key → 401');
 
+    // 7n2. GET /students/:student_id/registrations — key-gated lookup
+    // No key → 401.
+    const sregNoKey = await handle(makeReq('GET', `/tournaments-api/students/${STUDENT_A}/registrations`), makeClient());
+    assertEqual(sregNoKey.status, 401, 'student registrations without x-api-key → 401');
+    assertEqual(sregNoKey.body.reason, 'unauthorized', 'student registrations without key → reason=unauthorized');
+
+    // Bad UUID → 400.
+    const sregBadId = await handle(makeReq('GET', '/tournaments-api/students/not-a-uuid/registrations', { headers: { 'x-api-key': API_KEY } }), makeClient());
+    assertEqual(sregBadId.status, 400, 'student registrations with bad uuid → 400');
+    assertEqual(sregBadId.body.reason, 'invalid_input', 'student registrations with bad uuid → reason=invalid_input');
+
+    // Valid → 200 with the right shape and ONLY this student's rows.
+    const sregOk = await handle(makeReq('GET', `/tournaments-api/students/${STUDENT_A}/registrations`, { headers: { 'x-api-key': API_KEY } }), makeClient());
+    assertEqual(sregOk.status, 200, 'student registrations with key + valid uuid → 200');
+    assertEqual(sregOk.body.ok, true, 'student registrations returns ok:true');
+    assert(Array.isArray(sregOk.body.registrations), 'student registrations returns an array');
+    const expectedA = rpcStore.registrations.filter(r => r.student_id === STUDENT_A);
+    assertEqual(sregOk.body.registrations.length, expectedA.length,
+        "student registrations returns exactly this student's rows");
+    assert(sregOk.body.registrations.length > 0, 'STUDENT_A has at least one registration to inspect');
+    for (const row of sregOk.body.registrations) {
+        assertEqual(Object.keys(row).sort(), ['id', 'registered_at', 'tournament_id'],
+            `student registration row shape is {id, tournament_id, registered_at} (id=${row.id})`);
+        assert(!('student_id' in row), `student registration row does NOT leak student_id (id=${row.id})`);
+        assert(expectedA.some(e => e.id === row.id), `row ${row.id} belongs to STUDENT_A`);
+    }
+    // registered_at ascending order.
+    const times = sregOk.body.registrations.map(r => r.registered_at);
+    const sortedTimes = [...times].sort();
+    assertEqual(times, sortedTimes, 'student registrations ordered by registered_at ascending');
+
+    // Student with no rows (incl. unknown student — no existence check) → 200 empty array.
+    const sregEmpty = await handle(makeReq('GET', `/tournaments-api/students/${STUDENT_C}/registrations`, { headers: { 'x-api-key': API_KEY } }), makeClient());
+    assertEqual(sregEmpty.status, 200, 'student with no registrations → 200');
+    assertEqual(sregEmpty.body, { ok: true, registrations: [] }, 'student with no registrations → empty array');
+
     // 7n. /openapi.json
     const openapiResp = await handle(makeReq('GET', '/tournaments-api/openapi.json'), makeClient());
     assertEqual(openapiResp.status, 200, 'GET /openapi.json → 200');
@@ -912,7 +956,7 @@ async function handle(req, supabase) {
     const openapiBlockEnd   = FN.indexOf('// ─── Route handlers');
     assert(openapiBlockStart > 0 && openapiBlockEnd > openapiBlockStart, 'OPENAPI_SPEC block found in edge function source');
     const openapiBlock = FN.slice(openapiBlockStart, openapiBlockEnd);
-    for (const route of ['/branches', '/tournaments', '/tournaments/{id}', '/tournaments/{id}/registrations', '/tournaments/{id}/register', '/registrations/{registration_id}', '/students/search', '/openapi.json']) {
+    for (const route of ['/branches', '/tournaments', '/tournaments/{id}', '/tournaments/{id}/registrations', '/tournaments/{id}/register', '/registrations/{registration_id}', '/students/search', '/students/{student_id}/registrations', '/openapi.json']) {
         assert(openapiBlock.includes(`'${route}'`), `OpenAPI spec lists path '${route}'`);
     }
     // The OpenAPI Reason schema is built from the runtime REASONS array via
