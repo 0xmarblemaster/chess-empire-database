@@ -131,10 +131,12 @@ const modalBlock = (() => {
     const end = HTML.indexOf('<!-- Attendance Import Modal', start);
     return HTML.slice(start, end > 0 ? end : start + 4000);
 })();
-for (const fld of ['first_name','last_name','phone','email','age','rating']) {
+for (const fld of ['first_name','last_name','phone','age','rating']) {
     assert(new RegExp(`name="${fld}"`).test(modalBlock),
         `guest modal has input name="${fld}"`);
 }
+assert(!/name="email"/.test(modalBlock),
+    'guest modal no longer has an email input (email is optional / removed)');
 assert(/name="phone"[^>]*pattern=/.test(modalBlock),
     'phone input enforces pattern via HTML5');
 assert(/name="age"[^>]*min="4"[^>]*max="99"/.test(modalBlock),
@@ -158,9 +160,11 @@ const submitBlock = (() => {
     const s = JS.indexOf('async function submitAddGuest(');
     return JS.slice(s, s + 3000);
 })();
-for (const param of ['p_tournament_id','p_guest_first_name','p_guest_last_name','p_guest_phone','p_guest_email','p_guest_age','p_guest_rating']) {
+for (const param of ['p_tournament_id','p_guest_first_name','p_guest_last_name','p_guest_phone','p_guest_age','p_guest_rating']) {
     assert(submitBlock.includes(param), `submitAddGuest sends ${param}`);
 }
+assert(!submitBlock.includes('p_guest_email'),
+    'submitAddGuest no longer sends p_guest_email (email is optional / removed)');
 assert(/\.rpc\(['"]register_for_tournament['"]/.test(submitBlock),
     'submitAddGuest calls register_for_tournament');
 assert(/p_source[:\s]+['"]admin['"]/.test(submitBlock),
@@ -221,7 +225,6 @@ const REQUIRED_KEYS = [
     'admin.tournaments.guestForm.firstName',
     'admin.tournaments.guestForm.lastName',
     'admin.tournaments.guestForm.phone',
-    'admin.tournaments.guestForm.email',
     'admin.tournaments.guestForm.age',
     'admin.tournaments.guestForm.rating',
     'admin.tournaments.guestForm.submit',
@@ -250,6 +253,45 @@ for (const lang of ['en','ru','kk']) {
             `i18n[${lang}] has "${k}"`);
     }
 }
+
+// ---------------------------------------------------------------------------
+// (g) migration 070 — guest email optional + duplicate-by-phone
+// ---------------------------------------------------------------------------
+console.log('\n=== (g) supabase/migrations/070 — email optional, dup-by-phone ====\n');
+
+const MIG070 = fs.readFileSync(
+    path.join(ROOT, 'supabase', 'migrations', '070_guest_email_optional.sql'), 'utf8');
+
+assert(/ALTER TABLE tournament_guest_contacts\s+ALTER COLUMN email DROP NOT NULL/i.test(MIG070),
+    'migration 070 drops NOT NULL on tournament_guest_contacts.email');
+assert(/ADD CONSTRAINT tgc_email_format\s+CHECK \(email IS NULL OR email ~\*/i.test(MIG070),
+    'migration 070 relaxes email format CHECK to allow NULL');
+assert(/CREATE OR REPLACE FUNCTION[\s\S]*register_for_tournament/.test(MIG070),
+    'migration 070 replaces register_for_tournament');
+
+// Email validation is skipped when empty and stored as NULL.
+assert(/IF length\(v_email\) = 0 THEN\s*\n\s*v_email := NULL;/.test(MIG070),
+    'migration 070 stores NULL when guest email is empty (validation skipped)');
+assert(!/length\(v_email\) = 0 OR v_email !~\*/.test(MIG070),
+    'migration 070 no longer rejects an empty guest email');
+
+// Duplicate-guest detection now keys on normalized phone, not email.
+const dupBlock070 = (() => {
+    const s = MIG070.indexOf("'duplicate_guest'");
+    return MIG070.slice(Math.max(0, s - 500), s + 60);
+})();
+assert(/regexp_replace\(\s*gc\.phone[\s\S]*=\s*v_phone_digits/.test(dupBlock070),
+    'migration 070 duplicate-guest check compares normalized phone digits');
+assert(!/lower\(gc\.email\)\s*=\s*v_email/.test(dupBlock070),
+    'migration 070 duplicate-guest check no longer uses email');
+
+// Phone stays required.
+assert(/length\(v_phone\) = 0 OR v_phone !~ /.test(MIG070),
+    'migration 070 keeps phone required');
+
+// Security posture from 069 preserved.
+assert(/REVOKE EXECUTE ON FUNCTION[\s\S]*FROM anon, PUBLIC/.test(MIG070),
+    'migration 070 keeps anon + PUBLIC execute revoked');
 
 // ---------------------------------------------------------------------------
 // (f) sandbox-exec submitAddGuest — happy path + error reasons
@@ -369,12 +411,48 @@ async function runSandbox() {
         assertEqual(p.p_tournament_id, 'tid-1', 'happy path: tournament id forwarded');
         assertEqual(p.p_guest_first_name, 'Alice', 'happy path: first_name passed');
         assertEqual(p.p_guest_last_name, 'Wonder', 'happy path: last_name passed');
-        assertEqual(p.p_guest_email, 'a@b.co', 'happy path: email lower-cased');
+        assert(!('p_guest_email' in p), 'happy path: p_guest_email no longer forwarded (email optional)');
         assertEqual(p.p_guest_age, 12, 'happy path: age parsed to int');
         assertEqual(p.p_guest_rating, 300, 'happy path: rating parsed to int');
         assertEqual(p.p_source, 'admin', 'happy path: source stamped admin');
         const ok = toastCalls.find(t => t.msg === 'TRANSLATED:admin.tournaments.guestRegistered');
         assert(!!ok, 'happy path: success toast fired');
+    }
+
+    // guest registers successfully without an email → RPC fires, no email in payload
+    {
+        const fakeDom = makeFakeDom({
+            first_name: 'Grace', last_name: 'Hopper', phone: '+7 700 7654321',
+            email: '', age: '11', rating: '',
+        }, 'tid-noemail');
+        const { client, calls } = makeStubSupabase({ data: { ok: true, registration_id: 'r-ne' }, error: null });
+        const { submitAddGuest, toastCalls } = loadHandlers(fakeDom, { client, calls });
+        await submitAddGuest({ preventDefault() {}, target: fakeDom.form });
+        assert(calls.length === 1 && calls[0].name === 'register_for_tournament',
+            'no-email path: RPC fired exactly once');
+        assert(!('p_guest_email' in calls[0].params),
+            'no-email path: payload omits p_guest_email');
+        assertEqual(calls[0].params.p_guest_phone, '+7 700 7654321',
+            'no-email path: phone still forwarded');
+        const ok = toastCalls.find(t => t.msg === 'TRANSLATED:admin.tournaments.guestRegistered');
+        assert(!!ok, 'no-email path: success toast fired');
+    }
+
+    // duplicate-by-phone → RPC returns duplicate_guest → dedicated toast fires
+    {
+        const fakeDom = makeFakeDom({
+            first_name: 'Ada', last_name: 'Byron', phone: '+7 700 7654321',
+            email: '', age: '11', rating: '',
+        }, 'tid-dupphone');
+        const { client, calls } = makeStubSupabase({
+            data: { ok: false, reason: 'duplicate_guest' }, error: null,
+        });
+        const { submitAddGuest, toastCalls } = loadHandlers(fakeDom, { client, calls });
+        await submitAddGuest({ preventDefault() {}, target: fakeDom.form });
+        assert(calls.length === 1 && !('p_guest_email' in calls[0].params),
+            'duplicate-by-phone: RPC fired without email in payload');
+        const dup = toastCalls.find(t => t.msg === 'TRANSLATED:admin.tournaments.duplicateGuest');
+        assert(!!dup, 'duplicate-by-phone: duplicateGuest toast fires');
     }
 
     // optional rating omitted → null forwarded (not 0, not NaN)

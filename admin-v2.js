@@ -12610,7 +12610,6 @@ async function submitAddGuest(ev) {
         p_guest_first_name: f.first_name.value.trim(),
         p_guest_last_name:  f.last_name.value.trim(),
         p_guest_phone:      _normalisePhone(f.phone.value),
-        p_guest_email:      f.email.value.trim().toLowerCase(),
         p_guest_age:        parseInt(f.age.value, 10),
         p_guest_rating:     ratingRaw ? parseInt(ratingRaw, 10) : null,
         p_source:           'admin'
