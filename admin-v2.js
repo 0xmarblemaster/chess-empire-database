@@ -7758,7 +7758,7 @@ function renderAttendanceCalendar(preFilteredData = null) {
                                 <div class="student-avatar" style="width: 28px; height: 28px; font-size: 0.75rem;">
                                     ${initials}
                                 </div>
-                                <span class="student-name-text" style="flex: 1;"><span class="first-name">${firstName}</span> <span class="last-name">${lastName}</span></span>
+                                <a href="student.html?id=${student.id}" class="student-name-text student-name-link" draggable="false" onclick="return handleStudentNameClick(event)" style="flex: 1;"><span class="first-name">${firstName}</span> <span class="last-name">${lastName}</span></a>
                             </div>
                         </td>
                 `;
@@ -7925,6 +7925,23 @@ function handleStudentDragEnd(event) {
     draggedStudentRow = null;
     draggedStudentId = null;
     draggedFromSlotId = null;
+
+    // Mark that a drag just ended so an immediately-following click on the
+    // student-name anchor doesn't navigate after a sloppy drop. Cleared shortly
+    // after, so a deliberate click still works.
+    window.__attendanceDragJustEnded = true;
+    setTimeout(() => { window.__attendanceDragJustEnded = false; }, 150);
+}
+
+// Click guard for the student-name anchor. Suppresses accidental navigation
+// right after a drag-move, but never blocks a normal click (so native
+// navigation, Ctrl+click, and middle-click new-tab all keep working).
+function handleStudentNameClick(event) {
+    if (window.__attendanceDragJustEnded) {
+        event.preventDefault();
+        return false;
+    }
+    return true;
 }
 
 // Handle drag over on time slot header (allow drop)

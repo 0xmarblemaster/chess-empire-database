@@ -3640,6 +3640,21 @@ tr[data-student-id] {
     min-width: 180px;
 }
 
+/* Clickable student name in the attendance calendar — links to the student
+   card. Inherits the row text color; gold + underline affordance on hover,
+   matching the students-table pattern. Drag-to-move is unaffected because the
+   anchor is draggable="false" and the press bubbles to the draggable row. */
+.attendance-student-cell .student-name-link {
+    color: inherit;
+    text-decoration: none;
+}
+
+.attendance-student-cell .student-name-link:hover {
+    color: #d97706;
+    text-decoration: underline;
+    cursor: pointer;
+}
+
 /* Student action menu - dropdown from drag handle */
 .student-action-menu {
     position: fixed;
