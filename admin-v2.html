@@ -900,6 +900,15 @@
                             </table>
                         </div>
                     </div>
+
+                    <!-- Mobile Option C: dashboard cards + FAB (≤768px only) -->
+                    <div class="tournaments-mobile" id="tournamentsAdminMobile">
+                        <div class="tm-stats" id="tournamentsAdminMobileStats"></div>
+                        <div class="tm-cards" id="tournamentsAdminMobileCards"></div>
+                    </div>
+                    <button class="tournaments-fab" id="tournamentsAdminFab" onclick="showCreateTournamentModal()" aria-label="+ New Tournament">
+                        <i data-lucide="plus"></i>
+                    </button>
                 </div>
 
                 <!-- Registrations Tab -->
@@ -948,6 +957,9 @@
                             </table>
                         </div>
                     </div>
+
+                    <!-- Mobile registrations list (≤768px only) -->
+                    <div class="tournaments-reg-mobile" id="tournamentsAdminRegMobileCards"></div>
                 </div>
             </div>
             <!-- End Tournament Management Section -->

@@ -1749,6 +1749,14 @@ td {
     display: none;
 }
 
+/* Tournaments admin mobile (Option C) — hidden on desktop, the desktop table
+   stays as-is. Shown only inside the ≤768px media query below. */
+.tournaments-mobile,
+.tournaments-reg-mobile,
+.tournaments-fab {
+    display: none;
+}
+
 /* Show mobile cards only on mobile/tablet */
 @media (max-width: 768px) {
     .mobile-student-cards {
@@ -6035,5 +6043,305 @@ tr[data-student-id] {
     #tournamentsAdminSection table td {
         white-space: nowrap;
         padding: 0.75rem 0.625rem;
+    }
+
+    /* Option C: hide the desktop table wrappers, reveal dashboard cards + FAB.
+       The global `.table-wrapper { display: none }` already hides the tables;
+       here we just surface the mobile card views and hide the redundant
+       "+ New Tournament" header button (the FAB replaces it). */
+    #tournamentsAdminSection .header-actions .btn {
+        display: none;
+    }
+    .tournaments-mobile {
+        display: block;
+        padding: 0 16px;
+    }
+    .tournaments-reg-mobile {
+        display: block;
+        padding: 0 16px 16px;
+    }
+
+    /* Summary stat strip */
+    .tm-stats {
+        display: flex;
+        gap: 10px;
+        margin: 4px 0 14px;
+    }
+    .tm-stat {
+        flex: 1;
+        background: #ffffff;
+        border: 1px solid #e5e7eb;
+        border-radius: 16px;
+        padding: 12px 14px;
+        min-width: 0;
+    }
+    .tm-stat-v {
+        font-size: 22px;
+        font-weight: 700;
+        color: #111827;
+        line-height: 1.1;
+    }
+    .tm-stat-l {
+        font-size: 12px;
+        color: #64748b;
+        margin-top: 2px;
+        line-height: 1.25;
+    }
+
+    /* Tournament cards */
+    .tc {
+        background: #ffffff;
+        border: 1px solid #e5e7eb;
+        border-radius: 16px;
+        padding: 16px;
+        margin-bottom: 12px;
+    }
+    .tc-top {
+        display: flex;
+        align-items: flex-start;
+        justify-content: space-between;
+        gap: 10px;
+    }
+    .tc-nameblock {
+        min-width: 0;
+    }
+    .tc-name {
+        font-size: 17px;
+        font-weight: 700;
+        color: #111827;
+        overflow-wrap: anywhere;
+    }
+    .tc-when {
+        font-size: 13px;
+        color: #64748b;
+        margin-top: 3px;
+    }
+    .tc-top-right {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        flex-shrink: 0;
+    }
+    .tc-status {
+        font-size: 11px;
+        font-weight: 600;
+        padding: 4px 9px;
+        border-radius: 99px;
+        white-space: nowrap;
+    }
+    .tc-status.is-open { background: #f0fdf4; color: #16a34a; }
+    .tc-status.is-closed { background: #f1f5f9; color: #64748b; }
+    .tc-status.is-cancelled { background: #fef2f2; color: #dc2626; }
+
+    .tc-menu-wrap {
+        position: relative;
+    }
+    .tc-kebab {
+        width: 34px;
+        height: 34px;
+        border-radius: 10px;
+        border: 1px solid #e5e7eb;
+        background: #ffffff;
+        font-size: 18px;
+        line-height: 1;
+        color: #64748b;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        cursor: pointer;
+    }
+    .tc-menu {
+        display: none;
+        position: absolute;
+        top: 40px;
+        right: 0;
+        min-width: 168px;
+        background: #ffffff;
+        border: 1px solid #e5e7eb;
+        border-radius: 12px;
+        box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
+        padding: 6px;
+        z-index: 50;
+    }
+    .tc-menu.is-open {
+        display: block;
+    }
+    .tc-menu button {
+        display: block;
+        width: 100%;
+        text-align: left;
+        padding: 10px 12px;
+        border: none;
+        background: none;
+        border-radius: 8px;
+        font-family: inherit;
+        font-size: 14px;
+        font-weight: 500;
+        color: #111827;
+        cursor: pointer;
+    }
+    .tc-menu button:active {
+        background: #f9fafb;
+    }
+    .tc-menu button.danger {
+        color: #dc2626;
+    }
+
+    .tc-tags {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 6px;
+        margin: 12px 0;
+    }
+    .tm-tag {
+        font-size: 12px;
+        font-weight: 500;
+        background: #f1f5f9;
+        color: #64748b;
+        border-radius: 8px;
+        padding: 5px 10px;
+    }
+    .tc-cap {
+        margin-bottom: 12px;
+    }
+    .tc-cap-line {
+        display: flex;
+        justify-content: space-between;
+        font-size: 12px;
+        color: #64748b;
+        margin-bottom: 6px;
+    }
+    .tc-cap-line b {
+        color: #111827;
+        font-weight: 600;
+    }
+    .tc-bar {
+        height: 6px;
+        border-radius: 3px;
+        background: #f1f5f9;
+        overflow: hidden;
+    }
+    .tc-bar i {
+        display: block;
+        height: 100%;
+        border-radius: 3px;
+        background: #2563eb;
+    }
+    .tc-bar i.hot {
+        background: #d97706;
+    }
+    .tc-act {
+        display: flex;
+        gap: 8px;
+    }
+    .tc-act .pri {
+        flex: 1;
+        padding: 11px 0;
+        border-radius: 10px;
+        border: 1px solid #2563eb;
+        background: #2563eb;
+        color: #ffffff;
+        font-family: inherit;
+        font-size: 14px;
+        font-weight: 600;
+        cursor: pointer;
+    }
+    .tc-act .pri:active {
+        opacity: 0.9;
+    }
+
+    /* Empty state (cards + registrations) */
+    .tm-empty {
+        text-align: center;
+        padding: 3rem 1rem;
+        color: #94a3b8;
+    }
+    .tm-empty i {
+        width: 40px;
+        height: 40px;
+        margin-bottom: 0.75rem;
+    }
+    .tm-empty div {
+        font-size: 0.95rem;
+        font-weight: 500;
+    }
+
+    /* Registrations mobile list */
+    .rm-card {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        background: #ffffff;
+        border-bottom: 1px solid #f3f4f6;
+        padding: 14px 4px;
+    }
+    .rm-num {
+        width: 24px;
+        flex-shrink: 0;
+        font-size: 13px;
+        font-weight: 600;
+        color: #94a3b8;
+        text-align: center;
+    }
+    .rm-info {
+        flex: 1;
+        min-width: 0;
+    }
+    .rm-name {
+        font-size: 15px;
+        font-weight: 600;
+        color: #111827;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+    .rm-meta {
+        font-size: 13px;
+        color: #6b7280;
+        margin-top: 2px;
+    }
+    .rm-rating {
+        font-size: 15px;
+        font-weight: 600;
+        color: #111827;
+        flex-shrink: 0;
+    }
+    .rm-remove {
+        width: 36px;
+        height: 36px;
+        flex-shrink: 0;
+        border: none;
+        background: none;
+        color: #dc2626;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        cursor: pointer;
+    }
+
+    /* Floating action button — bottom-right, above the mobile bottom nav */
+    .tournaments-fab {
+        display: flex;
+        position: fixed;
+        right: 16px;
+        bottom: 84px;
+        width: 56px;
+        height: 56px;
+        border-radius: 50%;
+        background: #2563eb;
+        color: #ffffff;
+        border: none;
+        align-items: center;
+        justify-content: center;
+        box-shadow: 0 6px 16px rgba(37, 99, 235, 0.4);
+        z-index: 190;
+        cursor: pointer;
+    }
+    .tournaments-fab i {
+        width: 28px;
+        height: 28px;
+    }
+    .tournaments-fab:active {
+        transform: scale(0.94);
     }
 }

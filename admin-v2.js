@@ -12086,6 +12086,10 @@ async function loadTournamentsAdminList() {
 window.loadTournamentsAdminList = loadTournamentsAdminList;
 
 function renderTournamentsAdminTable() {
+    // Mobile Option C cards render from the same list + status tab, independently
+    // of the desktop table below (CSS media queries decide which one is visible).
+    if (typeof renderTournamentsAdminMobileCards === 'function') renderTournamentsAdminMobileCards();
+
     const tbody = document.getElementById('tournamentsAdminTableBody');
     if (!tbody) return;
     if (tournamentsAdminList.length === 0) {
@@ -12154,6 +12158,162 @@ function renderTournamentsAdminTable() {
 
     if (typeof lucide !== 'undefined') lucide.createIcons();
 }
+
+// ---- Mobile Option C: dashboard stat strip + tournament cards + FAB --------
+
+// Returns [saturdayISO, sundayISO] for the current weekend. On weekdays this is
+// the upcoming Sat/Sun; on Sunday it looks back to the day before so "this
+// weekend" still matches. Dates are compared against tournaments.tournament_date
+// which is stored as a 'YYYY-MM-DD' string.
+function _tournamentsWeekendRange() {
+    const iso = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+    const now = new Date();
+    const day = now.getDay();                       // 0 = Sun … 6 = Sat
+    const satOffset = (day === 0) ? -1 : (6 - day); // Sunday: Saturday was yesterday
+    const sat = new Date(now.getFullYear(), now.getMonth(), now.getDate() + satOffset);
+    const sun = new Date(sat.getFullYear(), sat.getMonth(), sat.getDate() + 1);
+    return [iso(sat), iso(sun)];
+}
+
+function _computeTournamentsAdminStats() {
+    const active = tournamentsAdminList.filter(t => t.status === 'open').length;
+    let registrations = 0;
+    tournamentsAdminRegCounts.forEach(n => { registrations += (n || 0); });
+    const [sat, sun] = _tournamentsWeekendRange();
+    const weekend = tournamentsAdminList.filter(t => {
+        const d = t.tournament_date || '';
+        return d === sat || d === sun;
+    }).length;
+    return { active, registrations, weekend };
+}
+
+// Close any open card kebab menus (shared by outside-click + action handlers).
+function _closeTournamentCardMenus() {
+    document.querySelectorAll('.tc-menu.is-open').forEach(m => m.classList.remove('is-open'));
+}
+window._closeTournamentCardMenus = _closeTournamentCardMenus;
+
+function _toggleTournamentCardMenu(id, ev) {
+    if (ev) ev.stopPropagation();
+    const menu = document.getElementById('tcMenu-' + id);
+    if (!menu) return;
+    const wasOpen = menu.classList.contains('is-open');
+    _closeTournamentCardMenus();
+    if (!wasOpen) menu.classList.add('is-open');
+}
+window._toggleTournamentCardMenu = _toggleTournamentCardMenu;
+
+// One-time global listener so tapping outside a kebab menu closes it.
+function _wireTournamentCardMenuDismiss() {
+    if (window.__tcMenuDismissWired) return;
+    window.__tcMenuDismissWired = true;
+    document.addEventListener('click', (e) => {
+        if (!e.target.closest || !e.target.closest('.tc-menu-wrap')) {
+            _closeTournamentCardMenus();
+        }
+    });
+}
+
+function renderTournamentsAdminMobileCards() {
+    const statsBox = document.getElementById('tournamentsAdminMobileStats');
+    const cardsBox = document.getElementById('tournamentsAdminMobileCards');
+    if (!statsBox && !cardsBox) return;
+    _wireTournamentCardMenuDismiss();
+
+    // Summary stat strip — computed from the full list (independent of the tab).
+    if (statsBox) {
+        const s = _computeTournamentsAdminStats();
+        statsBox.innerHTML = `
+            <div class="tm-stat"><div class="tm-stat-v">${s.active}</div><div class="tm-stat-l">${_escapeHtml(_tt('admin.tournaments.mobile.statActive'))}</div></div>
+            <div class="tm-stat"><div class="tm-stat-v">${s.registrations}</div><div class="tm-stat-l">${_escapeHtml(_tt('admin.tournaments.mobile.statRegistrations'))}</div></div>
+            <div class="tm-stat"><div class="tm-stat-v">${s.weekend}</div><div class="tm-stat-l">${_escapeHtml(_tt('admin.tournaments.mobile.statWeekend'))}</div></div>
+        `;
+    }
+
+    if (!cardsBox) return;
+
+    const statusTab = (tournamentsAdminStatusTab === 'closed') ? 'closed' : 'active';
+    const filteredRows = tournamentsAdminList.filter(row => {
+        if (statusTab === 'active') return row.status === 'open';
+        return row.status === 'closed' || row.status === 'cancelled';
+    });
+
+    if (filteredRows.length === 0) {
+        cardsBox.innerHTML = `
+            <div class="tm-empty">
+                <i data-lucide="trophy"></i>
+                <div>${_escapeHtml(_tt('admin.tournaments.noTournaments'))}</div>
+            </div>`;
+        if (typeof lucide !== 'undefined') lucide.createIcons();
+        return;
+    }
+
+    const _composeName = (window.i18n && typeof window.i18n.composeTournamentName === 'function')
+        ? window.i18n.composeTournamentName
+        : ((t) => t && t.name ? t.name : '');
+    const _translateTimeFormat = (window.i18n && typeof window.i18n.translateTimeFormat === 'function')
+        ? window.i18n.translateTimeFormat
+        : (f => f);
+    const _translateBranchAdmin = (window.i18n && typeof window.i18n.translateBranchName === 'function')
+        ? window.i18n.translateBranchName
+        : (n => n);
+    const roundsSuffix = _tt('admin.tournaments.mobile.roundsSuffix');
+    const filledLabel = _tt('admin.tournaments.mobile.filled');
+    const participantsLabel = _tt('admin.tournaments.mobile.participants');
+
+    cardsBox.innerHTML = filteredRows.map(row => {
+        const id = _escapeHtml(row.id);
+        const count = tournamentsAdminRegCounts.get(row.id) || 0;
+        const capacity = Number(row.capacity ?? 0);
+        const pct = capacity > 0 ? Math.min(100, Math.round((count / capacity) * 100)) : 0;
+        const statusLabel = _tt('admin.tournaments.status.' + row.status) || row.status;
+        const statusClass = row.status === 'open' ? 'is-open'
+            : row.status === 'cancelled' ? 'is-cancelled' : 'is-closed';
+        const time = row.start_time ? String(row.start_time).slice(0, 5) : '';
+        const displayName = _composeName({ league: row.league, name: row.name }, row.branch_name);
+        const displayTimeFormat = _translateTimeFormat(row.time_format || '');
+        const displayBranch = _translateBranchAdmin(row.branch_name || '');
+        const whenParts = [row.tournament_date, time].filter(Boolean).join(' · ');
+        const whenLine = [whenParts, displayBranch].filter(Boolean).join(' · ');
+
+        const tags = [];
+        if (displayTimeFormat) tags.push(`<span class="tm-tag">${_escapeHtml(displayTimeFormat)}</span>`);
+        if (row.rounds != null && row.rounds !== '') tags.push(`<span class="tm-tag">${_escapeHtml(String(row.rounds))} ${_escapeHtml(roundsSuffix)}</span>`);
+        if (row.registration_fee != null) tags.push(`<span class="tm-tag">${_escapeHtml(String(row.registration_fee))} ₸</span>`);
+
+        return `
+            <div class="tc" data-tournament-id="${id}">
+                <div class="tc-top">
+                    <div class="tc-nameblock">
+                        <div class="tc-name">${_escapeHtml(displayName)}</div>
+                        <div class="tc-when">${_escapeHtml(whenLine)}</div>
+                    </div>
+                    <div class="tc-top-right">
+                        <span class="tc-status ${statusClass}">${_escapeHtml(statusLabel)}</span>
+                        <div class="tc-menu-wrap">
+                            <button class="tc-kebab" onclick="_toggleTournamentCardMenu('${id}', event)" aria-label="${_escapeHtml(_tt('admin.tournaments.col.actions'))}">⋯</button>
+                            <div class="tc-menu" id="tcMenu-${id}">
+                                <button onclick="_closeTournamentCardMenus();showEditTournamentModal('${id}')">${_escapeHtml(_tt('admin.tournaments.action.edit'))}</button>
+                                <button onclick="_closeTournamentCardMenus();cancelTournament('${id}')">${_escapeHtml(_tt('admin.tournaments.action.cancel'))}</button>
+                                <button class="danger" onclick="_closeTournamentCardMenus();deleteTournament('${id}')">${_escapeHtml(_tt('admin.tournaments.action.delete'))}</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="tc-tags">${tags.join('')}</div>
+                <div class="tc-cap">
+                    <div class="tc-cap-line"><span>${_escapeHtml(filledLabel)}</span><b>${count} / ${_escapeHtml(String(capacity))}</b></div>
+                    <div class="tc-bar"><i class="${pct >= 100 ? 'hot' : ''}" style="width:${pct}%"></i></div>
+                </div>
+                <div class="tc-act">
+                    <button class="pri" onclick="showTournamentParticipants('${id}')">${_escapeHtml(participantsLabel)} (${count})</button>
+                </div>
+            </div>`;
+    }).join('');
+
+    if (typeof lucide !== 'undefined') lucide.createIcons();
+}
+window.renderTournamentsAdminMobileCards = renderTournamentsAdminMobileCards;
 
 function _populateTournamentsAdminBranchSelect(selectedId) {
     const sel = document.getElementById('tournamentAdminBranch');
@@ -12234,6 +12394,7 @@ async function onTournamentsAdminRegSelectChange() {
         if (body) {
             body.innerHTML = `<tr><td colspan="9" style="text-align:center; padding:2rem; color:#94a3b8;">${_escapeHtml(_tt('admin.tournaments.selectTournament'))}</td></tr>`;
         }
+        _setRegMobilePlaceholder('admin.tournaments.selectTournament');
         _setRegDownloadEnabled(false);
         _setRegAddGuestEnabled(false);
         return;
@@ -12276,12 +12437,75 @@ function _computeAge(dob, storedAge, refDate) {
     return null;
 }
 
+// ---- Mobile registrations list (≤768px) ------------------------------------
+
+function _setRegMobilePlaceholder(msgKey) {
+    const box = document.getElementById('tournamentsAdminRegMobileCards');
+    if (box) box.innerHTML = `<div class="tm-empty"><div>${_escapeHtml(_tt(msgKey))}</div></div>`;
+}
+
+// Renders tournamentsAdminCurrentRegRows into simple mobile cards — mirrors the
+// desktop roster table (name, tournament/branch, rating, age, status, remove).
+function renderTournamentsAdminRegMobileCards(refDate) {
+    const box = document.getElementById('tournamentsAdminRegMobileCards');
+    if (!box) return;
+    const rows = tournamentsAdminCurrentRegRows || [];
+    if (rows.length === 0) {
+        _setRegMobilePlaceholder('admin.tournaments.noRegistrations');
+        return;
+    }
+    const translateBranch = (window.i18n && typeof window.i18n.translateBranchName === 'function')
+        ? window.i18n.translateBranchName
+        : (n => n);
+    const guestBadge = _tt('admin.tournaments.guestBadge');
+    const dash = '—';
+
+    box.innerHTML = rows.map((row, i) => {
+        const isGuest = !row.student_id;
+        let name, meta, rating;
+        if (isGuest) {
+            const g = Array.isArray(row.tournament_guest_contacts)
+                ? row.tournament_guest_contacts[0]
+                : row.tournament_guest_contacts;
+            name = `${g?.last_name || ''} ${g?.first_name || ''}`.trim() || dash;
+            rating = (g && g.rating != null) ? String(g.rating) : dash;
+            const age = (g && g.age != null) ? `${g.age}` : '';
+            meta = [`<span class="badge badge-guest">${_escapeHtml(guestBadge)}</span>`, age].filter(Boolean).join(' · ');
+        } else {
+            const s = row.students || {};
+            name = `${s.last_name || ''} ${s.first_name || ''}`.trim() || dash;
+            const ratingObj = Array.isArray(s.student_current_ratings)
+                ? s.student_current_ratings[0]
+                : s.student_current_ratings;
+            rating = ratingObj?.rating != null ? String(ratingObj.rating) : dash;
+            const branchName = s.branches?.name ? translateBranch(s.branches.name) : '';
+            const age = _computeAge(s.date_of_birth, s.age, refDate);
+            meta = [branchName ? _escapeHtml(branchName) : '', age != null ? `${age}` : ''].filter(Boolean).join(' · ');
+        }
+        return `
+            <div class="rm-card" data-registration-id="${_escapeHtml(row.id)}">
+                <div class="rm-num">${i + 1}</div>
+                <div class="rm-info">
+                    <div class="rm-name">${_escapeHtml(name)}</div>
+                    <div class="rm-meta">${meta || dash}</div>
+                </div>
+                <div class="rm-rating">${_escapeHtml(rating)}</div>
+                <button class="rm-remove" onclick="removeRegistration('${_escapeHtml(row.id)}')" aria-label="${_escapeHtml(_tt('admin.tournaments.action.remove'))}">
+                    <i data-lucide="trash-2"></i>
+                </button>
+            </div>`;
+    }).join('');
+    if (typeof lucide !== 'undefined') lucide.createIcons();
+}
+window.renderTournamentsAdminRegMobileCards = renderTournamentsAdminRegMobileCards;
+
 async function showTournamentRegistrations(tournamentId) {
     const supabase = window.supabaseClient;
     const body = document.getElementById('tournamentsAdminRegBody');
     if (!body) return;
     if (!supabase) {
         body.innerHTML = `<tr><td colspan="9" style="text-align:center; padding:2rem; color:#dc2626;">${_escapeHtml(_tt('admin.tournaments.error'))}</td></tr>`;
+        _setRegMobilePlaceholder('admin.tournaments.error');
         _setRegDownloadEnabled(false);
         return;
     }
@@ -12312,6 +12536,7 @@ async function showTournamentRegistrations(tournamentId) {
         tournamentsAdminCurrentRegRows = data || [];
         if (tournamentsAdminCurrentRegRows.length === 0) {
             body.innerHTML = `<tr><td colspan="9" style="text-align:center; padding:2rem; color:#94a3b8;">${_escapeHtml(_tt('admin.tournaments.noRegistrations'))}</td></tr>`;
+            _setRegMobilePlaceholder('admin.tournaments.noRegistrations');
             _setRegDownloadEnabled(false);
             _setRegAddGuestEnabled(true);
             return;
@@ -12387,12 +12612,14 @@ async function showTournamentRegistrations(tournamentId) {
                 </tr>
             `;
         }).join('');
+        renderTournamentsAdminRegMobileCards(refDate);
         _setRegDownloadEnabled(true);
         _setRegAddGuestEnabled(true);
         if (typeof lucide !== 'undefined') lucide.createIcons();
     } catch (e) {
         console.error('Failed to load registrations:', e);
         body.innerHTML = `<tr><td colspan="9" style="text-align:center; padding:2rem; color:#dc2626;">${_escapeHtml(_tt('admin.tournaments.error'))}</td></tr>`;
+        _setRegMobilePlaceholder('admin.tournaments.error');
         _setRegDownloadEnabled(false);
     }
 }
