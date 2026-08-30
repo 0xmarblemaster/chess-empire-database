@@ -6613,10 +6613,83 @@ async function loadStudentAliases() {
 }
 
 // Populate schedule dropdown based on selected branch
+// Halyk Arena coach ids (see TASK_halyk_coach_days.md). Matched by prefix so a
+// truncated or full UUID both work; coach name is the fallback when the id is
+// out of scope. Aleksandr Olegovich works Mon–Fri; Andrei Olegovich works
+// Tue-Thu and Sat-Sun.
+const HALYK_COACH_ALEKSANDR_ID = 'de188ac1';
+const HALYK_COACH_ANDREI_ID = '3a6d5a08';
+
+function isHalykBranch(branchName) {
+    if (!branchName) return false;
+    const n = branchName.toLowerCase();
+    return n.includes('halyk') || n.includes('khalyk') ||
+           n.includes('халык') || n.includes('халық');
+}
+
+// Map a schedule type to its i18n label key.
+function scheduleTypeI18nKey(scheduleType) {
+    switch (scheduleType) {
+        case 'mon_wed': return 'admin.attendance.monWed';
+        case 'mon_wed_fri': return 'admin.attendance.monWedFri';
+        case 'tue_thu': return 'admin.attendance.tueThu';
+        case 'wed_fri': return 'admin.attendance.wedFri';
+        case 'sat_sun': return 'admin.attendance.satSun';
+        case 'mon_fri': return 'admin.attendance.monFri';
+        default: return '';
+    }
+}
+
+// Which schedule types Halyk Arena offers for a given coach:
+//   Aleksandr Olegovich → ['mon_fri']
+//   Andrei Olegovich    → ['tue_thu', 'sat_sun']
+// No/unknown coach → [] (placeholder only, so an operator must pick a coach).
+function getHalykScheduleTypesForCoach(coachId, coachName) {
+    const id = (coachId || '').toLowerCase();
+    const name = (coachName || '').toLowerCase();
+    const isAleksandr = id.startsWith(HALYK_COACH_ALEKSANDR_ID) ||
+        name.includes('aleksandr') || name.includes('александр');
+    const isAndrei = id.startsWith(HALYK_COACH_ANDREI_ID) ||
+        name.includes('andrei') || name.includes('андрей');
+    if (isAleksandr) return ['mon_fri'];
+    if (isAndrei) return ['tue_thu', 'sat_sun'];
+    return [];
+}
+
+// Build <option> HTML for a list of schedule types.
+function scheduleOptionsHtml(types) {
+    return types.map(ty => {
+        const key = scheduleTypeI18nKey(ty);
+        return `<option value="${ty}" data-i18n="${key}">${t(key)}</option>`;
+    }).join('');
+}
+
+// Halyk Arena: after the coach changes, reset the selected schedule if it is no
+// longer valid for the new coach (e.g. Andrei's tue_thu → Aleksandr's mon_fri),
+// then sync both schedule <select> values. The empty "All Schedules" filter
+// value stays valid. Returns nothing; mutates attendanceCurrentSchedule.
+function applyHalykScheduleResetForCoach() {
+    if (!isHalykBranch(attendanceCurrentBranch)) return;
+    const types = getHalykScheduleTypesForCoach(attendanceCurrentCoach, attendanceCurrentCoachName);
+    if (attendanceCurrentSchedule !== '' && !types.includes(attendanceCurrentSchedule)) {
+        attendanceCurrentSchedule = types.length ? types[0] : '';
+    }
+    const desktopSelect = document.getElementById('attendanceScheduleFilter');
+    const mobileSelect = document.getElementById('mobileScheduleFilter');
+    if (desktopSelect) desktopSelect.value = attendanceCurrentSchedule;
+    if (mobileSelect) mobileSelect.value = attendanceCurrentSchedule;
+}
+
 function populateAttendanceScheduleDropdown() {
     const desktopSelect = document.getElementById('attendanceScheduleFilter');
     const mobileSelect = document.getElementById('mobileScheduleFilter');
     const addStudentSelect = document.getElementById('addStudentScheduleSelect');
+
+    // Halyk Arena is coach-aware: schedule options depend on the selected coach.
+    const isHalyk = isHalykBranch(attendanceCurrentBranch);
+    const halykScheduleTypes = isHalyk
+        ? getHalykScheduleTypesForCoach(attendanceCurrentCoach, attendanceCurrentCoachName)
+        : null;
 
     // Determine which schedule types to show based on branch
     const isDebutBranch = attendanceCurrentBranch && attendanceCurrentBranch.toLowerCase().includes('debut');
@@ -6629,7 +6702,13 @@ function populateAttendanceScheduleDropdown() {
     if (desktopSelect) {
         const currentValue = desktopSelect.value;
 
-        if (isDebutBranch) {
+        if (isHalyk) {
+            // Halyk Arena: coach-aware schedule options (empty until a coach is picked).
+            desktopSelect.innerHTML = `
+                <option value="" data-i18n="admin.attendance.allSchedules">All Schedules</option>
+                ${scheduleOptionsHtml(halykScheduleTypes)}
+            `;
+        } else if (isDebutBranch) {
             // Debut branch offers BOTH mon_wed (Asylkhan) and mon_wed_fri (Nail)
             desktopSelect.innerHTML = `
                 <option value="" data-i18n="admin.attendance.allSchedules">All Schedules</option>
@@ -6667,7 +6746,13 @@ function populateAttendanceScheduleDropdown() {
     if (mobileSelect) {
         const currentValue = mobileSelect.value;
 
-        if (isDebutBranch) {
+        if (isHalyk) {
+            // Halyk Arena: coach-aware schedule options (empty until a coach is picked).
+            mobileSelect.innerHTML = `
+                <option value="" data-i18n="admin.attendance.allSchedules">All Schedules</option>
+                ${scheduleOptionsHtml(halykScheduleTypes)}
+            `;
+        } else if (isDebutBranch) {
             // Debut branch offers BOTH mon_wed (Asylkhan) and mon_wed_fri (Nail)
             mobileSelect.innerHTML = `
                 <option value="" data-i18n="admin.attendance.allSchedules">All Schedules</option>
@@ -6705,7 +6790,13 @@ function populateAttendanceScheduleDropdown() {
     if (addStudentSelect) {
         const currentValue = addStudentSelect.value;
 
-        if (isDebutBranch) {
+        if (isHalyk) {
+            // Halyk Arena: coach-aware schedule options (no "All"; a student is
+            // assigned exactly one schedule). Empty placeholder until a coach is picked.
+            addStudentSelect.innerHTML = halykScheduleTypes.length
+                ? scheduleOptionsHtml(halykScheduleTypes)
+                : `<option value="" data-i18n="admin.attendance.allSchedules">All Schedules</option>`;
+        } else if (isDebutBranch) {
             // Debut branch offers BOTH mon_wed (Asylkhan) and mon_wed_fri (Nail)
             addStudentSelect.innerHTML = `
                 <option value="mon_wed" data-i18n="admin.attendance.monWed">${t('admin.attendance.monWed')}</option>
@@ -6837,6 +6928,11 @@ function onAttendanceCoachChange() {
         mobileSelect.value = attendanceCurrentCoach;
     }
 
+    // Halyk Arena: schedule options are coach-aware. Refresh the dropdown and
+    // reset the selected schedule if it's no longer valid for the new coach.
+    populateAttendanceScheduleDropdown();
+    applyHalykScheduleResetForCoach();
+
     // Repopulate time slots with coach-specific slots
     populateAttendanceTimeSlots();
 
@@ -6923,12 +7019,26 @@ function onMobileAttendanceCoachChange() {
     attendanceCurrentCoach = mobileSelect.value;
     if (desktopSelect) desktopSelect.value = mobileSelect.value;
 
+    // Resolve coach name (used by the coach-aware schedule + time-slot logic).
+    if (attendanceCurrentCoach && attendanceCurrentCoach !== 'all' && attendanceCurrentCoach !== 'unassigned') {
+        const coach = window.coaches.find(c => c.id === attendanceCurrentCoach);
+        attendanceCurrentCoachName = coach ? `${coach.firstName} ${coach.lastName}` : null;
+    } else {
+        attendanceCurrentCoachName = null;
+    }
+
     // Reset time slot filter
     attendanceCurrentTimeSlot = 'all';
     const timeSlotSelect = document.getElementById('attendanceTimeSlotFilter');
     if (timeSlotSelect) {
         timeSlotSelect.value = 'all';
     }
+
+    // Halyk Arena: schedule options are coach-aware. Refresh the dropdown and
+    // reset the selected schedule if it's no longer valid for the new coach.
+    populateAttendanceScheduleDropdown();
+    applyHalykScheduleResetForCoach();
+    populateAttendanceTimeSlots();
 
     // Save filter state
     saveAttendanceFilterState();
@@ -7427,6 +7537,7 @@ function getScheduleDaysOfWeek(scheduleType) {
         case 'tue_thu': return [2, 4]; // Tuesday, Thursday
         case 'wed_fri': return [3, 5]; // Wednesday, Friday (NIS only)
         case 'sat_sun': return [0, 6]; // Saturday, Sunday
+        case 'mon_fri': return [1, 2, 3, 4, 5]; // Monday–Friday (Halyk Arena — Aleksandr Olegovich)
         default: return [];
     }
 }
@@ -7455,6 +7566,9 @@ function getScheduleDates(year, month, scheduleType, offset = 0) {
             break;
         case 'sat_sun':
             targetDays = [0, 6]; // Saturday, Sunday
+            break;
+        case 'mon_fri':
+            targetDays = [1, 2, 3, 4, 5]; // Monday–Friday (Halyk Arena — Aleksandr Olegovich)
             break;
         default:
             // If no schedule selected, return all days (or limited on mobile with offset)
