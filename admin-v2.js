@@ -6615,7 +6615,7 @@ async function loadStudentAliases() {
 // Populate schedule dropdown based on selected branch
 // Halyk Arena coach ids (see TASK_halyk_coach_days.md). Matched by prefix so a
 // truncated or full UUID both work; coach name is the fallback when the id is
-// out of scope. Aleksandr Olegovich works Mon–Fri; Andrei Olegovich works
+// out of scope. Aleksandr Olegovich works Mon–Wed; Andrei Olegovich works
 // Tue-Thu and Sat-Sun.
 const HALYK_COACH_ALEKSANDR_ID = 'de188ac1';
 const HALYK_COACH_ANDREI_ID = '3a6d5a08';
@@ -6641,7 +6641,7 @@ function scheduleTypeI18nKey(scheduleType) {
 }
 
 // Which schedule types Halyk Arena offers for a given coach:
-//   Aleksandr Olegovich → ['mon_fri']
+//   Aleksandr Olegovich → ['mon_wed']
 //   Andrei Olegovich    → ['tue_thu', 'sat_sun']
 // No/unknown coach → [] (placeholder only, so an operator must pick a coach).
 function getHalykScheduleTypesForCoach(coachId, coachName) {
@@ -6651,7 +6651,7 @@ function getHalykScheduleTypesForCoach(coachId, coachName) {
         name.includes('aleksandr') || name.includes('александр');
     const isAndrei = id.startsWith(HALYK_COACH_ANDREI_ID) ||
         name.includes('andrei') || name.includes('андрей');
-    if (isAleksandr) return ['mon_fri'];
+    if (isAleksandr) return ['mon_wed'];
     if (isAndrei) return ['tue_thu', 'sat_sun'];
     return [];
 }
@@ -6665,7 +6665,7 @@ function scheduleOptionsHtml(types) {
 }
 
 // Halyk Arena: after the coach changes, reset the selected schedule if it is no
-// longer valid for the new coach (e.g. Andrei's tue_thu → Aleksandr's mon_fri),
+// longer valid for the new coach (e.g. Andrei's tue_thu → Aleksandr's mon_wed),
 // then sync both schedule <select> values. The empty "All Schedules" filter
 // value stays valid. Returns nothing; mutates attendanceCurrentSchedule.
 function applyHalykScheduleResetForCoach() {

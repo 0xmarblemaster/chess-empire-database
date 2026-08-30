@@ -4,7 +4,7 @@
  * Covers (see TASK_halyk_coach_days.md):
  *   1. getScheduleDaysOfWeek('mon_fri') === [1, 2, 3, 4, 5]
  *   2. getScheduleDates(...) for 'mon_fri' returns only Mon–Fri dates.
- *   3. getHalykScheduleTypesForCoach: Aleksandr → ['mon_fri'];
+ *   3. getHalykScheduleTypesForCoach: Aleksandr → ['mon_wed'];
  *      Andrei → ['tue_thu', 'sat_sun']; by id AND by name fallback.
  *   4. populateAttendanceScheduleDropdown is coach-aware for Halyk and leaves
  *      other branches unchanged.
@@ -123,9 +123,9 @@ console.log('\n=== getHalykScheduleTypesForCoach ===============================
         '\nreturn getHalykScheduleTypesForCoach;');
     const fn = factory();
 
-    assertEqual(fn(ALEKSANDR_ID, null), ['mon_fri'], 'Aleksandr by id → [mon_fri]');
+    assertEqual(fn(ALEKSANDR_ID, null), ['mon_wed'], 'Aleksandr by id → [mon_wed]');
     assertEqual(fn(ANDREI_ID, null), ['tue_thu', 'sat_sun'], 'Andrei by id → [tue_thu, sat_sun]');
-    assertEqual(fn(null, 'Aleksandr Olegovich'), ['mon_fri'], 'Aleksandr by name → [mon_fri]');
+    assertEqual(fn(null, 'Aleksandr Olegovich'), ['mon_wed'], 'Aleksandr by name → [mon_wed]');
     assertEqual(fn(null, 'Андрей Олегович'), ['tue_thu', 'sat_sun'], 'Andrei by Russian name → [tue_thu, sat_sun]');
     assertEqual(fn('some-other-id', 'Someone Else'), [], 'unknown coach → []');
     assertEqual(fn(null, null), [], 'no coach → []');
@@ -178,18 +178,18 @@ function optionValues(html) {
     return [...html.matchAll(/value="([^"]*)"/g)].map(m => m[1]);
 }
 
-// Halyk + Aleksandr → only mon_fri (plus the empty "All" placeholder on filters).
+// Halyk + Aleksandr → only mon_wed (plus the empty "All" placeholder on filters).
 {
     const { api, selects } = loadDropdownSandbox({
         branch: 'Halyk Arena', coach: ALEKSANDR_ID, coachName: 'Aleksandr Olegovich', schedule: '',
     });
     api.populate();
-    assertEqual(optionValues(selects.attendanceScheduleFilter.innerHTML), ['', 'mon_fri'],
-        'Halyk/Aleksandr desktop → [All, mon_fri]');
-    assertEqual(optionValues(selects.mobileScheduleFilter.innerHTML), ['', 'mon_fri'],
-        'Halyk/Aleksandr mobile → [All, mon_fri]');
-    assertEqual(optionValues(selects.addStudentScheduleSelect.innerHTML), ['mon_fri'],
-        'Halyk/Aleksandr add-student → [mon_fri] (no All)');
+    assertEqual(optionValues(selects.attendanceScheduleFilter.innerHTML), ['', 'mon_wed'],
+        'Halyk/Aleksandr desktop → [All, mon_wed]');
+    assertEqual(optionValues(selects.mobileScheduleFilter.innerHTML), ['', 'mon_wed'],
+        'Halyk/Aleksandr mobile → [All, mon_wed]');
+    assertEqual(optionValues(selects.addStudentScheduleSelect.innerHTML), ['mon_wed'],
+        'Halyk/Aleksandr add-student → [mon_wed] (no All)');
 }
 
 // Halyk + Andrei → tue_thu + sat_sun.
@@ -216,14 +216,14 @@ function optionValues(html) {
     assert(!vals.includes('mon_fri'), 'Debut never offers mon_fri');
 }
 
-// Reset: Andrei(tue_thu selected) → switch to Aleksandr → resets to mon_fri.
+// Reset: Andrei(tue_thu selected) → switch to Aleksandr → resets to mon_wed.
 {
     const { api } = loadDropdownSandbox({
         branch: 'Halyk Arena', coach: ALEKSANDR_ID, coachName: 'Aleksandr Olegovich', schedule: 'tue_thu',
     });
     api.reset();
-    assertEqual(api.getSchedule(), 'mon_fri',
-        'switching to Aleksandr while tue_thu selected resets to mon_fri');
+    assertEqual(api.getSchedule(), 'mon_wed',
+        'switching to Aleksandr while tue_thu selected resets to mon_wed');
 }
 
 // Reset: empty "All" filter stays valid for a coach.
