@@ -6138,6 +6138,19 @@ const ATTENDANCE_TIME_SLOTS_GAGARIN_MON_WED = [
     '18:00-19:00'
 ];
 
+// Gagarin Park schedules for Coach Chingis Baurzhanovich (Nurgalimov Chingis).
+// Same as the generic Gagarin lists but with the 18:00-19:00 slot appended at the
+// bottom of each day. The filter keeps 18:00-19:00 appearing exactly once (the
+// generic Mon-Wed list already ends with it) so we never emit a duplicate slot.
+const ATTENDANCE_TIME_SLOTS_GAGARIN_MON_WED_CHINGIS = [
+    ...ATTENDANCE_TIME_SLOTS_GAGARIN_MON_WED.filter(s => s !== '18:00-19:00'),
+    '18:00-19:00'
+];
+const ATTENDANCE_TIME_SLOTS_GAGARIN_TUE_THU_CHINGIS = [
+    ...ATTENDANCE_TIME_SLOTS_GAGARIN_TUE_THU.filter(s => s !== '18:00-19:00'),
+    '18:00-19:00'
+];
+
 const DEFAULT_TIME_SLOT_ROWS = 10;      // Default visible rows
 const MAX_TIME_SLOT_CAPACITY = 15;      // Maximum students per slot
 const DEBUT_DEFAULT_TIME_SLOT_ROWS = 20; // Default visible rows (Debut branch)
@@ -6248,6 +6261,19 @@ function getTimeSlotsForBranch(branchName, scheduleType = null, coachName = null
             }
             if (scheduleType === 'mon_wed') {
                 return ATTENDANCE_TIME_SLOTS_GAGARIN_MON_WED_VASILY;
+            }
+        }
+
+        // Coach Chingis Baurzhanovich (Nurgalimov Chingis) — generic Gagarin
+        // slots plus a 18:00-19:00 slot at the bottom of Mon-Wed and Tue-Thu.
+        if (normalizedCoach.includes('chingis') ||
+            normalizedCoach.includes('чингис') ||
+            normalizedCoach.includes('чингиз')) {
+            if (scheduleType === 'mon_wed') {
+                return ATTENDANCE_TIME_SLOTS_GAGARIN_MON_WED_CHINGIS;
+            }
+            if (scheduleType === 'tue_thu') {
+                return ATTENDANCE_TIME_SLOTS_GAGARIN_TUE_THU_CHINGIS;
             }
         }
 
