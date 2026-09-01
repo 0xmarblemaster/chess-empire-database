@@ -7275,7 +7275,8 @@ async function loadAttendanceData() {
                 scheduleFilter,
                 attendanceCurrentYear,
                 attendanceCurrentMonth + 1,
-                attendanceCurrentCoach === 'all' ? null : attendanceCurrentCoach
+                attendanceCurrentCoach === 'all' ? null : attendanceCurrentCoach,
+                isHalykBranch(branchObj.name)
             ),
             // Load saved time slot assignments resolved to the displayed month
             // (effective-dating from migration 051 — past months see prior versions).

@@ -1,11 +1,14 @@
 /**
  * Tests for TASK_cross_coach_add.md — cross-coach attendance visibility.
  *
- * getAttendanceCalendarData(branchId, scheduleType, year, month, coachId) must,
- * for a SPECIFIC coach + a scheduleType, union the coach's own students with the
- * set of students assigned to that branch+schedule via
+ * getAttendanceCalendarData(branchId, scheduleType, year, month, coachId,
+ * allowCrossCoach) must, for a SPECIFIC coach + a scheduleType AND when
+ * allowCrossCoach is true (Halyk Arena only), union the coach's own students with
+ * the set of students assigned to that branch+schedule via
  * student_time_slot_assignments — so a coach sees (and can add) any active branch
- * student regardless of coach_id, without changing any coach_id.
+ * student regardless of coach_id, without changing any coach_id. When
+ * allowCrossCoach is falsy (default — Gagarin Park and every other branch), the
+ * query stays strict per-coach (.eq('coach_id', coachId)).
  *
  * Assertions:
  *   1. specific coach + scheduleType + non-empty assignments → students query
@@ -129,7 +132,7 @@ async function test_union_when_assigned() {
         attendance: [],
     });
     const sd = loadSupabaseData(client);
-    await sd.getAttendanceCalendarData(BRANCH, 'mon_fri', 2026, 8, COACH_A);
+    await sd.getAttendanceCalendarData(BRANCH, 'mon_fri', 2026, 8, COACH_A, true);
 
     // Assignments query ran on the right table with branch + schedule filters.
     const assignCalls = callsFor(client, 'student_time_slot_assignments');
@@ -176,7 +179,7 @@ async function test_fallback_when_empty() {
         attendance: [],
     });
     const sd = loadSupabaseData(client);
-    await sd.getAttendanceCalendarData(BRANCH, 'mon_fri', 2026, 8, COACH_A);
+    await sd.getAttendanceCalendarData(BRANCH, 'mon_fri', 2026, 8, COACH_A, true);
 
     assert(callsFor(client, 'student_time_slot_assignments').length > 0,
         'assignments query still runs (to discover it is empty)');
@@ -262,7 +265,7 @@ async function test_cross_coach_student_returned() {
         attendance: [],
     });
     const sd = loadSupabaseData(client);
-    const result = await sd.getAttendanceCalendarData(BRANCH, 'mon_fri', 2026, 8, COACH_A);
+    const result = await sd.getAttendanceCalendarData(BRANCH, 'mon_fri', 2026, 8, COACH_A, true);
 
     const ids = result.students.map(s => s.id);
     assert(ids.includes(STUDENT_CROSS),
@@ -275,12 +278,51 @@ async function test_cross_coach_student_returned() {
         'cross-coach student is mapped to the { firstName, lastName } shape');
 }
 
+// ---------------------------------------------------------------------------
+// (6) specific coach + scheduleType + allowCrossCoach OMITTED/false → strict.
+//     Gagarin Park / default regression guard: no assignments query, no .or(),
+//     exactly one .eq('coach_id', COACH_A) on students. Cross-coach union must
+//     apply ONLY to Halyk Arena (which passes allowCrossCoach=true).
+// ---------------------------------------------------------------------------
+async function test_strict_when_flag_default() {
+    console.log('\n=== (6) specific coach, allowCrossCoach default → strict per-coach ====\n');
+    for (const call of [
+        // 6th arg omitted entirely (defaults to false)
+        (sd) => sd.getAttendanceCalendarData(BRANCH, 'mon_wed', 2026, 8, COACH_A),
+        // 6th arg explicitly false
+        (sd) => sd.getAttendanceCalendarData(BRANCH, 'mon_wed', 2026, 8, COACH_A, false),
+    ]) {
+        const client = makeMockClient({
+            student_time_slot_assignments: [
+                { student_id: STUDENT_OWN },
+                { student_id: STUDENT_CROSS },
+            ],
+            students: [
+                { id: STUDENT_OWN, first_name: 'Own', last_name: 'A', coach_id: COACH_A },
+            ],
+            attendance: [],
+        });
+        const sd = loadSupabaseData(client);
+        await call(sd);
+
+        assertEqual(callsFor(client, 'student_time_slot_assignments').length, 0,
+            'strict: no student_time_slot_assignments query issued');
+        assertEqual(methodCalls(client, 'students', 'or').length, 0,
+            'strict: no .or() on students');
+        const studentCoachEq = methodCalls(client, 'students', 'eq')
+            .map(c => c.args).filter(a => a[0] === 'coach_id');
+        assertEqual(studentCoachEq, [['coach_id', COACH_A]],
+            'strict: exactly one .eq(coach_id, coachId) on students');
+    }
+}
+
 (async () => {
     await test_union_when_assigned();
     await test_fallback_when_empty();
     await test_all_and_null_unchanged();
     await test_unassigned_unchanged();
     await test_cross_coach_student_returned();
+    await test_strict_when_flag_default();
 
     console.log(`\n--- ${passed} passed, ${failed} failed ---\n`);
     if (failed > 0) process.exit(1);

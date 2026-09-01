@@ -2149,7 +2149,7 @@ const supabaseData = {
      * Get students with their attendance for a specific branch/schedule/month
      * Returns a structure optimized for calendar rendering
      */
-    async getAttendanceCalendarData(branchId, scheduleType, year, month, coachId = null) {
+    async getAttendanceCalendarData(branchId, scheduleType, year, month, coachId = null, allowCrossCoach = false) {
         // Calculate date range
         const startDate = `${year}-${String(month).padStart(2, '0')}-01`;
         // Calculate last day of month without timezone conversion
@@ -2187,32 +2187,39 @@ const supabaseData = {
         if (coachId === 'unassigned') {
             studentsQuery = studentsQuery.is('coach_id', null);
         } else if (coachId && coachId !== 'all') {
-            // Cross-coach visibility: a coach must see (and be able to add) any
-            // active branch student assigned to THIS branch+schedule, even when
-            // that student's coach_id belongs to a different coach. We union the
-            // coach's own students with the schedule-assigned set. This is a
-            // read-only visibility change — no student's coach_id is modified.
-            let assignedIds = [];
-            if (scheduleType) {
-                const { data: assignmentRows } = await window.supabaseClient
-                    .from('student_time_slot_assignments')
-                    .select('student_id')
-                    .eq('branch_id', branchId)
-                    .eq('schedule_type', scheduleType);
-                if (assignmentRows) {
-                    assignedIds = [...new Set(
-                        assignmentRows
-                            .map(r => r.student_id)
-                            .filter(id => id != null)
-                    )];
+            if (allowCrossCoach) {
+                // Cross-coach visibility (Halyk Arena only): a coach must see (and
+                // be able to add) any active branch student assigned to THIS
+                // branch+schedule, even when that student's coach_id belongs to a
+                // different coach. We union the coach's own students with the
+                // schedule-assigned set. This is a read-only visibility change —
+                // no student's coach_id is modified. Every other branch keeps
+                // strict per-coach separation via the else branch below.
+                let assignedIds = [];
+                if (scheduleType) {
+                    const { data: assignmentRows } = await window.supabaseClient
+                        .from('student_time_slot_assignments')
+                        .select('student_id')
+                        .eq('branch_id', branchId)
+                        .eq('schedule_type', scheduleType);
+                    if (assignmentRows) {
+                        assignedIds = [...new Set(
+                            assignmentRows
+                                .map(r => r.student_id)
+                                .filter(id => id != null)
+                        )];
+                    }
                 }
-            }
-            if (assignedIds.length > 0) {
-                studentsQuery = studentsQuery.or(
-                    `coach_id.eq.${coachId},id.in.(${assignedIds.join(',')})`
-                );
+                if (assignedIds.length > 0) {
+                    studentsQuery = studentsQuery.or(
+                        `coach_id.eq.${coachId},id.in.(${assignedIds.join(',')})`
+                    );
+                } else {
+                    // Empty set: never emit an empty in.() — invalid PostgREST syntax.
+                    studentsQuery = studentsQuery.eq('coach_id', coachId);
+                }
             } else {
-                // Empty set: never emit an empty in.() — invalid PostgREST syntax.
+                // Strict per-coach separation (default, all non-Halyk branches).
                 studentsQuery = studentsQuery.eq('coach_id', coachId);
             }
         }
