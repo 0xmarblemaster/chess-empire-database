@@ -4538,6 +4538,63 @@ tr[data-student-id] {
     flex-shrink: 0;
 }
 
+/* Mobile "+ Add" menu button — hidden on desktop, shown in the ≤768px block */
+.attendance-add-menu-btn {
+    display: none;
+    align-items: center;
+    justify-content: center;
+    gap: 0.25rem;
+    width: 100%;
+    padding: 0.35rem 0.4rem;
+    background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+    color: white;
+    border: none;
+    border-radius: 0.5rem;
+    font-size: 0.65rem;
+    font-weight: 600;
+    white-space: nowrap;
+    cursor: pointer;
+    box-shadow: 0 2px 4px rgba(16, 185, 129, 0.25);
+}
+
+.attendance-add-menu-btn:active {
+    background: linear-gradient(135deg, #059669 0%, #047857 100%);
+}
+
+/* Dropdown is appended to document.body as a position:fixed element so the
+   sticky/scrolling attendance table cannot clip it. */
+.attendance-add-menu-dropdown {
+    position: fixed;
+    min-width: 180px;
+    background: white;
+    border: 1px solid #e5e7eb;
+    border-radius: 8px;
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.18);
+    padding: 0.25rem;
+    z-index: 10002;
+    display: flex;
+    flex-direction: column;
+}
+
+.attendance-add-menu-item {
+    display: block;
+    width: 100%;
+    text-align: left;
+    padding: 0.625rem 0.75rem;
+    background: none;
+    border: none;
+    border-radius: 6px;
+    font-size: 0.875rem;
+    font-weight: 500;
+    color: #1f2937;
+    cursor: pointer;
+}
+
+.attendance-add-menu-item:hover {
+    background: #f0fdf4;
+    color: #059669;
+}
+
 /* Add Student Search Container in Modal */
 .add-student-search-container {
     position: relative;
@@ -4667,6 +4724,15 @@ tr[data-student-id] {
         max-width: 110px !important;
         width: 110px !important;
         padding: 0.35rem 0.4rem !important;
+    }
+
+    /* Swap the two stacked buttons for the compact "+ Add" menu button */
+    .attendance-header-desktop-btn {
+        display: none !important;
+    }
+
+    .attendance-add-menu-btn {
+        display: inline-flex;
     }
 
     .add-student-search-dropdown {

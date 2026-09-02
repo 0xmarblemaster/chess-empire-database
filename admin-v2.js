@@ -6101,6 +6101,72 @@ function closeAddTimeSlotModal() {
 }
 window.closeAddTimeSlotModal = closeAddTimeSlotModal;
 
+// Mobile-only "+ Add" dropdown for the attendance calendar header. The menu is
+// rendered as a position:fixed element on document.body so the sticky/scrolling
+// table cannot clip it. See admin-styles.css .attendance-add-menu-btn/dropdown.
+function closeAttendanceAddMenu() {
+    const menu = document.getElementById('attendanceAddMenuDropdown');
+    if (menu) menu.remove();
+    document.removeEventListener('click', _attendanceAddMenuOutside, true);
+    document.removeEventListener('keydown', _attendanceAddMenuKeydown, true);
+    const scroller = document.getElementById('attendanceCalendarContainer');
+    if (scroller) scroller.removeEventListener('scroll', closeAttendanceAddMenu);
+    window.removeEventListener('scroll', closeAttendanceAddMenu, true);
+    window.removeEventListener('resize', closeAttendanceAddMenu);
+}
+window.closeAttendanceAddMenu = closeAttendanceAddMenu;
+
+function _attendanceAddMenuOutside(e) {
+    const menu = document.getElementById('attendanceAddMenuDropdown');
+    if (menu && menu.contains(e.target)) return;
+    if (e.target.closest && e.target.closest('.attendance-add-menu-btn')) return;
+    closeAttendanceAddMenu();
+}
+
+function _attendanceAddMenuKeydown(e) {
+    if (e.key === 'Escape') closeAttendanceAddMenu();
+}
+
+function toggleAttendanceAddMenu(event) {
+    if (event) event.stopPropagation();
+    // Toggle off if already open.
+    if (document.getElementById('attendanceAddMenuDropdown')) {
+        closeAttendanceAddMenu();
+        return;
+    }
+
+    const btn = event && event.currentTarget ? event.currentTarget : null;
+    const rect = btn ? btn.getBoundingClientRect() : { left: 0, bottom: 0 };
+
+    const menu = document.createElement('div');
+    menu.id = 'attendanceAddMenuDropdown';
+    menu.className = 'attendance-add-menu-dropdown';
+    menu.style.top = `${rect.bottom + 4}px`;
+    menu.style.left = `${rect.left}px`;
+    menu.innerHTML = `
+        <button type="button" class="attendance-add-menu-item" data-action="student">${t('admin.attendance.addMenu.student') || 'Student'}</button>
+        <button type="button" class="attendance-add-menu-item" data-action="timeSlot">${t('admin.attendance.addMenu.timeSlot') || 'Time Slot'}</button>
+    `;
+    menu.querySelector('[data-action="student"]').addEventListener('click', () => {
+        closeAttendanceAddMenu();
+        openAddStudentToCalendarModal();
+    });
+    menu.querySelector('[data-action="timeSlot"]').addEventListener('click', () => {
+        closeAttendanceAddMenu();
+        openAddTimeSlotModal();
+    });
+    document.body.appendChild(menu);
+
+    // Close on outside click/tap, Escape, scroll, resize.
+    document.addEventListener('click', _attendanceAddMenuOutside, true);
+    document.addEventListener('keydown', _attendanceAddMenuKeydown, true);
+    const scroller = document.getElementById('attendanceCalendarContainer');
+    if (scroller) scroller.addEventListener('scroll', closeAttendanceAddMenu);
+    window.addEventListener('scroll', closeAttendanceAddMenu, true);
+    window.addEventListener('resize', closeAttendanceAddMenu);
+}
+window.toggleAttendanceAddMenu = toggleAttendanceAddMenu;
+
 // NEVER INSERT into time_slots directly — use add_time_slot_versioned RPC. See migration 078.
 async function submitAddTimeSlot() {
     const errEl = document.getElementById('addTimeSlotError');
@@ -8118,7 +8184,7 @@ function renderAttendanceCalendar(preFilteredData = null) {
     let headerHtml = `
         <tr>
             <th class="attendance-student-header">
-                <button class="attendance-add-student-btn" onclick="openAddStudentToCalendarModal()">
+                <button class="attendance-add-student-btn attendance-header-desktop-btn" onclick="openAddStudentToCalendarModal()">
                     <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                         <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"></path>
                         <circle cx="9" cy="7" r="4"></circle>
@@ -8127,7 +8193,7 @@ function renderAttendanceCalendar(preFilteredData = null) {
                     </svg>
                     ${t('admin.attendance.addStudent') || 'Add Student'}
                 </button>
-                <button class="attendance-add-student-btn" onclick="openAddTimeSlotModal()" style="margin-top: 0.375rem;">
+                <button class="attendance-add-student-btn attendance-header-desktop-btn" onclick="openAddTimeSlotModal()" style="margin-top: 0.375rem;">
                     <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                         <circle cx="12" cy="12" r="10"></circle>
                         <line x1="12" y1="8" x2="12" y2="16"></line>
@@ -8135,6 +8201,7 @@ function renderAttendanceCalendar(preFilteredData = null) {
                     </svg>
                     ${t('admin.attendance.addTimeSlot.button') || 'Add Time Slot'}
                 </button>
+                <button class="attendance-add-menu-btn" onclick="toggleAttendanceAddMenu(event)">+ ${t('admin.attendance.addMenu.button') || 'Add'} ▾</button>
             </th>
     `;
 
