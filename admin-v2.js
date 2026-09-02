@@ -6480,20 +6480,11 @@ async function showAttendanceManagement(updateHash = true) {
         }
     }
 
-    // Populate schedule dropdown based on branch
-    populateAttendanceScheduleDropdown();
-
-    // Apply saved schedule selection to dropdown
-    const scheduleSelect = document.getElementById('attendanceScheduleFilter');
-    if (scheduleSelect) {
-        if (attendanceCurrentSchedule) {
-            scheduleSelect.value = attendanceCurrentSchedule;
-        } else {
-            attendanceCurrentSchedule = scheduleSelect.value || '';
-        }
-    }
-
-    // Populate coach dropdown based on branch
+    // Populate coach dropdown based on branch. Must run BEFORE the schedule
+    // dropdown: it can auto-pin a coach (admin single-coach / first-coach pin),
+    // and coach-aware branches (Halyk, Debut/Azamat) derive their schedule
+    // options from the pinned coach. Populating schedules first left them empty
+    // for Halyk after a branch restore — the Aleksandr missing-Mon-Wed bug.
     populateAttendanceCoachDropdown();
 
     // Apply saved coach selection to dropdown and resolve coach name
@@ -6506,6 +6497,24 @@ async function showAttendanceManagement(updateHash = true) {
             attendanceCurrentCoachName = coach ? `${coach.firstName} ${coach.lastName}` : null;
         }
     }
+
+    // Populate schedule dropdown based on branch + (now settled) coach
+    populateAttendanceScheduleDropdown();
+
+    // Apply saved schedule selection to dropdown
+    const scheduleSelect = document.getElementById('attendanceScheduleFilter');
+    if (scheduleSelect) {
+        if (attendanceCurrentSchedule) {
+            scheduleSelect.value = attendanceCurrentSchedule;
+        } else {
+            attendanceCurrentSchedule = scheduleSelect.value || '';
+        }
+    }
+
+    // Sanitize a saved schedule that is invalid for the settled coach
+    // (e.g. saved tue_thu but the coach only works mon_wed).
+    applyHalykScheduleResetForCoach();
+    applyDebutScheduleResetForCoach();
 
     // Populate time slots based on schedule
     populateAttendanceTimeSlots();
@@ -6983,11 +6992,16 @@ function onAttendanceBranchChange() {
     // Save filter state
     saveAttendanceFilterState();
 
-    // Populate schedule dropdown based on branch
-    populateAttendanceScheduleDropdown();
-
-    // Populate coach dropdown for new branch
+    // Populate coach dropdown for new branch FIRST — it can auto-pin a coach,
+    // and the schedule options depend on that coach at coach-aware branches
+    // (Halyk, Debut/Azamat).
     populateAttendanceCoachDropdown();
+
+    // Populate schedule dropdown based on branch + pinned coach, then reset
+    // a schedule that is invalid for the new coach.
+    populateAttendanceScheduleDropdown();
+    applyHalykScheduleResetForCoach();
+    applyDebutScheduleResetForCoach();
 
     populateAttendanceTimeSlots();
     loadAttendanceData();
@@ -7101,11 +7115,16 @@ function onMobileAttendanceBranchChange() {
     // Save filter state
     saveAttendanceFilterState();
 
-    // Populate schedule dropdown based on branch
-    populateAttendanceScheduleDropdown();
-
-    // Populate coach dropdown for new branch
+    // Populate coach dropdown for new branch FIRST — it can auto-pin a coach,
+    // and the schedule options depend on that coach at coach-aware branches
+    // (Halyk, Debut/Azamat).
     populateAttendanceCoachDropdown();
+
+    // Populate schedule dropdown based on branch + pinned coach, then reset
+    // a schedule that is invalid for the new coach.
+    populateAttendanceScheduleDropdown();
+    applyHalykScheduleResetForCoach();
+    applyDebutScheduleResetForCoach();
 
     // Also populate mobile schedule filter if needed
     populateMobileAttendanceSchedules();

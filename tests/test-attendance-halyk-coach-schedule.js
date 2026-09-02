@@ -281,5 +281,38 @@ console.log('\n=== migration file ==============================================
     assert(/SQL editor/i.test(sql), 'migration notes it must be run in the Supabase SQL editor');
 }
 
+// ---------------------------------------------------------------------------
+// (8) Coach dropdown must populate BEFORE the schedule dropdown.
+//
+// Regression: opening/restoring Halyk Arena reset the coach filter to 'all',
+// populated the (coach-aware, therefore empty) schedule dropdown, and only
+// then auto-pinned Aleksandr — leaving his Mon-Wed schedule invisible. The
+// coach must be settled first, and an invalid schedule reset afterwards.
+// ---------------------------------------------------------------------------
+console.log('\n=== coach-before-schedule ordering ===================================\n');
+{
+    const orderedFns = [
+        'onAttendanceBranchChange',
+        'onMobileAttendanceBranchChange',
+        'showAttendanceManagement'
+    ];
+    for (const fnName of orderedFns) {
+        const src = extractFn(ADMIN_V2_SRC, fnName);
+        assert(src.length > 0, `${fnName} found in admin-v2.js`);
+        const coachIdx = src.indexOf('populateAttendanceCoachDropdown()');
+        const scheduleIdx = src.indexOf('populateAttendanceScheduleDropdown()');
+        assert(coachIdx >= 0 && scheduleIdx >= 0,
+            `${fnName} populates both coach and schedule dropdowns`);
+        assert(coachIdx < scheduleIdx,
+            `${fnName}: coach dropdown populated before schedule dropdown`);
+        const halykResetIdx = src.indexOf('applyHalykScheduleResetForCoach()');
+        const debutResetIdx = src.indexOf('applyDebutScheduleResetForCoach()');
+        assert(halykResetIdx > scheduleIdx,
+            `${fnName}: Halyk schedule reset runs after schedule dropdown populate`);
+        assert(debutResetIdx > scheduleIdx,
+            `${fnName}: Debut schedule reset runs after schedule dropdown populate`);
+    }
+}
+
 console.log(`\n--- ${passed} passed, ${failed} failed ---\n`);
 if (failed > 0) process.exit(1);
