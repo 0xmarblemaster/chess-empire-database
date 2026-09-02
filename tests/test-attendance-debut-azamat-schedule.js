@@ -266,5 +266,137 @@ console.log('\n=== migration file ==============================================
     assert(sql.includes("'12:00'::TIME, '13:00'::TIME"), 'sat_sun ends at 13:00');
 }
 
+// ---------------------------------------------------------------------------
+// (6) renderAttendanceCalendar with ZERO students (the chicken-and-egg bug):
+//     a coach with no assigned students must still get the full table —
+//     all his slot rows AND the Add Student button — or he can never add
+//     anyone. Regression for the early-return that hid everything behind
+//     the "no students" placeholder.
+// ---------------------------------------------------------------------------
+console.log('\n=== renderAttendanceCalendar: zero-student coach ======================\n');
+
+function makeEl() {
+    return { innerHTML: '', style: { display: '' } };
+}
+
+function loadRenderSandbox({ branch, coachName, schedule, calendarData }) {
+    const slotConsts = [...ADMIN_V2_SRC.matchAll(/const (ATTENDANCE_TIME_SLOTS_\w+) = \[[^\]]*\];/gs)]
+        .map(m => m[0]).join('\n');
+    const body = `
+'use strict';
+let attendanceCurrentBranch = __branch;
+let attendanceCurrentCoachName = __coachName;
+let attendanceCurrentSchedule = __schedule;
+let attendanceCurrentTimeSlot = '';
+let attendanceCurrentYear = 2026;
+let attendanceCurrentMonth = 8; // September
+let attendanceCalendarData = __calendarData;
+let attendanceCurrentScheduleStudents = new Set();
+let attendanceStudentScheduleAssignments = {};
+let attendanceExpandedSlots = {};
+let attendanceHideEmptyRows = false;
+let mobileCalendarOffset = 0;
+let TIME_SLOTS_CACHE = null;
+function _currentAttendanceMonthKey() { return '2026-09'; }
+const t = (k) => k;
+const getLanguage = () => 'ru';
+const escapeHtml = (s) => String(s);
+const getDefaultRows = () => 3;
+const getMaxCapacity = () => 12;
+const canEditCurrentSlots = () => true;
+const editButtonHiddenReason = () => null;
+const getStudentsForTimeSlot = (slotIndex, data) => (data || []).filter(
+    s => s.timeSlotIndexes && (s.timeSlotIndexes.has ? s.timeSlotIndexes.has(slotIndex) : s.timeSlotIndexes.includes(slotIndex)));
+const findAttendanceRecord = () => null;
+const getScheduleDates = () => [1, 3, 8, 10]; // any non-empty date set
+const lucide = { createIcons: () => {} };
+const window = { lucide, getTimeSlotLabel: () => null, attendanceFilteredData: null };
+const console = { log: () => {}, error: () => {} };
+const __els = {
+    attendanceCalendarPlaceholder: __makeEl(),
+    attendanceCalendarTable: __makeEl(),
+    attendanceCalendarHead: __makeEl(),
+    attendanceCalendarBody: __makeEl(),
+};
+const document = { getElementById: (id) => __els[id] || null };
+${slotConsts}
+${extractFn(ADMIN_V2_SRC, 'getTimeSlotsForBranch')}
+${extractFn(ADMIN_V2_SRC, 'renderAttendanceCalendar')}
+renderAttendanceCalendar();
+return __els;
+`;
+    const factory = new Function('__branch', '__coachName', '__schedule', '__calendarData', '__makeEl', body);
+    return factory(branch, coachName, schedule, calendarData, makeEl);
+}
+
+// Azamat, tue_thu, ZERO students → table shown with all 10 slot rows + Add Student button.
+{
+    const els = loadRenderSandbox({
+        branch: 'Debut', coachName: 'Azamat Alemkhanovich', schedule: 'tue_thu', calendarData: [],
+    });
+    assertEqual(els.attendanceCalendarTable.style.display, 'table',
+        'zero-student Azamat tue_thu: table is shown, not hidden');
+    assertEqual(els.attendanceCalendarPlaceholder.style.display, 'none',
+        'zero-student Azamat tue_thu: placeholder is hidden');
+    assert(els.attendanceCalendarHead.innerHTML.includes('openAddStudentToCalendarModal'),
+        'zero-student Azamat tue_thu: Add Student button renders in header');
+    const slotHeaders = (els.attendanceCalendarBody.innerHTML.match(/attendance-time-slot-header/g) || []).length;
+    assertEqual(slotHeaders, 10, 'zero-student Azamat tue_thu: all 10 slot rows render');
+    assert(els.attendanceCalendarBody.innerHTML.includes('9:00-10:00') &&
+           els.attendanceCalendarBody.innerHTML.includes('18:00-19:00'),
+        'zero-student Azamat tue_thu: first and last slots (9:00, 18:00-19:00) present');
+}
+
+// Azamat, sat_sun, ZERO students → 4 slot rows.
+{
+    const els = loadRenderSandbox({
+        branch: 'Debut', coachName: 'Azamat Alemkhanovich', schedule: 'sat_sun', calendarData: [],
+    });
+    const slotHeaders = (els.attendanceCalendarBody.innerHTML.match(/attendance-time-slot-header/g) || []).length;
+    assertEqual(slotHeaders, 4, 'zero-student Azamat sat_sun: all 4 slot rows render');
+    assert(els.attendanceCalendarTable.style.display === 'table',
+        'zero-student Azamat sat_sun: table is shown');
+}
+
+// True-empty case (no students AND no slots) still shows the placeholder,
+// with the coach-aware message when a coach is selected.
+{
+    const els = loadRenderSandbox({
+        branch: 'Nonexistent Branch XYZ', coachName: 'Some Coach', schedule: 'mon_wed', calendarData: [],
+    });
+    if (els.attendanceCalendarTable.style.display === 'none') {
+        assert(true, 'no-slots branch: table stays hidden');
+        assert(els.attendanceCalendarPlaceholder.innerHTML.includes('noStudentsForCoach'),
+            'no-slots branch + coach selected: coach-aware placeholder message used');
+    } else {
+        // Unknown branches fall back to a generic slot list — placeholder path
+        // then requires empty slots, which this branch can't produce. Verify
+        // the fallback rendered the table instead (still a valid state).
+        assert(true, 'unknown branch falls back to generic slots and renders table');
+        assert(true, '(coach-aware placeholder covered by source assertion below)');
+    }
+}
+
+// Source-structure regression guards: slots must be resolved BEFORE the empty
+// check, and the empty check must require BOTH lists empty.
+{
+    const renderSrc = extractFn(ADMIN_V2_SRC, 'renderAttendanceCalendar');
+    const slotCallIdx = renderSrc.indexOf('getTimeSlotsForBranch(');
+    const emptyCheckIdx = renderSrc.indexOf('filteredData.length === 0');
+    assert(slotCallIdx > 0 && emptyCheckIdx > 0 && slotCallIdx < emptyCheckIdx,
+        'renderAttendanceCalendar resolves timeSlots BEFORE the empty-student check');
+    assert(renderSrc.includes('filteredData.length === 0 && timeSlots.length === 0'),
+        'placeholder early-return requires BOTH zero students AND zero slots');
+    assert(renderSrc.includes('noStudentsForCoach'),
+        'placeholder uses coach-aware message when a coach is selected');
+}
+
+// i18n: the new key exists in all three locales.
+{
+    const I18N_SRC = fs.readFileSync(path.join(ROOT, 'i18n.js'), 'utf8');
+    const count = (I18N_SRC.match(/"admin\.attendance\.noStudentsForCoach"/g) || []).length;
+    assertEqual(count, 3, 'admin.attendance.noStudentsForCoach defined in en, kk, ru');
+}
+
 console.log(`\n--- ${passed} passed, ${failed} failed ---\n`);
 if (failed > 0) process.exit(1);

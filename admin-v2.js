@@ -7810,12 +7810,20 @@ function renderAttendanceCalendar(preFilteredData = null) {
     // Store filtered data globally for drag-and-drop access
     window.attendanceFilteredData = filteredData;
 
-    if (filteredData.length === 0) {
+    // Get time slots for current branch and schedule type (Sat-Sun has different slots).
+    // Needed BEFORE the empty check: a coach with zero students must still see his
+    // slot rows and the Add Student button, or he can never add anyone.
+    const timeSlots = getTimeSlotsForBranch(attendanceCurrentBranch, attendanceCurrentSchedule, attendanceCurrentCoachName);
+
+    if (filteredData.length === 0 && timeSlots.length === 0) {
         // Show placeholder with "no students" message
         if (placeholder) {
+            const noStudentsMsg = attendanceCurrentCoachName
+                ? t('admin.attendance.noStudentsForCoach')
+                : t('admin.attendance.noStudents');
             placeholder.innerHTML = `
                 <i data-lucide="users" style="width: 48px; height: 48px; margin-bottom: 1rem; opacity: 0.5;"></i>
-                <p>${t('admin.attendance.noStudents')}</p>
+                <p>${noStudentsMsg}</p>
             `;
             placeholder.style.display = 'block';
         }
@@ -7881,11 +7889,9 @@ function renderAttendanceCalendar(preFilteredData = null) {
     `;
     thead.innerHTML = headerHtml;
 
-    // Build body rows grouped by time slots
+    // Build body rows grouped by time slots (timeSlots resolved above, before the empty check)
     let bodyHtml = '';
 
-    // Get time slots for current branch and schedule type (Sat-Sun has different slots)
-    const timeSlots = getTimeSlotsForBranch(attendanceCurrentBranch, attendanceCurrentSchedule, attendanceCurrentCoachName);
     const totalColumns = scheduleDates.length + 1; // Student column + date columns
 
     // Group students into time slot sections by their timeSlotIndexes set.
