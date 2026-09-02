@@ -180,12 +180,25 @@ assert(fnBody(ADMIN_SRC, 'openEditTimeSlotModal').includes('getTimeSlotIdForTime
 // 2e. write paths carry logical ids
 assert(/p_logical_slot_id: fromLogicalId/.test(ADMIN_SRC),
     'move: source-slot hide carries p_logical_slot_id');
-assert(/upsertTimeSlotAssignment\(studentId, branchId, scheduleType, toSlotIndex, toLogicalId\)/.test(ADMIN_SRC),
-    'move: target-slot upsert carries the logical id');
+assert(/upsertTimeSlotAssignment\(studentId, branchId, scheduleType, toPhysicalIndex !== null \? toPhysicalIndex : toSlotIndex, toLogicalId\)/.test(ADMIN_SRC),
+    'move: target-slot upsert carries the physical slot_index + logical id');
 assert(/p_logical_slot_id: hideLogicalId/.test(ADMIN_SRC),
     'deleteStudentFromCalendar hide carries p_logical_slot_id');
-assert(/upsertTimeSlotAssignment\(\s*\n?\s*studentId,\s*\n?\s*branchObj\.id,\s*\n?\s*selectedSchedule,\s*\n?\s*targetSlotIndex,\s*\n?\s*targetLogicalId/.test(ADMIN_SRC),
-    'add-student: upsert carries the target logical id');
+assert(/upsertTimeSlotAssignment\(\s*\n?\s*studentId,\s*\n?\s*branchObj\.id,\s*\n?\s*selectedSchedule,\s*\n?\s*targetPhysicalIndex !== null \? targetPhysicalIndex : targetSlotIndex,\s*\n?\s*targetLogicalId/.test(ADMIN_SRC),
+    'add-student: upsert carries the physical slot_index + target logical id');
+
+// 2f. Migration 077: write paths pass the real physical slot_index (not the
+//     display position) as p_time_slot_index, resolved via getSlotIndexForPosition.
+assert(new RegExp('function getSlotIndexForPosition\\(').test(ADMIN_SRC),
+    'getSlotIndexForPosition is defined');
+assert(/window\.getSlotIndexForPosition\s*=\s*getSlotIndexForPosition/.test(ADMIN_SRC),
+    'getSlotIndexForPosition is exported on window');
+assert(fnBody(ADMIN_SRC, 'getSlotIndexForPosition').includes('slot.slotIndex'),
+    'getSlotIndexForPosition returns the physical slotIndex from the cache bucket');
+assert(/p_time_slot_index: fromPhysicalIndex !== null \? fromPhysicalIndex : fromSlotIndex/.test(ADMIN_SRC),
+    'move: source-slot hide passes the physical slot_index (falls back to display position)');
+assert(/p_time_slot_index: hidePhysicalIndex !== null \? hidePhysicalIndex : slotIndex/.test(ADMIN_SRC),
+    'deleteStudentFromCalendar hide passes the physical slot_index (falls back to display position)');
 
 // ============================================================================
 // 3. supabase-data.js — source contract
@@ -208,6 +221,35 @@ assert(/if \(logicalSlotId\) row\.logical_slot_id = logicalSlotId;/.test(upsertB
 const bulkBody = methodBody(SDATA_SRC, 'bulkUpsertTimeSlotAssignments');
 assert(/if \(a\.logicalSlotId\) row\.logical_slot_id = a\.logicalSlotId;/.test(bulkBody),
     'bulkUpsertTimeSlotAssignments carries logical_slot_id when provided');
+
+// Migration 077: read-path dedupe shadows by logical_slot_id (fallback index).
+assert(/const slotKey = d\.logical_slot_id \|\| `idx:\$\{d\.time_slot_index\}`;/.test(getBody),
+    'getTimeSlotAssignments dedupes by logical_slot_id (fallback to positional index)');
+// Migration 077: add-path hide-cleanup is scoped to the SAME logical slot.
+assert(/clearSlotHidesQuery = logicalSlotId\s*\n?\s*\? clearSlotHidesQuery\.eq\('logical_slot_id', logicalSlotId\)\s*\n?\s*: clearSlotHidesQuery\.eq\('time_slot_index', timeSlotIndex\);/.test(upsertBody),
+    'upsertTimeSlotAssignment clears future hides scoped by logical_slot_id (fallback index)');
+
+// ============================================================================
+// 3b. Migration 077 — hide_student_versioned resolves by logical_slot_id
+// ============================================================================
+console.log('\n=== migration 077_hide_student_resolve_by_logical_slot.sql ==========\n');
+
+const MIG77_PATH = path.join(ROOT, 'supabase/migrations/077_hide_student_resolve_by_logical_slot.sql');
+assert(fs.existsSync(MIG77_PATH), 'supabase/migrations/077_… exists');
+const MIG77 = fs.existsSync(MIG77_PATH) ? fs.readFileSync(MIG77_PATH, 'utf8') : '';
+
+assert(/BEGIN;[\s\S]+COMMIT;/.test(MIG77), 'wrapped in BEGIN;…COMMIT;');
+assert(/CREATE OR REPLACE FUNCTION hide_student_versioned\([\s\S]+?p_logical_slot_id UUID DEFAULT NULL\s*\)/.test(MIG77),
+    'recreates the 6-arg hide_student_versioned (p_logical_slot_id DEFAULT NULL)');
+assert(/IF p_logical_slot_id IS NOT NULL THEN[\s\S]+?AND logical_slot_id = p_logical_slot_id/.test(MIG77),
+    'resolves the target row by logical_slot_id when one is provided');
+assert(/AND time_slot_index = p_time_slot_index[\s\S]+?AND \(p_logical_slot_id IS NULL OR logical_slot_id IS NULL\)/.test(MIG77),
+    'falls back to positional index only for legacy rows with NULL logical id');
+assert(/GRANT EXECUTE ON FUNCTION hide_student_versioned\(UUID, UUID, TEXT, INT, DATE, UUID\) TO authenticated/.test(MIG77),
+    'grants EXECUTE on the 6-arg overload');
+assert(/SECURITY INVOKER/.test(MIG77), 'stays SECURITY INVOKER (RLS unchanged)');
+assert(/updated_by\s+= auth\.uid\(\)/.test(MIG77) && /COALESCE\(p_logical_slot_id/.test(MIG77),
+    'preserves 076 semantics (updated_by = auth.uid(), COALESCE logical id)');
 
 // ============================================================================
 // 4. JS port of the versioned RPCs — logical_slot_id is carried across versions
@@ -361,6 +403,159 @@ function resolveMembership(bucket, assignment) {
     assertEqual(bRetime.map(s => s.time), ['11:30-12:30'], 're-timed slot shows new time in M1');
     assertEqual(resolveMembership(bRetime, { studentId: 'S2', timeSlotIndex: 0, logicalSlotId: 'LX' }), 0,
         're-timing keeps the student on the same logical slot (position unchanged)');
+}
+
+// ============================================================================
+// 6. JS port of migration 077 — hide/add resolve by logical_slot_id, not the
+//    positional index (the Zhandosova tombstone-skew incident).
+// ============================================================================
+console.log('\n=== migration 077: hide resolves by logical id under index skew =====\n');
+
+let _aid = 1;
+function aid() { return `a-${(_aid++).toString().padStart(4, '0')}`; }
+
+// Port of hide_student_versioned (migration 077 resolution order).
+function hideStudentVersioned(rows, {
+    p_student_id, p_branch_id, p_schedule_type, p_time_slot_index,
+    p_effective_from, p_logical_slot_id = null,
+}) {
+    const bySameSchedule = r => r.student_id === p_student_id &&
+        r.branch_id === p_branch_id && r.schedule_type === p_schedule_type &&
+        r.effective_from <= p_effective_from;
+    const latest = list => list.slice()
+        .sort((a, b) => a.effective_from < b.effective_from ? 1 : -1)[0] || null;
+
+    let existing = null;
+    if (p_logical_slot_id) {
+        existing = latest(rows.filter(r => bySameSchedule(r) && r.logical_slot_id === p_logical_slot_id));
+    }
+    if (!existing) {
+        existing = latest(rows.filter(r => bySameSchedule(r) &&
+            r.time_slot_index === p_time_slot_index &&
+            (p_logical_slot_id === null || r.logical_slot_id == null)));
+    }
+
+    if (!existing) {
+        const row = { id: aid(), student_id: p_student_id, branch_id: p_branch_id,
+            schedule_type: p_schedule_type, time_slot_index: p_time_slot_index,
+            effective_from: p_effective_from, hidden: true, logical_slot_id: p_logical_slot_id };
+        rows.push(row); return row;
+    }
+    if (existing.effective_from === p_effective_from) {
+        existing.hidden = true;
+        existing.logical_slot_id = p_logical_slot_id || existing.logical_slot_id;
+        return existing;
+    }
+    const row = { id: aid(), student_id: existing.student_id, branch_id: existing.branch_id,
+        schedule_type: existing.schedule_type, time_slot_index: existing.time_slot_index,
+        effective_from: p_effective_from, hidden: true,
+        logical_slot_id: p_logical_slot_id || existing.logical_slot_id };
+    rows.push(row); return row;
+}
+
+// Port of getTimeSlotAssignments dedupe (migration 077: shadow by logical id).
+function visibleSlots(rows, branch_id, schedule_type, monthEnd) {
+    const data = rows
+        .filter(r => r.branch_id === branch_id && r.schedule_type === schedule_type && r.effective_from <= monthEnd)
+        .slice()
+        .sort((a, b) => a.student_id !== b.student_id
+            ? (a.student_id < b.student_id ? -1 : 1)
+            : (a.effective_from < b.effective_from ? 1 : -1)); // effective_from DESC
+    const seen = new Set();
+    const out = [];
+    for (const d of data) {
+        if (d.time_slot_index < 0) continue;
+        const slotKey = d.logical_slot_id || `idx:${d.time_slot_index}`;
+        const key = `${d.student_id}|${slotKey}`;
+        if (seen.has(key)) continue;
+        seen.add(key);
+        if (d.hidden === true) continue;
+        out.push({ studentId: d.student_id, timeSlotIndex: d.time_slot_index, logicalSlotId: d.logical_slot_id || null });
+    }
+    return out;
+}
+
+{
+    // Zhandosova mon_wed: "12:00-13:00" is physical slot_index 4 (logical L4)
+    // but renders at display position 2. A dead legacy row lingers at idx 2.
+    const rows = [
+        { id: aid(), student_id: 'S', branch_id: 'B', schedule_type: 'mon_wed',
+          time_slot_index: 4, effective_from: '1970-01-01', hidden: false, logical_slot_id: 'L4' }, // real
+        { id: aid(), student_id: 'S', branch_id: 'B', schedule_type: 'mon_wed',
+          time_slot_index: 2, effective_from: '1970-01-01', hidden: false, logical_slot_id: 'L2' }, // dead legacy
+    ];
+
+    // The write path resolves display position 2 -> logical L4 + physical idx 4.
+    hideStudentVersioned(rows, { p_student_id: 'S', p_branch_id: 'B', p_schedule_type: 'mon_wed',
+        p_time_slot_index: 4, p_effective_from: '2026-09-01', p_logical_slot_id: 'L4' });
+
+    const septReal = rows.find(r => r.logical_slot_id === 'L4' && r.effective_from === '2026-09-01');
+    assert(!!septReal && septReal.hidden === true && septReal.time_slot_index === 4,
+        'hide targets the REAL idx-4 (logical L4) row, storing the physical index');
+    assert(!rows.some(r => r.logical_slot_id === 'L2' && r.hidden === true),
+        'the dead legacy idx-2 (logical L2) row is left untouched');
+
+    // Survives a "refresh": re-read September membership.
+    const sept = visibleSlots(rows, 'B', 'mon_wed', '2026-09-30');
+    assert(!sept.some(a => a.studentId === 'S' && a.logicalSlotId === 'L4'),
+        'after refresh, S no longer renders in their L4 slot (correct row hidden)');
+    // August (before the hide) is unaffected — versioned semantics preserved.
+    const aug = visibleSlots(rows, 'B', 'mon_wed', '2026-08-31');
+    assert(aug.some(a => a.studentId === 'S' && a.logicalSlotId === 'L4'),
+        'August still shows S in L4 (hide is effective Sept onward)');
+
+    // Contrast: the OLD index-keyed resolution (display position 2) would have
+    // matched the dead L2 row — exactly the bug this fixes.
+    const rows2 = [
+        { id: aid(), student_id: 'S', branch_id: 'B', schedule_type: 'mon_wed',
+          time_slot_index: 4, effective_from: '1970-01-01', hidden: false, logical_slot_id: 'L4' },
+        { id: aid(), student_id: 'S', branch_id: 'B', schedule_type: 'mon_wed',
+          time_slot_index: 2, effective_from: '1970-01-01', hidden: false, logical_slot_id: 'L2' },
+    ];
+    // Legacy caller (no logical id) passing the display position 2:
+    hideStudentVersioned(rows2, { p_student_id: 'S', p_branch_id: 'B', p_schedule_type: 'mon_wed',
+        p_time_slot_index: 2, p_effective_from: '2026-09-01', p_logical_slot_id: null });
+    const septBug = visibleSlots(rows2, 'B', 'mon_wed', '2026-09-30');
+    assert(septBug.some(a => a.studentId === 'S' && a.logicalSlotId === 'L4'),
+        'legacy index-2 hide leaves the real L4 row visible (the original incident)');
+}
+
+console.log('\n=== migration 077: add-path hide-cleanup is scoped by logical id ====\n');
+
+// Port of upsertTimeSlotAssignment's future-hide cleanup (migration 077 scope).
+function clearFutureHidesOnAdd(rows, { student_id, branch_id, schedule_type, time_slot_index, logical_slot_id }) {
+    return rows.filter(r => {
+        const isMatch = r.student_id === student_id && r.branch_id === branch_id &&
+            r.schedule_type === schedule_type && r.hidden === true &&
+            r.effective_from > '1970-01-01' &&
+            (logical_slot_id ? r.logical_slot_id === logical_slot_id : r.time_slot_index === time_slot_index);
+        return !isMatch; // keep everything that does NOT match the cleanup filter
+    });
+}
+
+{
+    // A repair hide row for a DIFFERENT logical slot (LR) happens to sit at the
+    // numeric index (2) that a re-add of logical L4 targets by display position.
+    const rows = [
+        { id: aid(), student_id: 'S', branch_id: 'B', schedule_type: 'mon_wed',
+          time_slot_index: 2, effective_from: '2026-09-01', hidden: true, logical_slot_id: 'LR' }, // repair hide
+        { id: aid(), student_id: 'S', branch_id: 'B', schedule_type: 'mon_wed',
+          time_slot_index: 4, effective_from: '2026-09-01', hidden: true, logical_slot_id: 'L4' }, // L4 hide to lift
+    ];
+
+    // Re-add to logical L4 (physical idx 4): cleanup scoped by logical id.
+    const after = clearFutureHidesOnAdd(rows, { student_id: 'S', branch_id: 'B',
+        schedule_type: 'mon_wed', time_slot_index: 4, logical_slot_id: 'L4' });
+    assert(after.some(r => r.logical_slot_id === 'LR'),
+        'add-path cleanup keeps the repair hide row of the OTHER logical slot (LR)');
+    assert(!after.some(r => r.logical_slot_id === 'L4'),
+        'add-path cleanup still lifts the hide of the SAME logical slot (L4)');
+
+    // Contrast: an index-scoped cleanup at display position 2 would wipe LR.
+    const afterBug = clearFutureHidesOnAdd(rows, { student_id: 'S', branch_id: 'B',
+        schedule_type: 'mon_wed', time_slot_index: 2, logical_slot_id: null });
+    assert(!afterBug.some(r => r.logical_slot_id === 'LR'),
+        'index-scoped cleanup (position 2) would delete the LR repair hide (the original incident)');
 }
 
 console.log(`\n--- ${passed} passed, ${failed} failed ---\n`);

@@ -2728,16 +2728,21 @@ const supabaseData = {
                 }
             }
 
-            // Dedupe by (student_id, time_slot_index) — keep the latest
-            // version per (student, slot) pair via effective_from DESC.
-            // Skip hidden rows and the legacy -1 sentinel rows; the latter
-            // were already accounted for by the schedule-wide hide pass.
+            // Dedupe by (student_id, logical_slot_id) — keep the latest version
+            // per (student, logical slot) pair via effective_from DESC. Migration
+            // 077: shadow by the STABLE logical_slot_id so a stale duplicate at a
+            // different positional index (tombstone skew) can't keep a student
+            // visible after their real slot's latest row is a hide. Legacy rows
+            // with no logical id fall back to the positional index. Skip hidden
+            // rows and the legacy -1 sentinel rows; the latter were already
+            // accounted for by the schedule-wide hide pass.
             const seen = new Set();
             const resolved = [];
             const contributingStudents = new Set();
             for (const d of data) {
                 if (d.time_slot_index < 0) continue;
-                const key = `${d.student_id}|${d.time_slot_index}`;
+                const slotKey = d.logical_slot_id || `idx:${d.time_slot_index}`;
+                const key = `${d.student_id}|${slotKey}`;
                 if (seen.has(key)) continue;
                 seen.add(key);
                 if (d.hidden === true) continue;
@@ -2822,18 +2827,23 @@ const supabaseData = {
         }
 
         // Clear any future per-slot hide rows for THIS slot (migration 061
-        // hidden=TRUE rows). Scoped to (student_id, branch_id, schedule_type,
-        // time_slot_index) so adding a student to slot B does NOT un-hide
-        // them from slot A — sibling slot hides are preserved.
-        const { error: clearSlotHidesError } = await window.supabaseClient
+        // hidden=TRUE rows). Migration 077: scope by the stable logical_slot_id
+        // when known, so re-adding to one slot only un-hides that SAME logical
+        // slot — never a sibling/repair hide row that happens to share the
+        // numeric index under tombstone skew. Legacy rows (no logical id) fall
+        // back to the positional time_slot_index.
+        let clearSlotHidesQuery = window.supabaseClient
             .from('student_time_slot_assignments')
             .delete()
             .eq('student_id', studentId)
             .eq('branch_id', branchId)
             .eq('schedule_type', scheduleType)
-            .eq('time_slot_index', timeSlotIndex)
             .eq('hidden', true)
             .gt('effective_from', '1970-01-01');
+        clearSlotHidesQuery = logicalSlotId
+            ? clearSlotHidesQuery.eq('logical_slot_id', logicalSlotId)
+            : clearSlotHidesQuery.eq('time_slot_index', timeSlotIndex);
+        const { error: clearSlotHidesError } = await clearSlotHidesQuery;
 
         if (clearSlotHidesError) {
             console.error('Error clearing future per-slot hide rows after upsert:', clearSlotHidesError);

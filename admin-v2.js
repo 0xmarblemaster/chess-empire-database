@@ -5830,6 +5830,24 @@ function getSlotPositionForLogicalId(branchName, scheduleType, coachName, logica
 }
 window.getSlotPositionForLogicalId = getSlotPositionForLogicalId;
 
+// Physical time_slots.slot_index of the slot at display position `position`.
+// Write paths (add / drag / hide) store this — NOT the render position — as
+// student_time_slot_assignments.time_slot_index, so the value matches how
+// migration 076 backfilled assignments (a.time_slot_index = ts.slot_index) and
+// so the RPC's legacy-index fallback resolves the right row when display
+// position ≠ physical index (tombstone skew). Null on cache miss so callers
+// fall back to the display position (legacy schedules with no cache bucket).
+function getSlotIndexForPosition(branchName, scheduleType, coachName, position, monthKey) {
+    if (!TIME_SLOTS_CACHE || typeof position !== 'number' || position < 0) return null;
+    const mk = monthKey || _currentAttendanceMonthKey();
+    const key = `${(branchName || '').toLowerCase()}|${(coachName || '').toLowerCase()}|${scheduleType}|${mk}`;
+    const bucket = TIME_SLOTS_CACHE[key];
+    if (!bucket) return null;
+    const slot = bucket[position];
+    return (slot && typeof slot.slotIndex === 'number') ? slot.slotIndex : null;
+}
+window.getSlotIndexForPosition = getSlotIndexForPosition;
+
 function canEditCurrentSlots() {
     if (!attendanceRoleInfo) return false;
     // A specific coach must be selected — time_slots rows are keyed per-coach,
@@ -8461,11 +8479,16 @@ async function moveStudentToTimeSlot(studentId, fromSlotIndex, toSlotId, toSlotI
                 const displayedMonthStart = `${attendanceCurrentYear}-${String(attendanceCurrentMonth + 1).padStart(2, '0')}-01`;
                 const fromLogicalId = getLogicalSlotIdForPosition(
                     attendanceCurrentBranch, scheduleType, attendanceCurrentCoachName, fromSlotIndex);
+                // Pass the slot's real physical slot_index (not the render
+                // position) so the RPC's legacy-index fallback and the row it
+                // stores stay correct under tombstone skew (migration 077).
+                const fromPhysicalIndex = getSlotIndexForPosition(
+                    attendanceCurrentBranch, scheduleType, attendanceCurrentCoachName, fromSlotIndex);
                 const { error: hideError } = await window.supabaseClient.rpc('hide_student_versioned', {
                     p_student_id: studentId,
                     p_branch_id: branchId,
                     p_schedule_type: scheduleType,
-                    p_time_slot_index: fromSlotIndex,
+                    p_time_slot_index: fromPhysicalIndex !== null ? fromPhysicalIndex : fromSlotIndex,
                     p_effective_from: displayedMonthStart,
                     p_logical_slot_id: fromLogicalId
                 });
@@ -8476,10 +8499,13 @@ async function moveStudentToTimeSlot(studentId, fromSlotIndex, toSlotId, toSlotI
 
             // 2. Add (upsert) to the target slot. Independent of the
             //    source-slot hide so sibling slots survive. Migration 076:
-            //    carry the target slot's stable logical_slot_id.
+            //    carry the target slot's stable logical_slot_id. Migration 077:
+            //    store the real physical slot_index, not the render position.
             const toLogicalId = getLogicalSlotIdForPosition(
                 attendanceCurrentBranch, scheduleType, attendanceCurrentCoachName, toSlotIndex);
-            await supabaseData.upsertTimeSlotAssignment(studentId, branchId, scheduleType, toSlotIndex, toLogicalId);
+            const toPhysicalIndex = getSlotIndexForPosition(
+                attendanceCurrentBranch, scheduleType, attendanceCurrentCoachName, toSlotIndex);
+            await supabaseData.upsertTimeSlotAssignment(studentId, branchId, scheduleType, toPhysicalIndex !== null ? toPhysicalIndex : toSlotIndex, toLogicalId);
             console.log(`Saved time slot move to database: ${studentName} → slot ${toSlotIndex}`);
         } catch (error) {
             console.error('Failed to save time slot move to database:', error);
@@ -9387,11 +9413,15 @@ async function submitAddStudentToCalendar() {
             const targetSlotIndex = parseInt(selectedTimeSlotIndex);
             const targetLogicalId = getLogicalSlotIdForPosition(
                 selectedBranch, selectedSchedule, coachName, targetSlotIndex);
+            // Migration 077: store the slot's real physical slot_index, not the
+            // render position, so tombstone skew never writes a mismatched row.
+            const targetPhysicalIndex = getSlotIndexForPosition(
+                selectedBranch, selectedSchedule, coachName, targetSlotIndex);
             await window.supabaseData.upsertTimeSlotAssignment(
                 studentId,
                 branchObj.id,
                 selectedSchedule,
-                targetSlotIndex,
+                targetPhysicalIndex !== null ? targetPhysicalIndex : targetSlotIndex,
                 targetLogicalId
             );
         }
@@ -9553,16 +9583,20 @@ async function deleteStudentFromCalendar(studentId, studentName, slotIndex) {
 
             const displayedMonthStart = `${attendanceCurrentYear}-${String(attendanceCurrentMonth + 1).padStart(2, '0')}-01`;
 
-            // Migration 076: carry the slot's stable logical_slot_id so the
-            // hide row records which logical slot it belongs to.
+            // Migration 076/077: carry the slot's stable logical_slot_id so the
+            // RPC resolves the correct row by logical id (renumber/tombstone
+            // safe), and pass the real physical slot_index — not the display
+            // position — for the legacy fallback and the stored row.
             const hideLogicalId = getLogicalSlotIdForPosition(
+                attendanceCurrentBranch, attendanceCurrentSchedule, attendanceCurrentCoachName, slotIndex);
+            const hidePhysicalIndex = getSlotIndexForPosition(
                 attendanceCurrentBranch, attendanceCurrentSchedule, attendanceCurrentCoachName, slotIndex);
 
             const { error } = await window.supabaseClient.rpc('hide_student_versioned', {
                 p_student_id: studentId,
                 p_branch_id: branchObj.id,
                 p_schedule_type: attendanceCurrentSchedule,
-                p_time_slot_index: slotIndex,
+                p_time_slot_index: hidePhysicalIndex !== null ? hidePhysicalIndex : slotIndex,
                 p_effective_from: displayedMonthStart,
                 p_logical_slot_id: hideLogicalId
             });

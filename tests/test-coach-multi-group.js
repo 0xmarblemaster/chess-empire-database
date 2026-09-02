@@ -129,8 +129,8 @@ const getBody = methodBody(SDATA_SRC, 'getTimeSlotAssignments');
 assert(getBody.length > 0, 'located getTimeSlotAssignments method body');
 assert(/\.select\(['"]student_id, time_slot_index, effective_from, hidden(?:, logical_slot_id)?['"]\)/.test(getBody),
     'getTimeSlotAssignments selects hidden column');
-assert(/`\$\{d\.student_id\}\|\$\{d\.time_slot_index\}`/.test(getBody),
-    'getTimeSlotAssignments dedupes by (student_id, time_slot_index)');
+assert(/const slotKey = d\.logical_slot_id \|\| `idx:\$\{d\.time_slot_index\}`;[\s\S]*?`\$\{d\.student_id\}\|\$\{slotKey\}`/.test(getBody),
+    'getTimeSlotAssignments dedupes by (student_id, logical_slot_id || idx:time_slot_index)');
 assert(/scheduleWideHidden\.add\(d\.student_id\)/.test(getBody),
     'getTimeSlotAssignments honours legacy schedule-wide -1 markers');
 assert(/d\.hidden === true/.test(getBody),
@@ -144,8 +144,9 @@ assert(/onConflict:\s*['"]student_id,branch_id,schedule_type,time_slot_index,eff
     'upsertTimeSlotAssignment conflict target includes time_slot_index');
 assert(/hidden:\s*false/.test(upsertBody),
     'upsertTimeSlotAssignment writes hidden=false on the active row');
-assert(/\.eq\(['"]time_slot_index['"],\s*timeSlotIndex\)[\s\S]+\.eq\(['"]hidden['"],\s*true\)/.test(upsertBody),
-    'clear-future-hides query is scoped to (time_slot_index = timeSlotIndex, hidden = true)');
+assert(/\.eq\(['"]hidden['"],\s*true\)/.test(upsertBody) &&
+    /logicalSlotId\s*\n?\s*\?\s*clearSlotHidesQuery\.eq\(['"]logical_slot_id['"],\s*logicalSlotId\)\s*\n?\s*:\s*clearSlotHidesQuery\.eq\(['"]time_slot_index['"],\s*timeSlotIndex\)/.test(upsertBody),
+    'clear-future-hides query is scoped by logical_slot_id when known (fallback time_slot_index), hidden = true (migration 077)');
 
 const bulkBody = methodBody(SDATA_SRC, 'bulkUpsertTimeSlotAssignments');
 assert(bulkBody.length > 0, 'located bulkUpsertTimeSlotAssignments method body');
@@ -170,8 +171,8 @@ const delBody = fnBody(ADMIN_SRC, 'deleteStudentFromCalendar');
 assert(delBody.length > 0, 'located deleteStudentFromCalendar function body');
 assert(/async function deleteStudentFromCalendar\(studentId, studentName, slotIndex\)/.test(ADMIN_SRC),
     'deleteStudentFromCalendar accepts slotIndex as third argument');
-assert(/p_time_slot_index\s*:\s*slotIndex/.test(delBody),
-    'deleteStudentFromCalendar forwards the row-context slotIndex to hide_student_versioned');
+assert(/p_time_slot_index\s*:\s*hidePhysicalIndex !== null \? hidePhysicalIndex : slotIndex/.test(delBody),
+    'deleteStudentFromCalendar forwards the physical slot_index (fallback slotIndex) to hide_student_versioned (migration 077)');
 assert(/student\.timeSlotIndexes\s*=\s*student\.timeSlotIndexes\.filter\(i\s*=>\s*i !== slotIndex\)/.test(delBody),
     'deleteStudentFromCalendar removes only the targeted slot from local state');
 
@@ -183,8 +184,8 @@ assert(/next\.delete\(fromSlotIndex\)/.test(moveBody),
     'drag removes fromSlotIndex from local timeSlotIndexes');
 assert(/next\.add\(toSlotIndex\)/.test(moveBody),
     'drag adds toSlotIndex to local timeSlotIndexes');
-assert(/hide_student_versioned[\s\S]+p_time_slot_index\s*:\s*fromSlotIndex/.test(moveBody),
-    'drag hides the source slot via per-slot hide_student_versioned RPC');
+assert(/hide_student_versioned[\s\S]+p_time_slot_index\s*:\s*fromPhysicalIndex !== null \? fromPhysicalIndex : fromSlotIndex/.test(moveBody),
+    'drag hides the source slot via per-slot hide_student_versioned RPC with the physical slot_index (migration 077)');
 
 const dropBody = fnBody(ADMIN_SRC, 'handleSlotDrop');
 assert(dropBody.length > 0, 'located handleSlotDrop function body');

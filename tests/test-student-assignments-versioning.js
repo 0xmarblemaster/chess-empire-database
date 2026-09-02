@@ -154,11 +154,13 @@ assert(/\.rpc\(\s*['"]hide_student_versioned['"]/.test(hideBody),
 assert(!/upsertTimeSlotAssignment\s*\([\s\S]{0,200}-1\s*[,)]/.test(hideBody),
     'does NOT call upsertTimeSlotAssignment with -1 anymore');
 // Migration 061 multi-slot: hide_student_versioned takes p_time_slot_index
-// as a key parameter — the slot being hidden. deleteStudentFromCalendar
-// forwards the row-context `slotIndex` rather than the legacy global -1
-// sentinel. See COACH_MULTI_GROUP_PRD.md.
-assert(/p_time_slot_index\s*:\s*slotIndex/.test(hideBody),
-    'RPC payload sets p_time_slot_index = slotIndex (per-slot hide, migration 061)');
+// as a key parameter — the slot being hidden. Migration 077:
+// deleteStudentFromCalendar forwards the slot's real physical slot_index
+// (resolved from the display position), falling back to the row-context
+// `slotIndex` on a cache miss — never the legacy global -1 sentinel.
+// See COACH_MULTI_GROUP_PRD.md and PRD_SLOT_STABLE_ID.md.
+assert(/p_time_slot_index\s*:\s*hidePhysicalIndex !== null \? hidePhysicalIndex : slotIndex/.test(hideBody),
+    'RPC payload sets p_time_slot_index = physical slot_index (fallback slotIndex) (migration 077)');
 assert(/p_effective_from\s*:\s*displayedMonthStart/.test(hideBody),
     'RPC payload sets p_effective_from = displayedMonthStart');
 assert(/displayedMonthStart\s*=\s*`\$\{attendanceCurrentYear\}-\$\{String\(attendanceCurrentMonth\s*\+\s*1\)\.padStart\(2,\s*['"]0['"]\)\}-01`/.test(hideBody),
