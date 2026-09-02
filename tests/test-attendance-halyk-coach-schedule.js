@@ -67,7 +67,8 @@ function extractConst(src, name) {
 }
 const HALYK_CONSTS =
     extractConst(ADMIN_V2_SRC, 'HALYK_COACH_ALEKSANDR_ID') + '\n' +
-    extractConst(ADMIN_V2_SRC, 'HALYK_COACH_ANDREI_ID') + '\n';
+    extractConst(ADMIN_V2_SRC, 'HALYK_COACH_ANDREI_ID') + '\n' +
+    extractConst(ADMIN_V2_SRC, 'DEBUT_COACH_AZAMAT_ID') + '\n';
 
 // ---------------------------------------------------------------------------
 // (1) getScheduleDaysOfWeek('mon_fri')
@@ -155,6 +156,7 @@ ${HALYK_CONSTS}
 ${extractFn(ADMIN_V2_SRC, 'isHalykBranch')}
 ${extractFn(ADMIN_V2_SRC, 'scheduleTypeI18nKey')}
 ${extractFn(ADMIN_V2_SRC, 'getHalykScheduleTypesForCoach')}
+${extractFn(ADMIN_V2_SRC, 'getDebutScheduleTypesForCoach')}
 ${extractFn(ADMIN_V2_SRC, 'scheduleOptionsHtml')}
 ${extractFn(ADMIN_V2_SRC, 'applyHalykScheduleResetForCoach')}
 ${extractFn(ADMIN_V2_SRC, 'populateAttendanceScheduleDropdown')}

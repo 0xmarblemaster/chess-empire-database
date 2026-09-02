@@ -6071,6 +6071,30 @@ const ATTENDANCE_TIME_SLOTS_DEBUT_SAT_SUN_ASYLKHAN = [
     '12:00-13:30'
 ];
 
+// Debut branch Tuesday-Thursday schedule for coach Azamat Alemkhanovich:
+// full day 9:00-19:00, hourly. Slots may be empty but must stay visible.
+const ATTENDANCE_TIME_SLOTS_DEBUT_TUE_THU_AZAMAT = [
+    '9:00-10:00',
+    '10:00-11:00',
+    '11:00-12:00',
+    '12:00-13:00',
+    '13:00-14:00',
+    '14:00-15:00',
+    '15:00-16:00',
+    '16:00-17:00',
+    '17:00-18:00',
+    '18:00-19:00'
+];
+
+// Debut branch Saturday-Sunday schedule for coach Azamat Alemkhanovich:
+// mornings only, 9:00-13:00 hourly.
+const ATTENDANCE_TIME_SLOTS_DEBUT_SAT_SUN_AZAMAT = [
+    '9:00-10:00',
+    '10:00-11:00',
+    '11:00-12:00',
+    '12:00-13:00'
+];
+
 // Gagarin Park Saturday-Sunday schedule (сб-вс)
 const ATTENDANCE_TIME_SLOTS_GAGARIN_SAT_SUN = [
     '9:00-10:30',
@@ -6305,6 +6329,16 @@ function getTimeSlotsForBranch(branchName, scheduleType = null, coachName = null
             }
             if (scheduleType === 'mon_wed_fri') {
                 return ATTENDANCE_TIME_SLOTS_DEBUT_MON_WED_FRI_NAIL;
+            }
+        }
+
+        // Coach Azamat Alemkhanovich works Tue-Thu (9:00-19:00) and Sat-Sun (9:00-13:00)
+        if (normalizedCoach.includes('azamat') || normalizedCoach.includes('азамат')) {
+            if (scheduleType === 'tue_thu') {
+                return ATTENDANCE_TIME_SLOTS_DEBUT_TUE_THU_AZAMAT;
+            }
+            if (scheduleType === 'sat_sun') {
+                return ATTENDANCE_TIME_SLOTS_DEBUT_SAT_SUN_AZAMAT;
             }
         }
 
@@ -6646,6 +6680,11 @@ async function loadStudentAliases() {
 const HALYK_COACH_ALEKSANDR_ID = 'de188ac1';
 const HALYK_COACH_ANDREI_ID = '3a6d5a08';
 
+// Debut coach Azamat Alemkhanovich (28c56c39-7318-41f1-8f8b-a996dd721f02):
+// works Tue-Thu and Sat-Sun only. Matched by id prefix with name fallback,
+// same convention as the Halyk coach ids above.
+const DEBUT_COACH_AZAMAT_ID = '28c56c39';
+
 function isHalykBranch(branchName) {
     if (!branchName) return false;
     const n = branchName.toLowerCase();
@@ -6682,6 +6721,19 @@ function getHalykScheduleTypesForCoach(coachId, coachName) {
     return [];
 }
 
+// Which schedule types Debut offers for a given coach:
+//   Azamat Alemkhanovich → ['tue_thu', 'sat_sun'] (his only working days)
+//   Anyone else / no coach / "all" → null, meaning "use the generic Debut list".
+// Unlike Halyk, Debut stays non-coach-aware for everyone except Azamat.
+function getDebutScheduleTypesForCoach(coachId, coachName) {
+    const id = (coachId || '').toLowerCase();
+    const name = (coachName || '').toLowerCase();
+    const isAzamat = id.startsWith(DEBUT_COACH_AZAMAT_ID) ||
+        name.includes('azamat') || name.includes('азамат');
+    if (isAzamat) return ['tue_thu', 'sat_sun'];
+    return null;
+}
+
 // Build <option> HTML for a list of schedule types.
 function scheduleOptionsHtml(types) {
     return types.map(ty => {
@@ -6706,6 +6758,24 @@ function applyHalykScheduleResetForCoach() {
     if (mobileSelect) mobileSelect.value = attendanceCurrentSchedule;
 }
 
+// Debut counterpart of the Halyk reset: only kicks in when the selected coach
+// is schedule-restricted (Azamat). E.g. switching from Nail (mon_wed_fri) to
+// Azamat resets the schedule to tue_thu. The empty "All Schedules" value stays.
+function applyDebutScheduleResetForCoach() {
+    if (!attendanceCurrentBranch) return;
+    const n = attendanceCurrentBranch.toLowerCase();
+    if (!n.includes('debut') && !n.includes('дебют')) return;
+    const types = getDebutScheduleTypesForCoach(attendanceCurrentCoach, attendanceCurrentCoachName);
+    if (!types) return;
+    if (attendanceCurrentSchedule !== '' && !types.includes(attendanceCurrentSchedule)) {
+        attendanceCurrentSchedule = types.length ? types[0] : '';
+    }
+    const desktopSelect = document.getElementById('attendanceScheduleFilter');
+    const mobileSelect = document.getElementById('mobileScheduleFilter');
+    if (desktopSelect) desktopSelect.value = attendanceCurrentSchedule;
+    if (mobileSelect) mobileSelect.value = attendanceCurrentSchedule;
+}
+
 function populateAttendanceScheduleDropdown() {
     const desktopSelect = document.getElementById('attendanceScheduleFilter');
     const mobileSelect = document.getElementById('mobileScheduleFilter');
@@ -6719,6 +6789,11 @@ function populateAttendanceScheduleDropdown() {
 
     // Determine which schedule types to show based on branch
     const isDebutBranch = attendanceCurrentBranch && attendanceCurrentBranch.toLowerCase().includes('debut');
+    // Debut is coach-aware for Azamat only (Tue-Thu + Sat-Sun); null keeps the
+    // generic Debut list for every other coach / no coach selected.
+    const debutScheduleTypes = isDebutBranch
+        ? getDebutScheduleTypesForCoach(attendanceCurrentCoach, attendanceCurrentCoachName)
+        : null;
     const isNishBranch = attendanceCurrentBranch && (
         attendanceCurrentBranch.toLowerCase().includes('ниш') ||
         attendanceCurrentBranch.toLowerCase().includes('nish')
@@ -6733,6 +6808,12 @@ function populateAttendanceScheduleDropdown() {
             desktopSelect.innerHTML = `
                 <option value="" data-i18n="admin.attendance.allSchedules">All Schedules</option>
                 ${scheduleOptionsHtml(halykScheduleTypes)}
+            `;
+        } else if (isDebutBranch && debutScheduleTypes) {
+            // Debut coach-aware (Azamat): only his own days.
+            desktopSelect.innerHTML = `
+                <option value="" data-i18n="admin.attendance.allSchedules">All Schedules</option>
+                ${scheduleOptionsHtml(debutScheduleTypes)}
             `;
         } else if (isDebutBranch) {
             // Debut branch offers BOTH mon_wed (Asylkhan) and mon_wed_fri (Nail)
@@ -6778,6 +6859,12 @@ function populateAttendanceScheduleDropdown() {
                 <option value="" data-i18n="admin.attendance.allSchedules">All Schedules</option>
                 ${scheduleOptionsHtml(halykScheduleTypes)}
             `;
+        } else if (isDebutBranch && debutScheduleTypes) {
+            // Debut coach-aware (Azamat): only his own days.
+            mobileSelect.innerHTML = `
+                <option value="" data-i18n="admin.attendance.allSchedules">All Schedules</option>
+                ${scheduleOptionsHtml(debutScheduleTypes)}
+            `;
         } else if (isDebutBranch) {
             // Debut branch offers BOTH mon_wed (Asylkhan) and mon_wed_fri (Nail)
             mobileSelect.innerHTML = `
@@ -6822,6 +6909,10 @@ function populateAttendanceScheduleDropdown() {
             addStudentSelect.innerHTML = halykScheduleTypes.length
                 ? scheduleOptionsHtml(halykScheduleTypes)
                 : `<option value="" data-i18n="admin.attendance.allSchedules">All Schedules</option>`;
+        } else if (isDebutBranch && debutScheduleTypes) {
+            // Debut coach-aware (Azamat): only his own days (no "All"; a student
+            // is assigned exactly one schedule).
+            addStudentSelect.innerHTML = scheduleOptionsHtml(debutScheduleTypes);
         } else if (isDebutBranch) {
             // Debut branch offers BOTH mon_wed (Asylkhan) and mon_wed_fri (Nail)
             addStudentSelect.innerHTML = `
@@ -6958,6 +7049,7 @@ function onAttendanceCoachChange() {
     // reset the selected schedule if it's no longer valid for the new coach.
     populateAttendanceScheduleDropdown();
     applyHalykScheduleResetForCoach();
+    applyDebutScheduleResetForCoach();
 
     // Repopulate time slots with coach-specific slots
     populateAttendanceTimeSlots();
@@ -7064,6 +7156,7 @@ function onMobileAttendanceCoachChange() {
     // reset the selected schedule if it's no longer valid for the new coach.
     populateAttendanceScheduleDropdown();
     applyHalykScheduleResetForCoach();
+    applyDebutScheduleResetForCoach();
     populateAttendanceTimeSlots();
 
     // Save filter state
