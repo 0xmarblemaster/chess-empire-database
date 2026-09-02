@@ -9355,15 +9355,16 @@ async function submitAddStudentToCalendar() {
         const selectedBranchIsDebut = selectedBranchName.includes('debut') || selectedBranchName.includes('дебют');
         const selectedBranchMaxCapacity = selectedBranchIsDebut ? DEBUT_MAX_TIME_SLOT_CAPACITY : MAX_TIME_SLOT_CAPACITY;
 
-        if (studentsInSlot.length >= selectedBranchMaxCapacity) {
-            // Get coach name for the selected student
-            const student = window.students?.find(s => s.id === studentId);
-            let coachName = null;
-            if (student && student.coachId) {
-                const coach = window.coaches?.find(c => c.id === student.coachId);
-                coachName = coach ? `${coach.firstName} ${coach.lastName}` : null;
-            }
+        // Get coach name for the selected student — used for the capacity
+        // toast below and for logical_slot_id resolution on save.
+        const student = window.students?.find(s => s.id === studentId);
+        let coachName = null;
+        if (student && student.coachId) {
+            const coach = window.coaches?.find(c => c.id === student.coachId);
+            coachName = coach ? `${coach.firstName} ${coach.lastName}` : null;
+        }
 
+        if (studentsInSlot.length >= selectedBranchMaxCapacity) {
             const timeSlots = getTimeSlotsForBranch(selectedBranch, selectedSchedule, coachName);
             const slotTime = timeSlots[timeSlotIndex];
             const slotLabel = slotTime && typeof window.getTimeSlotLabel === 'function'
@@ -9419,7 +9420,6 @@ async function submitAddStudentToCalendar() {
         }
 
         // Show success message
-        const student = window.students.find(s => s.id === studentId);
         const studentName = student ? `${student.firstName} ${student.lastName}` : 'Student';
         showToast(t('admin.attendance.studentAddedSuccess', { name: studentName }) || `${studentName} added to calendar`, 'success');
 
