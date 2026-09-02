@@ -5853,13 +5853,18 @@ function canEditCurrentSlots() {
     // A specific coach must be selected — time_slots rows are keyed per-coach,
     // so "All Coaches" / "Unassigned" has no single row to edit.
     if (!attendanceCurrentCoachName) return false;
-    if (attendanceRoleInfo.isAdmin) return true;
-    return !!attendanceRoleInfo.coachId && attendanceCurrentCoach === attendanceRoleInfo.coachId;
+    // Migration 079: any dashboard user (admin, coach, or can_edit_students)
+    // may edit slots on ANY coach's calendar. RLS enforces the actual
+    // permission; the only UI requirement left is that a concrete coach
+    // context is selected above.
+    return true;
 }
 
 function editButtonHiddenReason() {
     if (!attendanceRoleInfo) return null;
-    if (attendanceRoleInfo.isAdmin && !attendanceCurrentCoachName) return 'admin_no_coach_selected';
+    // Any dashboard user can edit slots once a concrete coach is picked, so the
+    // "select a coach first" hint now applies to everyone (migration 079).
+    if (!attendanceCurrentCoachName) return 'no_coach_selected';
     return null;
 }
 
@@ -8191,7 +8196,7 @@ function renderAttendanceCalendar(preFilteredData = null) {
             editBtnHtml = `<button type="button" class="time-slot-edit-btn" data-slot-time="${timeSlot}" title="${t('admin.attendance.editTimeSlot.title') || 'Edit time slot'}" onclick="event.stopPropagation(); openEditTimeSlotModal('${timeSlot}')">
                     <i data-lucide="pencil" style="width: 14px; height: 14px;"></i>
                 </button>`;
-        } else if (editButtonHiddenReason() === 'admin_no_coach_selected') {
+        } else if (editButtonHiddenReason() === 'no_coach_selected') {
             // Render a disabled pencil with a tooltip so admins know the action
             // exists and how to enable it (pick a specific coach in the filter).
             const hint = (t('admin.attendance.editTimeSlot.selectCoachToEdit') || 'Select a coach to edit slots').replace(/"/g, '&quot;');
