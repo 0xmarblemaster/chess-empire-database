@@ -5700,9 +5700,22 @@ async function loadTimeSlotsCache(year, month) {
                     slotIndex: row.slot_index
                 });
             }
+            // Render order: chronological by start time, slot_index only as
+            // tiebreaker. Indexes reflect creation history, so a slot created
+            // after its chronological neighbors (e.g. a new 11:00-12:00 when
+            // 12:00-13:00 already exists at a lower index) would otherwise
+            // display out of order. Reordering here cannot re-home students:
+            // membership resolves logical_slot_id -> array position both ways
+            // (migration 076), and legacy no-logical-id rows live on schedules
+            // with no cache bucket at all (hard-coded fallback arrays).
+            const _slotStartMin = (t) => {
+                const m = /^(\d{1,2}):(\d{2})/.exec(t || '');
+                return m ? (parseInt(m[1], 10) * 60 + parseInt(m[2], 10)) : Number.MAX_SAFE_INTEGER;
+            };
             for (const k of Object.keys(TIME_SLOTS_CACHE)) {
                 if (k.endsWith(`|${monthKey}`)) {
-                    TIME_SLOTS_CACHE[k].sort((a, b) => a.slotIndex - b.slotIndex);
+                    TIME_SLOTS_CACHE[k].sort((a, b) =>
+                        (_slotStartMin(a.time) - _slotStartMin(b.time)) || (a.slotIndex - b.slotIndex));
                 }
             }
             TIME_SLOTS_CACHE_LOADED[monthKey] = true;
