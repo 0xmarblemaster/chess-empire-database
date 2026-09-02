@@ -6024,6 +6024,176 @@ async function deleteTimeSlot() {
 }
 window.deleteTimeSlot = deleteTimeSlot;
 
+// ---------------------------------------------------------------------------
+// Add Time Slot (migration 078). Creates a NEW slot for the currently viewed
+// (branch, coach, schedule) bucket via the add_time_slot_versioned RPC. A
+// concrete coach must be selected — time_slots rows are keyed per-coach, so
+// "All Coaches" has no single bucket to add to.
+// ---------------------------------------------------------------------------
+
+// Localized "{Month} {Year}" label for the effective-from note.
+function _attendanceMonthLabel() {
+    const lang = (typeof getLanguage === 'function') ? getLanguage() : 'en';
+    const monthNames = lang === 'ru'
+        ? ['Январь', 'Февраль', 'Март', 'Апрель', 'Май', 'Июнь', 'Июль', 'Август', 'Сентябрь', 'Октябрь', 'Ноябрь', 'Декабрь']
+        : lang === 'kk'
+        ? ['Қаңтар', 'Ақпан', 'Наурыз', 'Сәуір', 'Мамыр', 'Маусым', 'Шілде', 'Тамыз', 'Қыркүйек', 'Қазан', 'Қараша', 'Желтоқсан']
+        : ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+    return `${monthNames[attendanceCurrentMonth]} ${attendanceCurrentYear}`;
+}
+
+// Render-format a "HH:MM"/"H:MM" time the way getTimeSlotsForBranch does
+// (strip a leading zero on the hour) so duplicate checks compare like-for-like.
+function _fmtSlotTime(hm) {
+    const [h, m] = hm.split(':');
+    return `${parseInt(h, 10)}:${m}`;
+}
+
+async function openAddTimeSlotModal() {
+    // A concrete coach + schedule must be selected.
+    if (!attendanceCurrentCoachName ||
+        attendanceCurrentCoach === 'all' ||
+        attendanceCurrentCoach === 'unassigned') {
+        alert(t('admin.attendance.addTimeSlot.selectCoachFirst') || 'Select a specific coach first to add a time slot.');
+        return;
+    }
+    if (!attendanceCurrentSchedule || attendanceCurrentSchedule === 'all') {
+        alert(t('admin.attendance.addTimeSlot.selectScheduleFirst') || 'Select a specific schedule first to add a time slot.');
+        return;
+    }
+    if (!attendanceCurrentBranch) {
+        alert(t('admin.attendance.addTimeSlot.selectBranchFirst') || 'Select a branch first to add a time slot.');
+        return;
+    }
+
+    // Ensure the cache is loaded so submit can tell DB buckets from fallback ones.
+    try {
+        const mk = _currentAttendanceMonthKey();
+        if (TIME_SLOTS_CACHE === null || !TIME_SLOTS_CACHE_LOADED[mk]) {
+            await loadTimeSlotsCache();
+        }
+    } catch (_) { /* fall through */ }
+
+    document.getElementById('addTimeSlotStart').value = '';
+    document.getElementById('addTimeSlotEnd').value = '';
+    document.getElementById('addTimeSlotLabel').value = '';
+    document.getElementById('addTimeSlotError').style.display = 'none';
+
+    const noteEl = document.getElementById('addTimeSlotEffectiveFromNote');
+    if (noteEl) {
+        const tpl = t('admin.attendance.addTimeSlot.appliesFromNote') ||
+            'Applies from {month} onward.';
+        noteEl.textContent = tpl.replace('{month}', _attendanceMonthLabel());
+    }
+
+    document.getElementById('addTimeSlotModal').classList.add('active');
+    if (window.lucide?.createIcons) window.lucide.createIcons();
+}
+window.openAddTimeSlotModal = openAddTimeSlotModal;
+
+function closeAddTimeSlotModal() {
+    document.getElementById('addTimeSlotModal').classList.remove('active');
+}
+window.closeAddTimeSlotModal = closeAddTimeSlotModal;
+
+// NEVER INSERT into time_slots directly — use add_time_slot_versioned RPC. See migration 078.
+async function submitAddTimeSlot() {
+    const errEl = document.getElementById('addTimeSlotError');
+    errEl.style.display = 'none';
+
+    if (!attendanceCurrentCoachName ||
+        attendanceCurrentCoach === 'all' ||
+        attendanceCurrentCoach === 'unassigned' ||
+        !attendanceCurrentSchedule || attendanceCurrentSchedule === 'all' ||
+        !attendanceCurrentBranch) {
+        errEl.textContent = t('admin.attendance.addTimeSlot.selectCoachFirst') || 'Select a specific coach first to add a time slot.';
+        errEl.style.display = 'block';
+        return;
+    }
+
+    const startVal = document.getElementById('addTimeSlotStart').value;
+    const endVal   = document.getElementById('addTimeSlotEnd').value;
+    const labelVal = (document.getElementById('addTimeSlotLabel').value || '').trim();
+
+    if (!startVal || !endVal) {
+        errEl.textContent = t('admin.attendance.addTimeSlot.errBothTimes') || 'Please enter both start and end time.';
+        errEl.style.display = 'block';
+        return;
+    }
+    if (startVal >= endVal) {
+        errEl.textContent = t('admin.attendance.addTimeSlot.errEndAfterStart') || 'End time must be after start time.';
+        errEl.style.display = 'block';
+        return;
+    }
+
+    // Duplicate check against the currently rendered slots for this bucket.
+    const renderedSlots = getTimeSlotsForBranch(
+        attendanceCurrentBranch, attendanceCurrentSchedule, attendanceCurrentCoachName) || [];
+    const candidate = `${_fmtSlotTime(startVal)}-${_fmtSlotTime(endVal)}`;
+    if (renderedSlots.includes(candidate)) {
+        errEl.textContent = t('admin.attendance.addTimeSlot.errDuplicate') || 'A slot with this start and end time already exists.';
+        errEl.style.display = 'block';
+        return;
+    }
+
+    // Resolve branch id from name.
+    const branchObj = (window.branches || []).find(b => b.name === attendanceCurrentBranch);
+    if (!branchObj) {
+        errEl.textContent = t('admin.attendance.branchNotFound') || 'Branch not found';
+        errEl.style.display = 'block';
+        return;
+    }
+
+    // If this bucket has NO DB rows it is fallback-only; seed the currently
+    // rendered fallback slots so they survive the flip to DB mode.
+    const monthKey = _currentAttendanceMonthKey();
+    const cacheKey = `${(attendanceCurrentBranch || '').toLowerCase()}|${(attendanceCurrentCoachName || '').toLowerCase()}|${attendanceCurrentSchedule}|${monthKey}`;
+    const bucket = TIME_SLOTS_CACHE?.[cacheKey];
+    const isFallbackOnly = !bucket || bucket.length === 0;
+    let seedSlots = null;
+    if (isFallbackOnly) {
+        seedSlots = renderedSlots.map(slot => {
+            const [s, e] = slot.split('-');
+            const pad = (t2) => {
+                const [h, m] = t2.split(':');
+                return `${String(h).padStart(2, '0')}:${m}`;
+            };
+            return { start: `${pad(s)}:00`, end: `${pad(e)}:00`, label: null };
+        });
+    }
+
+    const currentMonthStart = `${attendanceCurrentYear}-${String(attendanceCurrentMonth + 1).padStart(2, '0')}-01`;
+
+    try {
+        const { data, error } = await window.supabaseClient
+            .rpc('add_time_slot_versioned', {
+                p_branch: branchObj.id,
+                p_coach: attendanceCurrentCoach,
+                p_schedule: attendanceCurrentSchedule,
+                p_start_time: `${startVal}:00`,
+                p_end_time: `${endVal}:00`,
+                p_label: labelVal || null,
+                p_effective_from: currentMonthStart,
+                p_seed_slots: seedSlots
+            });
+        if (error) throw error;
+        if (!data) {
+            throw new Error(t('admin.attendance.editTimeSlot.errPermission') || 'You do not have permission to edit this slot. Contact an admin.');
+        }
+
+        await window.reloadTimeSlotsCache(attendanceCurrentYear, attendanceCurrentMonth);
+        closeAddTimeSlotModal();
+        if (typeof renderAttendanceCalendar === 'function') {
+            renderAttendanceCalendar();
+        }
+    } catch (err) {
+        console.error('[time_slots] add failed', err);
+        errEl.textContent = err?.message || t('admin.attendance.addTimeSlot.errSaveFailed') || 'Add failed.';
+        errEl.style.display = 'block';
+    }
+}
+window.submitAddTimeSlot = submitAddTimeSlot;
+
 // Time slot configuration: 8 slots, 10 students per slot
 // Default slots for all branches (9:00 - 18:00)
 const ATTENDANCE_TIME_SLOTS_DEFAULT = [
@@ -7951,6 +8121,14 @@ function renderAttendanceCalendar(preFilteredData = null) {
                         <line x1="22" y1="11" x2="16" y2="11"></line>
                     </svg>
                     ${t('admin.attendance.addStudent') || 'Add Student'}
+                </button>
+                <button class="attendance-add-student-btn" onclick="openAddTimeSlotModal()" style="margin-top: 0.375rem;">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <circle cx="12" cy="12" r="10"></circle>
+                        <line x1="12" y1="8" x2="12" y2="16"></line>
+                        <line x1="8" y1="12" x2="16" y2="12"></line>
+                    </svg>
+                    ${t('admin.attendance.addTimeSlot.button') || 'Add Time Slot'}
                 </button>
             </th>
     `;
