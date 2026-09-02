@@ -2699,7 +2699,7 @@ const supabaseData = {
 
             const { data, error } = await window.supabaseClient
                 .from('student_time_slot_assignments')
-                .select('student_id, time_slot_index, effective_from, hidden')
+                .select('student_id, time_slot_index, effective_from, hidden, logical_slot_id')
                 .eq('branch_id', branchId)
                 .eq('schedule_type', scheduleType)
                 .lte('effective_from', monthEnd)
@@ -2744,7 +2744,11 @@ const supabaseData = {
                 if (scheduleWideHidden.has(d.student_id)) continue;
                 resolved.push({
                     studentId: d.student_id,
-                    timeSlotIndex: d.time_slot_index
+                    timeSlotIndex: d.time_slot_index,
+                    // Migration 076: stable slot identity. The caller prefers
+                    // this over timeSlotIndex to stay renumber-safe; NULL for
+                    // legacy rows falls back to the positional index.
+                    logicalSlotId: d.logical_slot_id || null
                 });
                 contributingStudents.add(d.student_id);
             }
@@ -2782,7 +2786,7 @@ const supabaseData = {
      * @param {number} timeSlotIndex - The time slot index (0-based)
      * @returns {Object} The upserted assignment
      */
-    async upsertTimeSlotAssignment(studentId, branchId, scheduleType, timeSlotIndex) {
+    async upsertTimeSlotAssignment(studentId, branchId, scheduleType, timeSlotIndex, logicalSlotId = null) {
         // Effective-dating: writes from non-hide paths (drag-drop, initial seeding)
         // target the 1970-01-01 baseline row so they apply across all months
         // historically — same semantic as before migration 051. Multi-slot
@@ -2791,17 +2795,22 @@ const supabaseData = {
         // their existing slot assignments untouched. Hiding is the only
         // path that scopes a change to a specific month onward; see
         // deleteStudentFromCalendar in admin-v2.js.
+        // Migration 076: carry the stable logical_slot_id when the caller can
+        // resolve it. Only include the column when provided so a cache-miss
+        // (null) never overwrites an existing backfilled value on conflict.
+        const row = {
+            student_id: studentId,
+            branch_id: branchId,
+            schedule_type: scheduleType,
+            time_slot_index: timeSlotIndex,
+            effective_from: '1970-01-01',
+            hidden: false,
+            updated_at: new Date().toISOString()
+        };
+        if (logicalSlotId) row.logical_slot_id = logicalSlotId;
         const { data, error } = await window.supabaseClient
             .from('student_time_slot_assignments')
-            .upsert([{
-                student_id: studentId,
-                branch_id: branchId,
-                schedule_type: scheduleType,
-                time_slot_index: timeSlotIndex,
-                effective_from: '1970-01-01',
-                hidden: false,
-                updated_at: new Date().toISOString()
-            }], {
+            .upsert([row], {
                 onConflict: 'student_id,branch_id,schedule_type,time_slot_index,effective_from'
             })
             .select()
@@ -2855,7 +2864,8 @@ const supabaseData = {
             studentId: data.student_id,
             branchId: data.branch_id,
             scheduleType: data.schedule_type,
-            timeSlotIndex: data.time_slot_index
+            timeSlotIndex: data.time_slot_index,
+            logicalSlotId: data.logical_slot_id || null
         };
     },
 
@@ -2869,15 +2879,20 @@ const supabaseData = {
             return { success: 0, errors: [] };
         }
 
-        const insertData = assignments.map(a => ({
-            student_id: a.studentId,
-            branch_id: a.branchId,
-            schedule_type: a.scheduleType,
-            time_slot_index: a.timeSlotIndex,
-            effective_from: '1970-01-01',
-            hidden: false,
-            updated_at: new Date().toISOString()
-        }));
+        const insertData = assignments.map(a => {
+            const row = {
+                student_id: a.studentId,
+                branch_id: a.branchId,
+                schedule_type: a.scheduleType,
+                time_slot_index: a.timeSlotIndex,
+                effective_from: '1970-01-01',
+                hidden: false,
+                updated_at: new Date().toISOString()
+            };
+            // Migration 076: carry stable slot identity when available.
+            if (a.logicalSlotId) row.logical_slot_id = a.logicalSlotId;
+            return row;
+        });
 
         const { data, error } = await window.supabaseClient
             .from('student_time_slot_assignments')

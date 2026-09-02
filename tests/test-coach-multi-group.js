@@ -127,7 +127,7 @@ const SDATA_SRC = fs.readFileSync(path.join(ROOT, 'supabase-data.js'), 'utf8');
 
 const getBody = methodBody(SDATA_SRC, 'getTimeSlotAssignments');
 assert(getBody.length > 0, 'located getTimeSlotAssignments method body');
-assert(/\.select\(['"]student_id, time_slot_index, effective_from, hidden['"]\)/.test(getBody),
+assert(/\.select\(['"]student_id, time_slot_index, effective_from, hidden(?:, logical_slot_id)?['"]\)/.test(getBody),
     'getTimeSlotAssignments selects hidden column');
 assert(/`\$\{d\.student_id\}\|\$\{d\.time_slot_index\}`/.test(getBody),
     'getTimeSlotAssignments dedupes by (student_id, time_slot_index)');

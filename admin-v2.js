@@ -5595,7 +5595,7 @@ function loadAttendanceFilterState() {
 
 // Time slots cache: loaded from `time_slots` table (P2 + versioning in migration 049).
 // Key shape: `${branchName.toLowerCase()}|${coachName.toLowerCase()}|${scheduleType}|${YYYY-MM}`
-// Value: array of { id, time: "H:MM-H:MM", label, slotIndex } sorted by slotIndex,
+// Value: array of { id, logicalSlotId, time: "H:MM-H:MM", label, slotIndex } sorted by slotIndex,
 // containing the *latest* slot version with effective_from <= last day of YYYY-MM.
 // null cache = not yet loaded for ANY month; bucket miss = fallback to ATTENDANCE_TIME_SLOTS_* arrays.
 let TIME_SLOTS_CACHE = null;
@@ -5655,6 +5655,7 @@ async function loadTimeSlotsCache(year, month) {
                 .select(`
                     id, branch_id, coach_id, schedule_type, slot_index,
                     start_time, end_time, label, effective_from, deleted_at,
+                    logical_slot_id,
                     branches!inner(name),
                     coaches!time_slots_coach_id_fkey(first_name, last_name)
                 `)
@@ -5693,6 +5694,7 @@ async function loadTimeSlotsCache(year, month) {
                 if (!TIME_SLOTS_CACHE[cacheKey]) TIME_SLOTS_CACHE[cacheKey] = [];
                 TIME_SLOTS_CACHE[cacheKey].push({
                     id: row.id,
+                    logicalSlotId: row.logical_slot_id || null,
                     time: `${fmt(row.start_time)}-${fmt(row.end_time)}`,
                     label: row.label,
                     slotIndex: row.slot_index
@@ -5768,6 +5770,52 @@ function getTimeSlotIdForTime(branchName, scheduleType, coachName, timeString, m
     return match?.id || null;
 }
 window.getTimeSlotIdForTime = getTimeSlotIdForTime;
+
+// Stable logical_slot_id (migration 076) for the slot matching `timeString`.
+// Attendance marks store this — NOT the per-version time_slots.id — so a mark
+// survives slot re-timing/renumbering.
+function getLogicalSlotIdForTime(branchName, scheduleType, coachName, timeString, monthKey) {
+    if (!TIME_SLOTS_CACHE) return null;
+    const mk = monthKey || _currentAttendanceMonthKey();
+    const key = `${(branchName || '').toLowerCase()}|${(coachName || '').toLowerCase()}|${scheduleType}|${mk}`;
+    const bucket = TIME_SLOTS_CACHE[key];
+    if (!bucket) return null;
+    const match = bucket.find(s => s.time === timeString);
+    return match?.logicalSlotId || null;
+}
+window.getLogicalSlotIdForTime = getLogicalSlotIdForTime;
+
+// Logical_slot_id (migration 076) for the slot at display position `position`
+// in a coach's bucket. `position` is the render-order index used by the
+// calendar (drag-drop / add-student / hide), which equals the array position
+// in the compacted, slotIndex-sorted bucket. Best-effort: null when the cache
+// bucket is missing so callers fall back to the positional index.
+function getLogicalSlotIdForPosition(branchName, scheduleType, coachName, position, monthKey) {
+    if (!TIME_SLOTS_CACHE || typeof position !== 'number' || position < 0) return null;
+    const mk = monthKey || _currentAttendanceMonthKey();
+    const key = `${(branchName || '').toLowerCase()}|${(coachName || '').toLowerCase()}|${scheduleType}|${mk}`;
+    const bucket = TIME_SLOTS_CACHE[key];
+    if (!bucket) return null;
+    return bucket[position]?.logicalSlotId || null;
+}
+window.getLogicalSlotIdForPosition = getLogicalSlotIdForPosition;
+
+// Reverse of getLogicalSlotIdForPosition: the current render position of the
+// slot carrying `logicalSlotId` in a coach's bucket. This is the renumber-safe
+// membership resolver — an assignment's stored time_slot_index may be stale
+// after a restructure, but its logical_slot_id always finds the slot's current
+// display position. Returns null when the slot is absent (e.g. tombstoned this
+// month) so the caller can fall back to the positional index for legacy rows.
+function getSlotPositionForLogicalId(branchName, scheduleType, coachName, logicalSlotId, monthKey) {
+    if (!TIME_SLOTS_CACHE || !logicalSlotId) return null;
+    const mk = monthKey || _currentAttendanceMonthKey();
+    const key = `${(branchName || '').toLowerCase()}|${(coachName || '').toLowerCase()}|${scheduleType}|${mk}`;
+    const bucket = TIME_SLOTS_CACHE[key];
+    if (!bucket) return null;
+    const pos = bucket.findIndex(s => s.logicalSlotId === logicalSlotId);
+    return pos >= 0 ? pos : null;
+}
+window.getSlotPositionForLogicalId = getSlotPositionForLogicalId;
 
 function canEditCurrentSlots() {
     if (!attendanceRoleInfo) return false;
@@ -7483,12 +7531,29 @@ async function loadAttendanceData() {
                 timeSlotAssignmentsResult.value || { assignments: [], hiddenStudentIds: [] };
 
             // Build studentId → Set<slotIndex> map for quick lookup.
+            // Migration 076: prefer the assignment's stable logical_slot_id,
+            // resolving it to the slot's CURRENT render position, so a
+            // restructure (renumber/re-time/tombstone) does not re-home
+            // students. Fall back to the stored positional time_slot_index for
+            // legacy rows with no logical_slot_id (nothing breaks pre-migration).
+            // Resolution needs a specific coach's bucket; in "all coaches" mode
+            // the calendar uses fallback slot arrays, so we keep the positional
+            // index there (identical to pre-076 behavior).
+            const _logicalMonthKey = _monthKeyFromYM(attendanceCurrentYear, attendanceCurrentMonth);
             const assignmentMap = new Map();
             for (const a of savedAssignments) {
+                let slotIdx = a.timeSlotIndex;
+                if (a.logicalSlotId && attendanceCurrentCoachName) {
+                    const pos = getSlotPositionForLogicalId(
+                        attendanceCurrentBranch, scheduleFilter,
+                        attendanceCurrentCoachName, a.logicalSlotId, _logicalMonthKey
+                    );
+                    if (pos !== null) slotIdx = pos;
+                }
                 if (!assignmentMap.has(a.studentId)) {
                     assignmentMap.set(a.studentId, new Set());
                 }
-                assignmentMap.get(a.studentId).add(a.timeSlotIndex);
+                assignmentMap.get(a.studentId).add(slotIdx);
             }
 
             attendanceCalendarData.forEach(student => {
@@ -8378,14 +8443,18 @@ async function moveStudentToTimeSlot(studentId, fromSlotIndex, toSlotId, toSlotI
         try {
             // 1. Hide from the source slot (versioned per-slot via the
             //    migration 061 RPC). Skipped when there is no source slot.
+            //    Migration 076: carry the source slot's stable logical_slot_id.
             if (typeof fromSlotIndex === 'number' && fromSlotIndex >= 0) {
                 const displayedMonthStart = `${attendanceCurrentYear}-${String(attendanceCurrentMonth + 1).padStart(2, '0')}-01`;
+                const fromLogicalId = getLogicalSlotIdForPosition(
+                    attendanceCurrentBranch, scheduleType, attendanceCurrentCoachName, fromSlotIndex);
                 const { error: hideError } = await window.supabaseClient.rpc('hide_student_versioned', {
                     p_student_id: studentId,
                     p_branch_id: branchId,
                     p_schedule_type: scheduleType,
                     p_time_slot_index: fromSlotIndex,
-                    p_effective_from: displayedMonthStart
+                    p_effective_from: displayedMonthStart,
+                    p_logical_slot_id: fromLogicalId
                 });
                 if (hideError) {
                     console.error('Failed to hide student from source slot:', hideError);
@@ -8393,8 +8462,11 @@ async function moveStudentToTimeSlot(studentId, fromSlotIndex, toSlotId, toSlotI
             }
 
             // 2. Add (upsert) to the target slot. Independent of the
-            //    source-slot hide so sibling slots survive.
-            await supabaseData.upsertTimeSlotAssignment(studentId, branchId, scheduleType, toSlotIndex);
+            //    source-slot hide so sibling slots survive. Migration 076:
+            //    carry the target slot's stable logical_slot_id.
+            const toLogicalId = getLogicalSlotIdForPosition(
+                attendanceCurrentBranch, scheduleType, attendanceCurrentCoachName, toSlotIndex);
+            await supabaseData.upsertTimeSlotAssignment(studentId, branchId, scheduleType, toSlotIndex, toLogicalId);
             console.log(`Saved time slot move to database: ${studentName} → slot ${toSlotIndex}`);
         } catch (error) {
             console.error('Failed to save time slot move to database:', error);
@@ -8483,8 +8555,10 @@ async function toggleAttendanceStatus(studentId, dateStr, cell) {
     // Save to database
     try {
         const slotStr = attendanceCurrentTimeSlot !== 'all' ? attendanceCurrentTimeSlot : null;
+        // Migration 076: attendance.time_slot_id holds the STABLE logical_slot_id,
+        // not the per-version time_slots.id, so a mark survives slot re-timing.
         const slotId = slotStr
-            ? getTimeSlotIdForTime(attendanceCurrentBranch, attendanceCurrentSchedule, attendanceCurrentCoachName, slotStr)
+            ? getLogicalSlotIdForTime(attendanceCurrentBranch, attendanceCurrentSchedule, attendanceCurrentCoachName, slotStr)
             : null;
 
         if (newStatus === '') {
@@ -8683,8 +8757,10 @@ async function toggleAttendanceCheckbox(studentId, dateStr, cell) {
             // Upsert attendance record
             if (window.supabaseData && typeof window.supabaseData.upsertAttendance === 'function') {
                 const slotStr = attendanceCurrentTimeSlot !== 'all' ? attendanceCurrentTimeSlot : null;
+                // Migration 076: store the stable logical_slot_id (not the
+                // per-version time_slots.id) in attendance.time_slot_id.
                 const slotId = slotStr
-                    ? getTimeSlotIdForTime(attendanceCurrentBranch, attendanceCurrentSchedule || 'mon_wed', attendanceCurrentCoachName, slotStr)
+                    ? getLogicalSlotIdForTime(attendanceCurrentBranch, attendanceCurrentSchedule || 'mon_wed', attendanceCurrentCoachName, slotStr)
                     : null;
 
                 // Capture the result with ID
@@ -9290,13 +9366,19 @@ async function submitAddStudentToCalendar() {
             return;
         }
 
-        // Save time slot assignment to database
+        // Save time slot assignment to database. Migration 076: carry the
+        // target slot's stable logical_slot_id (resolved from the selected
+        // coach's cache bucket at the current attendance month).
         if (window.supabaseData?.upsertTimeSlotAssignment) {
+            const targetSlotIndex = parseInt(selectedTimeSlotIndex);
+            const targetLogicalId = getLogicalSlotIdForPosition(
+                selectedBranch, selectedSchedule, coachName, targetSlotIndex);
             await window.supabaseData.upsertTimeSlotAssignment(
                 studentId,
                 branchObj.id,
                 selectedSchedule,
-                parseInt(selectedTimeSlotIndex)
+                targetSlotIndex,
+                targetLogicalId
             );
         }
 
@@ -9458,12 +9540,18 @@ async function deleteStudentFromCalendar(studentId, studentName, slotIndex) {
 
             const displayedMonthStart = `${attendanceCurrentYear}-${String(attendanceCurrentMonth + 1).padStart(2, '0')}-01`;
 
+            // Migration 076: carry the slot's stable logical_slot_id so the
+            // hide row records which logical slot it belongs to.
+            const hideLogicalId = getLogicalSlotIdForPosition(
+                attendanceCurrentBranch, attendanceCurrentSchedule, attendanceCurrentCoachName, slotIndex);
+
             const { error } = await window.supabaseClient.rpc('hide_student_versioned', {
                 p_student_id: studentId,
                 p_branch_id: branchObj.id,
                 p_schedule_type: attendanceCurrentSchedule,
                 p_time_slot_index: slotIndex,
-                p_effective_from: displayedMonthStart
+                p_effective_from: displayedMonthStart,
+                p_logical_slot_id: hideLogicalId
             });
             if (error) {
                 console.error('Error hiding student via RPC:', error);
