@@ -5818,7 +5818,9 @@ window.getLogicalSlotIdForPosition = getLogicalSlotIdForPosition;
 // membership resolver — an assignment's stored time_slot_index may be stale
 // after a restructure, but its logical_slot_id always finds the slot's current
 // display position. Returns null when the slot is absent (e.g. tombstoned this
-// month) so the caller can fall back to the positional index for legacy rows.
+// month); the caller must then SKIP the assignment row rather than fall back to
+// its stale positional index, which would re-home the student into an unrelated
+// slot after a restructure. See RALPH_TASK_tombstone-fallback-fix.md.
 function getSlotPositionForLogicalId(branchName, scheduleType, coachName, logicalSlotId, monthKey) {
     if (!TIME_SLOTS_CACHE || !logicalSlotId) return null;
     const mk = monthKey || _currentAttendanceMonthKey();
@@ -7820,7 +7822,15 @@ async function loadAttendanceData() {
                         attendanceCurrentBranch, scheduleFilter,
                         attendanceCurrentCoachName, a.logicalSlotId, _logicalMonthKey
                     );
-                    if (pos !== null) slotIdx = pos;
+                    // The logical slot is tombstoned — no live slot carries this
+                    // logical_slot_id in the current era. Falling back to the raw
+                    // positional index would re-home the student into an unrelated
+                    // slot after a restructure renumbers slots (real incident:
+                    // student stuck in a dead slot's stale row, undeletable on every
+                    // refresh). Skip the row entirely instead. See
+                    // RALPH_TASK_tombstone-fallback-fix.md.
+                    if (pos === null) continue;
+                    slotIdx = pos;
                 }
                 if (!assignmentMap.has(a.studentId)) {
                     assignmentMap.set(a.studentId, new Set());
