@@ -6729,8 +6729,11 @@ async function moveStudentToTimeSlot(studentId, fromSlotId, toSlotId, toSlotInde
 
     if (branchId && scheduleType) {
         try {
-            await supabaseData.upsertTimeSlotAssignment(studentId, branchId, scheduleType, toSlotIndex);
-            console.log(`Saved time slot assignment to database: ${studentName} → slot ${toSlotIndex}`);
+            // DB write disabled: this legacy admin page is not loaded by any HTML
+            // (admin-v2.js is the live app), and a direct assignment upsert would
+            // bypass the migration-081 no-auto-move guard. The live move path is
+            // admin-v2.js moveStudentToTimeSlot → move_student_slot_manual RPC.
+            console.warn('[legacy admin.js] moveStudentToTimeSlot DB write disabled — use admin-v2.js / move_student_slot_manual RPC');
         } catch (error) {
             console.error('Failed to save time slot assignment to database:', error);
             // Still show success since the UI has already updated
@@ -7491,15 +7494,11 @@ async function submitAddStudentToCalendar() {
             return;
         }
 
-        // Save time slot assignment to database
-        if (window.supabaseData?.upsertTimeSlotAssignment) {
-            await window.supabaseData.upsertTimeSlotAssignment(
-                studentId,
-                branchObj.id,
-                selectedSchedule,
-                parseInt(selectedTimeSlotIndex)
-            );
-        }
+        // DB write disabled: legacy admin page (not loaded by any HTML). A direct
+        // assignment upsert would bypass the migration-081 no-auto-move guard.
+        // The live path is admin-v2.js submitAddStudentToCalendar →
+        // move_student_slot_manual RPC.
+        console.warn('[legacy admin.js] add-student-to-calendar DB write disabled — use admin-v2.js / move_student_slot_manual RPC');
 
         // Close modal
         closeAddStudentToCalendarModal();
@@ -7656,27 +7655,12 @@ async function deleteStudentFromCalendar(studentId, studentName) {
                 delete attendanceStudentScheduleAssignments[studentId];
             }
 
-            // Mark student as deleted by saving time_slot_index = -1
-            // This ensures they stay deleted even after page refresh
-            if (window.supabaseData && attendanceCurrentBranch && attendanceCurrentSchedule) {
-                try {
-                    // Look up the branch ID from the branch name
-                    const branchObj = window.branches?.find(b => b.name === attendanceCurrentBranch);
-                    if (branchObj && branchObj.id) {
-                        // Use -1 as a special value to indicate "deleted from this schedule"
-                        await window.supabaseData.upsertTimeSlotAssignment(
-                            studentId,
-                            branchObj.id,
-                            attendanceCurrentSchedule,
-                            -1 // Special value: deleted/removed from calendar
-                        );
-                        console.log(`Marked ${studentName} as deleted (time_slot_index = -1)`);
-                    }
-                } catch (err) {
-                    console.error('Error saving deletion marker:', err);
-                    // Continue anyway - the student is already removed from local state
-                }
-            }
+            // DB write disabled: legacy admin page (not loaded by any HTML). The
+            // live delete-from-calendar path is admin-v2.js deleteStudentFromCalendar
+            // → hide_student_versioned RPC (a per-slot hide, which the no-auto-move
+            // guard permits). A direct time_slot_index = -1 upsert here would bypass
+            // that guard (migration 081).
+            console.warn('[legacy admin.js] delete-from-calendar DB write disabled — use admin-v2.js / hide_student_versioned RPC');
 
             // Re-render calendar
             renderAttendanceCalendar();

@@ -6036,8 +6036,13 @@ async function saveTimeSlotEdit() {
 
         await window.reloadTimeSlotsCache(attendanceCurrentYear, attendanceCurrentMonth);
         closeEditTimeSlotModal();
-        if (typeof renderAttendanceCalendar === 'function') {
-            renderAttendanceCalendar();
+        // Re-resolve every student's slot membership against the fresh slot cache
+        // BEFORE re-rendering. Rendering alone would draw stale
+        // student.timeSlotIndexes (computed in loadAttendanceData) against the new
+        // chronological slot order, shifting groups by one slot. loadAttendanceData
+        // ends in renderAttendanceCalendar(), so this is a single re-render.
+        if (typeof loadAttendanceData === 'function') {
+            await loadAttendanceData();
         }
     } catch (err) {
         console.error('[time_slots] save failed', err);
@@ -6070,8 +6075,11 @@ async function deleteTimeSlot() {
         }
         await window.reloadTimeSlotsCache(attendanceCurrentYear, attendanceCurrentMonth);
         closeEditTimeSlotModal();
-        if (typeof renderAttendanceCalendar === 'function') {
-            renderAttendanceCalendar();
+        // Re-resolve slot membership against the fresh cache before rendering, so
+        // groups at/after the deleted slot don't render one position out of place.
+        // loadAttendanceData ends in renderAttendanceCalendar() — single re-render.
+        if (typeof loadAttendanceData === 'function') {
+            await loadAttendanceData();
         }
     } catch (err) {
         console.error('[time_slots] delete failed', err);
@@ -6306,8 +6314,13 @@ async function submitAddTimeSlot() {
 
         await window.reloadTimeSlotsCache(attendanceCurrentYear, attendanceCurrentMonth);
         closeAddTimeSlotModal();
-        if (typeof renderAttendanceCalendar === 'function') {
-            renderAttendanceCalendar();
+        // Re-resolve slot membership against the fresh cache before rendering. A
+        // new earlier slot shifts the chronological order; without re-resolving,
+        // every group at/after it would draw one slot too early (and marks/drags
+        // would then write the WRONG slot's id). loadAttendanceData ends in
+        // renderAttendanceCalendar() — single re-render, no assignment-row writes.
+        if (typeof loadAttendanceData === 'function') {
+            await loadAttendanceData();
         }
     } catch (err) {
         console.error('[time_slots] add failed', err);
@@ -8814,56 +8827,58 @@ async function moveStudentToTimeSlot(studentId, fromSlotIndex, toSlotId, toSlotI
     // Re-render the calendar to reflect changes immediately
     renderAttendanceCalendar(filteredData);
 
-    // Save to database in the background.
+    // Save to database via the SINGLE manual-move RPC (migration 081). It hides
+    // the student from the source slot and assigns them to the target slot in one
+    // transaction, setting the app.manual_slot_move flag the guard trigger + RLS
+    // require. No automatic/buggy path can move a student — a student only moves
+    // through an explicit user action like this drag.
     const branchObj = window.branches?.find(b => b.name === attendanceCurrentBranch);
     const branchId = branchObj?.id;
     const scheduleType = attendanceCurrentSchedule;
 
     if (branchId && scheduleType) {
+        // Resolve from/to logical ids + physical slot_index from the ACTUAL
+        // rendered slot positions involved in the drag (fromSlotIndex/toSlotIndex
+        // came from the DOM `time-slot-N` ids) — never from index arithmetic.
+        const hasSource = typeof fromSlotIndex === 'number' && fromSlotIndex >= 0;
+        const fromLogicalId = hasSource
+            ? getLogicalSlotIdForPosition(attendanceCurrentBranch, scheduleType, attendanceCurrentCoachName, fromSlotIndex)
+            : null;
+        const fromPhysicalIndex = hasSource
+            ? getSlotIndexForPosition(attendanceCurrentBranch, scheduleType, attendanceCurrentCoachName, fromSlotIndex)
+            : null;
+        const toLogicalId = getLogicalSlotIdForPosition(
+            attendanceCurrentBranch, scheduleType, attendanceCurrentCoachName, toSlotIndex);
+        const toPhysicalIndex = getSlotIndexForPosition(
+            attendanceCurrentBranch, scheduleType, attendanceCurrentCoachName, toSlotIndex);
+        const displayedMonthStart = `${attendanceCurrentYear}-${String(attendanceCurrentMonth + 1).padStart(2, '0')}-01`;
+        const coachId = (attendanceCurrentCoach && attendanceCurrentCoach !== 'all' && attendanceCurrentCoach !== 'unassigned')
+            ? attendanceCurrentCoach : null;
         try {
-            // 1. Hide from the source slot (versioned per-slot via the
-            //    migration 061 RPC). Skipped when there is no source slot.
-            //    Migration 076: carry the source slot's stable logical_slot_id.
-            if (typeof fromSlotIndex === 'number' && fromSlotIndex >= 0) {
-                const displayedMonthStart = `${attendanceCurrentYear}-${String(attendanceCurrentMonth + 1).padStart(2, '0')}-01`;
-                const fromLogicalId = getLogicalSlotIdForPosition(
-                    attendanceCurrentBranch, scheduleType, attendanceCurrentCoachName, fromSlotIndex);
-                // Pass the slot's real physical slot_index (not the render
-                // position) so the RPC's legacy-index fallback and the row it
-                // stores stay correct under tombstone skew (migration 077).
-                const fromPhysicalIndex = getSlotIndexForPosition(
-                    attendanceCurrentBranch, scheduleType, attendanceCurrentCoachName, fromSlotIndex);
-                const { error: hideError } = await window.supabaseClient.rpc('hide_student_versioned', {
-                    p_student_id: studentId,
-                    p_branch_id: branchId,
-                    p_schedule_type: scheduleType,
-                    p_time_slot_index: fromPhysicalIndex !== null ? fromPhysicalIndex : fromSlotIndex,
-                    p_effective_from: displayedMonthStart,
-                    p_logical_slot_id: fromLogicalId
-                });
-                if (hideError) {
-                    console.error('Failed to hide student from source slot:', hideError);
-                }
-            }
-
-            // 2. Add (upsert) to the target slot. Independent of the
-            //    source-slot hide so sibling slots survive. Migration 076:
-            //    carry the target slot's stable logical_slot_id. Migration 077:
-            //    store the real physical slot_index, not the render position.
-            const toLogicalId = getLogicalSlotIdForPosition(
-                attendanceCurrentBranch, scheduleType, attendanceCurrentCoachName, toSlotIndex);
-            const toPhysicalIndex = getSlotIndexForPosition(
-                attendanceCurrentBranch, scheduleType, attendanceCurrentCoachName, toSlotIndex);
-            await supabaseData.upsertTimeSlotAssignment(studentId, branchId, scheduleType, toPhysicalIndex !== null ? toPhysicalIndex : toSlotIndex, toLogicalId);
-            console.log(`Saved time slot move to database: ${studentName} → slot ${toSlotIndex}`);
+            const { error } = await window.supabaseClient.rpc('move_student_slot_manual', {
+                p_student_id: studentId,
+                p_branch_id: branchId,
+                p_day_group: scheduleType,
+                p_to_slot_index: toPhysicalIndex !== null ? toPhysicalIndex : toSlotIndex,
+                p_to_logical_slot_id: toLogicalId,
+                p_from_slot_index: hasSource ? (fromPhysicalIndex !== null ? fromPhysicalIndex : fromSlotIndex) : null,
+                p_from_logical_slot_id: fromLogicalId,
+                p_coach_id: coachId,
+                p_effective_from: displayedMonthStart
+            });
+            if (error) throw error;
+            console.log(`Saved time slot move via move_student_slot_manual: ${studentName} → slot ${toSlotIndex}`);
         } catch (error) {
             console.error('Failed to save time slot move to database:', error);
-            // Still show success since the UI has already updated
-            // The assignment will work for this session but may not persist
+            // The DB rejected the move (e.g. the no-auto-move guard). Surface a
+            // clear error and resync the calendar with DB truth so the optimistic
+            // local move is not left stranded in a shifted/incorrect state.
             showToast(
-                (t('admin.attendance.saveFailed') || 'Warning: Could not save to database. Changes may not persist.'),
-                'warning'
+                (t('admin.attendance.moveFailed') || 'Could not move student. The change was not saved.'),
+                'error'
             );
+            await loadAttendanceData();
+            return;
         }
     }
 
@@ -9755,24 +9770,32 @@ async function submitAddStudentToCalendar() {
             return;
         }
 
-        // Save time slot assignment to database. Migration 076: carry the
-        // target slot's stable logical_slot_id (resolved from the selected
-        // coach's cache bucket at the current attendance month).
-        if (window.supabaseData?.upsertTimeSlotAssignment) {
+        // Save the first-time assignment via the manual-move RPC (migration 081,
+        // p_from_* NULL = a brand-new assignment, not a move). Direct assignment
+        // upserts are forbidden by the no-auto-move guard; this explicit,
+        // single-student user action is the sanctioned path. Migration 076/077:
+        // carry the target slot's stable logical_slot_id + real physical index.
+        if (window.supabaseClient?.rpc) {
             const targetSlotIndex = parseInt(selectedTimeSlotIndex);
             const targetLogicalId = getLogicalSlotIdForPosition(
                 selectedBranch, selectedSchedule, coachName, targetSlotIndex);
-            // Migration 077: store the slot's real physical slot_index, not the
-            // render position, so tombstone skew never writes a mismatched row.
             const targetPhysicalIndex = getSlotIndexForPosition(
                 selectedBranch, selectedSchedule, coachName, targetSlotIndex);
-            await window.supabaseData.upsertTimeSlotAssignment(
-                studentId,
-                branchObj.id,
-                selectedSchedule,
-                targetPhysicalIndex !== null ? targetPhysicalIndex : targetSlotIndex,
-                targetLogicalId
-            );
+            const { error: addError } = await window.supabaseClient.rpc('move_student_slot_manual', {
+                p_student_id: studentId,
+                p_branch_id: branchObj.id,
+                p_day_group: selectedSchedule,
+                p_to_slot_index: targetPhysicalIndex !== null ? targetPhysicalIndex : targetSlotIndex,
+                p_to_logical_slot_id: targetLogicalId,
+                p_from_slot_index: null,
+                p_from_logical_slot_id: null,
+                p_coach_id: student?.coachId || null
+            });
+            if (addError) {
+                console.error('Failed to add student to calendar:', addError);
+                showToast(t('admin.attendance.addStudentFailed') || 'Could not add the student to the calendar. The change was not saved.', 'error');
+                return;
+            }
         }
 
         // Close modal

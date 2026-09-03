@@ -178,14 +178,20 @@ assert(fnBody(ADMIN_SRC, 'openEditTimeSlotModal').includes('getTimeSlotIdForTime
     'openEditTimeSlotModal still uses getTimeSlotIdForTime (per-version DB row id for editing)');
 
 // 2e. write paths carry logical ids
-assert(/p_logical_slot_id: fromLogicalId/.test(ADMIN_SRC),
-    'move: source-slot hide carries p_logical_slot_id');
-assert(/upsertTimeSlotAssignment\(studentId, branchId, scheduleType, toPhysicalIndex !== null \? toPhysicalIndex : toSlotIndex, toLogicalId\)/.test(ADMIN_SRC),
-    'move: target-slot upsert carries the physical slot_index + logical id');
+// Migration 081: the drag move and the add-student modal route through the one
+// move_student_slot_manual RPC (no direct assignment upsert survives).
+assert(/p_from_logical_slot_id: fromLogicalId/.test(ADMIN_SRC),
+    'move: manual-move RPC carries the source slot logical id');
+assert(/p_to_logical_slot_id: toLogicalId/.test(ADMIN_SRC),
+    'move: manual-move RPC carries the target slot logical id');
+assert(/rpc\('move_student_slot_manual'/.test(ADMIN_SRC),
+    'move + add-student both call the move_student_slot_manual RPC');
 assert(/p_logical_slot_id: hideLogicalId/.test(ADMIN_SRC),
     'deleteStudentFromCalendar hide carries p_logical_slot_id');
-assert(/upsertTimeSlotAssignment\(\s*\n?\s*studentId,\s*\n?\s*branchObj\.id,\s*\n?\s*selectedSchedule,\s*\n?\s*targetPhysicalIndex !== null \? targetPhysicalIndex : targetSlotIndex,\s*\n?\s*targetLogicalId/.test(ADMIN_SRC),
-    'add-student: upsert carries the physical slot_index + target logical id');
+assert(/p_to_logical_slot_id: targetLogicalId/.test(ADMIN_SRC),
+    'add-student: manual-move RPC carries the target slot logical id');
+assert(/p_from_slot_index: null/.test(ADMIN_SRC),
+    'add-student: manual-move RPC passes a NULL source slot (first-time assignment)');
 
 // 2f. Migration 077: write paths pass the real physical slot_index (not the
 //     display position) as p_time_slot_index, resolved via getSlotIndexForPosition.
@@ -195,8 +201,8 @@ assert(/window\.getSlotIndexForPosition\s*=\s*getSlotIndexForPosition/.test(ADMI
     'getSlotIndexForPosition is exported on window');
 assert(fnBody(ADMIN_SRC, 'getSlotIndexForPosition').includes('slot.slotIndex'),
     'getSlotIndexForPosition returns the physical slotIndex from the cache bucket');
-assert(/p_time_slot_index: fromPhysicalIndex !== null \? fromPhysicalIndex : fromSlotIndex/.test(ADMIN_SRC),
-    'move: source-slot hide passes the physical slot_index (falls back to display position)');
+assert(/p_to_slot_index: toPhysicalIndex !== null \? toPhysicalIndex : toSlotIndex/.test(ADMIN_SRC),
+    'move: manual-move RPC passes the target physical slot_index (falls back to display position)');
 assert(/p_time_slot_index: hidePhysicalIndex !== null \? hidePhysicalIndex : slotIndex/.test(ADMIN_SRC),
     'deleteStudentFromCalendar hide passes the physical slot_index (falls back to display position)');
 

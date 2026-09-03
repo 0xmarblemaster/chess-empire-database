@@ -184,8 +184,8 @@ assert(/next\.delete\(fromSlotIndex\)/.test(moveBody),
     'drag removes fromSlotIndex from local timeSlotIndexes');
 assert(/next\.add\(toSlotIndex\)/.test(moveBody),
     'drag adds toSlotIndex to local timeSlotIndexes');
-assert(/hide_student_versioned[\s\S]+p_time_slot_index\s*:\s*fromPhysicalIndex !== null \? fromPhysicalIndex : fromSlotIndex/.test(moveBody),
-    'drag hides the source slot via per-slot hide_student_versioned RPC with the physical slot_index (migration 077)');
+assert(/move_student_slot_manual[\s\S]+p_from_slot_index: hasSource \? \(fromPhysicalIndex !== null \? fromPhysicalIndex : fromSlotIndex\) : null/.test(moveBody),
+    'drag routes the move through the move_student_slot_manual RPC with the source physical slot_index (migration 081)');
 
 const dropBody = fnBody(ADMIN_SRC, 'handleSlotDrop');
 assert(dropBody.length > 0, 'located handleSlotDrop function body');
