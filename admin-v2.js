@@ -5710,12 +5710,17 @@ async function loadTimeSlotsCache(year, month) {
             }
             // Render order: chronological by start time, slot_index only as
             // tiebreaker. Indexes reflect creation history, so a slot created
-            // after its chronological neighbors (e.g. a new 11:00-12:00 when
-            // 12:00-13:00 already exists at a lower index) would otherwise
-            // display out of order. Reordering here cannot re-home students:
-            // membership resolves logical_slot_id -> array position both ways
-            // (migration 076), and legacy no-logical-id rows live on schedules
-            // with no cache bucket at all (hard-coded fallback arrays).
+            // after its chronological neighbors (e.g. a new 9:00-10:00 that
+            // sorts to render position 0 while carrying the HIGHEST slot_index)
+            // would otherwise display out of order. Reordering here cannot
+            // re-home students: rows with a logical_slot_id resolve it ->
+            // current array position (migration 076); legacy no-logical-id rows
+            // resolve their stored time_slot_index (== slot_index) -> current
+            // array position via getSlotPositionForSlotIndex. NOTE: prod data
+            // disproved the old assumption that legacy rows only live on
+            // fallback-only schedules — Halyk carries 133 such rows on DB-mode
+            // buckets, so the positional resolution above is load-bearing
+            // (specs/slot-empty-fix-20260903.md).
             const _slotStartMin = (t) => {
                 const m = /^(\d{1,2}):(\d{2})/.exec(t || '');
                 return m ? (parseInt(m[1], 10) * 60 + parseInt(m[2], 10)) : Number.MAX_SAFE_INTEGER;
@@ -5839,6 +5844,43 @@ function getSlotPositionForLogicalId(branchName, scheduleType, coachName, logica
     return pos >= 0 ? pos : null;
 }
 window.getSlotPositionForLogicalId = getSlotPositionForLogicalId;
+
+// Current render position of the slot whose PHYSICAL slot_index === `slotIndex`
+// in a coach's bucket. This is the renumber-safe resolver for legacy assignment
+// rows that never got a logical_slot_id (migration 076 left them NULL because
+// their bucket was in fallback mode when it ran). Their stored time_slot_index
+// equals the slot's stable slot_index (that is how 076 backfilled), NOT a render
+// position — so a new earlier slot that shifts the chronological order must not
+// be treated as their slot. Map slot_index -> the slot carrying it -> its
+// current array position. Returns null when the cache bucket is missing (true
+// fallback schedules) or the index has no live slot, so callers keep the stored
+// index. See specs/slot-empty-fix-20260903.md.
+function getSlotPositionForSlotIndex(branchName, scheduleType, coachName, slotIndex, monthKey) {
+    if (!TIME_SLOTS_CACHE || typeof slotIndex !== 'number' || slotIndex < 0) return null;
+    const mk = monthKey || _currentAttendanceMonthKey();
+    const key = `${(branchName || '').toLowerCase()}|${(coachName || '').toLowerCase()}|${scheduleType}|${mk}`;
+    const bucket = TIME_SLOTS_CACHE[key];
+    if (!bucket) return null;
+    const pos = bucket.findIndex(s => s.slotIndex === slotIndex);
+    return pos >= 0 ? pos : null;
+}
+window.getSlotPositionForSlotIndex = getSlotPositionForSlotIndex;
+
+// A (branch, coach, schedule) bucket is in DB mode when the versioned time_slots
+// cache holds at least one slot for it. DB-mode buckets NEVER positionally
+// auto-seed (initializeStudentTimeSlots): students without an assignment row
+// stay unassigned so a freshly created slot starts empty. A bucket with no cache
+// entry is fallback mode (hard-coded ATTENDANCE_TIME_SLOTS_* arrays), where the
+// legacy auto-seed still applies. Requires a concrete coach — "all coaches" has
+// no single bucket and keeps the pre-existing fallback behavior.
+function isDbModeSlotBucket(branchName, scheduleType, coachName, monthKey) {
+    if (!TIME_SLOTS_CACHE || !branchName || !scheduleType || !coachName) return false;
+    const mk = monthKey || _currentAttendanceMonthKey();
+    const key = `${branchName.toLowerCase()}|${coachName.toLowerCase()}|${scheduleType}|${mk}`;
+    const bucket = TIME_SLOTS_CACHE[key];
+    return !!(bucket && bucket.length > 0);
+}
+window.isDbModeSlotBucket = isDbModeSlotBucket;
 
 // Physical time_slots.slot_index of the slot at display position `position`.
 // Write paths (add / drag / hide) store this — NOT the render position — as
@@ -6535,6 +6577,17 @@ function initializeStudentTimeSlots(skipStudentIds = new Set()) {
     if (attendanceCurrentBranch !== 'Halyk Arena') {
         // For non-Halyk Arena branches, leave students unassigned
         // They will not appear in any time slot until manually assigned
+        return;
+    }
+
+    // DB-mode gate (specs/slot-empty-fix-20260903.md): once a coach's Halyk
+    // bucket has real time_slots rows, positional auto-seed is FORBIDDEN — a
+    // student with no assignment row must render as unassigned, never be merged
+    // into a rendered slot by position. Otherwise a newly created slot (which
+    // may sort to render position 0) inherits every auto-seeded student. Only
+    // genuine fallback-mode buckets (hard-coded arrays, no DB rows) still seed.
+    if (isDbModeSlotBucket(attendanceCurrentBranch, attendanceCurrentSchedule,
+                           attendanceCurrentCoachName, _currentAttendanceMonthKey())) {
         return;
     }
 
@@ -7841,6 +7894,20 @@ async function loadAttendanceData() {
                     // stored positional index so the student stays visible
                     // exactly where they were (zero visual change), and record
                     // the orphan chain below so delete can reach it.
+                    if (pos !== null) slotIdx = pos;
+                } else if (!a.logicalSlotId && attendanceCurrentCoachName) {
+                    // Legacy row (no logical_slot_id — migration 076 left it NULL
+                    // because its bucket was fallback-mode then). Its stored
+                    // time_slot_index is the slot's PHYSICAL slot_index, not a
+                    // render position. Map slot_index -> the slot carrying it ->
+                    // its CURRENT render position, so a new earlier slot that
+                    // shifts the chronological order does not re-home the student
+                    // (specs/slot-empty-fix-20260903.md). pos === null (cache
+                    // miss / index has no live slot): keep the stored index.
+                    const pos = getSlotPositionForSlotIndex(
+                        attendanceCurrentBranch, scheduleFilter,
+                        attendanceCurrentCoachName, a.timeSlotIndex, _logicalMonthKey
+                    );
                     if (pos !== null) slotIdx = pos;
                 }
                 if (!assignmentMap.has(a.studentId)) {
