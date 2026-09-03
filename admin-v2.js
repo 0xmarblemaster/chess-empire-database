@@ -5532,6 +5532,14 @@ let attendanceMatchedNames = [];
 let attendanceSearchQuery = ''; // Search filter for student names
 let attendanceStudentScheduleAssignments = {}; // { studentId: 'mon_wed' | 'tue_thu' | 'sat_sun' | null }
 let attendanceCurrentScheduleStudents = new Set(); // Students with time slot assignments in CURRENT schedule
+// Migration 076/077: records every assignment chain that contributes a student
+// to a DISPLAYED slot index, keyed `${studentId}:${slotIdx}` → array of
+// { logicalSlotId, physicalIndex }. Cleared and rebuilt on every
+// loadAttendanceData run. deleteStudentFromCalendar consults it so a student on
+// a tombstoned logical slot is hidden by that orphan chain's own logical id +
+// physical index (which the displayed-position resolution can no longer reach),
+// instead of the displayed slot's chain. See RALPH_TASK_tombstone-delete-anywhere.md.
+let _assignmentChainsBySlot = {};
 let attendanceHideEmptyRows = true; // Hide empty placeholder rows by default
 let attendanceCurrentMode = 'present'; // Current attendance marking mode: 'present', 'excused', or 'absent'
 let mobileCalendarOffset = 0; // Mobile: tracks which 4-day chunk (0, 4, 8, 12...)
@@ -5818,9 +5826,9 @@ window.getLogicalSlotIdForPosition = getLogicalSlotIdForPosition;
 // membership resolver — an assignment's stored time_slot_index may be stale
 // after a restructure, but its logical_slot_id always finds the slot's current
 // display position. Returns null when the slot is absent (e.g. tombstoned this
-// month); the caller must then SKIP the assignment row rather than fall back to
-// its stale positional index, which would re-home the student into an unrelated
-// slot after a restructure. See RALPH_TASK_tombstone-fallback-fix.md.
+// month); the caller then falls back to the stored positional index so the
+// student stays visible where they were, and records the orphan chain so delete
+// can still hide it by its own logical id. See RALPH_TASK_tombstone-delete-anywhere.md.
 function getSlotPositionForLogicalId(branchName, scheduleType, coachName, logicalSlotId, monthKey) {
     if (!TIME_SLOTS_CACHE || !logicalSlotId) return null;
     const mk = monthKey || _currentAttendanceMonthKey();
@@ -7815,6 +7823,11 @@ async function loadAttendanceData() {
             // index there (identical to pre-076 behavior).
             const _logicalMonthKey = _monthKeyFromYM(attendanceCurrentYear, attendanceCurrentMonth);
             const assignmentMap = new Map();
+            // Rebuild the chain map for this era from scratch. Supersedes
+            // cb63d57's skip approach: a row whose logical_slot_id is tombstoned
+            // must STILL render (via its positional index) and STILL be
+            // deletable, so we record its chain here rather than dropping it.
+            _assignmentChainsBySlot = {};
             for (const a of savedAssignments) {
                 let slotIdx = a.timeSlotIndex;
                 if (a.logicalSlotId && attendanceCurrentCoachName) {
@@ -7822,20 +7835,29 @@ async function loadAttendanceData() {
                         attendanceCurrentBranch, scheduleFilter,
                         attendanceCurrentCoachName, a.logicalSlotId, _logicalMonthKey
                     );
-                    // The logical slot is tombstoned — no live slot carries this
-                    // logical_slot_id in the current era. Falling back to the raw
-                    // positional index would re-home the student into an unrelated
-                    // slot after a restructure renumbers slots (real incident:
-                    // student stuck in a dead slot's stale row, undeletable on every
-                    // refresh). Skip the row entirely instead. See
-                    // RALPH_TASK_tombstone-fallback-fix.md.
-                    if (pos === null) continue;
-                    slotIdx = pos;
+                    // pos !== null: the logical slot resolves to a live render
+                    // position — use it (renumber/re-time safe). pos === null:
+                    // the logical slot is tombstoned this era; fall back to the
+                    // stored positional index so the student stays visible
+                    // exactly where they were (zero visual change), and record
+                    // the orphan chain below so delete can reach it.
+                    if (pos !== null) slotIdx = pos;
                 }
                 if (!assignmentMap.has(a.studentId)) {
                     assignmentMap.set(a.studentId, new Set());
                 }
                 assignmentMap.get(a.studentId).add(slotIdx);
+
+                // Record the chain that placed this student at this displayed
+                // slot index. Rows with a logicalSlotId (both live-resolving and
+                // tombstoned-fallback) carry it; legacy rows record a null
+                // logical id with their positional physicalIndex.
+                const chainKey = `${a.studentId}:${slotIdx}`;
+                if (!_assignmentChainsBySlot[chainKey]) _assignmentChainsBySlot[chainKey] = [];
+                _assignmentChainsBySlot[chainKey].push({
+                    logicalSlotId: a.logicalSlotId || null,
+                    physicalIndex: a.timeSlotIndex
+                });
             }
 
             attendanceCalendarData.forEach(student => {
@@ -9843,27 +9865,53 @@ async function deleteStudentFromCalendar(studentId, studentName, slotIndex) {
 
             const displayedMonthStart = `${attendanceCurrentYear}-${String(attendanceCurrentMonth + 1).padStart(2, '0')}-01`;
 
-            // Migration 076/077: carry the slot's stable logical_slot_id so the
-            // RPC resolves the correct row by logical id (renumber/tombstone
-            // safe), and pass the real physical slot_index — not the display
-            // position — for the legacy fallback and the stored row.
-            const hideLogicalId = getLogicalSlotIdForPosition(
-                attendanceCurrentBranch, attendanceCurrentSchedule, attendanceCurrentCoachName, slotIndex);
-            const hidePhysicalIndex = getSlotIndexForPosition(
-                attendanceCurrentBranch, attendanceCurrentSchedule, attendanceCurrentCoachName, slotIndex);
+            // Migration 076/077 + RALPH_TASK_tombstone-delete-anywhere.md:
+            // hide every assignment chain that actually contributes this student
+            // to the displayed slot, using each chain's OWN logical id + stored
+            // physical index. This reaches rows on tombstoned logical slots —
+            // whose chain the displayed-position resolution below can no longer
+            // find (getLogicalSlotIdForPosition returns the LIVE slot's id, not
+            // the orphan's), which is what made those students undeletable.
+            const recordedChains = _assignmentChainsBySlot[`${studentId}:${slotIndex}`];
+            if (Array.isArray(recordedChains) && recordedChains.length > 0) {
+                for (const chain of recordedChains) {
+                    const { error } = await window.supabaseClient.rpc('hide_student_versioned', {
+                        p_student_id: studentId,
+                        p_branch_id: branchObj.id,
+                        p_schedule_type: attendanceCurrentSchedule,
+                        p_time_slot_index: chain.physicalIndex !== null ? chain.physicalIndex : slotIndex,
+                        p_effective_from: displayedMonthStart,
+                        p_logical_slot_id: chain.logicalSlotId
+                    });
+                    if (error) {
+                        console.error('Error hiding student via RPC:', error);
+                        showError(t('admin.attendance.deleteError') || 'Failed to hide student');
+                        return;
+                    }
+                }
+            } else {
+                // Safety fallback: no recorded chain for this displayed slot
+                // (e.g. an all-coaches / legacy path that never ran the build).
+                // Resolve the logical id + physical index from the displayed
+                // position, exactly as before.
+                const hideLogicalId = getLogicalSlotIdForPosition(
+                    attendanceCurrentBranch, attendanceCurrentSchedule, attendanceCurrentCoachName, slotIndex);
+                const hidePhysicalIndex = getSlotIndexForPosition(
+                    attendanceCurrentBranch, attendanceCurrentSchedule, attendanceCurrentCoachName, slotIndex);
 
-            const { error } = await window.supabaseClient.rpc('hide_student_versioned', {
-                p_student_id: studentId,
-                p_branch_id: branchObj.id,
-                p_schedule_type: attendanceCurrentSchedule,
-                p_time_slot_index: hidePhysicalIndex !== null ? hidePhysicalIndex : slotIndex,
-                p_effective_from: displayedMonthStart,
-                p_logical_slot_id: hideLogicalId
-            });
-            if (error) {
-                console.error('Error hiding student via RPC:', error);
-                showError(t('admin.attendance.deleteError') || 'Failed to hide student');
-                return;
+                const { error } = await window.supabaseClient.rpc('hide_student_versioned', {
+                    p_student_id: studentId,
+                    p_branch_id: branchObj.id,
+                    p_schedule_type: attendanceCurrentSchedule,
+                    p_time_slot_index: hidePhysicalIndex !== null ? hidePhysicalIndex : slotIndex,
+                    p_effective_from: displayedMonthStart,
+                    p_logical_slot_id: hideLogicalId
+                });
+                if (error) {
+                    console.error('Error hiding student via RPC:', error);
+                    showError(t('admin.attendance.deleteError') || 'Failed to hide student');
+                    return;
+                }
             }
 
             // Remove only this slot from the student's local timeSlotIndexes.

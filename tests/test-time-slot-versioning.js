@@ -383,14 +383,16 @@ function resolveLatestPerSlotForMonth(rows, monthEnd) {
 // ============================================================================
 console.log('\n=== compatibility check =============================================\n');
 
-// deleteTimeSlot is intentionally untouched by this PR; its zero-row guard
-// from the previous commit must still be intact.
+// deleteTimeSlot moved to a versioned soft-delete in commit 7a0fc9e: it now
+// calls the delete_time_slot_versioned RPC (inserting a tombstone version)
+// instead of the old hard .delete().eq(id).select() chain, so past months keep
+// their prior version. These assertions track that current, correct behavior.
 const delBody = fnBody(ADMIN_SRC, 'deleteTimeSlot');
 assert(delBody.length > 0, 'located deleteTimeSlot function body');
-assert(/\.delete\(\)\s*\.eq\(['"]id['"]\s*,\s*id\)\s*\.select\(\)/.test(delBody),
-    'deleteTimeSlot still uses .delete().eq(id).select() chain');
-assert(/if\s*\(\s*!data\s*\|\|\s*data\.length\s*===\s*0\s*\)/.test(delBody),
-    'deleteTimeSlot still has explicit zero-row guard');
+assert(/\.rpc\(\s*['"]delete_time_slot_versioned['"]/.test(delBody),
+    'deleteTimeSlot uses the delete_time_slot_versioned RPC (versioned soft-delete)');
+assert(/if\s*\(\s*!data\s*\)/.test(delBody),
+    'deleteTimeSlot guards on a falsy RPC result (permission / no-op)');
 
 console.log(`\n--- ${passed} passed, ${failed} failed ---\n`);
 if (failed > 0) process.exit(1);
