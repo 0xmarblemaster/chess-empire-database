@@ -7186,9 +7186,17 @@ function applyDebutScheduleResetForCoach() {
     const n = attendanceCurrentBranch.toLowerCase();
     if (!n.includes('debut') && !n.includes('дебют')) return;
     const types = getDebutScheduleTypesForCoach(attendanceCurrentCoach, attendanceCurrentCoachName);
-    if (!types) return;
-    if (attendanceCurrentSchedule !== '' && !types.includes(attendanceCurrentSchedule)) {
-        attendanceCurrentSchedule = types.length ? types[0] : '';
+    if (types) {
+        if (attendanceCurrentSchedule !== '' && !types.includes(attendanceCurrentSchedule)) {
+            attendanceCurrentSchedule = types.length ? types[0] : '';
+        }
+    } else if (attendanceCurrentSchedule === 'mon_wed_fri') {
+        // mon_wed_fri was retired from the generic Debut list (migration 083):
+        // a previously-saved selection falls back to mon_wed rather than
+        // persisting an option that no longer exists.
+        attendanceCurrentSchedule = 'mon_wed';
+    } else {
+        return;
     }
     const desktopSelect = document.getElementById('attendanceScheduleFilter');
     const mobileSelect = document.getElementById('mobileScheduleFilter');
@@ -7236,11 +7244,11 @@ function populateAttendanceScheduleDropdown() {
                 ${scheduleOptionsHtml(debutScheduleTypes)}
             `;
         } else if (isDebutBranch) {
-            // Debut branch offers BOTH mon_wed (Asylkhan) and mon_wed_fri (Nail)
+            // Debut generic list: mon_wed (Asylkhan) + tue_thu + sat_sun.
+            // (mon_wed_fri was retired — see migration 083.)
             desktopSelect.innerHTML = `
                 <option value="" data-i18n="admin.attendance.allSchedules">All Schedules</option>
                 <option value="mon_wed" data-i18n="admin.attendance.monWed">${t('admin.attendance.monWed')}</option>
-                <option value="mon_wed_fri" data-i18n="admin.attendance.monWedFri">${t('admin.attendance.monWedFri')}</option>
                 <option value="tue_thu" data-i18n="admin.attendance.tueThu">${t('admin.attendance.tueThu')}</option>
                 <option value="sat_sun" data-i18n="admin.attendance.satSun">${t('admin.attendance.satSun')}</option>
             `;
@@ -7286,11 +7294,11 @@ function populateAttendanceScheduleDropdown() {
                 ${scheduleOptionsHtml(debutScheduleTypes)}
             `;
         } else if (isDebutBranch) {
-            // Debut branch offers BOTH mon_wed (Asylkhan) and mon_wed_fri (Nail)
+            // Debut generic list: mon_wed (Asylkhan) + tue_thu + sat_sun.
+            // (mon_wed_fri was retired — see migration 083.)
             mobileSelect.innerHTML = `
                 <option value="" data-i18n="admin.attendance.allSchedules">All Schedules</option>
                 <option value="mon_wed" data-i18n="admin.attendance.monWed">${t('admin.attendance.monWed')}</option>
-                <option value="mon_wed_fri" data-i18n="admin.attendance.monWedFri">${t('admin.attendance.monWedFri')}</option>
                 <option value="tue_thu" data-i18n="admin.attendance.tueThu">${t('admin.attendance.tueThu')}</option>
                 <option value="sat_sun" data-i18n="admin.attendance.satSun">${t('admin.attendance.satSun')}</option>
             `;
@@ -7334,10 +7342,10 @@ function populateAttendanceScheduleDropdown() {
             // is assigned exactly one schedule).
             addStudentSelect.innerHTML = scheduleOptionsHtml(debutScheduleTypes);
         } else if (isDebutBranch) {
-            // Debut branch offers BOTH mon_wed (Asylkhan) and mon_wed_fri (Nail)
+            // Debut generic list: mon_wed (Asylkhan) + tue_thu + sat_sun.
+            // (mon_wed_fri was retired — see migration 083.)
             addStudentSelect.innerHTML = `
                 <option value="mon_wed" data-i18n="admin.attendance.monWed">${t('admin.attendance.monWed')}</option>
-                <option value="mon_wed_fri" data-i18n="admin.attendance.monWedFri">${t('admin.attendance.monWedFri')}</option>
                 <option value="tue_thu" data-i18n="admin.attendance.tueThu">${t('admin.attendance.tueThu')}</option>
                 <option value="sat_sun" data-i18n="admin.attendance.satSun">${t('admin.attendance.satSun')}</option>
             `;

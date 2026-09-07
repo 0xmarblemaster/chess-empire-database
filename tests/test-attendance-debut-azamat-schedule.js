@@ -158,8 +158,8 @@ function optionValues(html) {
     });
     api.populate();
     assertEqual(optionValues(selects.attendanceScheduleFilter.innerHTML),
-        ['', 'mon_wed', 'mon_wed_fri', 'tue_thu', 'sat_sun'],
-        'Debut/Nail desktop keeps the full generic list');
+        ['', 'mon_wed', 'tue_thu', 'sat_sun'],
+        'Debut/Nail desktop shows the generic list (mon_wed_fri retired)');
 }
 {
     const { api, selects } = loadDropdownSandbox({
@@ -167,8 +167,8 @@ function optionValues(html) {
     });
     api.populate();
     assertEqual(optionValues(selects.attendanceScheduleFilter.innerHTML),
-        ['', 'mon_wed', 'mon_wed_fri', 'tue_thu', 'sat_sun'],
-        'Debut/all-coaches desktop keeps the full generic list');
+        ['', 'mon_wed', 'tue_thu', 'sat_sun'],
+        'Debut/all-coaches desktop shows the generic list (mon_wed_fri retired)');
 }
 
 // Reset: Nail(mon_wed_fri) → switch to Azamat → resets to tue_thu.
@@ -197,13 +197,21 @@ function optionValues(html) {
     assertEqual(api.getSchedule(), '', 'empty All filter stays valid on coach change');
 }
 
-// Reset: no-op for other Debut coaches and for other branches.
+// Reset: generic Debut coaches fall back mon_wed_fri → mon_wed (retired option).
 {
     const { api } = loadDropdownSandbox({
         branch: 'Debut', coach: 'nail-id', coachName: NAIL_NAME, schedule: 'mon_wed_fri',
     });
     api.reset();
-    assertEqual(api.getSchedule(), 'mon_wed_fri', 'reset is a no-op for other Debut coaches');
+    assertEqual(api.getSchedule(), 'mon_wed', 'generic Debut coach with retired mon_wed_fri falls back to mon_wed');
+}
+// Reset: generic Debut coach with a still-valid schedule is left untouched.
+{
+    const { api } = loadDropdownSandbox({
+        branch: 'Debut', coach: 'nail-id', coachName: NAIL_NAME, schedule: 'tue_thu',
+    });
+    api.reset();
+    assertEqual(api.getSchedule(), 'tue_thu', 'generic Debut coach keeps a valid schedule');
 }
 {
     const { api } = loadDropdownSandbox({

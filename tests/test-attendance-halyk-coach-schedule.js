@@ -206,15 +206,16 @@ function optionValues(html) {
         'Halyk/Andrei add-student → [tue_thu, sat_sun]');
 }
 
-// Other branch (Debut) unchanged — no mon_fri, keeps mon_wed/mon_wed_fri/tue_thu/sat_sun.
+// Other branch (Debut) unaffected by the Halyk mon_fri change — generic list
+// is mon_wed/tue_thu/sat_sun (mon_wed_fri retired, see migration 083).
 {
     const { api, selects } = loadDropdownSandbox({
         branch: 'Debut', coach: 'all', coachName: null, schedule: '',
     });
     api.populate();
     const vals = optionValues(selects.attendanceScheduleFilter.innerHTML);
-    assertEqual(vals, ['', 'mon_wed', 'mon_wed_fri', 'tue_thu', 'sat_sun'],
-        'Debut desktop unchanged (no mon_fri)');
+    assertEqual(vals, ['', 'mon_wed', 'tue_thu', 'sat_sun'],
+        'Debut desktop unaffected by Halyk change (no mon_fri)');
     assert(!vals.includes('mon_fri'), 'Debut never offers mon_fri');
 }
 
