@@ -415,14 +415,14 @@ function loadBranches() {
                 <td>
                     <div class="student-cell">
                         <div class="student-avatar" style="background: linear-gradient(135deg, #8b5cf6 0%, #6366f1 100%);">
-                            <i data-lucide="building" style="width: 20px; height: 20px;"></i>
+                            <i data-lucide="${branch.is_online ? 'globe' : 'building'}" style="width: 20px; height: 20px;"></i>
                         </div>
                         <div class="student-name">${branch.name}</div>
                     </div>
                 </td>
-                <td>${branch.location}</td>
-                <td>${branch.phone}</td>
-                <td>${branch.email}</td>
+                <td>${branch.location || '—'}</td>
+                <td>${branch.is_online ? '—' : (branch.phone || '')}</td>
+                <td>${branch.is_online ? '—' : (branch.email || '')}</td>
                 <td><span class="level-badge">${studentCount}</span></td>
                 <td><span class="level-badge" style="background: #fef3c7; color: #92400e;">${coachCount}</span></td>
                 <td>

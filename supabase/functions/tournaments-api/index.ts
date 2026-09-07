@@ -324,6 +324,7 @@ async function getBranches(ctx: Ctx): Promise<Response> {
     .select('id, name, location')
     .not('name', 'ilike', '%НИШ%')
     .not('name', 'ilike', '%zhandosova%')
+    .not('name', 'ilike', '%online%')
     .order('name', { ascending: true })
   if (error) throw error
   // The schema column is `location`; the public API surface calls this

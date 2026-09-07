@@ -921,15 +921,15 @@ function showBranchesListView(updateHash = true) {
                         <div class="mobile-student-card" onclick="viewBranch('${branch.name}')">
                             <div class="mobile-card-header">
                                 <div class="mobile-card-avatar" style="background: linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%);">
-                                    <i data-lucide="building" style="width: 28px; height: 28px;"></i>
+                                    <i data-lucide="${branch.is_online ? 'globe' : 'building'}" style="width: 28px; height: 28px;"></i>
                                 </div>
                                 <div class="mobile-card-info">
                                     <div class="mobile-card-name">${i18n.translateBranchName(branch.name)}</div>
-                                    <div class="mobile-card-meta">${branch.location || 'Almaty'}</div>
+                                    <div class="mobile-card-meta">${branch.is_online ? i18n.translateBranchName(branch.name) : (branch.location || 'Almaty')}</div>
                                 </div>
                                 <span class="mobile-card-status active">${students.filter(s => s.branch === branch.name).length} students</span>
                             </div>
-                            
+                            ${branch.is_online ? '' : `
                             <div class="mobile-card-details">
                                 <div class="mobile-card-detail">
                                     <div class="mobile-card-detail-label">Phone</div>
@@ -940,6 +940,7 @@ function showBranchesListView(updateHash = true) {
                                     <div class="mobile-card-detail-value">${branch.email || 'branch@chessempire.kz'}</div>
                                 </div>
                             </div>
+                            `}
                         </div>
                     `).join('')}
                 </div>
@@ -6661,6 +6662,14 @@ function getTimeSlotsForBranch(branchName, scheduleType = null, coachName = null
         }
     }
     if (!branchName) return ATTENDANCE_TIME_SLOTS_DEFAULT;
+
+    // Online branches have NO schedule and are excluded from attendance — never
+    // seed the default physical slot grid for them (belt-and-suspenders; the
+    // attendance branch dropdowns already filter online branches out).
+    const _allBranches = (typeof window !== 'undefined' && window.branches) || [];
+    const branchObj = _allBranches.find(b => b.name === branchName);
+    if (branchObj && branchObj.is_online) return [];
+
     const normalizedName = branchName.toLowerCase().trim();
 
     if (normalizedName.includes('halyk') || normalizedName.includes('khalyk')) {
@@ -6952,6 +6961,12 @@ function populateAttendanceBranchDropdown() {
 
     // Get unique branches from students
     let uniqueBranches = [...new Set(window.students.map(s => s.branch))].filter(Boolean);
+
+    // Online branches have no schedule and are excluded from attendance marking.
+    const onlineBranchNames = new Set(
+        (window.branches || []).filter(b => b.is_online).map(b => b.name)
+    );
+    uniqueBranches = uniqueBranches.filter(b => !onlineBranchNames.has(b));
 
     // Coach lock: restrict the dropdown to branches the coach is assigned to
     // in coach_branches (migration 019). Prevents auto-jumping into — or even
@@ -7602,6 +7617,12 @@ function populateMobileBranchFilter() {
 
     // Get unique branches from students (same as desktop)
     let uniqueBranches = [...new Set(window.students.map(s => s.branch))].filter(Boolean);
+
+    // Online branches have no schedule and are excluded from attendance marking.
+    const onlineBranchNames = new Set(
+        (window.branches || []).filter(b => b.is_online).map(b => b.name)
+    );
+    uniqueBranches = uniqueBranches.filter(b => !onlineBranchNames.has(b));
 
     // Coach lock: restrict to coach_branches assignments (parity with desktop).
     const allowedBranches = window.attendanceRoleLock

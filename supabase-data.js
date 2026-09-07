@@ -262,7 +262,8 @@ const supabaseData = {
             name: branch.name,
             location: branch.location,
             phone: branch.phone,
-            email: branch.email
+            email: branch.email,
+            is_online: branch.is_online || false
         }));
     },
 
@@ -273,7 +274,8 @@ const supabaseData = {
                 name: branchData.name,
                 location: branchData.location,
                 phone: branchData.phone,
-                email: branchData.email
+                email: branchData.email,
+                is_online: branchData.is_online || false
             }])
             .select()
             .single();
@@ -289,7 +291,8 @@ const supabaseData = {
             name: data.name,
             location: data.location,
             phone: data.phone,
-            email: data.email
+            email: data.email,
+            is_online: data.is_online || false
         };
     },
 

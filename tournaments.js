@@ -14,7 +14,10 @@
 
 // Branches excluded from the public schedule. Values are the strings stored
 // in branches.name. "NiS" is displayed externally; the DB row is "НИШ".
-const EXCLUDED_BRANCHES = ['НИШ', 'Zhandosova'];
+// "Online" is a virtual branch (branches.is_online) with no physical venue, so
+// its always-empty venue card is hidden here; online students still register
+// to physical tournaments normally (participation is student-keyed).
+const EXCLUDED_BRANCHES = ['НИШ', 'Zhandosova', 'Online'];
 
 // Fallback polling interval (ms) when Realtime cannot connect.
 const POLL_INTERVAL_MS = 15000;
