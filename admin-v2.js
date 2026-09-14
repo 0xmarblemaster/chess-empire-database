@@ -2150,6 +2150,7 @@ function addNewStudent() {
 
     // Reset form
     document.getElementById('addStudentForm').reset();
+    toggleRazryadConfirmed('razryadSelect', 'razryadConfirmedRow');
     document.getElementById('photoPreview').innerHTML = '<i data-lucide="user" style="width: 64px; height: 64px; color: #94a3b8;"></i>';
 
     // Clear stored photo file
@@ -2158,6 +2159,22 @@ function addNewStudent() {
     // Reinitialize icons
     setTimeout(() => lucide.createIcons(), 100);
 }
+
+// Show the "Разряд подтверждён" checkbox only when a razryad other than 'none'
+// is selected; clear it when razryad is 'none' (an unranked student can't be
+// confirmed). Wired to the razryad <select> onchange in both student modals.
+function toggleRazryadConfirmed(selectId, rowId) {
+    const sel = document.getElementById(selectId);
+    const row = document.getElementById(rowId);
+    if (!sel || !row) return;
+    const hasRazryad = sel.value && sel.value !== 'none';
+    row.style.display = hasRazryad ? 'inline-flex' : 'none';
+    if (!hasRazryad) {
+        const cb = row.querySelector('input[type="checkbox"]');
+        if (cb) cb.checked = false;
+    }
+}
+window.toggleRazryadConfirmed = toggleRazryadConfirmed;
 
 // Close Add Student Modal
 function closeAddStudentModal() {
@@ -2403,6 +2420,8 @@ async function submitAddStudent(event) {
         coach: coachName,
         coachId: coach.id,
         razryad: formData.get('razryad') || 'none',
+        razryadConfirmed: (formData.get('razryad') && formData.get('razryad') !== 'none')
+            ? !!formData.get('razryadConfirmed') : false,
         status: (formData.get('status') || 'active').toLowerCase(),
         currentLevel: parseInt(formData.get('currentLevel')) || 1,
         currentLesson: parseInt(formData.get('currentLesson')) || 1,
@@ -2525,6 +2544,9 @@ function editStudent(studentId) {
 
     document.getElementById('editGender').value = student.gender || '';
     document.getElementById('editRazryadSelect').value = student.razryad || '';
+    const editConfirmedEl = document.getElementById('editRazryadConfirmed');
+    if (editConfirmedEl) editConfirmedEl.checked = !!student.razryadConfirmed;
+    toggleRazryadConfirmed('editRazryadSelect', 'editRazryadConfirmedRow');
     document.getElementById('editStatusSelect').value = student.status || 'active';
     document.getElementById('editCurrentLevel').value = student.currentLevel || '';
     document.getElementById('editCurrentLesson').value = student.currentLesson || '';
@@ -2851,6 +2873,8 @@ async function submitEditStudent(event) {
         branchId: branchId,
         coachId: coachId,
         razryad: formData.get('razryad') || 'none',
+        razryadConfirmed: (formData.get('razryad') && formData.get('razryad') !== 'none')
+            ? !!formData.get('razryadConfirmed') : false,
         status: formData.get('status') || 'active',
         currentLevel: parseInt(formData.get('currentLevel')) || student.currentLevel,
         currentLesson: parseInt(formData.get('currentLesson')) || student.currentLesson,
@@ -13622,6 +13646,10 @@ function _handleGuestRpcReason(data) {
         msg = (t && t !== key) ? t : _tt('admin.tournaments.error');
     } else if (reason === 'duplicate_guest') {
         msg = _tt('admin.tournaments.duplicateGuest');
+    } else if (reason === 'no_confirmed_razryad') {
+        msg = _tt('admin.tournaments.noConfirmedRazryad');
+    } else if (reason === 'guests_admin_only') {
+        msg = _tt('admin.tournaments.guestsAdminOnly');
     } else if (reason === 'ineligible') {
         const lg = data.tournament_league || '';
         const rg = data.student_league || '';
@@ -13677,7 +13705,10 @@ async function submitAddGuest(ev) {
         p_guest_phone:      _normalisePhone(f.phone.value),
         p_guest_age:        parseInt(f.age.value, 10),
         p_guest_rating:     ratingRaw ? parseInt(ratingRaw, 10) : null,
-        p_source:           'admin'
+        p_source:           'admin',
+        // Admin override: bypass the league='R' guest gate so admins can add
+        // any walk-in to a Titled tournament (spec decision #3).
+        p_force:            true
     };
     try {
         const { data, error } = await supabase.rpc('register_for_tournament', payload);

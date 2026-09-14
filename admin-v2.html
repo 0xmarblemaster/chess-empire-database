@@ -1846,7 +1846,7 @@
                     <div class="form-row">
                         <div class="form-group">
                             <label for="razryadSelect" class="form-label" data-i18n="admin.modals.add.razryad"></label>
-                            <select id="razryadSelect" name="razryad" class="form-input">
+                            <select id="razryadSelect" name="razryad" class="form-input" onchange="toggleRazryadConfirmed('razryadSelect','razryadConfirmedRow')">
                                 <option value="" data-i18n="admin.razryad.none"></option>
                                 <option value="4th" data-i18n="admin.razryad.4th"></option>
                                 <option value="3rd" data-i18n="admin.razryad.3rd"></option>
@@ -1854,6 +1854,10 @@
                                 <option value="1st" data-i18n="admin.razryad.1st"></option>
                                 <option value="KMS" data-i18n="admin.razryad.kms"></option>
                             </select>
+                            <label class="form-check" id="razryadConfirmedRow" style="display:none; margin-top:8px; align-items:center; gap:6px;">
+                                <input type="checkbox" id="razryadConfirmed" name="razryadConfirmed">
+                                <span data-i18n="admin.modals.add.razryadConfirmed"></span>
+                            </label>
                         </div>
                         <div class="form-group">
                             <label for="statusSelect" class="form-label" data-i18n="admin.modals.add.status"></label>
@@ -1994,7 +1998,7 @@
                     <div class="form-row">
                         <div class="form-group">
                             <label for="editRazryadSelect" class="form-label" data-i18n="admin.modals.add.razryad"></label>
-                            <select id="editRazryadSelect" name="razryad" class="form-input">
+                            <select id="editRazryadSelect" name="razryad" class="form-input" onchange="toggleRazryadConfirmed('editRazryadSelect','editRazryadConfirmedRow')">
                                 <option value="" data-i18n="admin.razryad.none"></option>
                                 <option value="4th" data-i18n="admin.razryad.4th"></option>
                                 <option value="3rd" data-i18n="admin.razryad.3rd"></option>
@@ -2002,6 +2006,10 @@
                                 <option value="1st" data-i18n="admin.razryad.1st"></option>
                                 <option value="KMS" data-i18n="admin.razryad.kms"></option>
                             </select>
+                            <label class="form-check" id="editRazryadConfirmedRow" style="display:none; margin-top:8px; align-items:center; gap:6px;">
+                                <input type="checkbox" id="editRazryadConfirmed" name="razryadConfirmed">
+                                <span data-i18n="admin.modals.add.razryadConfirmed"></span>
+                            </label>
                         </div>
                         <div class="form-group">
                             <label for="editStatusSelect" class="form-label" data-i18n="admin.modals.add.status"></label>
@@ -2613,6 +2621,7 @@
                                 <option value="A">A</option>
                                 <option value="B">B</option>
                                 <option value="C" selected>C</option>
+                                <option value="R" data-i18n="admin.tournaments.form.leagueR">Titled / Ranked (R)</option>
                             </select>
                         </div>
                     </div>

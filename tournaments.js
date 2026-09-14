@@ -158,6 +158,7 @@ const LEAGUE_NAME_KEYS = {
     'League A': 'leagues.leagueA',
     'League B': 'leagues.leagueB',
     'League C': 'leagues.leagueC',
+    'League R': 'leagues.leagueR',
 };
 
 function localizeTournamentName(name) {
@@ -649,6 +650,7 @@ function renderTournamentDetail(tournamentId) {
             </div>
             <div class="roster">${rosterHtml}</div>
             ${countdownHtml(t)}
+            ${t.league === 'R' ? `<p class="titled-note">${escapeHtml(tt('tournaments.titledOnlyNote'))}</p>` : ''}
             <button type="button" class="register-btn" data-register-for="${escapeAttr(t.id)}" ${isClosed ? 'disabled' : ''}>
                 ${escapeHtml(btnLabel)}
             </button>
