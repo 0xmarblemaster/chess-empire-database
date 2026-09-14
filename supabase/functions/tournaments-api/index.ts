@@ -25,7 +25,7 @@ const SUPABASE_URL = Deno.env.get('SUPABASE_URL') ?? ''
 const REASONS = [
   'unauthorized', 'not_found', 'closed', 'full',
   'duplicate', 'ineligible', 'invalid_input', 'server_error',
-  'no_confirmed_razryad', 'guests_admin_only',
+  'no_razryad', 'guests_admin_only',
 ] as const
 type Reason = typeof REASONS[number]
 
@@ -537,7 +537,7 @@ async function registerPlayer(ctx: Ctx, tournamentId: string): Promise<Response>
     reason === 'full'           ? 409 :
     reason === 'closed'         ? 409 :
     reason === 'ineligible'     ? 409 :
-    reason === 'no_confirmed_razryad' ? 409 :
+    reason === 'no_razryad' ? 409 :
     reason === 'guests_admin_only'    ? 409 :
     reason === 'invalid_input'  ? 400 : 500
   return json(result, status)

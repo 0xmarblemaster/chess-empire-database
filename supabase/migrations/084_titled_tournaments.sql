@@ -3,55 +3,26 @@
 -- CONTEXT (tasks/titled-tournament-spec.md)
 -- -----------------------------------------
 -- A new tournament type keyed off the existing `tournaments.league` column with
--- code 'R'. Only students who hold a *confirmed* razryad may self-register.
+-- code 'R'. Only students who hold a razryad may self-register.
 --
 -- Approved decisions:
 --   1. Guests: only admins may add guests to 'R' tournaments. Guest
 --      self-registration paths are blocked (reason 'guests_admin_only').
---   2. Students: a student with razryad != 'none' AND razryad_confirmed = TRUE
---      may self-register. Others are rejected with reason 'no_confirmed_razryad'.
+--   2. Students: a student with razryad != 'none' may self-register. Eligibility
+--      is read straight from students.razryad; there is no confirmation step.
+--      Manually-entered razryads count the same as system-detected ones. Others
+--      are rejected with reason 'no_razryad'.
 --   3. Admin override: admins force-register ANYONE (students without razryad,
 --      guests alike) via the new p_force flag, which bypasses the 'R' gate.
 --      The gate applies to self-registration paths only; force bypasses it
 --      explicitly (not accidentally).
---
--- "Confirmed" is a new flag: students.razryad_confirmed. System-detected
--- razryads (awarded from tournament uploads via the detect_razryad_from_result
--- trigger) are confirmed automatically; manually-entered razryads stay
--- unconfirmed until an admin ticks the "Разряд подтверждён" checkbox.
 --
 -- Idempotent — re-running this migration is safe.
 
 BEGIN;
 
 -- ============================================================
--- 1. students.razryad_confirmed
--- ============================================================
-ALTER TABLE students
-    ADD COLUMN IF NOT EXISTS razryad_confirmed BOOLEAN NOT NULL DEFAULT FALSE;
-
-COMMENT ON COLUMN students.razryad_confirmed IS
-    'TRUE when the razryad was system-detected (tournament upload) or explicitly confirmed by an admin. Gates self-registration into league=R (Titled) tournaments.';
-
--- Backfill: confirm razryads that were system-detected. razryad_history logs
--- every transition; entries written by the detect_razryad_from_result trigger
--- carry source='trigger'. A student whose current razryad matches such an entry
--- earned it on-system, so mark it confirmed. Manually-entered / imported
--- razryads (source 'manual'/'import', or no history at all) stay unconfirmed.
-UPDATE students s
-   SET razryad_confirmed = TRUE
- WHERE s.razryad IS NOT NULL
-   AND s.razryad <> 'none'
-   AND s.razryad_confirmed = FALSE
-   AND EXISTS (
-        SELECT 1 FROM razryad_history h
-         WHERE h.student_id = s.id
-           AND h.source = 'trigger'
-           AND h.new_razryad = s.razryad
-   );
-
--- ============================================================
--- 2. tournaments.league — allow 'R'
+-- 1. tournaments.league — allow 'R'
 -- ============================================================
 -- The original CHECK (migration 035) allowed only ('A','B','C'); the admin form
 -- has long offered 'A+' too. Rebuild the constraint idempotently so it reflects
@@ -62,55 +33,7 @@ ALTER TABLE tournaments
     CHECK (league IS NULL OR league IN ('A+', 'A', 'B', 'C', 'R'));
 
 -- ============================================================
--- 3. detect_razryad_from_result — confirm auto-awarded razryads
--- ============================================================
--- When the trigger upgrades a student's razryad from a tournament result, that
--- razryad is system-verified, so set razryad_confirmed = TRUE at the same time.
-CREATE OR REPLACE FUNCTION detect_razryad_from_result()
-RETURNS TRIGGER AS $$
-DECLARE
-    v_kind               tournament_kind;
-    v_earned             TEXT;
-    v_earned_for_student TEXT;
-    v_current            TEXT;
-BEGIN
-    SELECT kind INTO v_kind FROM tournaments_uploads WHERE id = NEW.upload_id;
-    IF v_kind IS NULL THEN
-        RETURN NEW;
-    END IF;
-
-    IF v_kind = 'razryad_4' AND NEW.score >= 6 THEN
-        v_earned := '4';
-        v_earned_for_student := '4th';
-    ELSIF v_kind = 'razryad_3' AND NEW.score >= 7 THEN
-        v_earned := '3';
-        v_earned_for_student := '3rd';
-    ELSE
-        v_earned := NULL;
-        v_earned_for_student := NULL;
-    END IF;
-
-    NEW.earned_razryad := v_earned;
-
-    IF v_earned IS NOT NULL THEN
-        SELECT razryad INTO v_current FROM students WHERE id = NEW.student_id;
-        IF razryad_rank(v_earned) > razryad_rank(v_current) THEN
-            UPDATE students
-               SET razryad = v_earned_for_student,
-                   razryad_confirmed = TRUE
-             WHERE id = NEW.student_id;
-        END IF;
-    END IF;
-
-    RETURN NEW;
-END;
-$$ LANGUAGE plpgsql SECURITY DEFINER;
-
-COMMENT ON FUNCTION detect_razryad_from_result() IS
-    'Migration 084: on-system razryad upgrade also sets students.razryad_confirmed = TRUE.';
-
--- ============================================================
--- 4. register_for_tournament — league 'R' gate + p_force override
+-- 2. register_for_tournament — league 'R' gate + p_force override
 -- ============================================================
 -- Based on migration 070. New: a trailing p_force BOOLEAN (default FALSE) that
 -- lets the admin dashboard force-register anyone into an 'R' tournament, and a
@@ -131,7 +54,6 @@ DECLARE
     v_required_league   TEXT;
     v_student_level     INT;
     v_student_razryad   TEXT;
-    v_student_confirmed BOOLEAN;
     v_registration_id   UUID;
     v_tournament        JSONB;
     v_source            TEXT;
@@ -265,22 +187,21 @@ BEGIN
         END IF;
 
         IF v_tournament_league = 'R' THEN
-            -- Titled tournament: self-registration requires a confirmed razryad.
+            -- Titled tournament: self-registration requires a razryad. Eligibility
+            -- is read straight from students.razryad (any value != 'none').
             -- p_force (admin override) bypasses this gate entirely.
             IF NOT p_force THEN
-                SELECT razryad, razryad_confirmed
-                  INTO v_student_razryad, v_student_confirmed
+                SELECT razryad
+                  INTO v_student_razryad
                   FROM students
                  WHERE id = p_student_id;
 
                 IF v_student_razryad IS NULL
-                   OR v_student_razryad = 'none'
-                   OR v_student_confirmed IS NOT TRUE THEN
+                   OR v_student_razryad = 'none' THEN
                     RETURN jsonb_build_object(
                         'ok', false,
-                        'reason', 'no_confirmed_razryad',
-                        'student_razryad', v_student_razryad,
-                        'razryad_confirmed', COALESCE(v_student_confirmed, false)
+                        'reason', 'no_razryad',
+                        'student_razryad', v_student_razryad
                     );
                 END IF;
             END IF;
