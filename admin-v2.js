@@ -8896,6 +8896,12 @@ async function moveStudentToTimeSlot(studentId, fromSlotIndex, toSlotId, toSlotI
                 p_effective_from: displayedMonthStart
             });
             if (error) throw error;
+            // Migration 086: moving a student INTO a slot is an explicit re-add
+            // for the destination — clear any exclusion there so the read-path
+            // hard filter stops shadowing them. Fail-open (no-op pre-migration).
+            await window.supabaseData?.deactivateStudentSlotExclusion?.(
+                studentId, branchId, scheduleType,
+                toPhysicalIndex !== null ? toPhysicalIndex : toSlotIndex, toLogicalId);
             console.log(`Saved time slot move via move_student_slot_manual: ${studentName} → slot ${toSlotIndex}`);
         } catch (error) {
             console.error('Failed to save time slot move to database:', error);
@@ -9825,6 +9831,12 @@ async function submitAddStudentToCalendar() {
                 showToast(t('admin.attendance.addStudentFailed') || 'Could not add the student to the calendar. The change was not saved.', 'error');
                 return;
             }
+            // Migration 086: an explicit add clears any hard exclusion for that
+            // slot so the read-path filter stops shadowing them. Fail-open.
+            await window.supabaseData?.deactivateStudentSlotExclusion?.(
+                studentId, branchObj.id, selectedSchedule,
+                targetPhysicalIndex !== null ? targetPhysicalIndex : targetSlotIndex,
+                targetLogicalId);
         }
 
         // Close modal
@@ -10007,6 +10019,13 @@ async function deleteStudentFromCalendar(studentId, studentName, slotIndex) {
                         showError(t('admin.attendance.deleteError') || 'Failed to hide student');
                         return;
                     }
+                    // Migration 086: also record a HARD exclusion for this
+                    // chain so the student can never resurrect via a stale row
+                    // the shadow logic missed. Fail-open (no-op pre-migration).
+                    await window.supabaseData?.addStudentSlotExclusion?.(
+                        studentId, branchObj.id, attendanceCurrentSchedule,
+                        chain.physicalIndex !== null ? chain.physicalIndex : slotIndex,
+                        chain.logicalSlotId);
                 }
             } else {
                 // Safety fallback: no recorded chain for this displayed slot
@@ -10031,6 +10050,11 @@ async function deleteStudentFromCalendar(studentId, studentName, slotIndex) {
                     showError(t('admin.attendance.deleteError') || 'Failed to hide student');
                     return;
                 }
+                // Migration 086: hard exclusion for the resolved slot too.
+                await window.supabaseData?.addStudentSlotExclusion?.(
+                    studentId, branchObj.id, attendanceCurrentSchedule,
+                    hidePhysicalIndex !== null ? hidePhysicalIndex : slotIndex,
+                    hideLogicalId);
             }
 
             // Remove only this slot from the student's local timeSlotIndexes.

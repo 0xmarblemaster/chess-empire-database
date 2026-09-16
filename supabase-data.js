@@ -2733,8 +2733,7 @@ const supabaseData = {
             // rows and the legacy -1 sentinel rows; the latter were already
             // accounted for by the schedule-wide hide pass.
             const seen = new Set();
-            const resolved = [];
-            const contributingStudents = new Set();
+            let resolved = [];
             for (const d of data) {
                 if (d.time_slot_index < 0) continue;
                 const slotKey = d.logical_slot_id || `idx:${d.time_slot_index}`;
@@ -2751,7 +2750,23 @@ const supabaseData = {
                     // legacy rows falls back to the positional index.
                     logicalSlotId: d.logical_slot_id || null
                 });
-                contributingStudents.add(d.student_id);
+            }
+
+            // Migration 086: HARD exclusion filter — the FINAL step after all
+            // dedupe/shadow logic. An active student_slot_exclusions row means
+            // the student can NEVER render in that slot, regardless of what
+            // stale/garbage assignment rows exist. A resolved slot is dropped
+            // if EITHER its stable logical_slot_id OR its physical index matches
+            // an active exclusion for that student. Fail open: if the table is
+            // absent (not yet migrated) the query errors and we skip filtering,
+            // so the frontend can deploy before the migration is applied.
+            resolved = await this._applySlotExclusions(resolved, branchId, scheduleType);
+
+            // Recompute the set of students that still contribute a visible slot
+            // AFTER exclusions, so hiddenStudentIds below stays correct.
+            const contributingStudents = new Set();
+            for (const r of resolved) {
+                contributingStudents.add(r.studentId);
             }
 
             // hiddenStudentIds: every student that has at least one row in
@@ -2780,6 +2795,107 @@ const supabaseData = {
     },
 
     /**
+     * Migration 086: drop any resolved slot that matches an ACTIVE exclusion
+     * for the student, by logical_slot_id OR physical index. Fail-open: if the
+     * student_slot_exclusions table is absent or the query errors, return the
+     * input unchanged so the read path keeps working pre-migration.
+     * @param {Array} resolved - [{ studentId, timeSlotIndex, logicalSlotId }]
+     * @returns {Promise<Array>} filtered resolved list
+     */
+    async _applySlotExclusions(resolved, branchId, scheduleType) {
+        try {
+            const { data, error } = await window.supabaseClient
+                .from('student_slot_exclusions')
+                .select('student_id, logical_slot_id, time_slot_index')
+                .eq('branch_id', branchId)
+                .eq('schedule_type', scheduleType)
+                .eq('active', true);
+
+            if (error || !data) return resolved; // fail open (table missing etc.)
+
+            const excludedByLogical = new Set();
+            const excludedByIndex = new Set();
+            for (const e of data) {
+                if (e.logical_slot_id) {
+                    excludedByLogical.add(`${e.student_id}|${e.logical_slot_id}`);
+                }
+                excludedByIndex.add(`${e.student_id}|idx:${e.time_slot_index}`);
+            }
+
+            return resolved.filter(r => {
+                if (r.logicalSlotId &&
+                    excludedByLogical.has(`${r.studentId}|${r.logicalSlotId}`)) {
+                    return false;
+                }
+                if (excludedByIndex.has(`${r.studentId}|idx:${r.timeSlotIndex}`)) {
+                    return false;
+                }
+                return true;
+            });
+        } catch (e) {
+            return resolved; // fail open
+        }
+    },
+
+    /**
+     * Migration 086: record a HARD exclusion so a deleted student can never
+     * resurrect in a slot. Upserts one row per (student, branch, schedule,
+     * physical slot), carrying the logical id when known. Fail-open: swallow
+     * the error if the table is absent so delete still succeeds pre-migration.
+     */
+    async addStudentSlotExclusion(studentId, branchId, scheduleType, timeSlotIndex, logicalSlotId = null) {
+        try {
+            const row = {
+                student_id: studentId,
+                branch_id: branchId,
+                schedule_type: scheduleType,
+                time_slot_index: timeSlotIndex,
+                active: true
+            };
+            if (logicalSlotId) row.logical_slot_id = logicalSlotId;
+            const { error } = await window.supabaseClient
+                .from('student_slot_exclusions')
+                .upsert([row], {
+                    onConflict: 'student_id,branch_id,schedule_type,time_slot_index'
+                });
+            if (error) {
+                console.log('student_slot_exclusions not available (skipping exclusion write):', error.message);
+                return false;
+            }
+            return true;
+        } catch (e) {
+            return false; // fail open
+        }
+    },
+
+    /**
+     * Migration 086: clear the exclusion for a slot when a student is
+     * explicitly re-added. Deactivates by logical id when known (renumber
+     * safe), else by physical index. Fail-open when the table is absent.
+     */
+    async deactivateStudentSlotExclusion(studentId, branchId, scheduleType, timeSlotIndex, logicalSlotId = null) {
+        try {
+            let query = window.supabaseClient
+                .from('student_slot_exclusions')
+                .update({ active: false })
+                .eq('student_id', studentId)
+                .eq('branch_id', branchId)
+                .eq('schedule_type', scheduleType);
+            query = logicalSlotId
+                ? query.eq('logical_slot_id', logicalSlotId)
+                : query.eq('time_slot_index', timeSlotIndex);
+            const { error } = await query;
+            if (error) {
+                console.log('student_slot_exclusions not available (skipping exclusion clear):', error.message);
+                return false;
+            }
+            return true;
+        } catch (e) {
+            return false; // fail open
+        }
+    },
+
+    /**
      * Update or create a time slot assignment for a student
      * @param {string} studentId - Student UUID
      * @param {string} branchId - Branch UUID
@@ -2796,6 +2912,14 @@ const supabaseData = {
         // their existing slot assignments untouched. Hiding is the only
         // path that scopes a change to a specific month onward; see
         // deleteStudentFromCalendar in admin-v2.js.
+        // Migration 085: never mint a legacy NULL-logical row. If the caller
+        // could not resolve the stable logical_slot_id (cache miss), re-fetch it
+        // from the time_slots chain now, before the insert. The DB also carries
+        // a BEFORE INSERT trigger that backfills this, but resolving here keeps
+        // the returned object and the hide-cleanup scoping below correct.
+        if (!logicalSlotId) {
+            logicalSlotId = await this._resolveLogicalSlotId(studentId, branchId, scheduleType, timeSlotIndex);
+        }
         // Migration 076: carry the stable logical_slot_id when the caller can
         // resolve it. Only include the column when provided so a cache-miss
         // (null) never overwrites an existing backfilled value on conflict.
@@ -2865,6 +2989,13 @@ const supabaseData = {
             throw clearLegacyHidesError;
         }
 
+        // Migration 086: explicitly re-adding a student to a slot contradicts
+        // any prior exclusion — clear it so the read-path hard filter stops
+        // shadowing them. Fail-open (helper swallows a missing-table error).
+        await this.deactivateStudentSlotExclusion(
+            studentId, branchId, scheduleType, timeSlotIndex,
+            data.logical_slot_id || logicalSlotId || null);
+
         return {
             id: data.id,
             studentId: data.student_id,
@@ -2873,6 +3004,39 @@ const supabaseData = {
             timeSlotIndex: data.time_slot_index,
             logicalSlotId: data.logical_slot_id || null
         };
+    },
+
+    /**
+     * Migration 085: resolve a slot's stable logical_slot_id from the
+     * time_slots chain (student's coach + schedule + slot_index). Best-effort;
+     * returns null on any miss/error so the caller can still write the row (the
+     * DB trigger backfills authoritatively).
+     */
+    async _resolveLogicalSlotId(studentId, branchId, scheduleType, timeSlotIndex) {
+        try {
+            if (typeof timeSlotIndex !== 'number' || timeSlotIndex < 0) return null;
+            let coachId = null;
+            const { data: s } = await window.supabaseClient
+                .from('students')
+                .select('coach_id')
+                .eq('id', studentId)
+                .single();
+            coachId = s?.coach_id || null;
+
+            let q = window.supabaseClient
+                .from('time_slots')
+                .select('logical_slot_id')
+                .eq('branch_id', branchId)
+                .eq('schedule_type', scheduleType)
+                .eq('slot_index', timeSlotIndex)
+                .order('effective_from', { ascending: false })
+                .limit(1);
+            if (coachId) q = q.eq('coach_id', coachId);
+            const { data } = await q;
+            return data && data[0] ? (data[0].logical_slot_id || null) : null;
+        } catch (e) {
+            return null;
+        }
     },
 
     /**
