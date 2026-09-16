@@ -76,6 +76,11 @@ DECLARE
   v_new student_time_slot_assignments;
   v_empty student_time_slot_assignments;
 BEGIN
+  -- Migration 081: a hide is a sanctioned single-student write. Flip the
+  -- transaction-local sentinel so the no-auto-move guard trigger + tightened
+  -- RLS permit the insert/update paths below (they set a slot reference).
+  PERFORM set_config('app.manual_slot_move', 'on', true);
+
   -- Resolve the chain's latest version on/before p_effective_from.
   IF p_logical_slot_id IS NOT NULL THEN
     -- Modern chain: match by the STABLE logical_slot_id (renumber/tombstone
@@ -144,6 +149,11 @@ BEGIN
   -- Later-month edit: insert a new version carrying the SAME slot identity
   -- (same logical_slot_id for modern, same NULL + index for legacy) with
   -- hidden=TRUE. Past months still resolve to the pre-existing row.
+  -- The version key (student, branch, schedule, index, month) is shared across
+  -- chains — another chain may already own this month's row at the same index
+  -- (e.g. the modern chain's hide when shadowing a legacy chain). Converge on
+  -- that row: mark it hidden and keep its identity (backfilling a legacy NULL
+  -- from ours if we have one); the 086 exclusion filter is the render backstop.
   INSERT INTO student_time_slot_assignments
     (student_id, branch_id, schedule_type, time_slot_index, effective_from,
      hidden, logical_slot_id, updated_by, created_at, updated_at)
@@ -152,6 +162,11 @@ BEGIN
      v_existing.time_slot_index, p_effective_from, TRUE,
      COALESCE(p_logical_slot_id, v_existing.logical_slot_id), auth.uid(),
      v_existing.created_at, NOW())
+  ON CONFLICT (student_id, branch_id, schedule_type, time_slot_index, effective_from) DO UPDATE
+    SET hidden          = TRUE,
+        logical_slot_id = COALESCE(student_time_slot_assignments.logical_slot_id, EXCLUDED.logical_slot_id),
+        updated_by      = auth.uid(),
+        updated_at      = NOW()
   RETURNING * INTO v_new;
   RETURN v_new;
 END
@@ -176,6 +191,9 @@ DECLARE
   v_primary student_time_slot_assignments;
   v_legacy student_time_slot_assignments;
 BEGIN
+  -- Migration 081 sentinel (transaction-local): sanctioned user-initiated hide.
+  PERFORM set_config('app.manual_slot_move', 'on', true);
+
   IF p_logical_slot_id IS NOT NULL THEN
     -- Primary chain: the logical-id chain. Insert a fresh hidden row if it has
     -- no prior version (migration 054).
