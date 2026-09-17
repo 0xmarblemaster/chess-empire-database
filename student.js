@@ -387,25 +387,42 @@ function renderLevelRankInfoBoxes(rankings) {
     return { branchRankHTML, schoolRankHTML };
 }
 
-// Render the Chesster app registration status panel.
+// Render the Chesster app registration status banner (full-width, spanning the
+// whole overview grid immediately above the Branch/School rank row).
 // Registered = student.chessterRegisteredAt is a truthy timestamp (synced from
 // the Chesster project by scripts/sync-chesster-registration.mjs). Anything
 // falsy — including a missing column before migration 088 is applied — reads as
-// "not registered", so the card never breaks.
+// "not registered", so the card never breaks. When registered and an email was
+// synced (migration 089) it is shown on a secondary line.
 function renderChessterStatusBox(student) {
     const isRegistered = !!(student && student.chessterRegisteredAt);
     const stateClass = isRegistered ? 'chesster-status--registered' : 'chesster-status--unregistered';
+    const statusIcon = isRegistered ? 'check' : 'x';
     const valueText = isRegistered
         ? (t('chesster.registered') || 'Registered')
         : (t('chesster.notRegistered') || 'Not registered');
 
+    const email = isRegistered && student.chessterEmail ? String(student.chessterEmail) : '';
+    const emailLine = email
+        ? `<div class="chesster-status-email">
+                <i data-lucide="mail" style="width: 14px; height: 14px;"></i>
+                <span>${escapeHtmlSafe(email)}</span>
+            </div>`
+        : '';
+
     return `
-        <div class="info-item chesster-status-item ${stateClass} mobile-order-0">
-            <div class="info-label">
+        <div class="chesster-status-banner ${stateClass} mobile-order-0">
+            <div class="info-label chesster-status-label">
                 <i data-lucide="smartphone" style="width: 14px; height: 14px;"></i>
                 ${t('chesster.appStatus') || 'Chesster App'}
             </div>
-            <div class="info-value chesster-status-value">${valueText}</div>
+            <div class="chesster-status-main">
+                <div class="info-value chesster-status-value">
+                    <i data-lucide="${statusIcon}" style="width: 18px; height: 18px;"></i>
+                    <span>${valueText}</span>
+                </div>
+                ${emailLine}
+            </div>
         </div>
     `;
 }

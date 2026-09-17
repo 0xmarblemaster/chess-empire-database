@@ -327,31 +327,75 @@ body {
     color: #1e293b;
 }
 
-/* Chesster app registration status panel — subtle green/red tint mirroring the
-   rank tier panels above. */
-.chesster-status-item.chesster-status--registered {
+/* Chesster app registration status banner — full-width strip above the Branch /
+   School rank row. Same rounded-panel family as the rank cells, but laid out as
+   a flex row (icon + status, with the synced email on a secondary line). */
+.chesster-status-banner {
+    padding: 1.25rem 1.5rem;
+    border-radius: 1rem;
+    border: 1px solid #e2e8f0;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.5rem 1.5rem;
+    transition: all 0.3s;
+}
+
+/* Span the full width of the overview grid, sitting above the rank cells. */
+.overview-mobile-grid .chesster-status-banner {
+    grid-column: 1 / -1;
+}
+
+.chesster-status-banner .chesster-status-label {
+    margin-bottom: 0;
+}
+
+.chesster-status-banner .chesster-status-main {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.25rem 1.25rem;
+}
+
+.chesster-status-banner .chesster-status-value {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.chesster-status-banner .chesster-status-email {
+    display: flex;
+    align-items: center;
+    gap: 0.375rem;
+    font-size: 0.9375rem;
+    font-weight: 600;
+    color: #047857;
+    word-break: break-all;
+}
+
+.chesster-status-banner.chesster-status--registered {
     background: linear-gradient(135deg, #ecfdf5 0%, #d1fae5 100%);
     border-color: #10b981;
 }
 
-.chesster-status-item.chesster-status--registered .info-label {
+.chesster-status-banner.chesster-status--registered .chesster-status-label {
     color: #047857;
 }
 
-.chesster-status-item.chesster-status--registered .chesster-status-value {
+.chesster-status-banner.chesster-status--registered .chesster-status-value {
     color: #10b981;
 }
 
-.chesster-status-item.chesster-status--unregistered {
+.chesster-status-banner.chesster-status--unregistered {
     background: linear-gradient(135deg, #fef2f2 0%, #fee2e2 100%);
     border-color: #ef4444;
 }
 
-.chesster-status-item.chesster-status--unregistered .info-label {
+.chesster-status-banner.chesster-status--unregistered .chesster-status-label {
     color: #b91c1c;
 }
 
-.chesster-status-item.chesster-status--unregistered .chesster-status-value {
+.chesster-status-banner.chesster-status--unregistered .chesster-status-value {
     color: #ef4444;
 }
 

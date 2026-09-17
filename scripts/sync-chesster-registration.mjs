@@ -25,10 +25,11 @@
  * (set CHESSTER_STUDENT_ROLE=<role> to restrict to a single role value).
  *
  * This script reads the verified memberships, then PATCHes
- * students.chesster_registered_at on THIS project:
+ * students.chesster_registered_at and students.chesster_email on THIS project:
  *   - registered & (NULL or different)  -> set to link_verified_at (fallbacks below)
- *   - not registered & non-NULL         -> set back to NULL (revoked / removed link)
- * Only rows that actually change are written.
+ *                                          and the winning membership's email
+ *   - not registered & non-NULL         -> set both back to NULL (revoked / removed)
+ * Only rows that actually change (timestamp OR email) are written.
  *
  * Env (fail fast if a required key is missing — NEVER hardcode keys):
  *   CE_SUPABASE_URL        default https://papgcizhfkngubwofjuo.supabase.co
@@ -61,45 +62,56 @@ function normalizeUrl(u) {
 // ---------------------------------------------------------------------------
 // members:  Chesster organization_members rows already filtered to
 //           external_source IN (chess_empire, online) AND link_status=verified.
-// students: THIS project's students rows: { id, chesster_registered_at }.
+// students: THIS project's students rows: { id, chesster_registered_at,
+//           chesster_email }.
 // now:      ISO string used as the last-resort timestamp fallback.
-// Returns { toSet:[{id,value}], toClear:[id], registered, newlyMarked,
-//           cleared, unchanged, total, roles:[...] }.
+// Returns { toSet:[{id,value,email}], toClear:[id], registered, newlyMarked,
+//           cleared, unchanged, emailChanged, total, roles:[...] }.
 export function computeChessterRegistrationDiff({ members = [], students = [], now }) {
     const nowIso = now || new Date().toISOString();
 
-    // id -> link_verified_at (keep the latest verified_at when duplicates exist)
-    const registeredAt = new Map();
+    // id -> { at, email } for the winning membership (latest verified_at). The
+    // email follows the same row whose verified_at wins, so duplicates resolve
+    // consistently for both columns.
+    const registered = new Map();
     const roles = new Set();
     for (const m of members) {
         const id = m.external_student_id;
         if (!id) continue;
         if (m.role) roles.add(m.role);
-        const prev = registeredAt.get(id);
+        const prev = registered.get(id);
         const cur = m.link_verified_at || null;
+        const email = m.email || null;
         // Prefer a non-null, later verified_at.
-        if (!registeredAt.has(id) || (cur && (!prev || cur > prev))) {
-            registeredAt.set(id, cur);
+        if (!registered.has(id) || (cur && (!prev.at || cur > prev.at))) {
+            registered.set(id, { at: cur, email });
         }
     }
 
     const toSet = [];
     const toClear = [];
     let unchanged = 0;
+    let emailChanged = 0;
 
     for (const s of students) {
         const current = s.chesster_registered_at || null;
-        if (registeredAt.has(s.id)) {
+        const currentEmail = s.chesster_email || null;
+        if (registered.has(s.id)) {
+            const win = registered.get(s.id);
             // Registered — value is link_verified_at, falling back to the
-            // existing stored value, then to now().
-            const value = registeredAt.get(s.id) || current || nowIso;
-            if (sameInstant(current, value)) {
+            // existing stored value, then to now(). Email follows the winning row.
+            const value = win.at || current || nowIso;
+            const email = win.email;
+            const tsSame = sameInstant(current, value);
+            const emailSame = (currentEmail || null) === (email || null);
+            if (tsSame && emailSame) {
                 unchanged++;
             } else {
-                toSet.push({ id: s.id, value });
+                if (!emailSame) emailChanged++;
+                toSet.push({ id: s.id, value, email });
             }
-        } else if (current) {
-            // No longer registered but a stamp lingers — clear it.
+        } else if (current || currentEmail) {
+            // No longer registered but a stamp/email lingers — clear both.
             toClear.push(s.id);
         } else {
             unchanged++;
@@ -109,10 +121,11 @@ export function computeChessterRegistrationDiff({ members = [], students = [], n
     return {
         toSet,
         toClear,
-        registered: registeredAt.size,
+        registered: registered.size,
         newlyMarked: toSet.length,
         cleared: toClear.length,
         unchanged,
+        emailChanged,
         total: students.length,
         roles: [...roles].sort()
     };
@@ -189,14 +202,14 @@ async function main() {
     const sourceFilter = `external_source=in.(${REGISTERED_SOURCES.join(',')})`;
     const roleFilter = STUDENT_ROLE ? `&role=eq.${encodeURIComponent(STUDENT_ROLE)}` : '';
     const membersQuery =
-        'select=external_student_id,link_status,external_source,link_verified_at,role' +
+        'select=external_student_id,link_status,external_source,link_verified_at,role,email' +
         `&${sourceFilter}&link_status=eq.verified${roleFilter}`;
 
     let members, students;
     try {
         [members, students] = await Promise.all([
             fetchAll(CHESSTER_URL, CHESSTER_KEY, 'organization_members', membersQuery),
-            fetchAll(CE_URL, CE_KEY, 'students', 'select=id,chesster_registered_at')
+            fetchAll(CE_URL, CE_KEY, 'students', 'select=id,chesster_registered_at,chesster_email')
         ]);
     } catch (e) {
         console.error(`❌ Fetch failed: ${e.message}`);
@@ -213,19 +226,19 @@ async function main() {
 
     if (DRY_RUN) {
         console.log('--- DRY RUN (no writes) ---');
-        for (const { id, value } of diff.toSet) {
-            console.log(`  SET   ${id} chesster_registered_at=${value}`);
+        for (const { id, value, email } of diff.toSet) {
+            console.log(`  SET   ${id} chesster_registered_at=${value} chesster_email=${email || 'NULL'}`);
         }
         for (const id of diff.toClear) {
-            console.log(`  CLEAR ${id} chesster_registered_at=NULL`);
+            console.log(`  CLEAR ${id} chesster_registered_at=NULL chesster_email=NULL`);
         }
     } else {
         try {
-            for (const { id, value } of diff.toSet) {
-                await patchStudent(id, { chesster_registered_at: value });
+            for (const { id, value, email } of diff.toSet) {
+                await patchStudent(id, { chesster_registered_at: value, chesster_email: email || null });
             }
             for (const id of diff.toClear) {
-                await patchStudent(id, { chesster_registered_at: null });
+                await patchStudent(id, { chesster_registered_at: null, chesster_email: null });
             }
         } catch (e) {
             console.error(`❌ Write failed: ${e.message}`);
@@ -236,7 +249,8 @@ async function main() {
 
     console.log(
         `registered=${diff.registered} newly_marked=${diff.newlyMarked} ` +
-        `cleared=${diff.cleared} unchanged=${diff.unchanged} total_students=${diff.total}`
+        `cleared=${diff.cleared} email_changed=${diff.emailChanged} ` +
+        `unchanged=${diff.unchanged} total_students=${diff.total}`
     );
     process.exit(0);
 }

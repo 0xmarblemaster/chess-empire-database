@@ -105,10 +105,13 @@ const supabaseData = {
             parentName: data.parent_name,
             parentPhone: data.parent_phone,
             parentEmail: data.parent_email,
-            // Chesster app registration timestamp (migration 088). May be
-            // undefined if the column has not been applied yet — the student
-            // card treats that as "not registered".
-            chessterRegisteredAt: data.chesster_registered_at || null
+            // Chesster app registration timestamp (migration 088) + the email the
+            // student registered with (migration 089). Either may be undefined if
+            // the column has not been applied yet — the student card treats a
+            // missing timestamp as "not registered" and a missing email as "no
+            // email line".
+            chessterRegisteredAt: data.chesster_registered_at || null,
+            chessterEmail: data.chesster_email || null
         };
     },
 

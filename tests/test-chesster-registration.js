@@ -55,6 +55,23 @@ async function main() {
         'comment references the sync script');
 
     // ========================================================================
+    // 1b. migration 089 — email column
+    // ========================================================================
+    console.log('\n=== migration 089_chesster_email.sql =================================\n');
+
+    const MIG89_PATH = path.join(ROOT, 'supabase/migrations/089_chesster_email.sql');
+    assert(fs.existsSync(MIG89_PATH), 'supabase/migrations/089_chesster_email.sql exists');
+    const MIG89 = fs.existsSync(MIG89_PATH) ? fs.readFileSync(MIG89_PATH, 'utf8') : '';
+
+    assert(/BEGIN;[\s\S]+COMMIT;/.test(MIG89), 'wrapped in BEGIN;…COMMIT;');
+    assert(/ALTER TABLE students\s*\n?\s*ADD COLUMN IF NOT EXISTS chesster_email TEXT NULL/.test(MIG89),
+        'adds students.chesster_email TEXT NULL (idempotent)');
+    assert(/COMMENT ON COLUMN students\.chesster_email/.test(MIG89),
+        'comments the new email column');
+    assert(/sync-chesster-registration\.mjs/.test(MIG89),
+        'comment references the sync script');
+
+    // ========================================================================
     // 2. supabase-data.js — chesterRegisteredAt passthrough
     // ========================================================================
     console.log('\n=== supabase-data.js source contract =================================\n');
@@ -62,6 +79,8 @@ async function main() {
     const DATA_SRC = fs.readFileSync(path.join(ROOT, 'supabase-data.js'), 'utf8');
     assert(/chessterRegisteredAt: data\.chesster_registered_at \|\| null/.test(DATA_SRC),
         'getStudentById maps chessterRegisteredAt (undefined column -> null)');
+    assert(/chessterEmail: data\.chesster_email \|\| null/.test(DATA_SRC),
+        'getStudentById maps chessterEmail (undefined column -> null)');
 
     // ========================================================================
     // 3. student.js — render helper + insertion order
@@ -76,8 +95,14 @@ async function main() {
         'registration is derived from student.chessterRegisteredAt (missing -> false)');
     assert(/chesster-status--registered/.test(STUDENT_SRC) && /chesster-status--unregistered/.test(STUDENT_SRC),
         'helper emits both registered/unregistered state classes');
+    assert(/chesster-status-banner/.test(STUDENT_SRC),
+        'helper renders a full-width chesster-status-banner (not a grid cell)');
+    assert(/escapeHtmlSafe\(email\)/.test(STUDENT_SRC),
+        'synced email is HTML-escaped with escapeHtmlSafe');
+    assert(/student\.chessterEmail/.test(STUDENT_SRC),
+        'email line reads from student.chessterEmail');
     assert(/mobile-order-0/.test(STUDENT_SRC),
-        'panel carries mobile-order-0 so it sorts first on mobile');
+        'banner carries mobile-order-0 so it sorts first on mobile');
     assert(/t\('chesster\.appStatus'\)/.test(STUDENT_SRC)
         && /t\('chesster\.registered'\)/.test(STUDENT_SRC)
         && /t\('chesster\.notRegistered'\)/.test(STUDENT_SRC),
@@ -95,10 +120,14 @@ async function main() {
     console.log('\n=== student-styles.css source contract ===============================\n');
 
     const CSS = fs.readFileSync(path.join(ROOT, 'student-styles.css'), 'utf8');
-    assert(/\.chesster-status-item\.chesster-status--registered\s*\{[\s\S]*?#10b981/.test(CSS),
-        'registered panel uses the green accent (#10b981)');
-    assert(/\.chesster-status-item\.chesster-status--unregistered\s*\{[\s\S]*?#ef4444/.test(CSS),
-        'unregistered panel uses the red accent (#ef4444)');
+    assert(/\.chesster-status-banner\.chesster-status--registered\s*\{[\s\S]*?#10b981/.test(CSS),
+        'registered banner uses the green accent (#10b981)');
+    assert(/\.chesster-status-banner\.chesster-status--unregistered\s*\{[\s\S]*?#ef4444/.test(CSS),
+        'unregistered banner uses the red accent (#ef4444)');
+    assert(/\.overview-mobile-grid \.chesster-status-banner\s*\{[\s\S]*?grid-column: 1 \/ -1/.test(CSS),
+        'banner spans the full overview grid width (grid-column: 1 / -1)');
+    assert(!/\.chesster-status-item\b/.test(CSS),
+        'dead grid-cell rules (.chesster-status-item) are removed');
     assert(/\.overview-mobile-grid \.mobile-order-0 \{ order: 0; \}/.test(CSS),
         'mobile-order-0 rule exists (mirrors mobile-order-1..9)');
 
@@ -133,49 +162,87 @@ async function main() {
     const NOW = '2026-09-17T00:00:00.000Z';
     const T1 = '2026-01-01T10:00:00.000Z';
 
-    // newly_marked: registered student with NULL stamp.
+    // newly_marked: registered student with NULL stamp (+ email carried).
     // unchanged (already correct): registered student whose stamp already matches.
     // cleared: unregistered student that still carries a stamp.
     // unchanged (never registered): no stamp, not in the set.
     const members = [
-        { external_student_id: 's-new', link_verified_at: T1, external_source: 'chess_empire', link_status: 'verified', role: 'student' },
-        { external_student_id: 's-same', link_verified_at: T1, external_source: 'online', link_status: 'verified', role: 'student' }
+        { external_student_id: 's-new', link_verified_at: T1, external_source: 'chess_empire', link_status: 'verified', role: 'student', email: 'new@chesster.io' },
+        { external_student_id: 's-same', link_verified_at: T1, external_source: 'online', link_status: 'verified', role: 'student', email: 'same@chesster.io' }
     ];
     const students = [
-        { id: 's-new', chesster_registered_at: null },
-        { id: 's-same', chesster_registered_at: T1 },
-        { id: 's-revoked', chesster_registered_at: T1 },
-        { id: 's-never', chesster_registered_at: null }
+        { id: 's-new', chesster_registered_at: null, chesster_email: null },
+        { id: 's-same', chesster_registered_at: T1, chesster_email: 'same@chesster.io' },
+        { id: 's-revoked', chesster_registered_at: T1, chesster_email: 'gone@chesster.io' },
+        { id: 's-never', chesster_registered_at: null, chesster_email: null }
     ];
 
     const diff = computeChessterRegistrationDiff({ members, students, now: NOW });
 
-    assertEqual(diff.toSet, [{ id: 's-new', value: T1 }],
-        'newly_marked: NULL-stamp registered student is set to link_verified_at');
+    assertEqual(diff.toSet, [{ id: 's-new', value: T1, email: 'new@chesster.io' }],
+        'newly_marked: NULL-stamp registered student is set to link_verified_at + email');
     assertEqual(diff.toClear, ['s-revoked'],
-        'cleared: unregistered student with a lingering stamp is cleared');
+        'cleared: unregistered student with a lingering stamp/email is cleared');
     assertEqual(
         { registered: diff.registered, newlyMarked: diff.newlyMarked, cleared: diff.cleared, unchanged: diff.unchanged, total: diff.total },
         { registered: 2, newlyMarked: 1, cleared: 1, unchanged: 2, total: 4 },
         'summary counts (registered/newly_marked/cleared/unchanged/total) are correct');
     assertEqual(diff.roles, ['student'], 'distinct roles are surfaced for operator visibility');
 
+    // --- email-specific behavior (migration 089) -----------------------------
+
+    // Email set on a newly registered student is carried through toSet.
+    assertEqual(diff.toSet[0].email, 'new@chesster.io',
+        'email set: newly registered student carries the membership email');
+
+    // Email updated in Chesster while the timestamp is unchanged -> still a write.
+    const diffEmailUpdate = computeChessterRegistrationDiff({
+        members: [{ external_student_id: 's-e', link_verified_at: T1, external_source: 'chess_empire', link_status: 'verified', email: 'fresh@chesster.io' }],
+        students: [{ id: 's-e', chesster_registered_at: T1, chesster_email: 'stale@chesster.io' }],
+        now: NOW
+    });
+    assertEqual(diffEmailUpdate.toSet, [{ id: 's-e', value: T1, email: 'fresh@chesster.io' }],
+        'email updated: same timestamp but changed email still produces a write');
+    assertEqual(diffEmailUpdate.emailChanged, 1, 'email_changed counter tracks email-only writes');
+
+    // Email cleared when registration is revoked (student drops out of members).
+    const diffEmailClear = computeChessterRegistrationDiff({
+        members: [],
+        students: [{ id: 's-r', chesster_registered_at: T1, chesster_email: 'bye@chesster.io' }],
+        now: NOW
+    });
+    assertEqual(diffEmailClear.toClear, ['s-r'],
+        'email cleared: revoked student is cleared (both columns set to NULL)');
+
+    // Duplicate memberships: email follows the row whose verified_at wins.
+    const T2 = '2026-05-05T12:00:00.000Z';
+    const diffDup = computeChessterRegistrationDiff({
+        members: [
+            { external_student_id: 's-d', link_verified_at: T1, external_source: 'chess_empire', link_status: 'verified', email: 'old@chesster.io' },
+            { external_student_id: 's-d', link_verified_at: T2, external_source: 'online', link_status: 'verified', email: 'winner@chesster.io' }
+        ],
+        students: [{ id: 's-d', chesster_registered_at: null, chesster_email: null }],
+        now: NOW
+    });
+    assertEqual(diffDup.toSet, [{ id: 's-d', value: T2, email: 'winner@chesster.io' }],
+        'duplicates: timestamp AND email follow the latest verified_at membership');
+
     // Fallback: registered with a NULL verified_at and no existing stamp -> now().
     const diffFallback = computeChessterRegistrationDiff({
-        members: [{ external_student_id: 's-x', link_verified_at: null, external_source: 'chess_empire', link_status: 'verified' }],
-        students: [{ id: 's-x', chesster_registered_at: null }],
+        members: [{ external_student_id: 's-x', link_verified_at: null, external_source: 'chess_empire', link_status: 'verified', email: 'x@chesster.io' }],
+        students: [{ id: 's-x', chesster_registered_at: null, chesster_email: null }],
         now: NOW
     });
-    assertEqual(diffFallback.toSet, [{ id: 's-x', value: NOW }],
+    assertEqual(diffFallback.toSet, [{ id: 's-x', value: NOW, email: 'x@chesster.io' }],
         'fallback: NULL link_verified_at with no stamp falls back to now()');
 
-    // A verified link with NULL verified_at but an existing stamp keeps the stamp.
+    // A verified link with NULL verified_at but an existing stamp+email keeps them.
     const diffKeep = computeChessterRegistrationDiff({
-        members: [{ external_student_id: 's-y', link_verified_at: null, external_source: 'chess_empire', link_status: 'verified' }],
-        students: [{ id: 's-y', chesster_registered_at: T1 }],
+        members: [{ external_student_id: 's-y', link_verified_at: null, external_source: 'chess_empire', link_status: 'verified', email: 'y@chesster.io' }],
+        students: [{ id: 's-y', chesster_registered_at: T1, chesster_email: 'y@chesster.io' }],
         now: NOW
     });
-    assertEqual(diffKeep.toSet, [], 'existing stamp is preserved when link_verified_at is NULL (no churn)');
+    assertEqual(diffKeep.toSet, [], 'existing stamp+email preserved when link_verified_at is NULL (no churn)');
     assertEqual(diffKeep.unchanged, 1, 'the preserved-stamp row counts as unchanged');
 
     // sameInstant tolerates formatting differences.
@@ -189,25 +256,32 @@ async function main() {
     // ========================================================================
     console.log('\n=== render helper states (pure-logic port) ===========================\n');
 
-    // Mirror of renderChessterStatusBox: only the state class + value text matter.
+    // Mirror of renderChessterStatusBox: state class, value text, and whether an
+    // email line is rendered (registered AND a synced email present).
     function renderPort(student, tr) {
         const isRegistered = !!(student && student.chessterRegisteredAt);
+        const email = isRegistered && student.chessterEmail ? String(student.chessterEmail) : '';
         return {
             stateClass: isRegistered ? 'chesster-status--registered' : 'chesster-status--unregistered',
-            value: isRegistered ? tr('chesster.registered') : tr('chesster.notRegistered')
+            statusIcon: isRegistered ? 'check' : 'x',
+            value: isRegistered ? tr('chesster.registered') : tr('chesster.notRegistered'),
+            emailLine: email || null
         };
     }
     const tr = (k) => ({ 'chesster.registered': 'Зарегистрирован', 'chesster.notRegistered': 'Не зарегистрирован' }[k]);
 
-    assertEqual(renderPort({ chessterRegisteredAt: T1 }, tr),
-        { stateClass: 'chesster-status--registered', value: 'Зарегистрирован' },
-        'registered student -> green registered panel');
-    assertEqual(renderPort({ chessterRegisteredAt: null }, tr),
-        { stateClass: 'chesster-status--unregistered', value: 'Не зарегистрирован' },
-        'unregistered student -> red unregistered panel');
+    assertEqual(renderPort({ chessterRegisteredAt: T1, chessterEmail: 'me@chesster.io' }, tr),
+        { stateClass: 'chesster-status--registered', statusIcon: 'check', value: 'Зарегистрирован', emailLine: 'me@chesster.io' },
+        'registered + email -> green banner with the email line');
+    assertEqual(renderPort({ chessterRegisteredAt: T1, chessterEmail: null }, tr),
+        { stateClass: 'chesster-status--registered', statusIcon: 'check', value: 'Зарегистрирован', emailLine: null },
+        'registered, no email -> green banner, no email line');
+    assertEqual(renderPort({ chessterRegisteredAt: null, chessterEmail: 'ghost@chesster.io' }, tr),
+        { stateClass: 'chesster-status--unregistered', statusIcon: 'x', value: 'Не зарегистрирован', emailLine: null },
+        'unregistered -> red banner, no email line even if a stale email is present');
     assertEqual(renderPort({}, tr),
-        { stateClass: 'chesster-status--unregistered', value: 'Не зарегистрирован' },
-        'missing column (undefined) -> treated as unregistered, no error');
+        { stateClass: 'chesster-status--unregistered', statusIcon: 'x', value: 'Не зарегистрирован', emailLine: null },
+        'missing columns (undefined) -> treated as unregistered, no error');
 
     console.log(`\n--- ${passed} passed, ${failed} failed ---\n`);
     if (failed > 0) process.exit(1);
