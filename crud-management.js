@@ -1199,6 +1199,7 @@ function displayAppAccessUsers(users) {
                             ${createAppAccessPermissionToggle(user, 'can_manage_branches')}
                             ${createAppAccessPermissionToggle(user, 'can_manage_coaches')}
                             ${createAppAccessPermissionToggle(user, 'can_manage_ratings')}
+                            ${createAppAccessPermissionToggle(user, 'can_manage_tournaments')}
                             ${createAppAccessPermissionToggle(user, 'can_manage_data')}
                             ${createAppAccessPermissionToggle(user, 'can_manage_attendance')}
                         </div>`
@@ -1268,6 +1269,7 @@ function getAppAccessPermissionLabel(permissionKey) {
         can_manage_branches: 'access.permissions.manageBranches',
         can_manage_coaches: 'access.permissions.manageCoaches',
         can_manage_ratings: 'access.permissions.manageRatings',
+        can_manage_tournaments: 'access.permissions.manageTournaments',
         can_manage_data: 'access.permissions.manageData',
         can_manage_attendance: 'access.permissions.manageAttendance'
     };
@@ -1282,6 +1284,7 @@ function getAppAccessPermissionLabel(permissionKey) {
         can_manage_branches: 'Manage Branches',
         can_manage_coaches: 'Manage Coaches',
         can_manage_ratings: 'Ratings Management',
+        can_manage_tournaments: 'Tournament Management',
         can_manage_data: 'Data Management',
         can_manage_attendance: 'Attendance'
     };
