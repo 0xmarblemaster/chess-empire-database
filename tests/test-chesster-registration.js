@@ -153,7 +153,7 @@ async function main() {
     console.log('\n=== sync-chesster-registration.mjs pure logic ========================\n');
 
     const scriptUrl = pathToFileURL(path.join(ROOT, 'scripts/sync-chesster-registration.mjs')).href;
-    const { computeChessterRegistrationDiff, sameInstant } = await import(scriptUrl);
+    const { computeChessterRegistrationDiff, sameInstant, resolveMemberEmails, pickClerkEmail } = await import(scriptUrl);
 
     assert(typeof computeChessterRegistrationDiff === 'function',
         'computeChessterRegistrationDiff is exported');
@@ -250,6 +250,96 @@ async function main() {
         'sameInstant treats equal instants with different precision as equal');
     assert(sameInstant(null, null), 'sameInstant(null, null) is true');
     assert(!sameInstant(null, T1), 'sameInstant(null, ts) is false');
+
+    // ========================================================================
+    // 6b. Clerk email fallback — resolveMemberEmails (injectable resolver)
+    // ========================================================================
+    console.log('\n=== Clerk email fallback (resolveMemberEmails) =======================\n');
+
+    assert(typeof resolveMemberEmails === 'function', 'resolveMemberEmails is exported');
+    assert(typeof pickClerkEmail === 'function', 'pickClerkEmail is exported');
+
+    // membership without email + resolver returns email -> email is written.
+    {
+        let calls = 0;
+        const res = await resolveMemberEmails({
+            members: [{ external_student_id: 's-1', link_verified_at: T1, external_source: 'chess_empire', link_status: 'verified', email: null, user_id: 'usr_a' }],
+            resolveEmail: async (uid) => { calls++; return uid === 'usr_a' ? 'a@clerk.io' : null; }
+        });
+        assertEqual(res.members[0].email, 'a@clerk.io', 'no-email membership gets the resolver email');
+        assertEqual({ from: res.emailFromClerk, failed: res.emailLookupFailed, missing: res.missingEmail }, { from: 1, failed: 0, missing: 1 },
+            'resolved membership counts as email_from_clerk (missing=1, failed=0)');
+        assertEqual(calls, 1, 'resolver is called for the missing-email membership');
+    }
+
+    // membership without email + resolver returns null -> email stays null, counted as lookup-failed.
+    {
+        const res = await resolveMemberEmails({
+            members: [{ external_student_id: 's-2', link_verified_at: T1, external_source: 'online', link_status: 'verified', email: '', user_id: 'usr_b' }],
+            resolveEmail: async () => null
+        });
+        assertEqual(res.members[0].email || null, null, 'unresolved membership keeps a null email');
+        assertEqual({ from: res.emailFromClerk, failed: res.emailLookupFailed, missing: res.missingEmail }, { from: 0, failed: 1, missing: 1 },
+            'unresolved membership counts as email_lookup_failed');
+        // The registration is still stamped: the diff treats it as registered regardless of email.
+        const d = computeChessterRegistrationDiff({
+            members: res.members,
+            students: [{ id: 's-2', chesster_registered_at: null, chesster_email: null }],
+            now: NOW
+        });
+        assertEqual(d.toSet, [{ id: 's-2', value: T1, email: null }],
+            'lookup-failed membership is still stamped registered with a null email');
+    }
+
+    // membership WITH email -> resolver NOT called (no unnecessary Clerk hits).
+    {
+        let calls = 0;
+        const res = await resolveMemberEmails({
+            members: [{ external_student_id: 's-3', link_verified_at: T1, external_source: 'chess_empire', link_status: 'verified', email: 'have@chesster.io', user_id: 'usr_c' }],
+            resolveEmail: async () => { calls++; return 'should-not-be-used@clerk.io'; }
+        });
+        assertEqual(calls, 0, 'resolver is NOT called when the membership already has an email');
+        assertEqual(res.members[0].email, 'have@chesster.io', 'existing email is left untouched');
+        assertEqual({ from: res.emailFromClerk, failed: res.emailLookupFailed, missing: res.missingEmail }, { from: 0, failed: 0, missing: 0 },
+            'membership with an email contributes nothing to the fallback counters');
+    }
+
+    // duplicate user_id memberships -> resolver called once (cache).
+    {
+        let calls = 0;
+        const res = await resolveMemberEmails({
+            members: [
+                { external_student_id: 's-4a', link_verified_at: T1, external_source: 'chess_empire', link_status: 'verified', email: null, user_id: 'usr_dup' },
+                { external_student_id: 's-4b', link_verified_at: T1, external_source: 'online', link_status: 'verified', email: null, user_id: 'usr_dup' }
+            ],
+            resolveEmail: async () => { calls++; return 'dup@clerk.io'; }
+        });
+        assertEqual(calls, 1, 'duplicate user_id resolves via cache — resolver called once');
+        assertEqual([res.members[0].email, res.members[1].email], ['dup@clerk.io', 'dup@clerk.io'],
+            'both duplicate memberships receive the cached email');
+        assertEqual(res.emailFromClerk, 2, 'both memberships count toward email_from_clerk');
+    }
+
+    // no resolver (CLERK_SECRET_KEY unset) -> fallback skipped, missing counted.
+    {
+        const res = await resolveMemberEmails({
+            members: [{ external_student_id: 's-5', link_verified_at: T1, external_source: 'chess_empire', link_status: 'verified', email: null, user_id: 'usr_e' }]
+        });
+        assertEqual({ from: res.emailFromClerk, failed: res.emailLookupFailed, missing: res.missingEmail }, { from: 0, failed: 0, missing: 1 },
+            'without a resolver the fallback is skipped and the miss is counted');
+        assertEqual(res.members[0].email || null, null, 'membership email stays null when no resolver is supplied');
+    }
+
+    // pickClerkEmail selects the primary address, falling back to the first.
+    assertEqual(pickClerkEmail({
+        primary_email_address_id: 'e2',
+        email_addresses: [{ id: 'e1', email_address: 'first@clerk.io' }, { id: 'e2', email_address: 'primary@clerk.io' }]
+    }), 'primary@clerk.io', 'pickClerkEmail returns the primary_email_address_id match');
+    assertEqual(pickClerkEmail({
+        primary_email_address_id: 'missing',
+        email_addresses: [{ id: 'e1', email_address: 'first@clerk.io' }]
+    }), 'first@clerk.io', 'pickClerkEmail falls back to the first address when the primary id is absent');
+    assertEqual(pickClerkEmail({ email_addresses: [] }), null, 'pickClerkEmail returns null when there are no addresses');
 
     // ========================================================================
     // 7. render helper — pure-logic port of the three states

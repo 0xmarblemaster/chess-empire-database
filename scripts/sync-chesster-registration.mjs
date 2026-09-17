@@ -37,6 +37,9 @@
  *   CHESSTER_SUPABASE_URL  default https://qtzujwiqzbgyhdgulvcd.supabase.co
  *   CHESSTER_SERVICE_ROLE_KEY (required — Chesster service role key)
  *   CHESSTER_STUDENT_ROLE  optional — restrict to a single role value
+ *   CLERK_SECRET_KEY       optional — when set, memberships that carry a Clerk
+ *                          user_id but no email have their email resolved from
+ *                          the Clerk Backend API. Unset -> fallback is skipped.
  *
  * Usage:
  *   node scripts/sync-chesster-registration.mjs            # write
@@ -50,6 +53,7 @@ const CE_KEY = process.env.CE_SERVICE_ROLE_KEY;
 const CHESSTER_URL = normalizeUrl(process.env.CHESSTER_SUPABASE_URL || 'https://qtzujwiqzbgyhdgulvcd.supabase.co');
 const CHESSTER_KEY = process.env.CHESSTER_SERVICE_ROLE_KEY;
 const STUDENT_ROLE = process.env.CHESSTER_STUDENT_ROLE || null;
+const CLERK_SECRET_KEY = process.env.CLERK_SECRET_KEY || null;
 
 const REGISTERED_SOURCES = ['chess_empire', 'online'];
 
@@ -143,6 +147,88 @@ export function sameInstant(a, b) {
 }
 
 // ---------------------------------------------------------------------------
+// Clerk email fallback — resolve membership emails that Chesster left null.
+// ---------------------------------------------------------------------------
+// Only ~1/4 of verified memberships carry an `email`; the rest only have a
+// Clerk `user_id`. This fills the gap BEFORE the diff runs so both the email
+// column and the summary reflect the resolved values. Pure & offline-testable:
+// the Clerk network call is injected as `resolveEmail(user_id) -> email|null`.
+//
+// members:      verified organization_members rows (may lack `email`).
+// resolveEmail: async (user_id) => email|null. Omit to skip the fallback.
+// Returns { members:[...email-filled], missingEmail, emailFromClerk,
+//           emailLookupFailed }.
+export async function resolveMemberEmails({ members = [], resolveEmail } = {}) {
+    const cache = new Map(); // user_id -> email|null (duplicates exist; look up once)
+    let missingEmail = 0;
+    let emailFromClerk = 0;
+    let emailLookupFailed = 0;
+    const out = [];
+
+    for (const m of members) {
+        const hasEmail = !!(m.email && String(m.email).trim());
+        if (hasEmail) { out.push(m); continue; }
+        missingEmail++;
+        // Can only recover an email when there is a user_id AND a resolver.
+        if (!m.user_id || typeof resolveEmail !== 'function') { out.push(m); continue; }
+
+        let email;
+        if (cache.has(m.user_id)) {
+            email = cache.get(m.user_id);
+        } else {
+            email = (await resolveEmail(m.user_id)) || null;
+            cache.set(m.user_id, email);
+        }
+
+        if (email) { emailFromClerk++; out.push({ ...m, email }); }
+        else       { emailLookupFailed++; out.push(m); }
+    }
+
+    return { members: out, missingEmail, emailFromClerk, emailLookupFailed };
+}
+
+// Pick the primary email from a Clerk user payload (the entry whose id matches
+// primary_email_address_id), falling back to the first address.
+export function pickClerkEmail(user) {
+    const list = Array.isArray(user && user.email_addresses) ? user.email_addresses : [];
+    if (!list.length) return null;
+    const primary = list.find((e) => e && e.id === user.primary_email_address_id);
+    return (primary && primary.email_address) || (list[0] && list[0].email_address) || null;
+}
+
+// Build the live Clerk resolver, or null when the secret key is unset.
+// Retries once on HTTP 429 (respecting Retry-After, default 1s); any other
+// failure resolves to null so the sync leaves that email untouched.
+function makeClerkEmailResolver(secretKey) {
+    if (!secretKey) return null;
+    return async function resolveClerkEmail(userId) {
+        for (let attempt = 0; attempt < 2; attempt++) {
+            let res;
+            try {
+                res = await fetch(`https://api.clerk.com/v1/users/${encodeURIComponent(userId)}`, {
+                    headers: { Authorization: `Bearer ${secretKey}` }
+                });
+            } catch {
+                return null;
+            }
+            if (res.status === 429 && attempt === 0) {
+                const retryAfter = Number(res.headers.get('retry-after'));
+                const waitMs = Number.isFinite(retryAfter) && retryAfter > 0 ? retryAfter * 1000 : 1000;
+                await new Promise((r) => setTimeout(r, waitMs));
+                continue;
+            }
+            if (!res.ok) return null;
+            try {
+                return pickClerkEmail(await res.json());
+            } catch {
+                return null;
+            }
+        }
+        return null;
+    };
+}
+
+// ---------------------------------------------------------------------------
 // REST helpers
 // ---------------------------------------------------------------------------
 async function fetchAll(baseUrl, key, table, query) {
@@ -202,7 +288,7 @@ async function main() {
     const sourceFilter = `external_source=in.(${REGISTERED_SOURCES.join(',')})`;
     const roleFilter = STUDENT_ROLE ? `&role=eq.${encodeURIComponent(STUDENT_ROLE)}` : '';
     const membersQuery =
-        'select=external_student_id,link_status,external_source,link_verified_at,role,email' +
+        'select=external_student_id,link_status,external_source,link_verified_at,role,email,user_id' +
         `&${sourceFilter}&link_status=eq.verified${roleFilter}`;
 
     let members, students;
@@ -215,6 +301,17 @@ async function main() {
         console.error(`❌ Fetch failed: ${e.message}`);
         process.exit(1);
         return;
+    }
+
+    // Fill in emails Chesster left null via the Clerk Backend API (best-effort).
+    const resolveEmail = makeClerkEmailResolver(CLERK_SECRET_KEY);
+    const emailRes = await resolveMemberEmails({ members, resolveEmail });
+    members = emailRes.members;
+    if (!resolveEmail && emailRes.missingEmail) {
+        console.warn(
+            `⚠️  ${emailRes.missingEmail} verified membership(s) have no email and CLERK_SECRET_KEY is unset — ` +
+            'skipping the Clerk email fallback.'
+        );
     }
 
     const diff = computeChessterRegistrationDiff({ members, students });
@@ -250,6 +347,7 @@ async function main() {
     console.log(
         `registered=${diff.registered} newly_marked=${diff.newlyMarked} ` +
         `cleared=${diff.cleared} email_changed=${diff.emailChanged} ` +
+        `email_from_clerk=${emailRes.emailFromClerk} email_lookup_failed=${emailRes.emailLookupFailed} ` +
         `unchanged=${diff.unchanged} total_students=${diff.total}`
     );
     process.exit(0);
