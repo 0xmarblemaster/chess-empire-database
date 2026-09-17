@@ -387,6 +387,29 @@ function renderLevelRankInfoBoxes(rankings) {
     return { branchRankHTML, schoolRankHTML };
 }
 
+// Render the Chesster app registration status panel.
+// Registered = student.chessterRegisteredAt is a truthy timestamp (synced from
+// the Chesster project by scripts/sync-chesster-registration.mjs). Anything
+// falsy — including a missing column before migration 088 is applied — reads as
+// "not registered", so the card never breaks.
+function renderChessterStatusBox(student) {
+    const isRegistered = !!(student && student.chessterRegisteredAt);
+    const stateClass = isRegistered ? 'chesster-status--registered' : 'chesster-status--unregistered';
+    const valueText = isRegistered
+        ? (t('chesster.registered') || 'Registered')
+        : (t('chesster.notRegistered') || 'Not registered');
+
+    return `
+        <div class="info-item chesster-status-item ${stateClass} mobile-order-0">
+            <div class="info-label">
+                <i data-lucide="smartphone" style="width: 14px; height: 14px;"></i>
+                ${t('chesster.appStatus') || 'Chesster App'}
+            </div>
+            <div class="info-value chesster-status-value">${valueText}</div>
+        </div>
+    `;
+}
+
 // Render puzzle score rank info boxes for the survival/puzzle tab
 // Shows position like "5 / 70" based on puzzle (survival) best score
 function renderPuzzleRankInfoBoxes(puzzleRankings) {
@@ -1221,6 +1244,9 @@ async function renderProfile() {
         <!-- Tab Content -->
         <div class="tab-content active" id="tab-overview">
             <div class="overview-mobile-grid">
+                <!-- Mobile order: 0. Chesster app registration status -->
+                ${renderChessterStatusBox(student)}
+
                 <!-- Mobile order: 1. Branch rank, 2. School rank -->
                 ${renderLevelRankInfoBoxes(rankings).branchRankHTML}
                 ${renderLevelRankInfoBoxes(rankings).schoolRankHTML}

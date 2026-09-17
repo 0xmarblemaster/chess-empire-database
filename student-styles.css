@@ -327,6 +327,34 @@ body {
     color: #1e293b;
 }
 
+/* Chesster app registration status panel — subtle green/red tint mirroring the
+   rank tier panels above. */
+.chesster-status-item.chesster-status--registered {
+    background: linear-gradient(135deg, #ecfdf5 0%, #d1fae5 100%);
+    border-color: #10b981;
+}
+
+.chesster-status-item.chesster-status--registered .info-label {
+    color: #047857;
+}
+
+.chesster-status-item.chesster-status--registered .chesster-status-value {
+    color: #10b981;
+}
+
+.chesster-status-item.chesster-status--unregistered {
+    background: linear-gradient(135deg, #fef2f2 0%, #fee2e2 100%);
+    border-color: #ef4444;
+}
+
+.chesster-status-item.chesster-status--unregistered .info-label {
+    color: #b91c1c;
+}
+
+.chesster-status-item.chesster-status--unregistered .chesster-status-value {
+    color: #ef4444;
+}
+
 .progress-section {
     margin-top: 3rem;
     padding-top: 3rem;
@@ -2400,6 +2428,7 @@ body {
     }
 
     /* Mobile order classes */
+    .overview-mobile-grid .mobile-order-0 { order: 0; }
     .overview-mobile-grid .mobile-order-1 { order: 1; }
     .overview-mobile-grid .mobile-order-2 { order: 2; }
     .overview-mobile-grid .mobile-order-3 { order: 3; }

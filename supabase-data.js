@@ -104,7 +104,11 @@ const supabaseData = {
             totalLessons: data.total_lessons,
             parentName: data.parent_name,
             parentPhone: data.parent_phone,
-            parentEmail: data.parent_email
+            parentEmail: data.parent_email,
+            // Chesster app registration timestamp (migration 088). May be
+            // undefined if the column has not been applied yet — the student
+            // card treats that as "not registered".
+            chessterRegisteredAt: data.chesster_registered_at || null
         };
     },
 
