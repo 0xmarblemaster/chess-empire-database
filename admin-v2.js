@@ -2203,6 +2203,14 @@ function updateCoachOptions() {
         option.textContent = coachFullName;
         coachSelect.appendChild(option);
     });
+
+    // Coach is optional for branches flagged coach_optional (e.g. Детский Дом)
+    const branch = window.branches?.find(b => b.name === selectedBranch);
+    if (branch?.coach_optional) {
+        coachSelect.removeAttribute('required');
+    } else {
+        coachSelect.setAttribute('required', '');
+    }
 }
 
 // Compress and resize image before upload
@@ -2386,7 +2394,10 @@ async function submitAddStudent(event) {
         return;
     }
 
-    if (!coach) {
+    // Coach is optional for branches flagged coach_optional (e.g. Детский Дом)
+    const coachOptional = !!branch?.coach_optional;
+
+    if (!coach && !coachOptional) {
         showToast('Coach not found', 'error');
         return;
     }
@@ -2400,8 +2411,8 @@ async function submitAddStudent(event) {
         gender: (formData.get('gender') || '').toLowerCase() || null,
         branch: branchName,
         branchId: branch.id,
-        coach: coachName,
-        coachId: coach.id,
+        coach: coach ? coachName : null,
+        coachId: coach ? coach.id : null,
         razryad: formData.get('razryad') || 'none',
         status: (formData.get('status') || 'active').toLowerCase(),
         currentLevel: parseInt(formData.get('currentLevel')) || 1,
@@ -2414,7 +2425,7 @@ async function submitAddStudent(event) {
     };
 
     // Validate required fields: Name, Surname, Age, Coach, Branch
-    if (!studentData.firstName || !studentData.lastName || !studentData.age || !studentData.branchId || !studentData.coachId) {
+    if (!studentData.firstName || !studentData.lastName || !studentData.age || !studentData.branchId || (!studentData.coachId && !coachOptional)) {
         showToast(t('admin.form.requiredFields'), 'error');
         return;
     }
@@ -2805,6 +2816,14 @@ function updateEditCoachOptions() {
         option.textContent = coachFullName;
         coachSelect.appendChild(option);
     });
+
+    // Coach is optional for branches flagged coach_optional (e.g. Детский Дом)
+    const branch = window.branches?.find(b => b.name === selectedBranch);
+    if (branch?.coach_optional) {
+        coachSelect.removeAttribute('required');
+    } else {
+        coachSelect.setAttribute('required', '');
+    }
 }
 
 // Submit Edit Student Form

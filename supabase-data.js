@@ -264,7 +264,8 @@ const supabaseData = {
             location: branch.location,
             phone: branch.phone,
             email: branch.email,
-            is_online: branch.is_online || false
+            is_online: branch.is_online || false,
+            coach_optional: branch.coach_optional || false
         }));
     },
 
@@ -276,7 +277,8 @@ const supabaseData = {
                 location: branchData.location,
                 phone: branchData.phone,
                 email: branchData.email,
-                is_online: branchData.is_online || false
+                is_online: branchData.is_online || false,
+                coach_optional: branchData.coach_optional || false
             }])
             .select()
             .single();
@@ -293,7 +295,8 @@ const supabaseData = {
             location: data.location,
             phone: data.phone,
             email: data.email,
-            is_online: data.is_online || false
+            is_online: data.is_online || false,
+            coach_optional: data.coach_optional || false
         };
     },
 
