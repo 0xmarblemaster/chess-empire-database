@@ -316,19 +316,27 @@ async function deleteStudent(id) {
             // Use Supabase
             await window.supabaseData.deleteStudent(id);
 
-            // Update local cache
-            // Student IDs from Supabase are strings (UUIDs), so compare as strings
-            const index = window.students.findIndex(s => String(s.id) === String(id));
-            if (index !== -1) {
-                const deletedStudent = window.students[index];
-                window.students.splice(index, 1);
-                return { success: true, student: deletedStudent };
+            // Update local cache if it's loaded on this page.
+            // Student IDs from Supabase are strings (UUIDs), so compare as strings.
+            // NOTE: pages like student.html load a single student and never populate
+            // window.students, so guard against it being undefined (otherwise the DB
+            // row is deleted but this throws and the UI reports a false failure).
+            if (Array.isArray(window.students)) {
+                const index = window.students.findIndex(s => String(s.id) === String(id));
+                if (index !== -1) {
+                    const deletedStudent = window.students[index];
+                    window.students.splice(index, 1);
+                    return { success: true, student: deletedStudent };
+                }
             }
 
             return { success: true };
         } else {
             // Fallback to localStorage
             // Student IDs from Supabase are strings (UUIDs), so compare as strings
+            if (!Array.isArray(window.students)) {
+                return { success: false, error: 'Student data not loaded' };
+            }
             const index = window.students.findIndex(s => String(s.id) === String(id));
             if (index === -1) {
                 return { success: false, error: 'Student not found' };
