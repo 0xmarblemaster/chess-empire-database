@@ -3687,7 +3687,8 @@ const BRANCH_NAME_TRANSLATIONS = {
     'Abaya Rozybakieva': { en: 'Abaya Rozybakieva', ru: 'Абая Розыбакиева', kk: 'Абай – Розыбакиев' },
     'Almaty 1': { en: 'Almaty 1', ru: 'Алматы 1', kk: 'Алматы 1' },
     'Almaty-1': { en: 'Almaty-1', ru: 'Алматы-1', kk: 'Алматы-1' },
-    'Online': { en: 'Online', ru: 'Онлайн', kk: 'Онлайн' }
+    'Online': { en: 'Online', ru: 'Онлайн', kk: 'Онлайн' },
+    'Детский Дом': { en: "Children's Home", ru: 'Детский Дом', kk: 'Балалар үйі' }
 };
 function _translateBranchNameTopLevel(name) {
     if (!name) return name;
@@ -4733,7 +4734,8 @@ window.translateStatus = translateStatus;
         'Abaya Rozybakieva': { en: 'Abaya Rozybakieva', ru: 'Абая Розыбакиева', kk: 'Абай – Розыбакиев' },
         'Almaty 1': { en: 'Almaty 1', ru: 'Алматы 1', kk: 'Алматы 1' },
         'Almaty-1': { en: 'Almaty-1', ru: 'Алматы-1', kk: 'Алматы-1' },
-        'Online': { en: 'Online', ru: 'Онлайн', kk: 'Онлайн' }
+        'Online': { en: 'Online', ru: 'Онлайн', kk: 'Онлайн' },
+        'Детский Дом': { en: "Children's Home", ru: 'Детский Дом', kk: 'Балалар үйі' }
     };
 
     const branchLocationTranslations = {

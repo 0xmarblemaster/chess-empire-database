@@ -2468,6 +2468,12 @@ async function submitAddStudent(event) {
             // Refresh the UI
             loadStudents();
             updateStats();
+            // Refresh filter dropdowns so a newly-added student's branch/coach
+            // (e.g. the first student in a brand-new branch) appears immediately
+            // without requiring a manual page reload.
+            if (typeof populateFilterDropdowns === 'function') {
+                populateFilterDropdowns();
+            }
         } else {
             throw new Error(result.error || 'Failed to create student');
         }
