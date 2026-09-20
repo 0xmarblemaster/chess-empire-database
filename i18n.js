@@ -374,6 +374,9 @@ const translations = {
         "admin.studentCard.level": "Level {{level}}",
         "admin.studentCard.view": "View",
         "admin.studentCard.edit": "Edit",
+        "admin.studentCard.delete": "Delete Student",
+        "admin.confirm.deleteStudent": "Are you sure you want to delete student \"{name}\"?",
+        "admin.error.deleteFailed": "Failed to delete student",
 
         // Coach Management Modals
         "admin.modals.coach.addTitle": "Add New Coach",
@@ -1624,6 +1627,9 @@ const translations = {
         "admin.studentCard.level": "Деңгей {{level}}",
         "admin.studentCard.view": "Ашу",
         "admin.studentCard.edit": "Өңдеу",
+        "admin.studentCard.delete": "Оқушыны жою",
+        "admin.confirm.deleteStudent": "\"{name}\" оқушысын жойғыңыз келе ме?",
+        "admin.error.deleteFailed": "Оқушыны жою сәтсіз аяқталды",
 
         // Admin Logout
         "admin.logout.confirm": "Шығуды растайсыз ба?",
@@ -2727,6 +2733,9 @@ const translations = {
         "admin.studentCard.level": "Ступень {{level}}",
         "admin.studentCard.view": "Открыть",
         "admin.studentCard.edit": "Редактировать",
+        "admin.studentCard.delete": "Удалить ученика",
+        "admin.confirm.deleteStudent": "Вы уверены, что хотите удалить ученика «{name}»?",
+        "admin.error.deleteFailed": "Не удалось удалить ученика",
 
         // Coach Management Modals (Russian)
         "admin.modals.coach.addTitle": "Добавить нового тренера",

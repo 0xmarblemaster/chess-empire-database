@@ -1175,6 +1175,13 @@ async function renderProfile() {
            </button>`
         : '';
 
+    // Delete button — mirrors the edit button, placed symmetrically on the top-left
+    const deleteButtonHTML = hasEditPermission
+        ? `<button class="delete-button" onclick="deleteStudentFromProfile()" title="${t('admin.studentCard.delete') || 'Delete Student'}">
+               <i data-lucide="trash-2" style="width: 18px; height: 18px;"></i>
+           </button>`
+        : '';
+
     // League badge HTML
     const leagueBadgeHTML = currentRating
         ? `<div class="league-badge tier-${leagueTier}">
@@ -1217,6 +1224,7 @@ async function renderProfile() {
 
     const profileHTML = `
         <div class="profile-header">
+            ${deleteButtonHTML}
             ${avatarHTML}
             <div class="profile-info">
                 <h1 class="student-name">${student.firstName} ${student.lastName}</h1>
@@ -1975,8 +1983,38 @@ function handleLightboxEscape(e) {
     }
 }
 
+// Delete the currently-viewed student, then return to the students list.
+// Uses deleteStudent() from crud.js (loaded on this page); showDeleteConfirmation
+// lives in crud-handlers.js which is NOT loaded here, so we confirm natively.
+async function deleteStudentFromProfile() {
+    const student = window.currentStudent;
+    if (!student) {
+        showToast(t('admin.error.studentNotFound') || 'Student not found', 'error');
+        return;
+    }
+
+    const name = `${student.firstName} ${student.lastName}`;
+    const confirmMsg = (t('admin.confirm.deleteStudent') || 'Are you sure you want to delete student "{name}"?').replace('{name}', name);
+    if (!window.confirm(confirmMsg)) return;
+
+    try {
+        const result = await deleteStudent(student.id);
+        if (result && result.success) {
+            showToast(t('admin.form.deleteSuccess') || 'Student deleted successfully', 'success');
+            // Return to the students list after a short beat so the toast is visible
+            setTimeout(() => { window.location.href = 'admin-v2.html'; }, 800);
+        } else {
+            showToast((result && result.error) || t('admin.error.deleteFailed') || 'Failed to delete student', 'error');
+        }
+    } catch (error) {
+        console.error('Error deleting student from profile:', error);
+        showToast(`${t('admin.error.deleteFailed') || 'Failed to delete student'}: ${error.message}`, 'error');
+    }
+}
+
 // Make functions globally available
 window.canEditStudent = canEditStudent;
+window.deleteStudentFromProfile = deleteStudentFromProfile;
 window.openEditModal = openEditModal;
 window.closeEditModal = closeEditModal;
 window.saveStudentEdits = saveStudentEdits;

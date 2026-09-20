@@ -221,6 +221,38 @@ body {
     display: none;
 }
 
+/* Delete button — mirror of .edit-button, pinned top-left */
+.delete-button {
+    position: absolute;
+    top: 0;
+    left: 0;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 40px;
+    height: 40px;
+    padding: 0;
+    background: white;
+    border: 1px solid #e2e8f0;
+    border-radius: 50%;
+    color: #475569;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+}
+
+.delete-button:hover {
+    background: #fee2e2;
+    border-color: #dc2626;
+    color: #dc2626;
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(220, 38, 38, 0.15);
+}
+
+.delete-button:active {
+    transform: translateY(0);
+}
+
 .avatar {
     width: 120px;
     height: 120px;
