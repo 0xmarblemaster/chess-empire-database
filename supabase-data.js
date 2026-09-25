@@ -1144,7 +1144,28 @@ const supabaseData = {
             if (reportProgress) reportProgress(i + 1, total, 'import');
         }
 
+        // All rows committed — poke Chesster to sync XP/coins now. Fire-and-forget
+        // (no await) so the upload result is never blocked or failed by the poke.
+        this.pokeGamificationSync();
+
         return { upload_id, inserted };
+    },
+
+    // Trigger Chesster's pull-based gamification sync after a tournament upload.
+    // Authenticates with the CE admin's Supabase access token. Non-fatal: never
+    // throws into the caller.
+    async pokeGamificationSync() {
+        try {
+            const { data: { session } } = await window.supabaseClient.auth.getSession();
+            const token = session?.access_token;
+            if (!token) return;
+            await fetch('https://chesster.io/api/chess-empire/gamification/sync-request', {
+                method: 'POST',
+                headers: { 'Authorization': 'Bearer ' + token },
+            });
+        } catch (e) {
+            console.warn('Gamification sync poke failed (non-fatal):', e);
+        }
     },
 
     // Add or update a rating entry for a student (upsert - one rating per student per day)
