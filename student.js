@@ -1175,7 +1175,7 @@ async function renderProfile() {
            </button>`
         : '';
 
-    // Delete button — mirrors the edit button, placed symmetrically on the top-left
+    // Delete button — stacked directly below the edit button on the right
     const deleteButtonHTML = hasEditPermission
         ? `<button class="delete-button" onclick="deleteStudentFromProfile()" title="${t('admin.studentCard.delete') || 'Delete Student'}">
                <i data-lucide="trash-2" style="width: 18px; height: 18px;"></i>
@@ -1224,7 +1224,6 @@ async function renderProfile() {
 
     const profileHTML = `
         <div class="profile-header">
-            ${deleteButtonHTML}
             ${avatarHTML}
             <div class="profile-info">
                 <h1 class="student-name">${student.firstName} ${student.lastName}</h1>
@@ -1238,6 +1237,7 @@ async function renderProfile() {
                 </div>
             </div>
             ${editButtonHTML}
+            ${deleteButtonHTML}
         </div>
 
         <a href="student-stats.html?id=${student.id}" class="check-stats-cta">
