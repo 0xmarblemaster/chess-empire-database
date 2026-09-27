@@ -1,159 +1,63 @@
 <!DOCTYPE html>
 <html lang="ru">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Chess Empire - Student Database</title>
-    <script src="https://cdn.tailwindcss.com"></script>
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=Outfit:wght@600;700;800&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/clear-sans-webfont@1.0.1/css/clear-sans.min.css" />
-    <script src="https://unpkg.com/lucide@latest"></script>
-    <script src="i18n.js?v=2"></script>
-    <link rel="stylesheet" href="styles.css?v=22">
-    <style>
-        /* Override styles for desktop - ensure this loads after Tailwind */
-        @media screen and (min-width: 769px) {
-            #search-wrapper {
-                padding-left: 0.25rem !important;
-                padding-right: 0.25rem !important;
-            }
-            
-            .search-container {
-                max-width: min(2560px, calc(100vw - 0.5rem)) !important;
-                width: 100% !important;
-            }
-        }
-    </style>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Chess Empire - Шахматная школа для детей в Алматы</title>
+<meta name="description" content="Chess Empire — чемпионская методика, которая помогла воспитать чемпионку мира. 6 филиалов по городу, сертифицированные тренеры, бесплатный пробный урок.">
+<meta name="theme-color" content="#1c1a16">
+<!-- TODO: replace https://chessempire.kz with the production domain -->
+<link rel="canonical" href="https://chessempire.kz/">
+<link rel="alternate" hreflang="ru" href="https://chessempire.kz/">
+<link rel="alternate" hreflang="en" href="https://chessempire.kz/en/">
+<link rel="alternate" hreflang="kk" href="https://chessempire.kz/kk/">
+<link rel="alternate" hreflang="x-default" href="https://chessempire.kz/">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="Chess Empire">
+<meta property="og:title" content="Chess Empire - Шахматная школа для детей в Алматы">
+<meta property="og:description" content="Chess Empire — чемпионская методика, которая помогла воспитать чемпионку мира. 6 филиалов по городу, сертифицированные тренеры, бесплатный пробный урок.">
+<meta property="og:image" content="https://chessempire.kz/assets/chess-pieces.jpg">
+<meta property="og:locale" content="ru_RU">
+<meta name="twitter:card" content="summary_large_image">
+<link rel="icon" href="/assets/favicon.svg" type="image/svg+xml">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,600;0,700;1,500&family=IBM+Plex+Sans:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap&subset=cyrillic,cyrillic-ext,latin-ext">
+<link rel="stylesheet" href="/shared/base.css">
+<link rel="stylesheet" href="/landing.css">
+<script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"EducationalOrganization","name":"Chess Empire","description":"Chess Empire — чемпионская методика, которая помогла воспитать чемпионку мира. 6 филиалов по городу, сертифицированные тренеры, бесплатный пробный урок.","url":"https://chessempire.kz/","telephone":"+7 777 123 45 67","email":"info@chessempire.kz","foundingDate":"2018","areaServed":"Almaty","sameAs":[],"location":[{"@type":"Place","name":"Chess Empire — Алматы Арена","address":{"@type":"PostalAddress","addressLocality":"Almaty","addressCountry":"KZ"}},{"@type":"Place","name":"Chess Empire — Дебют","address":{"@type":"PostalAddress","addressLocality":"Almaty","addressCountry":"KZ","streetAddress":"Кабанбай батыра, 71"}},{"@type":"Place","name":"Chess Empire — Халык Арена","address":{"@type":"PostalAddress","addressLocality":"Almaty","addressCountry":"KZ"}},{"@type":"Place","name":"Chess Empire — Алматы 1","address":{"@type":"PostalAddress","addressLocality":"Almaty","addressCountry":"KZ"}},{"@type":"Place","name":"Chess Empire — Жандосова 305","address":{"@type":"PostalAddress","addressLocality":"Almaty","addressCountry":"KZ"}},{"@type":"Place","name":"Chess Empire — ЖК Gagarin Park","address":{"@type":"PostalAddress","addressLocality":"Almaty","addressCountry":"KZ"}}]},{"@type":"FAQPage","mainEntity":[{"@type":"Question","name":"Сколько стоит обучение?","acceptedAnswer":{"@type":"Answer","text":"Стоимость зависит от филиала и выбранного тарифа. Базовые тарифы начинаются от 29 500 ₸/мес за 2 занятия в неделю по 60 минут. В филиалах Gagarin Park и Дебют цены немного выше. Смотрите подробную информацию в разделе «Цены и абонементы»."}},{"@type":"Question","name":"В каких филиалах есть тренеры, которые говорят на казахском?","acceptedAnswer":{"@type":"Answer","text":"Тренеры, говорящие на казахском языке, работают в филиалах: Дебют, Жандосова, Алматы Арена."}},{"@type":"Question","name":"Есть ли индивидуальные уроки?","acceptedAnswer":{"@type":"Answer","text":"Индивидуальные занятия проводятся только на пробном уроке или при подготовке к крупным чемпионатам (стоимость 10 000 ₸/час). Для начинающих и продолжающих рекомендуем групповой формат — он более эффективен для развития."}},{"@type":"Question","name":"Какое расписание занятий?","acceptedAnswer":{"@type":"Answer","text":"Занятия проходят 2 раза в неделю по 60 минут (для разрядников — 90 или 120 минут). Группы работают: Пн/Ср и Вт/Чт: 9:00–18:00, Сб/Вс: 9:00–13:00. Пятница — выходной."}},{"@type":"Question","name":"Можно ли заниматься один раз в неделю?","acceptedAnswer":{"@type":"Answer","text":"Нет, такой формат не предусмотрен. Занятия один раз в неделю не дают нужного результата и практики. Для прогресса необходимо минимум 2 занятия в неделю."}},{"@type":"Question","name":"Как проходят турниры и когда ребёнок может участвовать?","acceptedAnswer":{"@type":"Answer","text":"Турниры проходят каждые выходные в 5 филиалах. Ребёнок может участвовать после прохождения первой ступени обучения и сдачи экзамена у тренера. В абонемент входит до 4 бесплатных турниров в месяц."}},{"@type":"Question","name":"Можно ли купить неполный абонемент?","acceptedAnswer":{"@type":"Answer","text":"Нет, абонемент приобретается полностью. Посещение возможно только по установленному расписанию."}},{"@type":"Question","name":"Есть ли обучение для взрослых?","acceptedAnswer":{"@type":"Answer","text":"Да, обучение для взрослых проходит в филиале «Дебют» (Кабанбай батыра, 71) с 19:00 до 21:00. Стоимость одного занятия — 5 000 ₸. Пробный урок бесплатный."}},{"@type":"Question","name":"Есть ли у вас «Даму бала»?","acceptedAnswer":{"@type":"Answer","text":"Нет, такой программы у нас нет. Мы работаем по собственной чемпионской методике Chess Empire."}},{"@type":"Question","name":"Есть ли бесплатное обучение?","acceptedAnswer":{"@type":"Answer","text":"Бесплатен только пробный урок (30 минут). Обучение платное — от 29 500 ₸/мес. Действуют скидки для многодетных семей и детей с инвалидностью."}},{"@type":"Question","name":"Личный кабинет вы создаёте, или нам нужно регистрироваться самим?","acceptedAnswer":{"@type":"Answer","text":"Личный кабинет создаётся после первого занятия вместе с тренером. Мы поможем вам зарегистрироваться и объясним, как им пользоваться."}}]}]}</script>
 </head>
-<body>
-    <div class="min-h-screen flex items-center justify-center">
-        <div class="w-full px-4" id="search-wrapper">
-            <div style="display: flex; flex-direction: column; align-items: center; margin-bottom: 2rem;">
-                <img src="chess-empire-logo.png" alt="Chess Empire" class="logo-image" style="width: 120px; height: 120px; object-fit: contain; margin-bottom: 1rem;">
-                <h1 class="logo-text logo-text-gradient" style="font-family: 'Clear Sans', sans-serif; margin-bottom: 0;">Chess Empire</h1>
-            </div>
-
-            <div class="search-container">
-                <div class="search-input-wrapper">
-                    <i data-lucide="search" class="search-icon" style="width: 22px; height: 22px;"></i>
-                    <input
-                        type="text"
-                        class="search-input"
-                        data-i18n-placeholder="index.searchPlaceholder"
-                        id="searchInput"
-                    >
-                    <button class="clear-button" id="clearButton">
-                        <i data-lucide="x" style="width: 16px; height: 16px; color: #64748b;"></i>
-                    </button>
-                </div>
-
-                <div class="dropdown" id="dropdown"></div>
-            </div>
-        </div>
-    </div>
-
-    <div class="top-right-buttons">
-        <a class="rating-button" href="ratings.html">
-            <svg class="rating-crown" viewBox="0 0 24 24" fill="none">
-                <path d="M3 17L4.2 9L7.5 12.5L12 5L16.5 12.5L19.8 9L21 17H3Z" fill="currentColor" stroke="currentColor" stroke-width="0.5" stroke-linejoin="round"/>
-                <rect x="3" y="17" width="18" height="2.5" rx="0.8" fill="currentColor"/>
-            </svg>
-            <span id="ratingButtonLabel">Rating</span>
-        </a>
-
-        <button class="login-button" id="authButton" onclick="handleAuthButtonClick()" style="background: #C2A580;">
-            <i data-lucide="shield-check" id="authButtonIcon" style="width: 18px; height: 18px;"></i>
-            <span data-i18n="common.login" class="login-button-label" id="authButtonLabel">Login</span>
-        </button>
-    </div>
-
-    <div class="chess-pattern"></div>
-
-    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-    <script src="supabase-config.js?v=9" onerror="console.log('Supabase config not found')"></script>
-    <script src="supabase-client.js?v=9" onerror="console.log('Supabase client not found')"></script>
-    <script src="supabase-data.js?v=1762500000" onerror="console.log('Supabase data not found')"></script>
-    <script src="data.js?v=20250105020"></script>
-    <script src="app.js?v=5"></script>
-    <script>
-        function updateIndexTitle() {
-            document.title = t('index.title');
-        }
-
-        function updateLoginButtonLabel() {
-            const label = document.querySelector('.login-button-label');
-            if (label) {
-                label.textContent = t('common.login');
-            }
-            const ratingLabel = document.getElementById('ratingButtonLabel');
-            if (ratingLabel) {
-                ratingLabel.textContent = t('common.rating') || 'Rating';
-            }
-        }
-
-        // Handle auth button click (Login or Dashboard)
-        function handleAuthButtonClick() {
-            const isLoggedIn = sessionStorage.getItem('userRole');
-            if (isLoggedIn) {
-                window.location.href = 'admin.html';
-            } else {
-                window.location.href = 'login.html';
-            }
-        }
-
-        // Check if user is logged in and update button
-        async function checkAuthState() {
-            try {
-                if (!window.supabaseClient) {
-                    console.log('Supabase client not available');
-                    return;
-                }
-
-                const { data: { session }, error } = await window.supabaseClient.auth.getSession();
-
-                if (session && session.user) {
-                    console.log('User is logged in:', session.user.email);
-
-                    // Update button to show "Dashboard"
-                    const button = document.getElementById('authButton');
-                    const label = document.getElementById('authButtonLabel');
-                    const icon = document.getElementById('authButtonIcon');
-
-                    if (label) label.textContent = 'Dashboard';
-                    if (icon) icon.setAttribute('data-lucide', 'layout-dashboard');
-                    if (button) button.style.background = '#059669'; // Green color for logged-in state
-
-                    lucide.createIcons();
-                } else {
-                    console.log('No active session');
-                }
-            } catch (error) {
-                console.error('Error checking auth state:', error);
-            }
-        }
-
-        document.addEventListener('languagechange', () => {
-            updateIndexTitle();
-            updateLoginButtonLabel();
-        });
-
-        // Use window.onload instead of DOMContentLoaded to ensure all scripts are fully loaded
-        window.addEventListener('load', async () => {
-            updateIndexTitle();
-
-            // Apply translations after everything is loaded
-            if (window.i18n && window.i18n.translatePage) {
-                window.i18n.translatePage();
-            }
-
-            lucide.createIcons();
-            updateLoginButtonLabel();
-
-            // Check if user is logged in and update button
-            await checkAuthState();
-        });
-    </script>
+<body class="theme-chess">
+<a class="skip-link" href="#main">Перейти к содержанию</a>
+<header class="site-header"><div class="wrap header-inner">
+<a class="logo" href="#top"><span class="logo-mark" aria-hidden="true">♔︎</span>Chess Empire</a>
+<nav class="main-nav" id="main-nav" aria-label="Меню"><ul><li><a href="#about">О школе</a></li><li><a href="#trainers">Тренеры</a></li><li><a href="#programs">Программы</a></li><li><a href="#branches">Филиалы</a></li><li><a href="#prices">Цены</a></li><li><a href="#faq">FAQ</a></li><li><a href="#contacts">Контакты</a></li></ul></nav>
+<div class="header-actions"><nav class="lang-switch" aria-label="Язык"><a href="/" hreflang="ru" lang="ru" aria-current="page">RU</a><a href="/en/" hreflang="en" lang="en">EN</a><a href="/kk/" hreflang="kk" lang="kk">KZ</a></nav><a class="btn btn-primary header-cta" href="#trial">Пробный урок</a><button class="burger" type="button" aria-expanded="false" aria-controls="main-nav" aria-label="Меню"><span></span></button></div>
+</div></header>
+<main id="main">
+<section class="hero" id="top"><div class="wrap hero-grid"><div class="hero-text"><p class="eyebrow">1. e4 e5 2. Nf3 Nc6 3. Bc4 — ход за вами</p><h1>Шахматная школа для детей в <span>Алматы</span></h1><p class="lead">Chess Empire — чемпионская методика, которая помогла воспитать чемпионку мира. 6 филиалов по городу, сертифицированные тренеры, бесплатный пробный урок.</p><a class="btn btn-primary btn-lg" href="#trial">Записаться на бесплатный пробный урок</a><ul class="hero-stats"><li><strong>800+</strong><span>учеников</span></li><li><strong>10+</strong><span>лет опыта</span></li><li><strong>2018</strong><span>год основания</span></li></ul></div><div class="hero-media"><img src="/assets/chess-pieces.jpg" alt="Шахматные фигуры на доске" width="800" height="533" fetchpriority="high"></div></div></section>
+<section class="section" id="about"><div class="wrap split"><figure class="media-frame"><img src="/assets/chess-pieces.jpg" alt="О школе Chess Empire" width="800" height="533" loading="lazy"></figure><div class="prose"><p class="eyebrow"><span class="glyph" aria-hidden="true">♔︎</span> История</p><h2>О школе</h2><p>Chess Empire — сеть шахматных клубов в Алматы. Мы делаем шахматы доступными и эффективными: по чемпионской методике, которая помогла воспитать чемпионку мира.</p><p>Все тренеры сертифицированы и прошли обучение. У нас более 10 лет опыта преподавания и 800+ учеников.</p><p>Мы работаем с 2018 года. За это время выросли в сеть из 6 филиалов по городу. Наша методика помогла воспитать чемпионку мира.</p></div></div></section>
+<section class="section" id="features"><div class="wrap"><header class="section-head"><div><p class="eyebrow">Дебют · I</p><h2>Почему выбирают нас</h2></div><p>Наша чемпионская методика и профессиональный подход к обучению</p></header><div class="features-grid"><article class="feature"><span class="feature-mark" aria-hidden="true">♕︎</span><h3>Чемпионская методика</h3><p>Та же методика, что помогла воспитать чемпионку мира. Проверенная система обучения с доказанной эффективностью.</p></article><article class="feature"><span class="feature-mark" aria-hidden="true">♖︎</span><h3>Сертифицированные тренеры</h3><p>Все тренеры прошли сертификацию и специальное обучение работе с детьми разного возраста.</p></article><article class="feature"><span class="feature-mark" aria-hidden="true">♘︎</span><h3>6 филиалов по городу</h3><p>Легко найти удобный филиал рядом с домом. Работаем во всех районах Алматы.</p></article><article class="feature"><span class="feature-mark" aria-hidden="true">♗︎</span><h3>Книга в подарок</h3><p>Первая книга по нашей методике — в подарок каждому новому ученику.</p></article><article class="feature"><span class="feature-mark" aria-hidden="true">♔︎</span><h3>До 4 турниров в месяц</h3><p>Бесплатно, в рамках абонемента. Регулярная игровая практика для закрепления знаний.</p></article><article class="feature"><span class="feature-mark" aria-hidden="true">♙︎</span><h3>12 интеллектуальных навыков</h3><p>За одно занятие ребёнок прокачивает 12 интеллектуальных навыков: мышление, внимание, память и другие.</p></article></div></div></section>
+<section class="section" id="path"><div class="wrap"><header class="section-head is-center"><p class="eyebrow">Миттельшпиль · II</p><h2>Как проходит обучение</h2><p>Путь от первых шагов до международного рейтинга FIDE 1400+</p></header><ol class="path"><li class="step"><span class="step-piece" aria-hidden="true">♙︎</span><span class="step-key">D</span><h3>Старт</h3><span class="step-rating">Рейтинг 0-200</span><p>Правила игры, ходы фигур</p></li><li class="step"><span class="step-piece" aria-hidden="true">♘︎</span><span class="step-key">C</span><h3>Рост</h3><span class="step-rating">200 - 4 разряд</span><p>Расчёт вариантов, планирование</p></li><li class="step"><span class="step-piece" aria-hidden="true">♗︎</span><span class="step-key">B</span><h3>Уверенность</h3><span class="step-rating">4 - 3 разряд</span><p>Стратегия, управление эмоциями</p></li><li class="step"><span class="step-piece" aria-hidden="true">♖︎</span><span class="step-key">A</span><h3>Международный</h3><span class="step-rating">3 разряд - FIDE 1700</span><p>Глубокий анализ позиции</p></li><li class="step"><span class="step-piece" aria-hidden="true">♕︎</span><span class="step-key">PRO</span><h3>Элита</h3><span class="step-rating">FIDE 1700+</span><p>Игра на высоком уровне</p></li></ol><p class="path-note">На каждом уровне ребёнок не только растёт в игре, но и развивает мышление, внимание, память, дисциплину и лидерские качества. Занятия проходят в группах до 10 человек.</p></div></section>
+<section class="section" id="branches"><div class="wrap"><header class="section-head"><p class="eyebrow">III</p><h2>Наши филиалы</h2><p>Chess Empire работает в 6 точках по Алматы — выберите филиал рядом с вами</p></header><ul class="branches"><li class="branch"><span class="branch-idx">01</span><div class="branch-body"><h3>Алматы Арена</h3><p>Современный филиал с просторными залами для занятий и турниров.</p></div><a class="btn btn-ghost" href="#trial">Записаться</a></li><li class="branch"><span class="branch-idx">02</span><div class="branch-body"><h3>Дебют</h3><p>Кабанбай батыра, 71. Здесь также проходят занятия для взрослых.</p></div><a class="btn btn-ghost" href="#trial">Записаться</a></li><li class="branch"><span class="branch-idx">03</span><div class="branch-body"><h3>Халык Арена</h3><p>Удобное расположение в центре города с хорошей транспортной доступностью.</p></div><a class="btn btn-ghost" href="#trial">Записаться</a></li><li class="branch"><span class="branch-idx">04</span><div class="branch-body"><h3>Алматы 1</h3><p>Классический филиал с уютной атмосферой для обучения.</p></div><a class="btn btn-ghost" href="#trial">Записаться</a></li><li class="branch"><span class="branch-idx">05</span><div class="branch-body"><h3>Жандосова 305</h3><p>Филиал с тренерами, говорящими на казахском языке.</p></div><a class="btn btn-ghost" href="#trial">Записаться</a></li><li class="branch"><span class="branch-idx">06</span><div class="branch-body"><h3>ЖК Gagarin Park</h3><p>Современный филиал в новом жилом комплексе.</p></div><a class="btn btn-ghost" href="#trial">Записаться</a></li></ul></div></section>
+<section class="section section-tournaments" id="tournaments"><div class="wrap split"><div class="prose"><p class="eyebrow"><span class="glyph" aria-hidden="true">♖︎</span> Каждые выходные</p><h2>Турниры Liga B и Liga C</h2><p>Наши ученики участвуют в турнирах каждые выходные в филиалах Gagarin Park, Дебют, Халык Арена, Алматы Арена и Алматы-1.</p><p>Это бесценная игровая практика, которая закрепляет всё, что ребёнок изучил на занятиях. По мере роста ребёнок получает доступ к более серьёзным турнирам.</p><p><strong>В абонемент входит до 4 бесплатных турниров в месяц.</strong></p><ul class="stats"><li><span class="stat-num">4</span><span class="stat-label">турнира в месяц</span></li><li><span class="stat-num">5</span><span class="stat-label">филиалов</span></li><li><span class="stat-num">52</span><span class="stat-label">выходных в год</span></li></ul></div><figure class="media-frame"><img src="/assets/kids-playing-chess.jpg" alt="Шахматный турнир" width="1200" height="800" loading="lazy"></figure></div></section>
+<section class="section" id="trainers"><div class="wrap"><header class="section-head"><div><h2>Наши тренеры</h2></div><p>Мастера ФИДЕ и КМС с большим опытом работы с детьми</p></header><ul class="trainers"><li class="trainer"><span class="avatar avatar-initials" aria-hidden="true">CB</span><h3>Chingis Baurzhanovich</h3><span class="tag">Gagarin Park</span><p>Сооснователь и директор школы Chess Empire. Разработчик методики преподавания в Chess Empire. Директор по развитию шахмат в Казахстане в Федерации Шахмат. 2023–2024 Президент Союза Шахматистов города Алматы. Тренерский стаж более 10 лет. Наивысший международный рейтинг FIDE 2121.</p></li><li class="trainer"><img class="avatar" src="/assets/trainer-assylkhan.png" alt="Assylkhan Agbaevich" width="240" height="240" loading="lazy"><h3>Assylkhan Agbaevich</h3><span class="tag">Дебют</span><p>Мастер ФИДЕ, старший тренер г. Алматы, Заслуженный тренер РК, руководитель шахматного клуба «Дебют».</p></li><li class="trainer"><span class="avatar avatar-initials" aria-hidden="true">NI</span><h3>Nail Ildusovich</h3><span class="tag">Дебют</span><p>Тренер по шахматам Chess Empire.</p></li><li class="trainer"><img class="avatar" src="/assets/trainer-vasily.png" alt="Vasily Mikhaylovich" width="240" height="240" loading="lazy"><h3>Vasily Mikhaylovich</h3><span class="tag">Gagarin Park</span><p>Тренер по шахматам Chess Empire. Master FIDE (FM). Максимальный рейтинг FIDE 2381. Чемпион Республики Саха (Якутия). Более 7 лет преподавательского опыта.</p></li><li class="trainer"><img class="avatar" src="/assets/trainer-aleksandr.png" alt="Aleksandr Olegovich" width="240" height="240" loading="lazy"><h3>Aleksandr Olegovich</h3><span class="tag">Халык Арена</span><p>Тренер по шахматам Chess Empire. Мастер Фиде. Воспитал более 700 учеников.</p></li></ul><div class="center"><a class="btn btn-primary" href="#trial">Запишитесь на пробный урок</a></div></div></section>
+<section class="section" id="programs"><div class="wrap"><header class="section-head is-center"><p class="eyebrow">Программы</p><h2>Программы обучения</h2><p>Обучение построено как путь по уровням — от первых шагов до международного рейтинга FIDE 1400+</p></header><ol class="programs"><li class="program"><div class="level-badge"><span class="level-piece" aria-hidden="true">♙︎</span><span><b>D</b><small>Старт</small></span></div><div class="program-title"><h3>Старт в шахматах</h3><span class="rating">Рейтинг школы 0–200</span></div><p>Правила игры, ходы фигур, концентрация, запоминание ходов. Первый шаг в мир шахмат для самых маленьких.</p></li><li class="program"><div class="level-badge"><span class="level-piece" aria-hidden="true">♘︎</span><span><b>C</b><small>Рост</small></span></div><div class="program-title"><h3>Рост и развитие</h3><span class="rating">200 – 4 разряд</span></div><p>Расчёт вариантов, планирование игры, разбор ошибок, участие в турнирах. Активный рост шахматного мастерства.</p></li><li class="program"><div class="level-badge"><span class="level-piece" aria-hidden="true">♗︎</span><span><b>B</b><small>Уверенность</small></span></div><div class="program-title"><h3>Уверенность и характер</h3><span class="rating">4 разряд – 3 разряд</span></div><p>Решения под давлением, стратегия, управление эмоциями. Формирование шахматного характера.</p></li><li class="program"><div class="level-badge"><span class="level-piece" aria-hidden="true">♖︎</span><span><b>A</b><small>Международный</small></span></div><div class="program-title"><h3>Международный уровень</h3><span class="rating">3 разряд – FIDE 1700</span></div><p>Глубокий анализ позиции, действия в серьёзных турнирах. Подготовка к международным соревнованиям.</p></li><li class="program"><div class="level-badge"><span class="level-piece" aria-hidden="true">♕︎</span><span><b>PRO</b><small>Элита</small></span></div><div class="program-title"><h3>Элита Chess Empire</h3><span class="rating">FIDE 1700+</span></div><p>Игра на высоком уровне, лидерство, менторство. Подготовка профессиональных шахматистов.</p></li></ol></div></section>
+<section class="section" id="adults"><div class="wrap"><div class="adults"><div class="adults-info"><p class="eyebrow"><span class="glyph" aria-hidden="true">♚︎</span> Вечерние занятия</p><h2>Шахматы для взрослых</h2><p>Обучение для взрослых проходит в филиале <strong>«Дебют»</strong> (Кабанбай батыра, 71), с 19:00 до 21:00.</p></div><div class="adults-card"><p class="adults-price"><strong>5 000 ₸</strong> за занятие</p><p>Пробный урок — бесплатно, после него вы сможете принять решение, пообщавшись с тренером.</p><a class="btn btn-primary" href="#trial">Записаться на пробный урок</a></div></div></div></section>
+<section class="section" id="prices"><div class="wrap"><header class="section-head is-center"><p class="eyebrow">Эндшпиль · IV</p><h2>Цены и абонементы</h2></header><div><h3 class="sub-title">Базовые тарифы</h3><div class="price-grid"><article class="price-card"><h4 class="price-name"><span>2 раза в неделю<br>60 минут</span></h4><p class="price"><strong>29 500 ₸</strong><span>в месяц</span></p><ul class="price-features"><li>8 занятий в месяц</li><li>4 бесплатных турнира</li><li>Книга в подарок</li><li>Группа до 10 человек</li></ul></article><article class="price-card is-featured"><h4 class="price-name"><span class="badge">Популярный</span><span>2 раза в неделю<br>90 минут</span></h4><p class="price"><strong>37 500 ₸</strong><span>в месяц</span></p><ul class="price-features"><li>8 занятий в месяц</li><li>4 бесплатных турнира</li><li>Книга в подарок</li><li>Группа до 10 человек</li></ul></article><article class="price-card"><h4 class="price-name"><span>2 раза в неделю<br>120 минут</span></h4><p class="price"><strong>45 500 ₸</strong><span>в месяц</span></p><ul class="price-features"><li>8 занятий в месяц</li><li>4 бесплатных турнира</li><li>Книга в подарок</li><li>Группа до 10 человек</li></ul></article><article class="price-card"><h4 class="price-name"><span>4 раза в неделю<br>60 минут</span></h4><p class="price"><strong>44 250 ₸</strong><span>в месяц</span></p><ul class="price-features"><li>16 занятий в месяц</li><li>4 бесплатных турнира</li><li>Книга в подарок</li><li>Группа до 10 человек</li></ul></article></div><h3 class="sub-title">Тарифы Gagarin Park и Дебют</h3><div class="price-grid"><article class="price-card"><h4 class="price-name"><span>60 мин, 8 занятий</span></h4><p class="price"><strong>35 900 ₸</strong><span>в месяц</span></p></article><article class="price-card"><h4 class="price-name"><span>90 мин, 8 занятий</span></h4><p class="price"><strong>43 900 ₸</strong><span>в месяц</span></p></article><article class="price-card"><h4 class="price-name"><span>120 мин, 8 занятий</span></h4><p class="price"><strong>51 900 ₸</strong><span>в месяц</span></p></article><article class="price-card"><h4 class="price-name"><span>4 раза в неделю<br>60 мин, 16 занятий</span></h4><p class="price"><strong>53 850 ₸</strong><span>в месяц</span></p></article></div><div class="discounts"><h3 class="sub-title">Скидки</h3><ul class="discount-grid"><li><span class="pct">10%</span><p>2 ребёнка</p></li><li><span class="pct">20%</span><p>3 ребёнка</p></li><li><span class="pct">25%</span><p>Многодетная семья<br><small>(по справке)</small></p></li><li><span class="pct">50%</span><p>Человек с инвалидностью<br><small>(условия уточняются)</small></p></li></ul></div></div></div></section>
+<section class="section section-trial" id="trial"><div class="wrap"><header class="section-head is-center"><h2>Запишите ребёнка на бесплатный пробный урок</h2><p>Пробный урок бесплатный и длится примерно 30 минут. Тренер познакомится с ребёнком, оценит уровень и после занятия даст вам обратную связь.</p></header><form class="trial-form" data-wa="{&quot;greeting&quot;:&quot;Здравствуйте! Хочу записать ребёнка на бесплатный пробный урок.&quot;,&quot;name&quot;:&quot;Имя&quot;,&quot;phone&quot;:&quot;Телефон&quot;,&quot;branch&quot;:&quot;Филиал&quot;,&quot;time&quot;:&quot;Время&quot;}" data-msg-ok="Спасибо! Заявка готова — отправьте её в открывшемся окне WhatsApp." data-msg-error="Пожалуйста, заполните все поля." data-msg-phone="Введите номер телефона полностью" novalidate>
+<div class="field"><label for="name">Имя родителя</label><input type="text" id="name" name="name" required autocomplete="name" placeholder="Введите ваше имя"></div>
+<div class="field"><label for="phone">Телефон</label><input type="tel" id="phone" name="phone" required autocomplete="tel" inputmode="tel" placeholder="+7 (___) ___-__-__"></div>
+<div class="field"><label for="branch">Выберите филиал</label><select id="branch" name="branch" required><option value="">Выберите филиал</option><option value="arena">Алматы Арена</option><option value="debut">Дебют</option><option value="khalyk">Халык Арена</option><option value="almaty1">Алматы 1</option><option value="zhandosova">Жандосова 305</option><option value="gagarin">ЖК Gagarin Park</option></select></div>
+<div class="field"><label for="time">Удобное время</label><select id="time" name="time" required><option value="">Выберите время</option><option value="morning">Утро (9:00-12:00)</option><option value="day">День (12:00-18:00)</option><option value="evening">Вечер (18:00-21:00)</option><option value="weekend">Выходные (9:00-13:00)</option></select></div>
+<button type="submit" class="btn btn-primary btn-block">Записаться на пробный урок</button><p class="form-status" role="status" aria-live="polite"></p></form></div></section>
+<section class="section" id="blog"><div class="wrap"><header class="section-head is-center"><p class="eyebrow">Журнал</p><h2>Полезные статьи</h2><p>Всё о пользе шахмат для развития ребёнка, советы родителям и новости школы</p></header><div class="blog-grid"><article class="post"><span class="post-no">Статья 1</span><h3>Как шахматы развивают интеллект ребёнка</h3><p>Научные исследования о влиянии шахмат на когнитивные способности детей...</p><a class="read-more" href="#">Читать далее →</a></article><article class="post"><span class="post-no">Статья 2</span><h3>Сколько времени нужно заниматься шахматами</h3><p>Рекомендации по частоте и длительности занятий для разных возрастов...</p><a class="read-more" href="#">Читать далее →</a></article><article class="post"><span class="post-no">Статья 3</span><h3>Подготовка к первым турнирам</h3><p>Советы родителям: как помочь ребёнку справиться с волнением...</p><a class="read-more" href="#">Читать далее →</a></article></div></div></section>
+<section class="section" id="reviews"><div class="wrap"><header class="section-head is-center"><h2>Отзывы родителей</h2><p>Что говорят родители наших учеников</p></header><div class="reviews-grid"><figure class="review"><blockquote><p>«За полгода занятий сын очень изменился — стал более внимательным, усидчивым. Теперь сам просится на занятия! Тренер нашёл к нему отличный подход.»</p></blockquote><figcaption><span class="avatar-sm" aria-hidden="true">АК</span><span><strong>Анна К.</strong><small>Мама Артёма, 7 лет</small></span></figcaption></figure><figure class="review"><blockquote><p>«Дочь занимается уже год, получила 4 разряд. Очень довольны методикой и атмосферой. Турниры — отдельная любовь, ребёнок ждёт их с нетерпением.»</p></blockquote><figcaption><span class="avatar-sm" aria-hidden="true">СМ</span><span><strong>Сергей М.</strong><small>Папа Алины, 9 лет</small></span></figcaption></figure><figure class="review"><blockquote><p>«Пробовали в других школах, но здесь действительно другой подход. Ребёнок не просто играет, а понимает игру. Рекомендую всем!»</p></blockquote><figcaption><span class="avatar-sm" aria-hidden="true">ЕН</span><span><strong>Елена Н.</strong><small>Мама Данияра, 8 лет</small></span></figcaption></figure></div></div></section>
+<section class="section" id="faq"><div class="wrap"><header class="section-head"><h2>Частые вопросы</h2></header><div class="faq"><details class="faq-item" open><summary><span>Сколько стоит обучение?</span></summary><div class="faq-a"><p>Стоимость зависит от филиала и выбранного тарифа. Базовые тарифы начинаются от 29 500 ₸/мес за 2 занятия в неделю по 60 минут. В филиалах Gagarin Park и Дебют цены немного выше. Смотрите подробную информацию в разделе «Цены и абонементы».</p></div></details><details class="faq-item"><summary><span>В каких филиалах есть тренеры, которые говорят на казахском?</span></summary><div class="faq-a"><p>Тренеры, говорящие на казахском языке, работают в филиалах: Дебют, Жандосова, Алматы Арена.</p></div></details><details class="faq-item"><summary><span>Есть ли индивидуальные уроки?</span></summary><div class="faq-a"><p>Индивидуальные занятия проводятся только на пробном уроке или при подготовке к крупным чемпионатам (стоимость 10 000 ₸/час). Для начинающих и продолжающих рекомендуем групповой формат — он более эффективен для развития.</p></div></details><details class="faq-item"><summary><span>Какое расписание занятий?</span></summary><div class="faq-a"><p>Занятия проходят 2 раза в неделю по 60 минут (для разрядников — 90 или 120 минут). Группы работают: Пн/Ср и Вт/Чт: 9:00–18:00, Сб/Вс: 9:00–13:00. Пятница — выходной.</p></div></details><details class="faq-item"><summary><span>Можно ли заниматься один раз в неделю?</span></summary><div class="faq-a"><p>Нет, такой формат не предусмотрен. Занятия один раз в неделю не дают нужного результата и практики. Для прогресса необходимо минимум 2 занятия в неделю.</p></div></details><details class="faq-item"><summary><span>Как проходят турниры и когда ребёнок может участвовать?</span></summary><div class="faq-a"><p>Турниры проходят каждые выходные в 5 филиалах. Ребёнок может участвовать после прохождения первой ступени обучения и сдачи экзамена у тренера. В абонемент входит до 4 бесплатных турниров в месяц.</p></div></details><details class="faq-item"><summary><span>Можно ли купить неполный абонемент?</span></summary><div class="faq-a"><p>Нет, абонемент приобретается полностью. Посещение возможно только по установленному расписанию.</p></div></details><details class="faq-item"><summary><span>Есть ли обучение для взрослых?</span></summary><div class="faq-a"><p>Да, обучение для взрослых проходит в филиале «Дебют» (Кабанбай батыра, 71) с 19:00 до 21:00. Стоимость одного занятия — 5 000 ₸. Пробный урок бесплатный.</p></div></details><details class="faq-item"><summary><span>Есть ли у вас «Даму бала»?</span></summary><div class="faq-a"><p>Нет, такой программы у нас нет. Мы работаем по собственной чемпионской методике Chess Empire.</p></div></details><details class="faq-item"><summary><span>Есть ли бесплатное обучение?</span></summary><div class="faq-a"><p>Бесплатен только пробный урок (30 минут). Обучение платное — от 29 500 ₸/мес. Действуют скидки для многодетных семей и детей с инвалидностью.</p></div></details><details class="faq-item"><summary><span>Личный кабинет вы создаёте, или нам нужно регистрироваться самим?</span></summary><div class="faq-a"><p>Личный кабинет создаётся после первого занятия вместе с тренером. Мы поможем вам зарегистрироваться и объясним, как им пользоваться.</p></div></details></div></div></section>
+<section class="section" id="contacts"><div class="wrap"><header class="section-head"><h2>Контакты</h2><p>Свяжитесь с нами удобным способом, или выберите ближайший филиал</p></header><div class="split contacts-grid"><div class="contact-card"><h3>Свяжитесь с нами</h3><dl class="contact-list"><div><dt>Телефон</dt><dd><a href="tel:+77771234567">+7 (777) 123-45-67</a></dd></div><div><dt>WhatsApp</dt><dd><a href="https://wa.me/77771234567" target="_blank" rel="noopener">+7 (777) 123-45-67</a></dd></div><div><dt>Instagram</dt><dd><a href="https://instagram.com/chessempire_almaty" target="_blank" rel="noopener">@chessempire_almaty</a></dd></div><div><dt>Email</dt><dd><a href="mailto:info@chessempire.kz">info@chessempire.kz</a></dd></div><div><dt>Режим работы</dt><dd>Пн-Чт: 9:00-18:00<br>Сб-Вс: 9:00-13:00<br>Пт: выходной</dd></div></dl></div><div class="map-placeholder" role="img" aria-label="Интерактивная карта филиалов 6 точек по Алматы"><!-- TODO: replace with 2GIS / Google Maps embed --><p>Интерактивная карта филиалов<br>6 точек по Алматы</p></div></div></div></section>
+<section class="cta-band"><div class="wrap cta-inner"><div><p class="eyebrow">Шах и мат</p><h2>Первый ход — бесплатно</h2></div><a class="btn btn-light btn-lg" href="#trial">Записаться на бесплатный пробный урок</a></div></section>
+</main>
+<footer class="site-footer"><div class="wrap"><div class="footer-panel"><div class="footer-grid"><div class="footer-brand"><h3><span class="glyph" aria-hidden="true">♔︎</span> Chess Empire</h3><p>Шахматная школа в Алматы. Чемпионская методика, сертифицированные тренеры, 6 филиалов по городу.</p><ul class="socials"><li><a href="https://instagram.com/chessempire_almaty" target="_blank" rel="noopener">Instagram</a></li><li><a href="#">Facebook</a></li><li><a href="#">Telegram</a></li><li><a href="#">YouTube</a></li></ul></div><div><h3>Быстрые ссылки</h3><ul><li><a href="#about">О школе</a></li><li><a href="#programs">Программы обучения</a></li><li><a href="#prices">Цены</a></li><li><a href="#branches">Филиалы</a></li><li><a href="#faq">FAQ</a></li></ul></div><div><h3>Филиалы</h3><ul><li><a href="#branches">Алматы Арена</a></li><li><a href="#branches">Дебют</a></li><li><a href="#branches">Халык Арена</a></li><li><a href="#branches">Алматы 1</a></li><li><a href="#branches">Жандосова 305</a></li><li><a href="#branches">Gagarin Park</a></li></ul></div><div><h3>Контакты</h3><p><a href="tel:+77771234567">+7 (777) 123-45-67</a></p><p><a href="mailto:info@chessempire.kz">info@chessempire.kz</a></p><p>6 филиалов в Алматы</p></div></div><div class="footer-bottom"><p>© 2026 Chess Empire. Все права защищены.</p></div></div></div></footer>
+<script src="/shared/main.js" defer></script>
 </body>
 </html>
