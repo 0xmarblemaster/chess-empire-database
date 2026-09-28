@@ -206,6 +206,10 @@
                 <div class="header">
                     <h1 class="header-title" data-i18n="admin.header.students"></h1>
                     <div class="header-actions">
+                        <button class="btn btn-secondary" onclick="openStudentExportModal()">
+                            <i data-lucide="download" style="width: 18px; height: 18px;"></i>
+                            <span data-i18n="admin.actions.exportStudents"></span>
+                        </button>
                         <button class="btn btn-primary" onclick="addNewStudent()">
                             <i data-lucide="plus" style="width: 18px; height: 18px;"></i>
                             <span data-i18n="admin.actions.addStudent"></span>
@@ -3034,6 +3038,84 @@
             </button>
         </div>
     </nav>
+
+    <!-- Download Student Info Modal -->
+    <div id="studentExportModal" class="modal">
+        <div class="modal-overlay" onclick="closeStudentExportModal()"></div>
+        <div class="modal-content" style="max-width: 560px;">
+            <div class="modal-header">
+                <h2 class="modal-title" data-i18n="admin.export.title"></h2>
+                <button class="modal-close" onclick="closeStudentExportModal()">
+                    <i data-lucide="x" style="width: 24px; height: 24px;"></i>
+                </button>
+            </div>
+            <div class="modal-body">
+                <p style="color:#64748b; font-size:.9rem; margin-bottom:1.25rem;" data-i18n="admin.export.subtitle"></p>
+
+                <div class="form-section">
+                    <h3 class="form-section-title" data-i18n="admin.export.statusLabel"></h3>
+                    <div style="display:flex; gap:1.5rem; flex-wrap:wrap;">
+                        <label style="display:flex; align-items:center; gap:.5rem; cursor:pointer; font-weight:500;">
+                            <input type="checkbox" class="export-status" value="active" checked onchange="updateExportPreviewCount()">
+                            <span data-i18n="admin.filters.status.active"></span>
+                        </label>
+                        <label style="display:flex; align-items:center; gap:.5rem; cursor:pointer; font-weight:500;">
+                            <input type="checkbox" class="export-status" value="frozen" onchange="updateExportPreviewCount()">
+                            <span data-i18n="admin.filters.status.frozen"></span>
+                        </label>
+                        <label style="display:flex; align-items:center; gap:.5rem; cursor:pointer; font-weight:500;">
+                            <input type="checkbox" class="export-status" value="left" onchange="updateExportPreviewCount()">
+                            <span data-i18n="admin.filters.status.left"></span>
+                        </label>
+                    </div>
+                </div>
+
+                <div class="form-section">
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label class="form-label" data-i18n="admin.filters.branch"></label>
+                            <select id="exportBranchFilter" class="form-input" onchange="updateExportPreviewCount()">
+                                <option value="all" data-i18n="admin.filters.branch.all"></option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label" data-i18n="admin.filters.coach"></label>
+                            <select id="exportCoachFilter" class="form-input" onchange="updateExportPreviewCount()">
+                                <option value="all" data-i18n="admin.filters.coach.all"></option>
+                            </select>
+                        </div>
+                    </div>
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label class="form-label" data-i18n="admin.filters.level"></label>
+                            <select id="exportLevelFilter" class="form-input" onchange="updateExportPreviewCount()">
+                                <option value="all" data-i18n="admin.filters.level.all"></option>
+                            </select>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="form-section">
+                    <label style="display:flex; align-items:center; gap:.5rem; cursor:pointer; font-weight:500;">
+                        <input type="checkbox" id="exportIncludeContacts" onchange="updateExportPreviewCount()">
+                        <span data-i18n="admin.export.contactLabel"></span>
+                    </label>
+                    <p style="color:#94a3b8; font-size:.8rem; margin-top:.35rem; margin-bottom:0;" data-i18n="admin.export.contactHint"></p>
+                </div>
+
+                <div style="background:#fffbeb; border:1px solid #fde68a; border-radius:.5rem; padding:.75rem 1rem; color:#92400e; font-weight:600; font-size:.9rem;">
+                    <span id="exportMatchCount"></span>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" onclick="closeStudentExportModal()" data-i18n="common.cancel"></button>
+                <button class="btn btn-primary" onclick="exportStudentsExcel()">
+                    <i data-lucide="download" style="width:18px; height:18px;"></i>
+                    <span data-i18n="admin.export.download"></span>
+                </button>
+            </div>
+        </div>
+    </div>
 
     <script src="toast-notifications.js?v=1779360000"></script>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>

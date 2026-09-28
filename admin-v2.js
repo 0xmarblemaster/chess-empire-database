@@ -11146,6 +11146,268 @@ async function applyTimeSlotAssignmentsFromImport(assignments, branchId) {
 // Export current ratings (active + frozen students) to Excel.
 // Format matches Alex's rating files: A1="Name", B1=Date cell with latest rating_date,
 // then rows of [full_name, rating] sorted by rating DESC.
+// ===== Download Student Info (multi-filter stats export) =====
+// Opens a modal with its own filters (status multi-select, branch, coach, level,
+// optional parent-contact columns) and exports a 3-sheet XLSX:
+//   Summary  — Branch × Coach counts per selected status + totals
+//   Roster   — filtered students sorted by branch → coach → last name
+//   Totals   — per-branch and per-coach status breakdowns
+function openStudentExportModal() {
+    const modal = document.getElementById('studentExportModal');
+    if (!modal) return;
+
+    // Branch dropdown (from all loaded students, any status)
+    const branchSel = document.getElementById('exportBranchFilter');
+    branchSel.querySelectorAll('option[data-branch]').forEach(o => o.remove());
+    [...new Set(students.map(s => s.branch).filter(b => b && String(b).trim()))]
+        .sort((a, b) => i18n.translateBranchName(a).localeCompare(i18n.translateBranchName(b)))
+        .forEach(branch => {
+            const o = document.createElement('option');
+            o.value = branch;
+            o.textContent = i18n.translateBranchName(branch);
+            o.dataset.branch = branch;
+            branchSel.appendChild(o);
+        });
+    branchSel.value = 'all';
+
+    // Coach dropdown
+    const coachSel = document.getElementById('exportCoachFilter');
+    coachSel.querySelectorAll('option[data-coach]').forEach(o => o.remove());
+    [...new Set(students.map(s => s.coach).filter(c => c && String(c).trim()))]
+        .sort((a, b) => a.localeCompare(b))
+        .forEach(coach => {
+            const o = document.createElement('option');
+            o.value = coach;
+            o.textContent = coach;
+            o.dataset.coach = coach;
+            coachSel.appendChild(o);
+        });
+    coachSel.value = 'all';
+
+    // Level dropdown (1-8)
+    const levelSel = document.getElementById('exportLevelFilter');
+    levelSel.querySelectorAll('option[data-level]').forEach(o => o.remove());
+    for (let lvl = 1; lvl <= 8; lvl++) {
+        const o = document.createElement('option');
+        o.value = String(lvl);
+        o.textContent = t('admin.filters.level.option', { level: lvl });
+        o.dataset.level = lvl;
+        levelSel.appendChild(o);
+    }
+    levelSel.value = 'all';
+
+    // Defaults: active-only, contacts off
+    document.querySelectorAll('.export-status').forEach(cb => { cb.checked = cb.value === 'active'; });
+    const contactsCb = document.getElementById('exportIncludeContacts');
+    if (contactsCb) contactsCb.checked = false;
+
+    modal.classList.add('active');
+    updateExportPreviewCount();
+    setTimeout(() => { if (typeof lucide !== 'undefined') lucide.createIcons(); }, 50);
+}
+window.openStudentExportModal = openStudentExportModal;
+
+function closeStudentExportModal() {
+    const modal = document.getElementById('studentExportModal');
+    if (modal) modal.classList.remove('active');
+}
+window.closeStudentExportModal = closeStudentExportModal;
+
+function getExportSelectedStatuses() {
+    return [...document.querySelectorAll('.export-status:checked')].map(cb => cb.value);
+}
+
+function getExportFilteredStudents() {
+    const statuses = getExportSelectedStatuses();
+    const branch = document.getElementById('exportBranchFilter')?.value || 'all';
+    const coach = document.getElementById('exportCoachFilter')?.value || 'all';
+    const level = document.getElementById('exportLevelFilter')?.value || 'all';
+
+    return students.filter(s => {
+        if (statuses.length && !statuses.includes(s.status)) return false;
+        if (branch !== 'all' && s.branch !== branch) return false;
+        if (coach !== 'all' && s.coach !== coach) return false;
+        if (level !== 'all' && s.currentLevel !== parseInt(level)) return false;
+        return true;
+    });
+}
+
+function updateExportPreviewCount() {
+    const el = document.getElementById('exportMatchCount');
+    if (!el) return;
+    if (getExportSelectedStatuses().length === 0) {
+        el.textContent = t('admin.export.selectStatus');
+        return;
+    }
+    el.textContent = t('admin.export.matchCount', { count: getExportFilteredStudents().length });
+}
+window.updateExportPreviewCount = updateExportPreviewCount;
+
+function exportStudentsExcel() {
+    if (typeof XLSX === 'undefined') {
+        showToast(t('admin.export.error'), 'error');
+        return;
+    }
+    const statuses = getExportSelectedStatuses();
+    if (statuses.length === 0) {
+        showToast(t('admin.export.selectStatus'), 'error');
+        return;
+    }
+    const includeContacts = !!document.getElementById('exportIncludeContacts')?.checked;
+    const rows = getExportFilteredStudents();
+    if (rows.length === 0) {
+        showToast(t('admin.export.empty'), 'info');
+        return;
+    }
+
+    const bName = (b) => (typeof i18n !== 'undefined' && i18n.translateBranchName)
+        ? i18n.translateBranchName(b || '') : (b || '');
+    // Fixed column order, restricted to the statuses actually selected.
+    const STATUS_ORDER = ['active', 'frozen', 'left'].filter(s => statuses.includes(s));
+
+    const sorted = [...rows].sort((a, b) => {
+        const bc = bName(a.branch).localeCompare(bName(b.branch));
+        if (bc) return bc;
+        const cc = (a.coach || '').localeCompare(b.coach || '');
+        if (cc) return cc;
+        return (a.lastName || '').localeCompare(b.lastName || '');
+    });
+
+    const wb = XLSX.utils.book_new();
+
+    // ---- Sheet 1: Summary (Branch × Coach) ----
+    const summaryHeader = [t('admin.export.col.branch'), t('admin.export.col.coach')];
+    STATUS_ORDER.forEach(st => summaryHeader.push(translateStatus(st)));
+    summaryHeader.push(t('admin.export.col.total'));
+
+    const groupMap = new Map();
+    sorted.forEach(s => {
+        const key = `${s.branch}||${s.coach}`;
+        if (!groupMap.has(key)) groupMap.set(key, { branch: s.branch, coach: s.coach, counts: {} });
+        const g = groupMap.get(key);
+        g.counts[s.status] = (g.counts[s.status] || 0) + 1;
+    });
+
+    const summaryAoa = [summaryHeader];
+    const grand = {};
+    [...groupMap.values()].forEach(g => {
+        const row = [bName(g.branch), g.coach || '—'];
+        let total = 0;
+        STATUS_ORDER.forEach(st => {
+            const c = g.counts[st] || 0;
+            row.push(c);
+            total += c;
+            grand[st] = (grand[st] || 0) + c;
+        });
+        row.push(total);
+        summaryAoa.push(row);
+    });
+    const grandRow = [t('admin.export.grandTotal'), ''];
+    let grandTotal = 0;
+    STATUS_ORDER.forEach(st => { const c = grand[st] || 0; grandRow.push(c); grandTotal += c; });
+    grandRow.push(grandTotal);
+    summaryAoa.push(grandRow);
+
+    const wsSummary = XLSX.utils.aoa_to_sheet(summaryAoa);
+    wsSummary['!cols'] = [{ wch: 22 }, { wch: 24 }, ...STATUS_ORDER.map(() => ({ wch: 10 })), { wch: 10 }];
+    XLSX.utils.book_append_sheet(wb, wsSummary, t('admin.export.sheet.summary'));
+
+    // ---- Sheet 2: Roster ----
+    const rosterHeader = [
+        t('admin.export.col.num'),
+        t('admin.export.col.lastName'),
+        t('admin.export.col.firstName'),
+        t('admin.export.col.age'),
+        t('admin.export.col.branch'),
+        t('admin.export.col.coach'),
+        t('admin.export.col.level'),
+        t('admin.export.col.razryad'),
+        t('admin.export.col.status')
+    ];
+    if (includeContacts) {
+        rosterHeader.push(t('admin.export.col.parentName'), t('admin.export.col.parentPhone'));
+    }
+    const rosterAoa = [rosterHeader];
+    sorted.forEach((s, i) => {
+        const row = [
+            i + 1,
+            s.lastName || '',
+            s.firstName || '',
+            (s.age != null && s.age !== '') ? s.age : '',
+            bName(s.branch),
+            s.coach || '',
+            (s.currentLevel != null && s.currentLevel !== '') ? s.currentLevel : '',
+            translateRazryad(s.razryad || 'None'),
+            translateStatus(s.status)
+        ];
+        if (includeContacts) row.push(s.parentName || '', s.parentPhone || '');
+        rosterAoa.push(row);
+    });
+    const wsRoster = XLSX.utils.aoa_to_sheet(rosterAoa);
+    const rosterCols = [{ wch: 5 }, { wch: 18 }, { wch: 18 }, { wch: 6 }, { wch: 22 }, { wch: 24 }, { wch: 8 }, { wch: 10 }, { wch: 12 }];
+    if (includeContacts) rosterCols.push({ wch: 22 }, { wch: 18 });
+    wsRoster['!cols'] = rosterCols;
+    XLSX.utils.book_append_sheet(wb, wsRoster, t('admin.export.sheet.roster'));
+
+    // ---- Sheet 3: Totals (by branch, by coach) ----
+    const totalsAoa = [];
+    const statusHead = STATUS_ORDER.map(st => translateStatus(st));
+
+    totalsAoa.push([t('admin.export.byBranch')]);
+    totalsAoa.push([t('admin.export.col.branch'), ...statusHead, t('admin.export.col.total')]);
+    const byBranch = new Map();
+    sorted.forEach(s => {
+        if (!byBranch.has(s.branch)) byBranch.set(s.branch, {});
+        const c = byBranch.get(s.branch);
+        c[s.status] = (c[s.status] || 0) + 1;
+    });
+    [...byBranch.entries()]
+        .sort((a, b) => bName(a[0]).localeCompare(bName(b[0])))
+        .forEach(([branch, counts]) => {
+            let total = 0;
+            const row = [bName(branch)];
+            STATUS_ORDER.forEach(st => { const c = counts[st] || 0; row.push(c); total += c; });
+            row.push(total);
+            totalsAoa.push(row);
+        });
+
+    totalsAoa.push([]);
+    totalsAoa.push([t('admin.export.byCoach')]);
+    totalsAoa.push([t('admin.export.col.coach'), ...statusHead, t('admin.export.col.total')]);
+    const byCoach = new Map();
+    sorted.forEach(s => {
+        const k = s.coach || '—';
+        if (!byCoach.has(k)) byCoach.set(k, {});
+        const c = byCoach.get(k);
+        c[s.status] = (c[s.status] || 0) + 1;
+    });
+    [...byCoach.entries()]
+        .sort((a, b) => a[0].localeCompare(b[0]))
+        .forEach(([coach, counts]) => {
+            let total = 0;
+            const row = [coach];
+            STATUS_ORDER.forEach(st => { const c = counts[st] || 0; row.push(c); total += c; });
+            row.push(total);
+            totalsAoa.push(row);
+        });
+
+    const wsTotals = XLSX.utils.aoa_to_sheet(totalsAoa);
+    wsTotals['!cols'] = [{ wch: 24 }, ...STATUS_ORDER.map(() => ({ wch: 10 })), { wch: 10 }];
+    XLSX.utils.book_append_sheet(wb, wsTotals, t('admin.export.sheet.totals'));
+
+    // ---- Filename ----
+    const today = new Date();
+    const dd = String(today.getDate()).padStart(2, '0');
+    const mm = String(today.getMonth() + 1).padStart(2, '0');
+    const yyyy = today.getFullYear();
+    const filename = _sanitizeFilename(`chess-empire-students-${STATUS_ORDER.join('-')}-${yyyy}-${mm}-${dd}`) + '.xlsx';
+
+    XLSX.writeFile(wb, filename);
+    showToast(t('admin.export.success'), 'success');
+    closeStudentExportModal();
+}
+window.exportStudentsExcel = exportStudentsExcel;
+
 async function exportRatingsExcel() {
     const userRole = window.supabaseAuth?.getCurrentUserRole();
     const isAdmin = userRole?.role === 'admin';
