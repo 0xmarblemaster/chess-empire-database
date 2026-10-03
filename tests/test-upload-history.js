@@ -147,6 +147,13 @@ assert(/auth\.getUser\(\)/.test(tuBlock),
 assert(/uploaded_by:\s*uploadedBy/.test(tuBlock),
     'addTournamentUpload payload includes uploaded_by');
 
+// Expired/missing session must abort BEFORE the insert — no anonymous
+// fallback that would surface as an opaque RLS error.
+assert(/if\s*\(!uploadedBy\)\s*\{[\s\S]{0,200}?Session expired/.test(tuBlock),
+    'addTournamentUpload throws "Session expired" when auth.getUser() returns no user');
+assert(tuBlock.indexOf('Session expired') < tuBlock.indexOf(".from('tournaments_uploads')"),
+    'session guard runs before the tournaments_uploads insert');
+
 // ---------------------------------------------------------------
 // (e) i18n keys present in en/ru/kk
 // ---------------------------------------------------------------

@@ -1055,11 +1055,17 @@ const supabaseData = {
         // by the parser, or entered by the admin).
         const ROUNDS_BY_KIND = { league_c: 6, league_b: 6, razryad_4: 10, razryad_3: 9 };
 
+        // RLS on tournaments_uploads rejects anonymous inserts, so a dead
+        // session must fail here with a clear message — not as a confusing
+        // row-level security error from PostgREST.
         let uploadedBy = null;
         try {
             const { data: { user } } = await window.supabaseClient.auth.getUser();
             uploadedBy = user?.id || null;
-        } catch (_) { /* anonymous fallback */ }
+        } catch (_) { uploadedBy = null; }
+        if (!uploadedBy) {
+            throw new Error('Session expired — please log out and log back in, then retry the upload.');
+        }
 
         const resolvedRounds = header.rounds || ROUNDS_BY_KIND[header.kind] || null;
         if (header.kind === 'rated' && (!Number.isInteger(resolvedRounds) || resolvedRounds < 1 || resolvedRounds > 20)) {

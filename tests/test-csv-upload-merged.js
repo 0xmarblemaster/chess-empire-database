@@ -124,7 +124,12 @@ async function run() {
             return q;
         }
         global.window = {
-            supabaseClient: { from(table) { return makeQuery(table); } },
+            supabaseClient: {
+                from(table) { return makeQuery(table); },
+                // addTournamentUpload aborts when there is no authenticated
+                // user, so the mock must present one.
+                auth: { getUser: () => Promise.resolve({ data: { user: { id: 'admin-1' } } }) },
+            },
         };
 
         const supabaseDataPath = require.resolve(path.join(ROOT, 'supabase-data.js'));
