@@ -205,6 +205,10 @@ const supabaseData = {
             throw error;
         }
 
+        // Event-driven freeze/thaw to Chesster. Fire-and-forget (no await) so a
+        // failed/slow sync never blocks or rolls back the status change.
+        this.pokeChessterFreezeThaw(id, studentData.status);
+
         // Transform to match data.js format
         return {
             id: data.id,
@@ -1155,6 +1159,50 @@ const supabaseData = {
         this.pokeGamificationSync();
 
         return { upload_id, inserted };
+    },
+
+    // Fire-and-forget freeze/thaw poke to Chesster after a student status flip.
+    // Lets Chesster freeze/thaw that one student immediately instead of waiting
+    // for its hourly reconcile cron (which stays as the safety net). Only fires
+    // for 'active'/'frozen' and only when a service token is configured in
+    // supabase-config.js (window.supabaseConfig.chessterSyncToken) — never
+    // hardcoded. Non-blocking: a failure shows a toast but never throws into the
+    // caller, so the status change is never rolled back.
+    async pokeChessterFreezeThaw(studentId, status) {
+        try {
+            if (status !== 'active' && status !== 'frozen') return;
+            const cfg = window.supabaseConfig || {};
+            const token = cfg.chessterSyncToken;
+            if (!token) return; // not configured — hourly cron is the safety net
+            const url = cfg.chessterSyncUrl
+                || 'https://chesster.io/api/chess-empire/sync/freeze-thaw';
+            const controller = new AbortController();
+            const timer = setTimeout(() => controller.abort(), 4000);
+            try {
+                const res = await fetch(url, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': 'Bearer ' + token,
+                    },
+                    body: JSON.stringify({ external_student_id: studentId, status }),
+                    signal: controller.signal,
+                });
+                if (!res.ok) {
+                    console.warn('Chesster freeze/thaw sync returned', res.status);
+                    if (typeof showToast === 'function') {
+                        showToast('Chesster sync delayed — will retry hourly', 'warning');
+                    }
+                }
+            } finally {
+                clearTimeout(timer);
+            }
+        } catch (e) {
+            console.warn('Chesster freeze/thaw sync failed (non-fatal):', e);
+            if (typeof showToast === 'function') {
+                showToast('Chesster sync delayed — will retry hourly', 'warning');
+            }
+        }
     },
 
     // Trigger Chesster's pull-based gamification sync after a tournament upload.
