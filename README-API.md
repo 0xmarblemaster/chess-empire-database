@@ -326,6 +326,101 @@ curl 'https://app.chessempire.kz/api/tournaments-api/students/<uuid>/registratio
 The OpenAPI spec at `/openapi.json` is the source of truth for request/response
 shapes — point your client generator there.
 
+---
+
+## Students (write) API
+
+**Endpoint:** `POST|GET /students-api?action=<action>`
+
+The **write** API for external integrations (e.g. AmoCRM sync). Unlike the
+read-only `analytics-*` functions, this one creates and mutates students. It is
+**not** part of the tournaments surface and uses a **separate** key.
+
+### Authentication
+
+Every action requires a header:
+
+```
+x-api-key: <CHESS_EMPIRE_WRITE_KEY — see supabase secrets>
+```
+
+`CHESS_EMPIRE_WRITE_KEY` is a **new, distinct** secret — it is NOT
+`CHESS_EMPIRE_API_KEY` (which stays tournament-only). A missing or wrong key →
+`401 {ok:false, reason:"unauthorized"}`. `GET /students-api` with no `action`
+returns the OpenAPI self-doc (public).
+
+### Environment variables
+
+| Var | Purpose |
+|-----|---------|
+| `CHESS_EMPIRE_WRITE_KEY` | API key clients send as `x-api-key`. Required. |
+| `CHESSTER_SYNC_TOKEN` | Bearer token for the freeze/thaw poke to Chesster. If unset, the poke is skipped and the hourly reconcile cron is the safety net. |
+| `CHESSTER_SYNC_URL` | Override the Chesster freeze/thaw endpoint (default `https://chesster.io/api/chess-empire/sync/freeze-thaw`). |
+
+### Actions
+
+| Action | Method | Body / Query | Description |
+|--------|--------|--------------|-------------|
+| `create` | POST | `{full_name, phone, branch_id, amocrm_customer_id?}` | Create a student (dedups first; see below). |
+| `freeze` | POST | `{student_id}` \| `{phone}` \| `{amocrm_customer_id}` | Set status → `frozen`. |
+| `activate` | POST | `{student_id}` \| `{phone}` \| `{amocrm_customer_id}` | Set status → `active` (unfreeze). |
+| `find` | GET | `?phone=...` | Look up students by normalized phone. |
+| `branches` | GET | — | List all branches (`id` + `name`) for branch mapping. |
+
+**Phone normalization.** Phones are normalized to canonical KZ/RU `+7XXXXXXXXXX`
+(spaces/dashes/parens/dots stripped; a leading domestic `8` → `+7`; a bare
+10-digit number gets `+7` prepended). Matching is on the last 10 digits, so a
+student is found regardless of how their stored `parent_phone` is formatted.
+
+**Dedup (create).** Before creating, the API looks for an existing student by
+`amocrm_customer_id` (exact) and by normalized phone. On a hit it returns the
+existing student (`existing: true`) and does **not** create a duplicate; if the
+match is `frozen` it is reactivated (`reactivated: true`). A phone / amocrm
+selector that matches more than one student → `409 {reason:"ambiguous"}`.
+
+**3-day manual guard.** Coaches win over automation: `freeze`/`activate` (and the
+create-time reactivation) are **refused** with `409 {reason:"manual_change_recent"}`
+when the most recent *manual* (dashboard) status change for that student is
+younger than **3 days**. The dashboard records those manual changes into
+`student_status_history` (`changed_by_type='manual'`, `source='dashboard'`); the
+API writes `changed_by_type='api'`, `source='students-api'`.
+
+**Audit.** Every status write returns the inserted `status_history_id` so callers
+can audit the change. A no-op (already in the target status) returns
+`{ok:true, changed:false}`. After a successful status write the API fires a
+non-blocking freeze/thaw poke to Chesster and reports the outcome as
+`chesster_poke: "ok" | "skipped" | "failed"` — a failed poke never fails or rolls
+back the response.
+
+The API never touches `student_time_slot_assignments` (migration 081 blocks
+automatic slot moves at the DB level by design).
+
+### Examples
+
+```bash
+BASE=https://papgcizhfkngubwofjuo.supabase.co/functions/v1/students-api
+KEY='<CHESS_EMPIRE_WRITE_KEY — see supabase secrets>'
+
+# List branches (for mapping AmoCRM → branch_id)
+curl "$BASE?action=branches" -H "x-api-key: $KEY"
+
+# Create (or dedup to an existing / reactivate a frozen) student
+curl -X POST "$BASE?action=create" -H "x-api-key: $KEY" \
+  -H 'content-type: application/json' \
+  -d '{"full_name":"Askar Zhumabek","phone":"8 (777) 123-45-67","branch_id":"<uuid>","amocrm_customer_id":123456}'
+
+# Find by phone (any format)
+curl "$BASE?action=find&phone=%2B77771234567" -H "x-api-key: $KEY"
+
+# Freeze / activate (resolve by id, phone, or amocrm_customer_id)
+curl -X POST "$BASE?action=freeze"   -H "x-api-key: $KEY" -H 'content-type: application/json' -d '{"amocrm_customer_id":123456}'
+curl -X POST "$BASE?action=activate" -H "x-api-key: $KEY" -H 'content-type: application/json' -d '{"phone":"+77771234567"}'
+```
+
+Requires migration `091_students_api.sql` applied (adds
+`students.amocrm_customer_id`, the `student_status_history` actor columns, and
+the `find_students_by_phone_digits` lookup).
+
 ## Deployment
 
 ```bash
@@ -341,4 +436,10 @@ supabase functions deploy analytics-schedule
 # Tournament registration API (or run scripts/deploy-tournaments-api.sh)
 supabase secrets set CHESS_EMPIRE_API_KEY='<CHESS_EMPIRE_API_KEY — see supabase secrets>'
 supabase functions deploy tournaments-api
+
+# Students write API (apply migration 091 first, then set the NEW write key)
+supabase secrets set CHESS_EMPIRE_WRITE_KEY='<CHESS_EMPIRE_WRITE_KEY — see supabase secrets>'
+# optional (enables the server-side Chesster freeze/thaw poke):
+supabase secrets set CHESSTER_SYNC_TOKEN='<CE_SYNC_SERVICE_TOKEN — see supabase secrets>'
+supabase functions deploy students-api
 ```

@@ -173,6 +173,17 @@ const supabaseData = {
 
     // Update student
     async updateStudent(id, studentData) {
+        // Capture the prior status so we can record a 'manual' status-history
+        // row ONLY on a real change (mirrors migration 022's trigger). This
+        // feeds the students-api 3-day manual guard. Best-effort — a failed
+        // read must never block the update.
+        let priorStatus = null;
+        try {
+            const { data: prev } = await window.supabaseClient
+                .from('students').select('status').eq('id', id).single();
+            priorStatus = prev ? prev.status : null;
+        } catch (_e) { /* non-fatal */ }
+
         const { data, error } = await window.supabaseClient
             .from('students')
             .update({
@@ -208,6 +219,13 @@ const supabaseData = {
         // Event-driven freeze/thaw to Chesster. Fire-and-forget (no await) so a
         // failed/slow sync never blocks or rolls back the status change.
         this.pokeChessterFreezeThaw(id, studentData.status);
+
+        // Record a 'manual' status-history row when the status actually changed,
+        // so the students-api 3-day guard (coaches win over automation) has data.
+        // Fire-and-forget (no await) — never blocks or rolls back the update.
+        if (priorStatus !== data.status) {
+            this.recordManualStatusChange(id, priorStatus, data.status);
+        }
 
         // Transform to match data.js format
         return {
@@ -1202,6 +1220,31 @@ const supabaseData = {
             if (typeof showToast === 'function') {
                 showToast('Chesster sync delayed — will retry hourly', 'warning');
             }
+        }
+    },
+
+    // Record a dashboard-originated ('manual') student status change into
+    // student_status_history. This is what the students-api 3-day guard reads to
+    // let coaches win over automation. Non-fatal: wrapped in try/catch so a
+    // failed insert (e.g. RLS) never throws into updateStudent and never rolls
+    // back the status change. Pins changed_by_type/source to satisfy the
+    // insert RLS policy (migration 091).
+    async recordManualStatusChange(studentId, oldStatus, newStatus) {
+        try {
+            const { error } = await window.supabaseClient
+                .from('student_status_history')
+                .insert([{
+                    student_id: studentId,
+                    old_status: oldStatus,
+                    new_status: newStatus,
+                    changed_by_type: 'manual',
+                    source: 'dashboard',
+                }]);
+            if (error) {
+                console.warn('Manual status-history insert failed (non-fatal):', error);
+            }
+        } catch (e) {
+            console.warn('Manual status-history insert failed (non-fatal):', e);
         }
     },
 
