@@ -35,6 +35,11 @@ verify_jwt = false
 # email-bound invitation token validated inside the function.
 verify_jwt = false
 
+[functions.students-api]
+# Auth is the x-api-key header (CHESS_EMPIRE_WRITE_KEY) checked inside the
+# function — same pattern as tournaments-api.
+verify_jwt = false
+
 [functions.delete-user]
 verify_jwt = true
 
