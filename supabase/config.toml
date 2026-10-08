@@ -12,6 +12,9 @@ verify_jwt = false
 [functions.analytics-leaderboards]
 verify_jwt = false
 
+[functions.analytics-schedule]
+verify_jwt = false
+
 [functions.analytics-sessions]
 verify_jwt = false
 

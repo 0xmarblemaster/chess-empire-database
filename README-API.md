@@ -201,6 +201,49 @@ curl -H "x-api-key: <CHESS_EMPIRE_API_KEY — see supabase secrets>" \
 
 ---
 
+## 8. Analytics - Schedule
+
+**Endpoint:** `GET /analytics-schedule`
+
+Read-only view of the group schedule grid. One row per **current** group slot
+(latest effective version per logical chain; soft-deleted/retired chains are
+excluded — migrations 065/083). Also accepts the read-only key
+`CHESS_EMPIRE_READONLY_KEY`.
+
+| Param | Values | Description |
+|-------|--------|-------------|
+| action | `list` | Operation type (default `list`) |
+| branch_id | uuid | Filter by branch |
+| coach_id | uuid | Filter by coach |
+| schedule_type | `mon_wed` `tue_thu` `sat_sun` `mon_wed_fri` `wed_fri` | Filter by schedule |
+| limit / offset | int | Pagination (default 200/0) |
+
+Each `data` row:
+
+| Field | Description |
+|-------|-------------|
+| group_id | Stable `time_slots.logical_slot_id` (migration 076) — use this as the group key; it is invariant across slot edits |
+| slot_version_id | Raw `time_slots.id` of the current version (debugging only; changes on every edit) |
+| group_name | `time_slots.label`; when null, composed `"<coach_name> · <start>–<end>"` |
+| branch_id / branch_name | Branch of the slot |
+| coach_id / coach_name | Coach of the slot (full name) |
+| schedule_type | Enum from `time_slots` |
+| days | `schedule_type` expanded to lowercase English day names, e.g. `mon_wed` → `["monday","wednesday"]` |
+| start_time / end_time | Slot times (`HH:MM:SS`) |
+| active_student_count | Distinct `active`-status students currently assigned to the slot chain, minus `student_slot_exclusions` (migration 086) |
+
+```bash
+# All current group slots
+curl -H "x-api-key: <CHESS_EMPIRE_READONLY_KEY — see supabase secrets>" \
+  "https://papgcizhfkngubwofjuo.supabase.co/functions/v1/analytics-schedule?action=list"
+
+# Filter by branch and schedule
+curl -H "x-api-key: <CHESS_EMPIRE_READONLY_KEY — see supabase secrets>" \
+  "https://papgcizhfkngubwofjuo.supabase.co/functions/v1/analytics-schedule?action=list&branch_id=<uuid>&schedule_type=mon_wed"
+```
+
+---
+
 ## Response Format
 
 **Success:**
@@ -223,7 +266,7 @@ curl -H "x-api-key: <CHESS_EMPIRE_API_KEY — see supabase secrets>" \
 
 ---
 
-## 8. Tournaments API (public registration)
+## 9. Tournaments API (public registration)
 
 **Base path:** `/tournaments-api`
 **Vercel proxy:** `https://app.chessempire.kz/api/tournaments-api/<path>` rewrites
@@ -293,6 +336,7 @@ supabase functions deploy analytics-users
 supabase functions deploy analytics-attendance
 supabase functions deploy analytics-leaderboards
 supabase functions deploy analytics-students
+supabase functions deploy analytics-schedule
 
 # Tournament registration API (or run scripts/deploy-tournaments-api.sh)
 supabase secrets set CHESS_EMPIRE_API_KEY='<CHESS_EMPIRE_API_KEY — see supabase secrets>'
