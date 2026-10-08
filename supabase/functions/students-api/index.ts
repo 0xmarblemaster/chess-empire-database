@@ -35,7 +35,11 @@ const corsHeaders = {
 }
 
 // NEW write key — deliberately separate from CHESS_EMPIRE_API_KEY (tournaments).
-const WRITE_KEYS = [Deno.env.get('CHESS_EMPIRE_WRITE_KEY') ?? ''].filter((k) => k !== '')
+// Comma-separated list so each external consumer gets its own revocable key.
+const WRITE_KEYS = (Deno.env.get('CHESS_EMPIRE_WRITE_KEY') ?? '')
+  .split(',')
+  .map((k) => k.trim())
+  .filter((k) => k !== '')
 const SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
 const CE_SECRET_KEY = Deno.env.get('CE_SECRET_KEY') ?? ''
 const DB_KEY = CE_SECRET_KEY || SERVICE_ROLE_KEY

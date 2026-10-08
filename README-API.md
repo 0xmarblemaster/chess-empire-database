@@ -353,7 +353,7 @@ returns the OpenAPI self-doc (public).
 
 | Var | Purpose |
 |-----|---------|
-| `CHESS_EMPIRE_WRITE_KEY` | API key clients send as `x-api-key`. Required. |
+| `CHESS_EMPIRE_WRITE_KEY` | API key(s) clients send as `x-api-key`. Required. Comma-separated list — each external consumer gets its own key so keys can be revoked individually (remove one from the list + redeploy). |
 | `CHESSTER_SYNC_TOKEN` | Bearer token for the freeze/thaw poke to Chesster. If unset, the poke is skipped and the hourly reconcile cron is the safety net. |
 | `CHESSTER_SYNC_URL` | Override the Chesster freeze/thaw endpoint (default `https://chesster.io/api/chess-empire/sync/freeze-thaw`). |
 
