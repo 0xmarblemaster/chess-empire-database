@@ -7,7 +7,7 @@
 // CHESS_EMPIRE_API_KEY — the two surfaces never share a key).
 //
 // Routing is on a `?action=` query param (create / freeze / activate / find /
-// branches); GET with no action returns the OpenAPI self-doc. Modelled on
+// branches / survival-score / survival-best / survival-leaderboard); GET with no action returns the OpenAPI self-doc. Modelled on
 // tournaments-api/index.ts (Deno serve + CORS + json/ok/err helpers).
 //
 // Product rules enforced here:
@@ -26,6 +26,11 @@ import {
   phoneDigits,
   splitFullName,
   isManualChangeRecent,
+  isUuid,
+  validateSurvivalPush,
+  parseLeaderboardParams,
+  almatyWindowStart,
+  SURVIVAL_SCORE_MAX,
 } from './students-logic.mjs'
 
 const corsHeaders = {
@@ -53,7 +58,7 @@ const CHESSTER_SYNC_TOKEN = Deno.env.get('CHESSTER_SYNC_TOKEN') ?? ''
 
 const REASONS = [
   'unauthorized', 'not_found', 'invalid_input', 'invalid_branch',
-  'ambiguous', 'manual_change_recent', 'server_error',
+  'ambiguous', 'manual_change_recent', 'student_inactive', 'server_error',
 ] as const
 type Reason = typeof REASONS[number]
 
@@ -70,10 +75,6 @@ function ok(extra: Record<string, unknown> = {}, status = 200): Response {
 
 function err(reason: Reason, status: number, extra: Record<string, unknown> = {}): Response {
   return json({ ok: false, reason, ...extra }, status)
-}
-
-function isUuid(s: string | null | undefined): boolean {
-  return !!s && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(s)
 }
 
 function authorized(req: Request): boolean {
@@ -351,13 +352,109 @@ async function listBranches(ctx: Ctx): Promise<Response> {
   return ok({ branches: (data || []).map((b: any) => ({ id: b.id, name: b.name })) })
 }
 
+// ─── Puzzle Rush (survival) ─────────────────────────────────────────────────
+
+const SURVIVAL_NOTES = 'Chesster Puzzle Rush (survival)'
+
+async function survivalBest(ctx: Ctx, studentId: string) {
+  const { data, error } = await ctx.supabase
+    .rpc('get_student_puzzle_rush_best', { p_student_id: studentId })
+  if (error) throw error
+  const row = (data && data[0]) || {}
+  return { week: row.week_best ?? null, month: row.month_best ?? null, all: row.all_best ?? null }
+}
+
+async function findByExternalRef(ctx: Ctx, ref: string): Promise<string | null> {
+  const { data, error } = await ctx.supabase
+    .from('survival_scores').select('id').eq('external_ref', ref).maybeSingle()
+  if (error) throw error
+  return data ? data.id : null
+}
+
+// Push one Chesster Puzzle Rush Survival run. Idempotent on external_ref: a
+// retry (or a concurrent duplicate losing the unique-index race) returns the
+// existing row's id with duplicate:true and never inserts a second row.
+async function pushSurvivalScore(ctx: Ctx): Promise<Response> {
+  let body: Record<string, unknown> = {}
+  try {
+    const text = await ctx.req.text()
+    body = text ? JSON.parse(text) : {}
+  } catch {
+    return err('invalid_input', 400)
+  }
+
+  const v = validateSurvivalPush(body)
+  if (!v.value) return err('invalid_input', 400, { field: v.field, max_score: SURVIVAL_SCORE_MAX })
+  const push = v.value
+
+  const { data: student, error: sErr } = await ctx.supabase
+    .from('students').select('id, status').eq('id', push.student_id).maybeSingle()
+  if (sErr) throw sErr
+  if (!student) return err('not_found', 404)
+  if (student.status !== 'active') return err('student_inactive', 409)
+
+  const existingId = await findByExternalRef(ctx, push.external_ref)
+  if (existingId) return ok({ duplicate: true, id: existingId })
+
+  const row: Record<string, unknown> = {
+    student_id: push.student_id,
+    score: push.score,
+    mode: 'puzzle_rush',
+    source: 'chesster',
+    external_ref: push.external_ref,
+    notes: SURVIVAL_NOTES,
+  }
+  if (push.achieved_at) row.achieved_at = push.achieved_at
+
+  const { data: inserted, error: iErr } = await ctx.supabase
+    .from('survival_scores').insert([row]).select('id').single()
+  if (iErr) {
+    if (iErr.code === '23505') {
+      const raceId = await findByExternalRef(ctx, push.external_ref)
+      if (raceId) return ok({ duplicate: true, id: raceId })
+    }
+    throw iErr
+  }
+
+  return ok({ id: inserted.id, best: await survivalBest(ctx, push.student_id) })
+}
+
+async function getSurvivalBest(ctx: Ctx, url: URL): Promise<Response> {
+  const studentId = url.searchParams.get('student_id')
+  if (!isUuid(studentId)) return err('invalid_input', 400, { field: 'student_id' })
+  return ok({ student_id: studentId, best: await survivalBest(ctx, studentId!) })
+}
+
+async function getSurvivalLeaderboard(ctx: Ctx, url: URL): Promise<Response> {
+  const q = (k: string) => url.searchParams.get(k)
+  const parsed = parseLeaderboardParams({
+    scope: q('scope'), period: q('period'), branch_id: q('branch_id'),
+    student_id: q('student_id'), limit: q('limit'),
+  })
+  if (!parsed.value) return err('invalid_input', 400, { field: parsed.field })
+  const p = parsed.value
+  const { data, error } = await ctx.supabase.rpc('get_puzzle_rush_leaderboard', {
+    p_scope: p.scope, p_period: p.period, p_branch_id: p.branch_id,
+    p_student_id: p.student_id, p_limit: p.limit,
+  })
+  if (error) throw error
+  const rows = data || []
+  const start = almatyWindowStart(p.period, Date.now())
+  return ok({
+    scope: p.scope, period: p.period, branch_id: p.branch_id,
+    window_start: start ? start.toISOString() : null,
+    total_count: rows.length ? Number(rows[0].total_count) : 0,
+    rows,
+  })
+}
+
 // ─── OpenAPI ──────────────────────────────────────────────────────────────
 const OPENAPI_SPEC = {
   openapi: '3.0.3',
   info: {
     title: 'Chess Empire — Students (write) API',
     version: '1.0.0',
-    description: 'Write API for external integrations (e.g. AmoCRM): create / freeze / activate students, find by phone, list branches. All actions require an x-api-key header (CHESS_EMPIRE_WRITE_KEY).',
+    description: 'Write API for external integrations (e.g. AmoCRM, Chesster): create / freeze / activate students, find by phone, list branches, push Puzzle Rush survival scores and read Puzzle Rush rankings. All actions require an x-api-key header (CHESS_EMPIRE_WRITE_KEY).',
   },
   servers: [
     { url: 'https://papgcizhfkngubwofjuo.supabase.co/functions/v1/students-api', description: 'Supabase edge function direct' },
@@ -439,6 +536,44 @@ const OPENAPI_SPEC = {
         responses: { '200': { description: 'OK' }, '401': { description: 'Unauthorized' } },
       },
     },
+    '/?action=survival-score': {
+      post: {
+        summary: `Push a Chesster Puzzle Rush Survival run (score 0..${SURVIVAL_SCORE_MAX}). Idempotent on external_ref: a repeat returns {ok:true, duplicate:true, id} without a second row.`,
+        security: [{ ApiKeyAuth: [] }],
+        requestBody: { required: true, content: { 'application/json': { schema: {
+          type: 'object', required: ['student_id', 'score', 'external_ref'],
+          properties: {
+            student_id: { type: 'string', format: 'uuid' },
+            score: { type: 'integer', minimum: 0, maximum: SURVIVAL_SCORE_MAX },
+            achieved_at: { type: 'string', format: 'date-time', nullable: true },
+            external_ref: { type: 'string', description: 'Chesster run id (unique)' },
+          },
+        } } } },
+        responses: { '200': { description: '{ok, id, best:{week,month,all}} or {ok, duplicate:true, id}' }, '400': { description: 'Bad input' }, '401': { description: 'Unauthorized' }, '404': { description: 'Student not found' }, '409': { description: 'student_inactive' } },
+      },
+    },
+    '/?action=survival-best': {
+      get: {
+        summary: 'Student Puzzle Rush bests for the current week / month (Asia/Almaty) and all time',
+        security: [{ ApiKeyAuth: [] }],
+        parameters: [{ name: 'student_id', in: 'query', required: true, schema: { type: 'string', format: 'uuid' } }],
+        responses: { '200': { description: '{ok, student_id, best:{week,month,all}}' }, '400': { description: 'Bad student_id' }, '401': { description: 'Unauthorized' } },
+      },
+    },
+    '/?action=survival-leaderboard': {
+      get: {
+        summary: 'Puzzle Rush leaderboard (best per active student, competition rank). Windows in Asia/Almaty; week starts Monday.',
+        security: [{ ApiKeyAuth: [] }],
+        parameters: [
+          { name: 'scope', in: 'query', schema: { type: 'string', enum: ['school', 'branch'], default: 'school' } },
+          { name: 'period', in: 'query', schema: { type: 'string', enum: ['week', 'month', 'all'], default: 'all' } },
+          { name: 'branch_id', in: 'query', schema: { type: 'string', format: 'uuid' }, description: 'Required for scope=branch; implies scope=branch when scope is omitted' },
+          { name: 'student_id', in: 'query', schema: { type: 'string', format: 'uuid' }, description: 'Appends this student\'s row (is_self) when outside the top N' },
+          { name: 'limit', in: 'query', schema: { type: 'integer', minimum: 1, maximum: 500, default: 50 } },
+        ],
+        responses: { '200': { description: '{ok, scope, period, branch_id, window_start, total_count, rows[]}' }, '400': { description: 'Bad params' }, '401': { description: 'Unauthorized' } },
+      },
+    },
   },
 }
 
@@ -484,6 +619,15 @@ export async function handle(req: Request): Promise<Response> {
     }
     if (method === 'GET' && action === 'branches') {
       const r = await listBranches(ctx); status = r.status; return r
+    }
+    if (method === 'POST' && action === 'survival-score') {
+      const r = await pushSurvivalScore(ctx); status = r.status; return r
+    }
+    if (method === 'GET' && action === 'survival-best') {
+      const r = await getSurvivalBest(ctx, url); status = r.status; return r
+    }
+    if (method === 'GET' && action === 'survival-leaderboard') {
+      const r = await getSurvivalLeaderboard(ctx, url); status = r.status; return r
     }
 
     const r = err('not_found', 404); status = r.status; return r

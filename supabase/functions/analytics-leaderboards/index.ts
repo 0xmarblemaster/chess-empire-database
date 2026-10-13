@@ -1,5 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts"
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
+import { parseLeaderboardParams } from '../students-api/students-logic.mjs'
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -73,25 +74,32 @@ serve(async (req) => {
     }
 
     if (action === 'survival') {
-      // Get best score per student, optionally filtered by mode
-      let query = supabase.from('survival_scores').select('student_id, score, mode, students(first_name, last_name, branch_id)')
-      if (p('mode')) query = query.eq('mode', p('mode'))
-      const { data, error } = await query.order('score', { ascending: false })
+      // Puzzle Rush board via the get_puzzle_rush_leaderboard RPC (migration 093):
+      // best per active student, competition rank, Almaty windows, no row cap.
+      const parsed = parseLeaderboardParams({
+        scope: p('scope'), period: p('period'), branch_id: p('branch_id'),
+        student_id: p('student_id'), limit: p('limit'),
+      }, 20)
+      if (!parsed.value) return json({ success: false, error: `Invalid parameter: ${parsed.field}` }, 400)
+      const q = parsed.value
+      const { data, error } = await supabase.rpc('get_puzzle_rush_leaderboard', {
+        p_scope: q.scope, p_period: q.period, p_branch_id: q.branch_id,
+        p_student_id: q.student_id, p_limit: q.limit,
+      })
       if (error) throw error
-
-      // Keep best per student
-      const best = new Map<string, any>()
-      for (const r of data || []) {
-        if (!best.has(r.student_id) || r.score > best.get(r.student_id).score) {
-          best.set(r.student_id, r)
-        }
-      }
-      const leaderboard = [...best.values()]
-        .sort((a, b) => b.score - a.score)
-        .slice(0, limit)
-        .map((r, i) => ({ rank: i + 1, student_id: r.student_id, score: r.score, mode: r.mode, student: r.students }))
-
-      return json({ success: true, data: leaderboard, count: leaderboard.length })
+      const leaderboard = (data || []).map((r: any) => ({
+        rank: Number(r.rank),
+        student_id: r.student_id,
+        score: r.best_score,
+        mode: 'puzzle_rush',
+        student: { first_name: r.first_name, last_name: r.last_name, branch_id: r.branch_id },
+        branch_name: r.branch_name,
+        achieved_at: r.achieved_at,
+        source: r.source,
+        is_self: r.is_self,
+      }))
+      const total = data && data.length ? Number(data[0].total_count) : 0
+      return json({ success: true, data: leaderboard, count: leaderboard.length, total_count: total, scope: q.scope, period: q.period })
     }
 
     if (action === 'bot_battles') {

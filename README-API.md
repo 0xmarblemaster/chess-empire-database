@@ -151,9 +151,20 @@ curl -H "x-api-key: <CHESS_EMPIRE_API_KEY — see supabase secrets>" \
 | Param | Values | Description |
 |-------|--------|-------------|
 | action | `ratings` `survival` `bot_battles` | Leaderboard type |
-| branch_id | int | Filter by branch |
-| mode | string | Survival mode filter |
-| limit | int | Top N (default 20) |
+| branch_id | uuid | Filter by branch (for `survival`: implies `scope=branch`) |
+| scope | `school` `branch` | `survival` only — default `school` |
+| period | `week` `month` `all` | `survival` only — default `all`; windows in Asia/Almaty, week starts Monday 00:00 |
+| student_id | uuid | `survival` only — append this student's row (`is_self:true`) when outside the top N |
+| limit | int | Top N (default 20, max 500 for `survival`) |
+
+`action=survival` is the Puzzle Rush board, served by the
+`get_puzzle_rush_leaderboard` RPC (migration `093_puzzle_rush_rankings.sql`):
+best score per **active** student in the window, competition ranking (ties share
+a place, tie order = earliest `achieved_at`), no 1000-row cap. Each row keeps the
+legacy shape `rank, student_id, score, mode, student{first_name,last_name,branch_id}`
+and adds `branch_name, achieved_at, source, is_self`; the response adds
+`total_count, scope, period`. The old `mode` param is ignored (all rows are
+`puzzle_rush`).
 
 ```bash
 # Top rated students
@@ -162,7 +173,7 @@ curl -H "x-api-key: <CHESS_EMPIRE_API_KEY — see supabase secrets>" \
 
 # Survival leaderboard
 curl -H "x-api-key: <CHESS_EMPIRE_API_KEY — see supabase secrets>" \
-  "https://papgcizhfkngubwofjuo.supabase.co/functions/v1/analytics-leaderboards?action=survival&mode=blitz"
+  "https://papgcizhfkngubwofjuo.supabase.co/functions/v1/analytics-leaderboards?action=survival&period=week&branch_id=<uuid>"
 
 # Bot battles leaderboard
 curl -H "x-api-key: <CHESS_EMPIRE_API_KEY — see supabase secrets>" \
@@ -366,6 +377,9 @@ returns the OpenAPI self-doc (public).
 | `activate` | POST | `{student_id}` \| `{phone}` \| `{amocrm_customer_id}` | Set status → `active` (unfreeze). |
 | `find` | GET | `?phone=...` | Look up students by normalized phone. |
 | `branches` | GET | — | List all branches (`id` + `name`) for branch mapping. |
+| `survival-score` | POST | `{student_id, score, external_ref, achieved_at?}` | Push a Chesster Puzzle Rush **Survival** run (see below). |
+| `survival-best` | GET | `?student_id=...` | `{best:{week,month,all}}` — the student's Puzzle Rush bests. |
+| `survival-leaderboard` | GET | `?scope=&period=&branch_id=&student_id=&limit=` | Puzzle Rush ranking board. |
 
 **Phone normalization.** Phones are normalized to canonical KZ/RU `+7XXXXXXXXXX`
 (spaces/dashes/parens/dots stripped; a leading domestic `8` → `+7`; a bare
@@ -392,6 +406,32 @@ non-blocking freeze/thaw poke to Chesster and reports the outcome as
 `chesster_poke: "ok" | "skipped" | "failed"` — a failed poke never fails or rolls
 back the response.
 
+**Puzzle Rush push (`survival-score`).** Chesster pushes a student's Survival run
+into `survival_scores` (CE stays the source of truth). `score` must be an integer
+`0..200` (else `400 {reason:"invalid_input", field:"score"}`); `external_ref` (the
+Chesster run id) is required; `achieved_at` is optional ISO-8601 (defaults to now).
+Unknown student → `404 not_found`; a student who is not `active` →
+`409 student_inactive`. The row is stored with `mode='puzzle_rush'`,
+`source='chesster'`, `notes='Chesster Puzzle Rush (survival)'`. Response:
+`{ok:true, id, best:{week, month, all}}`.
+
+**Idempotency rule.** `external_ref` is unique. Re-sending a run whose
+`external_ref` is already stored returns `200 {ok:true, duplicate:true, id}` with
+the existing row id and inserts nothing — so Chesster can safely retry any push
+(timeouts, 5xx) with the same `external_ref`. Use `survival-best` to decide
+whether a run is worth pushing (e.g. only when it beats the current week best).
+
+**Leaderboard (`survival-leaderboard`).** `scope` = `school` (default) | `branch`
+(`branch_id` required; a `branch_id` without `scope` implies `branch`); `period` =
+`week` | `month` | `all` (default). Windows are computed in **Asia/Almaty**: the
+week starts Monday 00:00 local, the month is the local calendar month. Only active
+students, best score per student in the window, competition ranking (`RANK()` —
+ties share a place). `limit` 1..500 (default 50); with `student_id`, that student's
+row is appended (`is_self:true`) when outside the top N. Response:
+`{ok, scope, period, branch_id, window_start, total_count, rows:[{rank, student_id,
+first_name, last_name, branch_id, branch_name, best_score, achieved_at, source,
+total_count, is_self}]}`.
+
 The API never touches `student_time_slot_assignments` (migration 081 blocks
 automatic slot moves at the DB level by design).
 
@@ -415,11 +455,22 @@ curl "$BASE?action=find&phone=%2B77771234567" -H "x-api-key: $KEY"
 # Freeze / activate (resolve by id, phone, or amocrm_customer_id)
 curl -X POST "$BASE?action=freeze"   -H "x-api-key: $KEY" -H 'content-type: application/json' -d '{"amocrm_customer_id":123456}'
 curl -X POST "$BASE?action=activate" -H "x-api-key: $KEY" -H 'content-type: application/json' -d '{"phone":"+77771234567"}'
+
+# Push a Puzzle Rush Survival run (safe to retry with the same external_ref)
+curl -X POST "$BASE?action=survival-score" -H "x-api-key: $KEY" -H 'content-type: application/json' \
+  -d '{"student_id":"<uuid>","score":34,"external_ref":"chesster-run-8f3a","achieved_at":"2026-10-13T15:04:00+05:00"}'
+
+# Student bests / weekly branch board
+curl "$BASE?action=survival-best&student_id=<uuid>" -H "x-api-key: $KEY"
+curl "$BASE?action=survival-leaderboard&period=week&branch_id=<uuid>&student_id=<uuid>&limit=20" -H "x-api-key: $KEY"
 ```
 
 Requires migration `091_students_api.sql` applied (adds
 `students.amocrm_customer_id`, the `student_status_history` actor columns, and
-the `find_students_by_phone_digits` lookup).
+the `find_students_by_phone_digits` lookup). The `survival-*` actions (and
+`analytics-leaderboards?action=survival`) require migration
+`093_puzzle_rush_rankings.sql` (adds `survival_scores.source` / `external_ref` and
+the `get_puzzle_rush_leaderboard` / `get_student_puzzle_rush_best` RPCs).
 
 ## Deployment
 
