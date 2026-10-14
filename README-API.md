@@ -10,6 +10,31 @@ All endpoints require one of:
 
 ---
 
+## Student ID (`student_code`)
+
+Every student has a permanent, human-readable **Student ID** next to the
+internal UUID `id` (migration `096_student_code.sql`):
+
+- **Format:** `CE-` + the number zero-padded to 5 digits — `CE-00001` …
+  `CE-99999`, then `CE-100000`, `CE-100001`, … (never truncated). Pattern
+  `^CE-[0-9]{5,}$`. Input is trimmed and uppercased, so `ce-00452` works; the
+  short form `CE-452` does **not** (no padding is guessed).
+- **Assigned by the database** on insert, from a sequence. Any value a client
+  sends on create is ignored.
+- **Immutable:** an update that changes it is rejected by a DB trigger.
+- **Never reused:** the sequence only moves forward; a deleted student's code is
+  retired forever.
+- **Every key's student payloads include it** (`CHESS_EMPIRE_API_KEY`,
+  `CHESS_EMPIRE_READONLY_KEY`, `CHESS_EMPIRE_WRITE_KEY`): wherever a student
+  object / row carries `student_id` (or `id`) and a name, it also carries
+  `student_code`.
+- **Alternative key:** wherever a `student_id` is accepted (query param or JSON
+  body), `student_code` may be sent instead. If both are sent they must name the
+  same student — otherwise `400` (`student_id_code_mismatch`). An unknown code
+  → `404`; a malformed one → `400` naming the field `student_code`.
+
+---
+
 ## 1. Analytics - Audit Log
 
 **Endpoint:** `GET /analytics-audit`
@@ -47,7 +72,8 @@ curl -H "x-api-key: <CHESS_EMPIRE_API_KEY — see supabase secrets>" \
 | Param | Values | Description |
 |-------|--------|-------------|
 | action | `history` `transitions` `freezes` `stats` | Operation type |
-| student_id | int | Filter by student |
+| student_id | uuid | Filter by student |
+| student_code | `CE-00452` | Alternative to `student_id` |
 | old_status / new_status | string | Filter by status |
 | from / to | ISO date | Date range |
 | limit / offset | int | Pagination |
@@ -59,8 +85,10 @@ curl -H "x-api-key: <CHESS_EMPIRE_API_KEY — see supabase secrets>" \
 
 # Freeze periods for a student
 curl -H "x-api-key: <CHESS_EMPIRE_API_KEY — see supabase secrets>" \
-  "https://papgcizhfkngubwofjuo.supabase.co/functions/v1/analytics-status?action=freezes&student_id=42"
+  "https://papgcizhfkngubwofjuo.supabase.co/functions/v1/analytics-status?action=freezes&student_code=CE-00452"
 ```
+
+`history` rows embed `students{student_code, first_name, last_name}`.
 
 ---
 
@@ -121,7 +149,8 @@ curl -H "x-api-key: <CHESS_EMPIRE_API_KEY — see supabase secrets>" \
 | action | `list` `rates` `summary` `alerts` `calendar` | Operation type |
 | branch_id | int | Branch filter |
 | schedule_type | string | Schedule filter |
-| student_id | int | Student filter |
+| student_id | uuid | Student filter |
+| student_code | `CE-00452` | Alternative to `student_id` |
 | coach_id | int | Coach filter |
 | year / month | int | Calendar period |
 | threshold | int | Alert threshold % (default 70) |
@@ -142,6 +171,9 @@ curl -H "x-api-key: <CHESS_EMPIRE_API_KEY — see supabase secrets>" \
   "https://papgcizhfkngubwofjuo.supabase.co/functions/v1/analytics-attendance?action=calendar&branch_id=1&year=2026&month=2"
 ```
 
+`list` / `calendar` records embed `students{student_code, …}`; `rates` / `alerts`
+rows carry `student_id` (UUID) + `student_code`.
+
 ---
 
 ## 6. Analytics - Leaderboards
@@ -155,6 +187,7 @@ curl -H "x-api-key: <CHESS_EMPIRE_API_KEY — see supabase secrets>" \
 | scope | `school` `branch` | `survival` only — default `school` |
 | period | `week` `month` `all` | `survival` only — default `all`; windows in Asia/Almaty, week starts Monday 00:00 |
 | student_id | uuid | `survival` only — append this student's row (`is_self:true`) when outside the top N |
+| student_code | `CE-00452` | `survival` only — alternative to `student_id` |
 | limit | int | Top N (default 20, max 500 for `survival`) |
 
 `action=survival` is the Puzzle Rush board, served by the
@@ -162,9 +195,9 @@ curl -H "x-api-key: <CHESS_EMPIRE_API_KEY — see supabase secrets>" \
 best score per **active** student in the window, competition ranking (ties share
 a place, tie order = earliest `achieved_at`), no 1000-row cap. Each row keeps the
 legacy shape `rank, student_id, score, mode, student{first_name,last_name,branch_id}`
-and adds `branch_name, achieved_at, source, is_self`; the response adds
+and adds `student_code, branch_name, achieved_at, source, is_self`; the response adds
 `total_count, scope, period`. The old `mode` param is ignored (all rows are
-`puzzle_rush`).
+`puzzle_rush`). `ratings` and `bot_battles` rows also carry `student_code`.
 
 ```bash
 # Top rated students
@@ -188,14 +221,19 @@ curl -H "x-api-key: <CHESS_EMPIRE_API_KEY — see supabase secrets>" \
 
 | Param | Values | Description |
 |-------|--------|-------------|
-| action | `profile` `ratings` `achievements` `ranking` | Operation type |
-| student_id | int | **Required** — Student ID |
+| action | `profile` `ratings` `achievements` `ranking` `progress_ranking` | Operation type |
+| student_id | uuid | **Required** unless `student_code` is given |
+| student_code | `CE-00452` | Look the student up by Student ID — same response as by `student_id` |
 | days | int | Rating history period (default 365) |
 
 ```bash
 # Full student profile
 curl -H "x-api-key: <CHESS_EMPIRE_API_KEY — see supabase secrets>" \
   "https://papgcizhfkngubwofjuo.supabase.co/functions/v1/analytics-students?action=profile&student_id=42"
+
+# Same profile by Student ID
+curl -H "x-api-key: <CHESS_EMPIRE_API_KEY — see supabase secrets>" \
+  "https://papgcizhfkngubwofjuo.supabase.co/functions/v1/analytics-students?action=profile&student_code=CE-00452"
 
 # Rating history with trend
 curl -H "x-api-key: <CHESS_EMPIRE_API_KEY — see supabase secrets>" \
@@ -209,6 +247,12 @@ curl -H "x-api-key: <CHESS_EMPIRE_API_KEY — see supabase secrets>" \
 curl -H "x-api-key: <CHESS_EMPIRE_API_KEY — see supabase secrets>" \
   "https://papgcizhfkngubwofjuo.supabase.co/functions/v1/analytics-students?action=ranking&student_id=42"
 ```
+
+`profile.student` includes `student_code`; `ranking` / `progress_ranking` return
+`student_id` + `student_code`. `analytics-tournaments` likewise adds
+`student_code` to `detail` participants, `branch_leaderboard`,
+`coach_kpi_summary` students and every `school_student_drilldown` row, and
+`student_history` accepts `student_code`.
 
 ---
 
@@ -300,9 +344,9 @@ Each response uses a consistent envelope:
 | `GET` | `/tournaments?branch_id=&upcoming=true` | — | List tournaments (upcoming by default) with `registered_count` |
 | `GET` | `/tournaments/:id` | — | One tournament |
 | `GET` | `/tournaments/:id/registrations` | — | Roster — `{id, source, registered_at, display_name}` (no `external_contact`) |
-| `GET` | `/students/search?q=&limit=` | — | Autocomplete active+frozen students |
-| `GET` | `/students/:student_id/registrations` | key | This student's registrations — `{id, tournament_id, registered_at}`, `registered_at` ascending. Empty array if none. Key-gated (links registrations to student identity) |
-| `POST` | `/tournaments/:id/register` | key | Body: `{ student_id }` OR `{ player_name }`. Optional `external_contact`. Header `x-source: telegram\|whatsapp\|online\|web` |
+| `GET` | `/students/search?q=&limit=` | — | Autocomplete active+frozen students by name or Student ID (`CE-00452`, `00452`). Hits carry `student_code` |
+| `GET` | `/students/:student_id/registrations` | key | `:student_id` may be the UUID or the Student ID (`CE-00452`). | This student's registrations — `{id, tournament_id, registered_at}`, `registered_at` ascending. Empty array if none. Key-gated (links registrations to student identity) |
+| `POST` | `/tournaments/:id/register` | key | Body: `{ student_id }` / `{ student_code }` OR `{ player_name }`. Optional `external_contact`. Header `x-source: telegram\|whatsapp\|online\|web` |
 | `DELETE` | `/registrations/:registration_id` | key | Cancel a registration; reopens the tournament if it was full |
 | `GET` | `/openapi.json` | — | Hand-written OpenAPI 3.0.3 contract |
 
@@ -373,13 +417,21 @@ returns the OpenAPI self-doc (public).
 | Action | Method | Body / Query | Description |
 |--------|--------|--------------|-------------|
 | `create` | POST | `{full_name, phone, branch_id, amocrm_customer_id?}` | Create a student (dedups first; see below). |
-| `freeze` | POST | `{student_id}` \| `{phone}` \| `{amocrm_customer_id}` | Set status → `frozen`. |
-| `activate` | POST | `{student_id}` \| `{phone}` \| `{amocrm_customer_id}` | Set status → `active` (unfreeze). |
-| `find` | GET | `?phone=...` | Look up students by normalized phone. |
+| `freeze` | POST | `{student_code}` \| `{student_id}` \| `{phone}` \| `{amocrm_customer_id}` | Set status → `frozen`. |
+| `activate` | POST | `{student_code}` \| `{student_id}` \| `{phone}` \| `{amocrm_customer_id}` | Set status → `active` (unfreeze). |
+| `link_amocrm` | POST | `{student_id \| student_code, amocrm_customer_id}` | Link an amoCRM id to an existing student (never overwrites a different id). |
+| `update_contact` | POST | `{student_id \| student_code, phone?, amocrm_customer_id?}` | Overwrite the parent phone / amoCRM id. |
+| `find` | GET | `?student_code=` \| `?amocrm_customer_id=` \| `?phone=` | Look up students. Precedence `student_code` > `amocrm_customer_id` > `phone`. Response `{ok, student_code\|amocrm_customer_id\|phone, students:[…]}`. |
+| `list` | GET | `?limit=&offset=&branch_id=&status=` | Paginated list ordered by `student_code`: `limit` 1..500 (default 100), `offset` ≥ 0, `status` ∈ `active` `frozen` `left`. Response `{ok, total, limit, offset, students:[…]}` (`total` = exact count for the filters). |
 | `branches` | GET | — | List all branches (`id` + `name`) for branch mapping. |
-| `survival-score` | POST | `{student_id, score, external_ref, achieved_at?}` | Push a Chesster Puzzle Rush **Survival** run (see below). |
-| `survival-best` | GET | `?student_id=...` | `{best:{week,month,all}}` — the student's Puzzle Rush bests. |
-| `survival-leaderboard` | GET | `?scope=&period=&branch_id=&student_id=&limit=` | Puzzle Rush ranking board. |
+| `survival-score` | POST | `{student_id \| student_code, score, external_ref, achieved_at?}` | Push a Chesster Puzzle Rush **Survival** run (see below). |
+| `survival-best` | GET | `?student_id=` \| `?student_code=` | `{best:{week,month,all}}` — the student's Puzzle Rush bests. |
+| `survival-leaderboard` | GET | `?scope=&period=&branch_id=&student_id=\|student_code=&limit=` | Puzzle Rush ranking board. |
+
+**Student object.** Every student in a response has the same shape:
+`{id, student_code, name, first_name, last_name, status, branch_id, branch,
+amocrm_customer_id, phone}`. `student_code` is never accepted on `create` — the
+database assigns it.
 
 **Phone normalization.** Phones are normalized to canonical KZ/RU `+7XXXXXXXXXX`
 (spaces/dashes/parens/dots stripped; a leading domestic `8` → `+7`; a bare
@@ -429,7 +481,7 @@ students, best score per student in the window, competition ranking (`RANK()` �
 ties share a place). `limit` 1..500 (default 50); with `student_id`, that student's
 row is appended (`is_self:true`) when outside the top N. Response:
 `{ok, scope, period, branch_id, window_start, total_count, rows:[{rank, student_id,
-first_name, last_name, branch_id, branch_name, best_score, achieved_at, source,
+student_code, first_name, last_name, branch_id, branch_name, best_score, achieved_at, source,
 total_count, is_self}]}`.
 
 The API never touches `student_time_slot_assignments` (migration 081 blocks
@@ -449,12 +501,17 @@ curl -X POST "$BASE?action=create" -H "x-api-key: $KEY" \
   -H 'content-type: application/json' \
   -d '{"full_name":"Askar Zhumabek","phone":"8 (777) 123-45-67","branch_id":"<uuid>","amocrm_customer_id":123456}'
 
-# Find by phone (any format)
+# Find by phone (any format) / by Student ID
 curl "$BASE?action=find&phone=%2B77771234567" -H "x-api-key: $KEY"
+curl "$BASE?action=find&student_code=CE-00452" -H "x-api-key: $KEY"
+
+# Page through all active students of a branch, 500 at a time
+curl "$BASE?action=list&status=active&branch_id=<uuid>&limit=500&offset=0" -H "x-api-key: $KEY"
 
 # Freeze / activate (resolve by id, phone, or amocrm_customer_id)
 curl -X POST "$BASE?action=freeze"   -H "x-api-key: $KEY" -H 'content-type: application/json' -d '{"amocrm_customer_id":123456}'
 curl -X POST "$BASE?action=activate" -H "x-api-key: $KEY" -H 'content-type: application/json' -d '{"phone":"+77771234567"}'
+curl -X POST "$BASE?action=freeze"   -H "x-api-key: $KEY" -H 'content-type: application/json' -d '{"student_code":"CE-00452"}'
 
 # Push a Puzzle Rush Survival run (safe to retry with the same external_ref)
 curl -X POST "$BASE?action=survival-score" -H "x-api-key: $KEY" -H 'content-type: application/json' \
@@ -471,6 +528,8 @@ the `find_students_by_phone_digits` lookup). The `survival-*` actions (and
 `analytics-leaderboards?action=survival`) require migration
 `093_puzzle_rush_rankings.sql` (adds `survival_scores.source` / `external_ref` and
 the `get_puzzle_rush_leaderboard` / `get_student_puzzle_rush_best` RPCs).
+`student_code` everywhere (and `action=list` ordering) requires migration
+`096_student_code.sql`.
 
 ## Deployment
 
