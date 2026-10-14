@@ -439,8 +439,13 @@ body {
     gap: 1.5rem;
 }
 
+/* Half-width in the row: always stack label above value so both banners line
+   up regardless of value length. */
 .overview-mobile-grid .staff-reference-row .chesster-status-banner {
     grid-column: auto;
+    flex-direction: column;
+    align-items: flex-start;
+    justify-content: center;
 }
 
 .amocrm-status-banner.amocrm-status--linked {
