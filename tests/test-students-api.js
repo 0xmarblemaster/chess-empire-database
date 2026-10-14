@@ -53,7 +53,7 @@ assert(/if \(!authorized\(req\)\) \{[\s\S]*err\('unauthorized', 401\)/.test(INDE
   'unauthorized requests get 401');
 
 // Routing on ?action=
-['create', 'freeze', 'activate', 'find', 'branches'].forEach((a) => {
+['create', 'freeze', 'activate', 'link_amocrm', 'find', 'branches'].forEach((a) => {
   assert(new RegExp(`action === '${a}'`).test(INDEX), `routes action=${a}`);
 });
 assert(/method === 'GET' && !action[\s\S]*OPENAPI_SPEC/.test(INDEX),
@@ -113,6 +113,55 @@ assert(!/student_time_slot_assignments/.test(INDEX_CODE),
   'code never references student_time_slot_assignments (migration 081 guard)');
 assert(!/manual_slot_move|move_student_slot_manual|logical_slot_id|time_slot_index/.test(INDEX_CODE),
   'code never touches slot-move machinery');
+
+// link_amocrm
+assert(/method === 'POST' && action === 'link_amocrm'[\s\S]*linkAmocrmId\(ctx\)/.test(INDEX),
+  'routes POST action=link_amocrm');
+assert(/'amocrm_customer_id_conflict'/.test(INDEX.slice(INDEX.indexOf('const REASONS'), INDEX.indexOf('] as const'))),
+  'amocrm_customer_id_conflict is a declared Reason');
+const lkStart = INDEX_CODE.indexOf('async function linkAmocrmId(');
+const lkEnd = INDEX_CODE.indexOf('async function findStudents(', lkStart);
+const lkBlock = INDEX_CODE.slice(lkStart, lkEnd);
+assert(lkStart >= 0 && lkEnd > lkStart, 'linkAmocrmId handler defined');
+assert(/validateLinkAmocrm\(body\)[\s\S]*err\('invalid_input', 400/.test(lkBlock),
+  'link_amocrm validates input → 400 invalid_input');
+assert(/linkAmocrm\(\{/.test(lkBlock), 'link_amocrm delegates the flow to the shared linkAmocrm()');
+assert(/\.update\(\{ amocrm_customer_id: amo \}\)\s*\n?\s*\.eq\('id', id\)\.is\('amocrm_customer_id', null\)/.test(lkBlock),
+  'single conditional UPDATE … WHERE id AND amocrm_customer_id IS NULL (atomic)');
+assert(/error\.code === '23505'[\s\S]*uniqueViolation: true/.test(lkBlock),
+  'unique-index violation (23505) mapped to a conflict');
+assert(/\.eq\('id', id\)\.maybeSingle\(\)/.test(lkBlock),
+  'student looked up strictly by id');
+assert(!/phone|first_name|last_name|find_students_by_phone_digits/.test(lkBlock),
+  'link_amocrm never selects a student by name / phone');
+assert(!/student_status_history|applyStatusChange|pokeChesster|status:|branch_id|coach|\.insert\(|\.delete\(/.test(lkBlock),
+  'link_amocrm never touches status / branch / coach / status history / Chesster, never inserts or deletes');
+assert((lkBlock.match(/\.update\(/g) || []).length === 1,
+  'link_amocrm issues exactly one UPDATE');
+
+// find by amocrm_customer_id
+const fdStart = INDEX_CODE.indexOf('async function findStudents(');
+const fdBlock = INDEX_CODE.slice(fdStart, INDEX_CODE.indexOf('async function listBranches(', fdStart));
+assert(/searchParams\.get\('amocrm_customer_id'\)[\s\S]*parseAmocrmId\(amoRaw\)[\s\S]*err\('invalid_input', 400, \{ field: 'amocrm_customer_id' \}\)/.test(fdBlock),
+  'find: bad amocrm_customer_id → 400 invalid_input');
+assert(/ok\(\{ amocrm_customer_id: amo, students: \(data \|\| \[\]\)\.map\(shape\) \}\)/.test(fdBlock),
+  'find by amocrm id mirrors the phone response shape (students[] of shape())');
+assert(fdBlock.indexOf("get('amocrm_customer_id')") < fdBlock.indexOf("get('phone')"),
+  'find: amocrm_customer_id takes precedence over phone');
+assert(/ok\(\{ phone: norm, students: \(data \|\| \[\]\)\.map\(shape\) \}\)/.test(fdBlock),
+  'find by phone unchanged');
+
+// OpenAPI
+const oaStart = INDEX.indexOf("'/?action=link_amocrm'");
+const oaBlock = INDEX.slice(oaStart, INDEX.indexOf("'/?action=find'", oaStart));
+assert(oaStart > INDEX.indexOf('const OPENAPI_SPEC'), 'OpenAPI documents /?action=link_amocrm');
+assert(/required: \['student_id', 'amocrm_customer_id'\]/.test(oaBlock), 'OpenAPI link_amocrm request schema');
+assert(/changed: true/.test(oaBlock) && /changed: false/.test(oaBlock), 'OpenAPI link_amocrm 200 examples (changed true/false)');
+['400', '404', '409'].forEach((c) => assert(new RegExp(`'${c}':`).test(oaBlock), `OpenAPI link_amocrm documents ${c}`));
+['invalid_input', 'not_found', 'amocrm_customer_id_conflict'].forEach((r) =>
+  assert(oaBlock.includes(r), `OpenAPI link_amocrm documents reason ${r}`));
+assert(/name: 'amocrm_customer_id', in: 'query'/.test(INDEX), 'OpenAPI find documents amocrm_customer_id query param');
+assert(/link_amocrm/.test(INDEX.slice(0, 1200)), 'header comment lists link_amocrm');
 
 // ---------------------------------------------------------------------------
 console.log('\n=== (b) migration 091\n');

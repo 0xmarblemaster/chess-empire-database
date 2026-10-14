@@ -58,6 +58,74 @@ export function isUuid(s) {
   return typeof s === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(s);
 }
 
+// ─── amoCRM link ────────────────────────────────────────────────────────────
+
+// Parse a positive integer amoCRM customer id from a JSON number or a numeric
+// string. Returns null for 0, negatives, floats, unsafe integers and junk.
+export function parseAmocrmId(raw) {
+  let n = null;
+  if (typeof raw === 'number') n = raw;
+  else if (typeof raw === 'string' && /^[0-9]+$/.test(raw.trim())) n = Number(raw.trim());
+  return Number.isSafeInteger(n) && n > 0 ? n : null;
+}
+
+// Validate a link_amocrm body. Returns { value } or { field } naming the first
+// invalid field.
+export function validateLinkAmocrm(body) {
+  const b = body && typeof body === 'object' ? body : {};
+  if (!isUuid(b.student_id)) return { field: 'student_id' };
+  const amo = parseAmocrmId(b.amocrm_customer_id);
+  if (amo === null) return { field: 'amocrm_customer_id' };
+  return { value: { student_id: b.student_id, amocrm_customer_id: amo } };
+}
+
+// What linking `requested` onto a student whose current value is `current`
+// means: 'link' (empty → write), 'same' (idempotent no-op) or 'conflict'
+// (a different id is already set — never overwritten).
+export function classifyLink(current, requested) {
+  if (current === null || current === undefined) return 'link';
+  return Number(current) === requested ? 'same' : 'conflict';
+}
+
+// Link flow for POST ?action=link_amocrm, over an injected db adapter so the
+// exact orchestration is unit-testable:
+//   db.getStudent(id)       → { id, amocrm_customer_id } | null
+//   db.findOwnerId(amo)     → id of the student holding amo | null
+//   db.setIfNull(id, amo)   → { row } (row null when 0 rows matched) | { uniqueViolation: true }
+// setIfNull is the single conditional UPDATE … WHERE amocrm_customer_id IS NULL,
+// so the write is atomic; the earlier reads only pick a precise error. Only
+// students.amocrm_customer_id is ever written. Returns { status, body }.
+export async function linkAmocrm(db, { student_id, amocrm_customer_id: amo }) {
+  const done = (changed, id) => ({ status: 200, body: { ok: true, changed, student: { id, amocrm_customer_id: amo } } });
+  const conflict = (ownerId) => ({
+    status: 409,
+    body: { ok: false, reason: 'amocrm_customer_id_conflict', ...(ownerId ? { conflict_student_id: ownerId } : {}) },
+  });
+  const settle = (row) => {
+    if (!row) return { status: 404, body: { ok: false, reason: 'not_found' } };
+    const c = classifyLink(row.amocrm_customer_id, amo);
+    if (c === 'same') return done(false, row.id);
+    if (c === 'conflict') return conflict(null);
+    return null;
+  };
+
+  const current = await db.getStudent(student_id);
+  const pre = settle(current);
+  if (pre) return pre;
+
+  const ownerId = await db.findOwnerId(amo);
+  if (ownerId && ownerId !== student_id) return conflict(ownerId);
+
+  const r = await db.setIfNull(student_id, amo);
+  if (r.uniqueViolation) return conflict(await db.findOwnerId(amo));
+  if (r.row) return done(true, r.row.id);
+
+  // 0 rows: a concurrent request set the column first — re-read and classify.
+  const post = settle(await db.getStudent(student_id));
+  if (post) return post;
+  throw new Error('link_amocrm: conditional update matched 0 rows but column is still empty');
+}
+
 // ─── Puzzle Rush (survival) ─────────────────────────────────────────────────
 
 // Upper bound for a pushed Puzzle Rush Survival score — anything above is
