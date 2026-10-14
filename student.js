@@ -427,6 +427,14 @@ function renderChessterStatusBox(student) {
     `;
 }
 
+// Permanent Student ID (CE-00452). Public — shown to every viewer, unlike the
+// staff-only banners below. Renders nothing until migration 096 is applied.
+function renderStudentCode(student) {
+    const code = student ? student.studentCode : null;
+    if (!code) return '';
+    return `<div class="student-code-badge" title="${escapeHtmlSafe(t('studentCode.title') || 'Permanent Student ID')}">${escapeHtmlSafe(t('studentCode.label') || 'ID')}: <span class="student-code-value">${escapeHtmlSafe(code)}</span></div>`;
+}
+
 // Render the amoCRM customer ID banner (staff-only, next to the Chesster banner).
 // Only null/undefined/'' read as "not linked"; any other value is shown in full.
 function renderAmocrmIdBox(student) {
@@ -1280,6 +1288,7 @@ async function renderProfile() {
             ${avatarHTML}
             <div class="profile-info">
                 <h1 class="student-name">${student.firstName} ${student.lastName}</h1>
+                ${renderStudentCode(student)}
                 <div class="student-meta">
                     <span class="student-details">${i18n.translateBranchName(student.branch)} • <a href="#" class="coach-link" onclick="navigateToCoach('${student.coachId}', event)">${student.coach}</a></span>
                 </div>

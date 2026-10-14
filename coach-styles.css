@@ -582,6 +582,11 @@ body {
     font-weight: 500;
 }
 
+.student-code {
+    font-variant-numeric: tabular-nums;
+    letter-spacing: 0.02em;
+}
+
 .status-dot {
     width: 8px;
     height: 8px;

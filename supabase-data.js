@@ -8,6 +8,16 @@ if (typeof window.supabaseClient === 'undefined') {
     console.error('Supabase client not initialized. Please load supabase-client.js first.');
 }
 
+// Does a search query hit a Student ID (students.student_code, e.g. CE-00452)?
+// Only queries containing a digit are compared, so typing a name like "Ce…"
+// never matches every code. "CE-00452", "ce-00452", "00452" and "452" all hit.
+function studentCodeMatches(code, query) {
+    const q = String(query || '').trim().toLowerCase();
+    if (!code || !/[0-9]/.test(q)) return false;
+    return String(code).toLowerCase().includes(q);
+}
+window.studentCodeMatches = studentCodeMatches;
+
 const supabaseData = {
     /**
      * STUDENTS
@@ -27,7 +37,7 @@ const supabaseData = {
             const { data, error } = await window.supabaseClient
                 .from('students')
                 .select(`
-                    id, first_name, last_name, age, date_of_birth, gender,
+                    id, student_code, first_name, last_name, age, date_of_birth, gender,
                     photo_url, branch_id, coach_id, razryad, status,
                     current_level, current_lesson, total_lessons,
                     parent_name, parent_phone, parent_email,
@@ -49,6 +59,7 @@ const supabaseData = {
         // Transform to match data.js format
         return rows.map(student => ({
             id: student.id,
+            studentCode: student.student_code || null,
             firstName: student.first_name,
             lastName: student.last_name,
             age: student.age,
@@ -88,6 +99,7 @@ const supabaseData = {
 
         return {
             id: data.id,
+            studentCode: data.student_code || null,
             firstName: data.first_name,
             lastName: data.last_name,
             age: data.age,
@@ -152,6 +164,7 @@ const supabaseData = {
         // Transform to match data.js format
         return {
             id: data.id,
+            studentCode: data.student_code || null,
             firstName: data.first_name,
             lastName: data.last_name,
             age: data.age,
@@ -231,6 +244,7 @@ const supabaseData = {
         // Transform to match data.js format
         return {
             id: data.id,
+            studentCode: data.student_code || null,
             firstName: data.first_name,
             lastName: data.last_name,
             age: data.age,
@@ -924,7 +938,8 @@ const supabaseData = {
                 branch:branches(name),
                 coach:coaches(first_name, last_name)
             `)
-            .or(`first_name.ilike.%${query}%,last_name.ilike.%${query}%`)
+            .or(`first_name.ilike.%${query}%,last_name.ilike.%${query}%`
+                + (/[0-9]/.test(query) ? `,student_code.ilike.%${query}%` : ''))
             .limit(50);
 
         if (error) {
@@ -934,6 +949,7 @@ const supabaseData = {
 
         const results = data.map(student => ({
             id: student.id,
+            studentCode: student.student_code || null,
             firstName: student.first_name,
             lastName: student.last_name,
             branch: student.branch?.name || '',
@@ -948,6 +964,11 @@ const supabaseData = {
         const queryLower = query.toLowerCase();
 
         return results.sort((a, b) => {
+            // Priority 0: exact Student ID (e.g. "CE-00452")
+            const aCode = (a.studentCode || '').toLowerCase() === queryLower;
+            const bCode = (b.studentCode || '').toLowerCase() === queryLower;
+            if (aCode !== bCode) return aCode ? -1 : 1;
+
             const aLastLower = a.lastName.toLowerCase();
             const bLastLower = b.lastName.toLowerCase();
             const aFirstLower = a.firstName.toLowerCase();
@@ -2018,7 +2039,7 @@ const supabaseData = {
         const studentIds = data.map(d => d.student_id);
         const { data: students } = await window.supabaseClient
             .from('students')
-            .select('id, first_name, last_name, branch:branches(name)')
+            .select('id, student_code, first_name, last_name, branch:branches(name)')
             .in('id', studentIds);
 
         const studentMap = new Map(students?.map(s => [s.id, s]) || []);
@@ -2028,6 +2049,7 @@ const supabaseData = {
             return {
                 rank: index + 1,
                 studentId: entry.student_id,
+                studentCode: student?.student_code || null,
                 firstName: student?.first_name || '',
                 lastName: student?.last_name || '',
                 branch: student?.branch?.name || '',
@@ -2072,7 +2094,7 @@ const supabaseData = {
             const studentIds = sortedRatings.map(d => d.student_id);
             let studentsQuery = window.supabaseClient
                 .from('students')
-                .select('id, first_name, last_name, branch_id, branch:branches(name)')
+                .select('id, student_code, first_name, last_name, branch_id, branch:branches(name)')
                 .in('id', studentIds);
 
             if (branchId) {
@@ -2090,6 +2112,7 @@ const supabaseData = {
                     return {
                         rank: index + 1,
                         studentId: entry.student_id,
+                        studentCode: student?.student_code || null,
                         firstName: student?.first_name || '',
                         lastName: student?.last_name || '',
                         branch: student?.branch?.name || '',
@@ -2122,7 +2145,7 @@ const supabaseData = {
         const studentIds = data.map(d => d.student_id);
         const { data: students } = await window.supabaseClient
             .from('students')
-            .select('id, first_name, last_name, branch:branches(name)')
+            .select('id, student_code, first_name, last_name, branch:branches(name)')
             .in('id', studentIds);
 
         const studentMap = new Map(students?.map(s => [s.id, s]) || []);
@@ -2132,6 +2155,7 @@ const supabaseData = {
             return {
                 rank: index + 1,
                 studentId: entry.student_id,
+                studentCode: student?.student_code || null,
                 firstName: student?.first_name || '',
                 lastName: student?.last_name || '',
                 branch: student?.branch?.name || '',
@@ -2227,7 +2251,7 @@ const supabaseData = {
             .from('attendance')
             .select(`
                 *,
-                student:students(id, first_name, last_name)
+                student:students(id, student_code, first_name, last_name)
             `)
             .eq('branch_id', branchId)
             .order('attendance_date', { ascending: true });
@@ -2303,7 +2327,7 @@ const supabaseData = {
         // Build students query
         let studentsQuery = window.supabaseClient
             .from('students')
-            .select('id, first_name, last_name, coach_id')
+            .select('id, student_code, first_name, last_name, coach_id')
             .eq('branch_id', branchId)
             .eq('status', 'active')
             .order('last_name');
@@ -2387,6 +2411,7 @@ const supabaseData = {
         return {
             students: students.map(s => ({
                 id: s.id,
+                studentCode: s.student_code || null,
                 firstName: s.first_name,
                 lastName: s.last_name
             })),
@@ -2549,7 +2574,7 @@ const supabaseData = {
             .from('student_name_aliases')
             .select(`
                 *,
-                student:students(id, first_name, last_name)
+                student:students(id, student_code, first_name, last_name)
             `)
             .order('alias_name');
 
@@ -2644,7 +2669,7 @@ const supabaseData = {
             .from('student_name_aliases')
             .select(`
                 student_id,
-                student:students(id, first_name, last_name, branch_id)
+                student:students(id, student_code, first_name, last_name, branch_id)
             `)
             .eq('alias_name', aliasName)
             .single();
@@ -3497,7 +3522,7 @@ const supabaseData = {
                 .from('student_status_history')
                 .select(`
                     *,
-                    student:students(id, first_name, last_name, branch:branches(name))
+                    student:students(id, student_code, first_name, last_name, branch:branches(name))
                 `);
 
             // Apply filters

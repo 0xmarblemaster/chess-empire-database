@@ -457,7 +457,7 @@ function getFilteredStudents() {
         if (currentFilters.search) {
             const searchTerm = currentFilters.search.toLowerCase();
             const fullName = `${student.firstName} ${student.lastName}`.toLowerCase();
-            if (!fullName.includes(searchTerm)) {
+            if (!fullName.includes(searchTerm) && !studentCodeMatches(student.studentCode, searchTerm)) {
                 return false;
             }
         }
@@ -508,7 +508,10 @@ function loadStudents() {
                 <td>
                     <div class="student-cell">
                         ${avatarHTML}
-                        <div class="student-name clickable" onclick="viewStudent('${student.id}')" style="cursor: pointer; color: #d97706;" onmouseover="this.style.textDecoration='underline'" onmouseout="this.style.textDecoration='none'">${student.firstName} ${student.lastName}</div>
+                        <div>
+                            <div class="student-name clickable" onclick="viewStudent('${student.id}')" style="cursor: pointer; color: #d97706;" onmouseover="this.style.textDecoration='underline'" onmouseout="this.style.textDecoration='none'">${student.firstName} ${student.lastName}</div>
+                            ${student.studentCode ? `<div class="student-code">${student.studentCode}</div>` : ''}
+                        </div>
                     </div>
                 </td>`;
         }).map((rowStart, index) => {
@@ -653,7 +656,7 @@ function renderMobileStudentCards(students) {
                     ${mobileAvatarHTML}
                     <div class="mobile-card-info">
                         <div class="mobile-card-name clickable" onclick="viewStudent('${student.id}')" style="cursor: pointer; color: #d97706;" onmouseover="this.style.textDecoration='underline'" onmouseout="this.style.textDecoration='none'">${student.firstName} ${student.lastName}</div>
-                        <div class="mobile-card-meta">${student.age} ${t('common.years')} • ${student.coach}</div>
+                        <div class="mobile-card-meta">${student.studentCode ? `${student.studentCode} • ` : ''}${student.age} ${t('common.years')} • ${student.coach}</div>
                     </div>
                     <span class="mobile-card-status ${student.status}">${translateStatus(student.status)}</span>
                 </div>
@@ -2373,9 +2376,14 @@ function removeEditPhoto() {
     setTimeout(() => lucide.createIcons(), 50);
 }
 
+// In-flight guard for submitAddStudent: a double click (or Enter + click)
+// must never insert the same child twice (seen in prod: identical rows 1–3s apart).
+let addStudentInFlight = false;
+
 // Submit Add Student Form
 async function submitAddStudent(event) {
     event.preventDefault();
+    if (addStudentInFlight) return;
 
     // Get form data
     const form = document.getElementById('addStudentForm');
@@ -2430,6 +2438,10 @@ async function submitAddStudent(event) {
         return;
     }
 
+    const submitButton = document.querySelector('button[type="submit"][form="addStudentForm"]');
+    addStudentInFlight = true;
+    if (submitButton) submitButton.disabled = true;
+
     try {
         // First create the student to get their ID
         const result = await createStudent(studentData);
@@ -2480,6 +2492,9 @@ async function submitAddStudent(event) {
     } catch (error) {
         console.error('❌ Error adding student:', error);
         showToast(error.message || 'Failed to add student', 'error');
+    } finally {
+        addStudentInFlight = false;
+        if (submitButton) submitButton.disabled = false;
     }
 }
 
@@ -9329,7 +9344,7 @@ async function handleAttendanceSearchDropdown(query) {
 
     const matches = scoped.filter(s => {
         const fullName = `${s.firstName || ''} ${s.lastName || ''}`.toLowerCase();
-        return fullName.includes(searchLower);
+        return fullName.includes(searchLower) || studentCodeMatches(s.studentCode, searchLower);
     });
 
     if (matches.length === 0) {
@@ -9658,7 +9673,7 @@ function handleAddStudentSearch(query) {
     // Filter students by search query
     const matches = addStudentBranchStudents.filter(student => {
         const fullName = `${student.firstName || ''} ${student.lastName || ''}`.toLowerCase();
-        return fullName.includes(searchLower);
+        return fullName.includes(searchLower) || studentCodeMatches(student.studentCode, searchLower);
     });
 
     // Render dropdown

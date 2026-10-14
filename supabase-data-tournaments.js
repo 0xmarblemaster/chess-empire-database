@@ -882,7 +882,7 @@
             .from('tournament_participants')
             .select(`
                 id, place, rating_before, rating_after, rating_delta, raw_name,
-                student:students(id, first_name, last_name)
+                student:students(id, student_code, first_name, last_name)
             `)
             .eq('tournament_id', tournamentId)
             .order('place', { ascending: true });

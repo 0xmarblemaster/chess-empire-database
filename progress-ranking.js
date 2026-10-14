@@ -15,7 +15,7 @@
     async function loadLeaderboard() {
         const [studentsRes, branchesRes, coachesRes] = await Promise.all([
             supabase.from('students')
-                .select('id, first_name, last_name, photo_url, current_level, current_lesson, branch_id, coach_id, branch:branches(name), coach:coaches(first_name, last_name), status')
+                .select('id, student_code, first_name, last_name, photo_url, current_level, current_lesson, branch_id, coach_id, branch:branches(name), coach:coaches(first_name, last_name), status')
                 .eq('status', 'active'),
             supabase.from('branches').select('id, name').order('name'),
             supabase.from('coaches').select('id, first_name, last_name, branch_id').order('last_name')

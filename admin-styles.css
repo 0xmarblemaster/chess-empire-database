@@ -877,6 +877,13 @@ td {
     color: #1e293b;
 }
 
+.student-code {
+    font-size: 0.75rem;
+    color: #64748b;
+    font-variant-numeric: tabular-nums;
+    letter-spacing: 0.02em;
+}
+
 /* Clickable coach name in table */
 .clickable-coach {
     cursor: pointer;

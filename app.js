@@ -26,7 +26,8 @@ async function searchStudents(query) {
     // Fallback to local search (only if students array is available and has data)
     if (typeof students !== 'undefined' && Array.isArray(students) && students.length > 0) {
         return students
-            .filter(student => `${student.firstName} ${student.lastName}`.toLowerCase().includes(searchTerm))
+            .filter(student => `${student.firstName} ${student.lastName}`.toLowerCase().includes(searchTerm)
+                || studentCodeMatches(student.studentCode, searchTerm))
             .slice(0, 8);
     }
 
@@ -131,6 +132,7 @@ function renderDropdown(results) {
                 <div>
                     <div class="student-name">${student.firstName} ${student.lastName}</div>
                     <div class="student-meta">
+                        ${student.studentCode ? `<span>${student.studentCode}</span><span>•</span>` : ''}
                         <span>${i18n.translateBranchName(student.branch)}</span>
                         <span>•</span>
                         <span>${t('index.coachLabel', { coach: student.coach })}</span>

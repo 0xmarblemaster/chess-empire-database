@@ -261,6 +261,7 @@ function renderCoachProfile() {
                                         ${razryadBadge}
                                     </div>
                                     <div class="student-meta">
+                                        ${student.studentCode ? `<span class="student-code">${student.studentCode}</span>` : ''}
                                         <span class="student-level">${t('coach.level') || 'Level'} ${student.currentLevel || 1}</span>
                                         <span class="status-dot ${statusClass}"></span>
                                     </div>

@@ -292,6 +292,23 @@ body {
     line-height: 1.2;
 }
 
+.student-code-badge {
+    display: inline-block;
+    margin-bottom: 0.5rem;
+    padding: 0.125rem 0.625rem;
+    border-radius: 9999px;
+    background: #f1f5f9;
+    color: #475569;
+    font-size: 0.875rem;
+    font-weight: 600;
+    letter-spacing: 0.02em;
+}
+
+.student-code-value {
+    font-variant-numeric: tabular-nums;
+    user-select: all;
+}
+
 .student-status {
     display: inline-flex;
     align-items: center;
