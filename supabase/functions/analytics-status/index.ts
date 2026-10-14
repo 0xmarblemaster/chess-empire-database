@@ -1,5 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts"
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
+import { resolveStudentParam, studentCodeLookup } from '../students-api/students-logic.mjs'
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -42,10 +43,13 @@ serve(async (req) => {
     const action = p('action') || 'history'
     const limit = parseInt(p('limit') || '100')
     const offset = parseInt(p('offset') || '0')
+    // ?student_code=CE-00452 is accepted wherever ?student_id is.
+    const ref = await resolveStudentParam(studentCodeLookup(supabase), { student_id: p('student_id'), student_code: p('student_code') })
+    if (ref.error) return json({ success: false, error: ref.error }, ref.status)
 
     if (action === 'history') {
-      let query = supabase.from('student_status_history').select('*, students(first_name, last_name)', { count: 'exact' })
-      if (p('student_id')) query = query.eq('student_id', p('student_id'))
+      let query = supabase.from('student_status_history').select('*, students(student_code, first_name, last_name)', { count: 'exact' })
+      if (ref.id) query = query.eq('student_id', ref.id)
       if (p('old_status')) query = query.eq('old_status', p('old_status'))
       if (p('new_status')) query = query.eq('new_status', p('new_status'))
       if (p('from')) query = query.gte('changed_at', p('from'))
@@ -68,8 +72,8 @@ serve(async (req) => {
     }
 
     if (action === 'freezes') {
-      const studentId = p('student_id')
-      if (!studentId) return json({ success: false, error: 'student_id required' }, 400)
+      const studentId = ref.id
+      if (!studentId) return json({ success: false, error: 'student_id or student_code required' }, 400)
       const { data, error } = await supabase.from('student_status_history')
         .select('*')
         .eq('student_id', studentId)

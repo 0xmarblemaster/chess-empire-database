@@ -1,5 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts"
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
+import { resolveStudentParam, studentCodeLookup } from '../students-api/students-logic.mjs'
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -36,9 +37,11 @@ serve(async (req) => {
     const url = new URL(req.url)
     const p = (k: string) => url.searchParams.get(k)
     const action = p('action') || 'profile'
-    const studentId = p('student_id')
-
-    if (!studentId) return json({ success: false, error: 'student_id required' }, 400)
+    // ?student_code=CE-00452 is accepted wherever ?student_id is.
+    const ref = await resolveStudentParam(studentCodeLookup(supabase), { student_id: p('student_id'), student_code: p('student_code') })
+    if (ref.error) return json({ success: false, error: ref.error }, ref.status)
+    const studentId: string = ref.id
+    if (!studentId) return json({ success: false, error: 'student_id or student_code required' }, 400)
 
     if (action === 'profile') {
       const [studentRes, ratingsRes, battlesRes, survivalRes, statusRes] = await Promise.all([
@@ -115,7 +118,7 @@ serve(async (req) => {
 
     if (action === 'ranking') {
       const { data: student, error: e1 } = await supabase
-        .from('students').select('id, branch_id, status').eq('id', studentId).maybeSingle()
+        .from('students').select('id, student_code, branch_id, status').eq('id', studentId).maybeSingle()
       if (e1) throw e1
       if (!student) return json({ success: false, error: 'Student not found' }, 404)
 
@@ -158,6 +161,7 @@ serve(async (req) => {
         success: true,
         data: {
           student_id: student.id,
+          student_code: student.student_code,
           rating: myRating,
           branch_rank: branchRank,
           branch_size: branchWithRating.length,
@@ -170,7 +174,7 @@ serve(async (req) => {
     if (action === 'progress_ranking') {
       const { data: students, error } = await supabase
         .from('students')
-        .select('id, branch_id, current_level, current_lesson, last_name, first_name')
+        .select('id, student_code, branch_id, current_level, current_lesson, last_name, first_name')
         .eq('status', 'active')
       if (error) throw error
 
@@ -185,10 +189,14 @@ serve(async (req) => {
 
       const idx = list.findIndex(s => s.id === studentId)
       if (idx === -1) {
+        const { data: me, error: meErr } = await supabase
+          .from('students').select('student_code').eq('id', studentId).maybeSingle()
+        if (meErr) throw meErr
         return json({
           success: true,
           data: {
             student_id: studentId,
+            student_code: me ? me.student_code : null,
             school_rank: null,
             school_size: list.length,
             branch_rank: null,
@@ -204,6 +212,7 @@ serve(async (req) => {
         success: true,
         data: {
           student_id: studentId,
+          student_code: list[idx].student_code,
           school_rank: idx + 1,
           school_size: list.length,
           branch_rank: branchIdx + 1,

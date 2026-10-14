@@ -9,6 +9,7 @@
 
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts"
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
+import { parseStudentCode, parseStudentRef, resolveStudentRef, studentCodeLookup } from '../students-api/students-logic.mjs'
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -26,7 +27,7 @@ const REASONS = [
   'unauthorized', 'not_found', 'closed', 'full',
   'duplicate', 'ineligible', 'invalid_input', 'server_error',
   'no_razryad', 'guests_admin_only', 'level_too_low', 'razryad_too_high',
-  'weekly_limit',
+  'weekly_limit', 'student_id_code_mismatch',
 ] as const
 type Reason = typeof REASONS[number]
 
@@ -152,6 +153,7 @@ const OPENAPI_SPEC = {
         type: 'object',
         properties: {
           id: { type: 'string', format: 'uuid' },
+          student_code: { type: 'string', example: 'CE-00452', description: 'Permanent human-readable Student ID' },
           name: { type: 'string' },
           branch: { type: 'string', nullable: true },
           current_rating: { type: 'integer', nullable: true },
@@ -161,6 +163,7 @@ const OPENAPI_SPEC = {
         type: 'object',
         properties: {
           student_id: { type: 'string', format: 'uuid' },
+          student_code: { type: 'string', example: 'CE-00452', description: 'Alternative to student_id; both given must name the same student' },
           player_name: { type: 'string' },
           external_contact: { type: 'string' },
         },
@@ -241,7 +244,7 @@ const OPENAPI_SPEC = {
     },
     '/tournaments/{id}/register': {
       post: {
-        summary: 'Register a player. Exactly one of student_id / player_name.',
+        summary: 'Register a player. Exactly one of a student (student_id and/or student_code) / player_name.',
         security: [{ ApiKeyAuth: [] }],
         parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'string', format: 'uuid' } }],
         requestBody: { required: true, content: { 'application/json': { schema: { $ref: '#/components/schemas/RegisterRequest' } } } },
@@ -267,7 +270,7 @@ const OPENAPI_SPEC = {
     },
     '/students/search': {
       get: {
-        summary: 'Autocomplete search across active+frozen students',
+        summary: 'Autocomplete search across active+frozen students (by name or Student ID, e.g. CE-00452 / 00452)',
         parameters: [
           { name: 'q',     in: 'query', required: true, schema: { type: 'string', minLength: 2 } },
           { name: 'limit', in: 'query', schema: { type: 'integer', default: 8, maximum: 20 } },
@@ -284,7 +287,7 @@ const OPENAPI_SPEC = {
       get: {
         summary: "List a student's tournament registrations (key-gated — links registrations to student identity)",
         security: [{ ApiKeyAuth: [] }],
-        parameters: [{ name: 'student_id', in: 'path', required: true, schema: { type: 'string', format: 'uuid' } }],
+        parameters: [{ name: 'student_id', in: 'path', required: true, schema: { type: 'string' }, description: 'Student UUID or Student ID (CE-00452)' }],
         responses: {
           '200': { description: 'OK', content: { 'application/json': { schema: {
             type: 'object',
@@ -452,9 +455,9 @@ async function searchStudents(ctx: Ctx, url: URL): Promise<Response> {
 
   const { data, error } = await ctx.supabase
     .from('students')
-    .select('id, first_name, last_name, branch:branches(name), student_current_ratings(rating)')
+    .select('id, student_code, first_name, last_name, branch:branches(name), student_current_ratings(rating)')
     .in('status', ['active', 'frozen'])
-    .or(`first_name.ilike.${pattern},last_name.ilike.${pattern}`)
+    .or(`first_name.ilike.${pattern},last_name.ilike.${pattern},student_code.ilike.${pattern}`)
     .order('last_name', { ascending: true })
     .limit(limit)
   if (error) throw error
@@ -463,6 +466,7 @@ async function searchStudents(ctx: Ctx, url: URL): Promise<Response> {
     const ratingRow = Array.isArray(s.student_current_ratings) ? s.student_current_ratings[0] : null
     return {
       id: s.id,
+      student_code: s.student_code,
       name: `${s.first_name || ''} ${s.last_name || ''}`.trim(),
       branch: s.branch ? s.branch.name : null,
       current_rating: ratingRow && Number.isFinite(Number(ratingRow.rating)) ? Number(ratingRow.rating) : null,
@@ -475,9 +479,16 @@ async function searchStudents(ctx: Ctx, url: URL): Promise<Response> {
 // Key-gated: links registrations to a student identity, so it must NOT be
 // publicly readable. Returns only that student's rows (never any other
 // student's data), so no student_id leaks into a public response.
-async function getStudentRegistrations(ctx: Ctx, studentId: string): Promise<Response> {
+async function getStudentRegistrations(ctx: Ctx, idOrCode: string): Promise<Response> {
   if (!authorized(ctx.req)) return err('unauthorized', 401)
-  if (!isUuid(studentId)) return err('invalid_input', 400)
+  let studentId = idOrCode
+  const code = parseStudentCode(idOrCode)
+  if (code) {
+    studentId = await studentCodeLookup(ctx.supabase).findIdByCode(code)
+    if (!studentId) return err('not_found', 404)
+  } else if (!isUuid(studentId)) {
+    return err('invalid_input', 400)
+  }
 
   const { data, error } = await ctx.supabase
     .from('tournament_registrations')
@@ -507,15 +518,22 @@ async function registerPlayer(ctx: Ctx, tournamentId: string): Promise<Response>
     return err('invalid_input', 400)
   }
 
-  const studentId = typeof body.student_id === 'string' ? body.student_id : null
   const playerName = typeof body.player_name === 'string' ? body.player_name.trim() : null
   const externalContact = typeof body.external_contact === 'string' ? body.external_contact : null
 
-  // EXACTLY ONE of student_id / player_name. Both missing OR both set are rejected.
-  const hasStudent = !!studentId && studentId.length > 0
+  // EXACTLY ONE of a student (student_id and/or student_code) / player_name.
+  // Both missing OR both set are rejected.
+  const ref = parseStudentRef(body, { required: false })
+  if (!ref.value) return err('invalid_input', 400)
+  const hasStudent = !!(ref.value.student_id || ref.value.student_code)
   const hasName = !!playerName && playerName.length > 0
   if (hasStudent === hasName) return err('invalid_input', 400)
-  if (hasStudent && !isUuid(studentId)) return err('invalid_input', 400)
+  let studentId: string | null = null
+  if (hasStudent) {
+    const r = await resolveStudentRef(studentCodeLookup(ctx.supabase), ref.value)
+    if (r.error) return json(r.error.body, r.error.status)
+    studentId = r.id
+  }
 
   const source = readSource(ctx.req)
 

@@ -110,6 +110,31 @@ export async function resolveStudentRef(db, ref) {
   return { id };
 }
 
+// resolveStudentRef adapter over a supabase-js client (students-api, the
+// analytics-* functions and tournaments-api share it).
+export function studentCodeLookup(supabase) {
+  return {
+    async findIdByCode(code) {
+      const { data, error } = await supabase
+        .from('students').select('id').eq('student_code', code).maybeSingle();
+      if (error) throw error;
+      return data ? data.id : null;
+    },
+  };
+}
+
+// Read-only analytics filters: map ?student_id / ?student_code to a UUID.
+// Returns { id } (null when neither is given) or { status, error } in the
+// analytics `{success:false, error}` message style.
+export async function resolveStudentParam(db, params) {
+  const ref = parseStudentRef(params, { required: false });
+  if (!ref.value) return { status: 400, error: `Invalid parameter: ${ref.field}` };
+  if (!ref.value.student_id && !ref.value.student_code) return { id: null };
+  const r = await resolveStudentRef(db, ref.value);
+  if (r.error) return { status: r.error.status, error: r.error.status === 404 ? 'Student not found' : r.error.body.reason };
+  return { id: r.id };
+}
+
 export const LIST_DEFAULT_LIMIT = 100;
 export const LIST_MAX_LIMIT = 500;
 

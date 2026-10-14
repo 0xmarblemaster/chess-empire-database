@@ -36,6 +36,7 @@ import {
   parseStudentCode,
   parseStudentRef,
   resolveStudentRef,
+  studentCodeLookup,
   parseListParams,
   LIST_MAX_LIMIT,
   STUDENT_STATUSES,
@@ -128,16 +129,7 @@ function shape(row: any) {
 interface Ctx { supabase: any; req: Request }
 
 // Adapter for resolveStudentRef(): student_code → UUID.
-function codeLookup(ctx: Ctx) {
-  return {
-    async findIdByCode(code: string) {
-      const { data, error } = await ctx.supabase
-        .from('students').select('id').eq('student_code', code).maybeSingle()
-      if (error) throw error
-      return data ? data.id : null
-    },
-  }
-}
+const codeLookup = (ctx: Ctx) => studentCodeLookup(ctx.supabase)
 
 // Resolve student_id / student_code from a query into a UUID. Returns { id }
 // or a ready error Response.

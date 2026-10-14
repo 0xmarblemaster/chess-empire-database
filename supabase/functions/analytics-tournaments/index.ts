@@ -1,5 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts"
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
+import { resolveStudentParam, studentCodeLookup } from '../students-api/students-logic.mjs'
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -218,7 +219,7 @@ serve(async (req) => {
 
       const { data: participants, error: pErr } = await supabase
         .from('tournament_participants')
-        .select('id, place, rating_before, rating_after, rating_delta, raw_name, student:students(id, first_name, last_name, branch_id)')
+        .select('id, place, rating_before, rating_after, rating_delta, raw_name, student:students(id, student_code, first_name, last_name, branch_id)')
         .eq('tournament_id', tournamentId)
         .order('place', { ascending: true })
       if (pErr) throw pErr
@@ -235,6 +236,7 @@ serve(async (req) => {
             rating_delta: p.rating_delta,
             raw_name: p.raw_name,
             student_id: p.student?.id || null,
+            student_code: p.student?.student_code || null,
             student_name: p.student ? `${p.student.first_name} ${p.student.last_name}` : p.raw_name,
             branch_id: p.student?.branch_id || null,
           })),
@@ -243,8 +245,10 @@ serve(async (req) => {
     }
 
     if (action === 'student_history') {
-      const studentId = p('student_id')
-      if (!studentId) return json({ success: false, error: 'student_id required' }, 400)
+      const ref = await resolveStudentParam(studentCodeLookup(supabase), { student_id: p('student_id'), student_code: p('student_code') })
+      if (ref.error) return json({ success: false, error: ref.error }, ref.status)
+      const studentId = ref.id
+      if (!studentId) return json({ success: false, error: 'student_id or student_code required' }, 400)
 
       const { data, error } = await supabase
         .from('tournament_participants')
@@ -294,20 +298,20 @@ serve(async (req) => {
 
       const { data, error } = await supabase
         .from('tournament_participants')
-        .select('student_id, place, rating_delta, tournament:tournaments!inner(id, league, tournament_date), student:students!inner(id, first_name, last_name, branch_id, status)')
+        .select('student_id, place, rating_delta, tournament:tournaments!inner(id, league, tournament_date), student:students!inner(id, student_code, first_name, last_name, branch_id, status)')
         .eq('student.branch_id', branchId)
         .eq('student.status', 'active')
         .eq('tournament.league', league)
         .gte('tournament.tournament_date', since)
       if (error) throw error
 
-      type LbSlot = { studentId: string; firstName: string; lastName: string; places: number[]; deltas: number[] }
+      type LbSlot = { studentId: string; studentCode: string; firstName: string; lastName: string; places: number[]; deltas: number[] }
       const byStudent = new Map<string, LbSlot>()
       for (const row of data || []) {
         const r: any = row
         if (!r.student || !r.tournament) continue
         const id = r.student.id
-        const slot: LbSlot = byStudent.get(id) || { studentId: id, firstName: r.student.first_name, lastName: r.student.last_name, places: [], deltas: [] }
+        const slot: LbSlot = byStudent.get(id) || { studentId: id, studentCode: r.student.student_code, firstName: r.student.first_name, lastName: r.student.last_name, places: [], deltas: [] }
         if (Number.isFinite(r.place)) slot.places.push(r.place)
         if (Number.isFinite(r.rating_delta)) slot.deltas.push(r.rating_delta)
         byStudent.set(id, slot)
@@ -317,6 +321,7 @@ serve(async (req) => {
         .filter(s => s.places.length > 0)
         .map(s => ({
           student_id: s.studentId,
+          student_code: s.studentCode,
           first_name: s.firstName,
           last_name: s.lastName,
           tournaments_played: s.places.length,
@@ -601,7 +606,7 @@ serve(async (req) => {
       if (!coach) return json({ success: false, error: 'Coach not found' }, 404)
 
       const { data: students, error: stErr } = await supabase
-        .from('students').select('id, first_name, last_name, status, razryad, branch_id, current_level')
+        .from('students').select('id, student_code, first_name, last_name, status, razryad, branch_id, current_level')
         .eq('coach_id', coachId).eq('status', 'active').gte('current_level', 2)
       if (stErr) throw stErr
       const studentIds = (students || []).map((s: any) => s.id)
@@ -672,6 +677,7 @@ serve(async (req) => {
       for (const s of students || []) {
         byStudent.set((s as any).id, {
           student_id: (s as any).id,
+          student_code: (s as any).student_code,
           student_name: `${(s as any).first_name} ${(s as any).last_name}`.trim(),
           razryad: (s as any).razryad,
           tournaments_played: 0,
@@ -960,7 +966,7 @@ serve(async (req) => {
 
       let studentsQuery = supabase
         .from('students')
-        .select('id, first_name, last_name, branch_id, coach_id, razryad, status, current_level')
+        .select('id, student_code, first_name, last_name, branch_id, coach_id, razryad, status, current_level')
         .eq('status', 'active').gte('current_level', 2)
       if (scopedCoachIds !== null) {
         if (scopedCoachIds.length === 0) return emptyResp()
@@ -1091,6 +1097,7 @@ serve(async (req) => {
           const tournamentKind = kinds.size === 1 ? [...kinds][0] : null
           return {
             student_id: slot.student_id,
+            student_code: s.student_code || null,
             first_name: s.first_name || null,
             last_name: s.last_name || null,
             branch_id: s.branch_id || null,
@@ -1135,6 +1142,7 @@ serve(async (req) => {
             occurred_at: u ? u.tournament_date : null,
             placement: Number(r.rank),
             student_id: r.student_id,
+            student_code: s.student_code || null,
             first_name: s.first_name || null,
             last_name: s.last_name || null,
             coach_name: coachName(s.coach_id || null),
@@ -1200,6 +1208,7 @@ serve(async (req) => {
           ) || hist[hist.length - 1] || null
           rows.push({
             student_id: r.student_id,
+            student_code: s.student_code || null,
             first_name: s.first_name || null,
             last_name: s.last_name || null,
             coach_name: coachName(s.coach_id || null),
@@ -1249,6 +1258,7 @@ serve(async (req) => {
           const s = studentById.get(e.student_id) || {}
           return {
             student_id: e.student_id,
+            student_code: s.student_code || null,
             first_name: s.first_name || null,
             last_name: s.last_name || null,
             coach_name: coachName(s.coach_id || null),

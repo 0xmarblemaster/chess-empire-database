@@ -1,6 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts"
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
-import { parseLeaderboardParams } from '../students-api/students-logic.mjs'
+import { parseLeaderboardParams, resolveStudentParam, studentCodeLookup } from '../students-api/students-logic.mjs'
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -58,7 +58,7 @@ serve(async (req) => {
       if (sorted.length === 0) return json({ success: true, data: [], count: 0 })
 
       // Fetch ALL students (simpler than .in() with many UUIDs which hits URL limits)
-      let studentsQuery = supabase.from('students').select('id, first_name, last_name, branch_id, status').limit(1000)
+      let studentsQuery = supabase.from('students').select('id, student_code, first_name, last_name, branch_id, status').limit(1000)
       if (p('branch_id')) studentsQuery = studentsQuery.eq('branch_id', p('branch_id'))
       const { data: students, error: sErr } = await studentsQuery
       if (sErr) throw sErr
@@ -68,7 +68,7 @@ serve(async (req) => {
         .filter(r => studentMap.has(r.student_id))
         .map((r, i) => {
           const s = studentMap.get(r.student_id)!
-          return { rank: i + 1, student_id: r.student_id, rating: r.rating, rating_date: r.rating_date, first_name: s.first_name, last_name: s.last_name, branch_id: s.branch_id, status: s.status }
+          return { rank: i + 1, student_id: r.student_id, student_code: s.student_code, rating: r.rating, rating_date: r.rating_date, first_name: s.first_name, last_name: s.last_name, branch_id: s.branch_id, status: s.status }
         })
       return json({ success: true, data: leaderboard, count: leaderboard.length })
     }
@@ -78,10 +78,15 @@ serve(async (req) => {
       // best per active student, competition rank, Almaty windows, no row cap.
       const parsed = parseLeaderboardParams({
         scope: p('scope'), period: p('period'), branch_id: p('branch_id'),
-        student_id: p('student_id'), limit: p('limit'),
+        student_id: p('student_id'), student_code: p('student_code'), limit: p('limit'),
       }, 20)
       if (!parsed.value) return json({ success: false, error: `Invalid parameter: ${parsed.field}` }, 400)
       const q = parsed.value
+      if (q.student_code) {
+        const ref = await resolveStudentParam(studentCodeLookup(supabase), q)
+        if (ref.error) return json({ success: false, error: ref.error }, ref.status)
+        q.student_id = ref.id
+      }
       const { data, error } = await supabase.rpc('get_puzzle_rush_leaderboard', {
         p_scope: q.scope, p_period: q.period, p_branch_id: q.branch_id,
         p_student_id: q.student_id, p_limit: q.limit,
@@ -90,6 +95,7 @@ serve(async (req) => {
       const leaderboard = (data || []).map((r: any) => ({
         rank: Number(r.rank),
         student_id: r.student_id,
+        student_code: r.student_code,
         score: r.best_score,
         mode: 'puzzle_rush',
         student: { first_name: r.first_name, last_name: r.last_name, branch_id: r.branch_id },
@@ -103,7 +109,7 @@ serve(async (req) => {
     }
 
     if (action === 'bot_battles') {
-      const { data, error } = await supabase.from('bot_battles').select('student_id, bot_name, bot_rating, students(first_name, last_name, branch_id)')
+      const { data, error } = await supabase.from('bot_battles').select('student_id, bot_name, bot_rating, students(student_code, first_name, last_name, branch_id)')
       if (error) throw error
 
       // Count battles and max bot rating per student
@@ -118,7 +124,7 @@ serve(async (req) => {
       const leaderboard = [...stats.entries()]
         .sort((a, b) => b[1].count - a[1].count)
         .slice(0, limit)
-        .map(([id, s], i) => ({ rank: i + 1, student_id: parseInt(id), battles: s.count, max_bot_rating: s.maxRating, student: s.student }))
+        .map(([id, s], i) => ({ rank: i + 1, student_id: id, student_code: s.student?.student_code ?? null, battles: s.count, max_bot_rating: s.maxRating, student: s.student }))
 
       return json({ success: true, data: leaderboard, count: leaderboard.length })
     }

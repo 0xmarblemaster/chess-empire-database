@@ -1,5 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts"
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
+import { resolveStudentParam, studentCodeLookup } from '../students-api/students-logic.mjs'
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -39,11 +40,26 @@ serve(async (req) => {
     const limit = parseInt(p('limit') || '100')
     const offset = parseInt(p('offset') || '0')
 
+    // student_id → { student_code, name } for per-student aggregates.
+    // deno-lint-ignore no-explicit-any
+    const studentInfo = async (ids: string[]): Promise<Map<string, any>> => {
+      const map = new Map()
+      for (let i = 0; i < ids.length; i += 100) {
+        const { data, error } = await supabase.from('students')
+          .select('id, student_code, first_name, last_name').in('id', ids.slice(i, i + 100))
+        if (error) throw error
+        for (const s of data || []) map.set(s.id, s)
+      }
+      return map
+    }
+
     if (action === 'list') {
-      let query = supabase.from('attendance').select('*, students(first_name, last_name)', { count: 'exact' })
+      const ref = await resolveStudentParam(studentCodeLookup(supabase), { student_id: p('student_id'), student_code: p('student_code') })
+      if (ref.error) return json({ success: false, error: ref.error }, ref.status)
+      let query = supabase.from('attendance').select('*, students(student_code, first_name, last_name)', { count: 'exact' })
       if (p('branch_id')) query = query.eq('branch_id', p('branch_id'))
       if (p('schedule_type')) query = query.eq('schedule_type', p('schedule_type'))
-      if (p('student_id')) query = query.eq('student_id', p('student_id'))
+      if (ref.id) query = query.eq('student_id', ref.id)
       if (p('coach_id')) query = query.eq('coach_id', p('coach_id'))
       if (p('status')) query = query.eq('status', p('status'))
       if (p('from')) query = query.gte('attendance_date', p('from'))
@@ -72,8 +88,10 @@ serve(async (req) => {
         if (r.status === 'present') studentStats[r.student_id].present++
       }
 
+      const info = await studentInfo(Object.keys(studentStats))
       const rates = Object.entries(studentStats).map(([id, s]) => ({
-        student_id: parseInt(id),
+        student_id: id,
+        student_code: info.get(id)?.student_code ?? null,
         total: s.total,
         present: s.present,
         rate: Math.round(s.present / s.total * 1000) / 10,
@@ -138,19 +156,18 @@ serve(async (req) => {
       }
 
       const alerts = Object.entries(stats)
-        .map(([id, s]) => ({ student_id: parseInt(id), total: s.total, present: s.present, rate: Math.round(s.present / s.total * 1000) / 10 }))
+        .map(([id, s]) => ({ student_id: id, total: s.total, present: s.present, rate: Math.round(s.present / s.total * 1000) / 10 }))
         .filter(s => s.rate < threshold)
         .sort((a, b) => a.rate - b.rate)
 
-      // Get student names
-      const studentIds = alerts.map(a => a.student_id)
-      if (studentIds.length > 0) {
-        const { data: students } = await supabase.from('students').select('id, first_name, last_name').in('id', studentIds)
-        const nameMap = new Map((students || []).map(s => [s.id, `${s.first_name} ${s.last_name}`]))
-        for (const a of alerts) (a as any).student_name = nameMap.get(a.student_id) || 'Unknown'
-      }
+      // Get student codes + names
+      const info = await studentInfo(alerts.map(a => a.student_id))
+      const rows = alerts.map((a) => {
+        const s = info.get(a.student_id)
+        return { ...a, student_code: s ? s.student_code : null, student_name: s ? `${s.first_name} ${s.last_name}` : 'Unknown' }
+      })
 
-      return json({ success: true, data: alerts, count: alerts.length, meta: { threshold } })
+      return json({ success: true, data: rows, count: rows.length, meta: { threshold } })
     }
 
     if (action === 'calendar') {
@@ -161,7 +178,7 @@ serve(async (req) => {
 
       const from = `${year}-${month.padStart(2, '0')}-01`
       const to = `${year}-${month.padStart(2, '0')}-31`
-      let query = supabase.from('attendance').select('attendance_date, student_id, status, schedule_type, time_slot')
+      let query = supabase.from('attendance').select('attendance_date, student_id, students(student_code), status, schedule_type, time_slot')
         .eq('branch_id', branchId).gte('attendance_date', from).lte('attendance_date', to)
       if (p('schedule_type')) query = query.eq('schedule_type', p('schedule_type'))
       const { data, error } = await query.order('attendance_date', { ascending: true })
