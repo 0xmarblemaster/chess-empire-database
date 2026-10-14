@@ -53,7 +53,7 @@ assert(/if \(!authorized\(req\)\) \{[\s\S]*err\('unauthorized', 401\)/.test(INDE
   'unauthorized requests get 401');
 
 // Routing on ?action=
-['create', 'freeze', 'activate', 'link_amocrm', 'find', 'branches'].forEach((a) => {
+['create', 'freeze', 'activate', 'link_amocrm', 'update_contact', 'find', 'branches'].forEach((a) => {
   assert(new RegExp(`action === '${a}'`).test(INDEX), `routes action=${a}`);
 });
 assert(/method === 'GET' && !action[\s\S]*OPENAPI_SPEC/.test(INDEX),
@@ -162,6 +162,30 @@ assert(/changed: true/.test(oaBlock) && /changed: false/.test(oaBlock), 'OpenAPI
   assert(oaBlock.includes(r), `OpenAPI link_amocrm documents reason ${r}`));
 assert(/name: 'amocrm_customer_id', in: 'query'/.test(INDEX), 'OpenAPI find documents amocrm_customer_id query param');
 assert(/link_amocrm/.test(INDEX.slice(0, 1200)), 'header comment lists link_amocrm');
+
+// update_contact
+assert(/method === 'POST' && action === 'update_contact'[\s\S]*updateStudentContact\(ctx\)/.test(INDEX),
+  'routes POST action=update_contact');
+const ucStart = INDEX_CODE.indexOf('async function updateStudentContact(');
+const ucBlock = INDEX_CODE.slice(ucStart, INDEX_CODE.indexOf('async function linkAmocrmId(', ucStart));
+assert(ucStart >= 0 && ucBlock.length > 0, 'updateStudentContact handler defined');
+assert(/validateUpdateContact\(body\)[\s\S]*err\('invalid_input', 400, \{ field: v\.field \}\)/.test(ucBlock),
+  'update_contact validates input → 400 invalid_input with field');
+assert(/updateContact\(\{/.test(ucBlock), 'update_contact delegates the flow to the shared updateContact()');
+assert(/\.eq\('id', id\)\.maybeSingle\(\)/.test(ucBlock), 'update_contact looks the student up strictly by id');
+assert(/error\.code === '23505'[\s\S]*uniqueViolation: true/.test(ucBlock), 'update_contact maps 23505 to a conflict');
+assert((ucBlock.match(/\.update\(/g) || []).length === 1, 'update_contact issues exactly one UPDATE');
+assert(/patch: \{ parent_phone\?: string; amocrm_customer_id\?: number \}/.test(ucBlock),
+  'update_contact UPDATE patch typed to parent_phone / amocrm_customer_id only');
+assert(!/student_status_history|applyStatusChange|pokeChesster|status:|branch_id|coach|\.insert\(|\.delete\(|find_students_by_phone_digits/.test(ucBlock),
+  'update_contact never touches status / branch / coach / status history / Chesster, never inserts or deletes');
+const ucOa = INDEX.slice(INDEX.indexOf("'/?action=update_contact'"), INDEX.indexOf("'/?action=find'"));
+assert(INDEX.indexOf("'/?action=update_contact'") > INDEX.indexOf('const OPENAPI_SPEC'), 'OpenAPI documents /?action=update_contact');
+assert(/required: \['student_id'\]/.test(ucOa) && /phone:/.test(ucOa) && /amocrm_customer_id:/.test(ucOa), 'OpenAPI update_contact request schema');
+assert(/changed: true/.test(ucOa) && /changed: false/.test(ucOa) && /updated_fields/.test(ucOa) && /previous/.test(ucOa),
+  'OpenAPI update_contact 200 examples (changed true/false, updated_fields, previous)');
+['400', '404', '409'].forEach((c) => assert(new RegExp(`'${c}':`).test(ucOa), `OpenAPI update_contact documents ${c}`));
+assert(/update_contact/.test(INDEX.slice(0, 1400)), 'header comment lists update_contact');
 
 // ---------------------------------------------------------------------------
 console.log('\n=== (b) migration 091\n');

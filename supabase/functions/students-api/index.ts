@@ -2,12 +2,13 @@
 //
 // Unlike the read-only analytics-* functions, this one WRITES: create a
 // student, freeze / activate (unfreeze) a student, link an amoCRM customer id
-// to an existing student, find by phone / amoCRM id, list branches. Every write requires an `x-api-key` header checked against the
+// to an existing student, correct (overwrite) a student's phone / amoCRM id,
+// find by phone / amoCRM id, list branches. Every write requires an `x-api-key` header checked against the
 // CHESS_EMPIRE_WRITE_KEY env var (a NEW key, distinct from the tournament-only
 // CHESS_EMPIRE_API_KEY — the two surfaces never share a key).
 //
 // Routing is on a `?action=` query param (create / freeze / activate /
-// link_amocrm / find / branches / survival-score / survival-best / survival-leaderboard); GET with no action returns the OpenAPI self-doc. Modelled on
+// link_amocrm / update_contact / find / branches / survival-score / survival-best / survival-leaderboard); GET with no action returns the OpenAPI self-doc. Modelled on
 // tournaments-api/index.ts (Deno serve + CORS + json/ok/err helpers).
 //
 // Product rules enforced here:
@@ -30,6 +31,8 @@ import {
   parseAmocrmId,
   validateLinkAmocrm,
   linkAmocrm,
+  validateUpdateContact,
+  updateContact,
   validateSurvivalPush,
   parseLeaderboardParams,
   almatyWindowStart,
@@ -340,6 +343,50 @@ async function changeStatus(ctx: Ctx, target: 'active' | 'frozen'): Promise<Resp
   })
 }
 
+// Overwrite parent_phone and/or amocrm_customer_id on an existing student
+// found strictly by student_id (the explicit correction path — link_amocrm
+// never overwrites). Touches ONLY those two columns: no status / branch / coach
+// change, no status_history row, no Chesster poke. Flow + outcome mapping live
+// in updateContact() (students-logic.mjs); this supplies the DB adapter.
+async function updateStudentContact(ctx: Ctx): Promise<Response> {
+  let body: Record<string, unknown> = {}
+  try {
+    const text = await ctx.req.text()
+    body = text ? JSON.parse(text) : {}
+  } catch {
+    return err('invalid_input', 400)
+  }
+
+  const v = validateUpdateContact(body)
+  if (!v.value) return err('invalid_input', 400, { field: v.field })
+
+  const r = await updateContact({
+    async getStudent(id: string) {
+      const { data, error } = await ctx.supabase
+        .from('students').select(STUDENT_SELECT).eq('id', id).maybeSingle()
+      if (error) throw error
+      return data ? shape(data) : null
+    },
+    async findOwnerId(amo: number) {
+      const { data, error } = await ctx.supabase
+        .from('students').select('id').eq('amocrm_customer_id', amo).limit(1)
+      if (error) throw error
+      return data && data[0] ? data[0].id : null
+    },
+    async update(id: string, patch: { parent_phone?: string; amocrm_customer_id?: number }) {
+      const { data, error } = await ctx.supabase
+        .from('students').update(patch).eq('id', id)
+        .select(STUDENT_SELECT)
+      if (error) {
+        if (error.code === '23505') return { uniqueViolation: true }
+        throw error
+      }
+      return { row: data && data[0] ? shape(data[0]) : null }
+    },
+  }, v.value)
+  return json(r.body, r.status)
+}
+
 // Write amocrm_customer_id onto an existing student found strictly by
 // student_id. Touches ONLY that column: no status / branch / coach change, no
 // status_history row, no Chesster poke. Flow + outcome mapping live in
@@ -514,7 +561,7 @@ const OPENAPI_SPEC = {
   info: {
     title: 'Chess Empire — Students (write) API',
     version: '1.0.0',
-    description: 'Write API for external integrations (e.g. AmoCRM, Chesster): create / freeze / activate students, link an amoCRM customer id to an existing student, find by phone or amoCRM id, list branches, push Puzzle Rush survival scores and read Puzzle Rush rankings. All actions require an x-api-key header (CHESS_EMPIRE_WRITE_KEY).',
+    description: 'Write API for external integrations (e.g. AmoCRM, Chesster): create / freeze / activate students, link an amoCRM customer id to an existing student, correct the phone / amoCRM id, find by phone or amoCRM id, list branches, push Puzzle Rush survival scores and read Puzzle Rush rankings. All actions require an x-api-key header (CHESS_EMPIRE_WRITE_KEY).',
   },
   servers: [
     { url: 'https://papgcizhfkngubwofjuo.supabase.co/functions/v1/students-api', description: 'Supabase edge function direct' },
@@ -610,6 +657,34 @@ const OPENAPI_SPEC = {
               id_on_other_student: { value: { ok: false, reason: 'amocrm_customer_id_conflict', conflict_student_id: '11111111-1111-4111-8111-111111111111' } },
             } } },
           },
+        },
+      },
+    },
+    '/?action=update_contact': {
+      post: {
+        summary: 'Correct (overwrite) parent phone and/or amoCRM customer id on an EXISTING student (by student_id only). Changes only students.parent_phone / students.amocrm_customer_id — never status, branch, coach or status history. Clearing a value (null) is not supported. Phone is not unique (siblings share a parent phone); amocrm_customer_id is.',
+        security: [{ ApiKeyAuth: [] }],
+        requestBody: { required: true, content: { 'application/json': { schema: {
+          type: 'object', required: ['student_id'],
+          description: 'At least one of phone / amocrm_customer_id is required',
+          properties: {
+            student_id: { type: 'string', format: 'uuid' },
+            phone: { type: 'string', description: 'KZ/RU phone, normalized to +7XXXXXXXXXX' },
+            amocrm_customer_id: { type: 'integer', minimum: 1, description: 'Positive integer (a numeric string is accepted)' },
+          },
+        }, example: { student_id: '00000000-0000-4000-8000-000000000000', phone: '+77011234567', amocrm_customer_id: 123456 } } } },
+        responses: {
+          '200': {
+            description: 'Updated (changed:true, with updated_fields and previous values) or every provided value already current (changed:false, no write). student uses the same shape as find.',
+            content: { 'application/json': { examples: {
+              updated: { value: { ok: true, changed: true, updated_fields: ['amocrm_customer_id'], previous: { phone: '+77011234567', amocrm_customer_id: 111 }, student: { id: '00000000-0000-4000-8000-000000000000', phone: '+77011234567', amocrm_customer_id: 123456 } } },
+              unchanged: { value: { ok: true, changed: false, student: { id: '00000000-0000-4000-8000-000000000000', phone: '+77011234567', amocrm_customer_id: 123456 } } },
+            } } },
+          },
+          '400': { description: 'invalid_input — bad UUID, phone or amoCRM id (field names it), or neither phone nor amocrm_customer_id given (field: body)', content: { 'application/json': { example: { ok: false, reason: 'invalid_input', field: 'phone' } } } },
+          '401': { description: 'Unauthorized' },
+          '404': { description: 'not_found — no student with this UUID', content: { 'application/json': { example: { ok: false, reason: 'not_found' } } } },
+          '409': { description: 'amocrm_customer_id_conflict — this id belongs to another student. Nothing is changed.', content: { 'application/json': { example: { ok: false, reason: 'amocrm_customer_id_conflict', conflict_student_id: '11111111-1111-4111-8111-111111111111' } } } },
         },
       },
     },
@@ -711,6 +786,9 @@ export async function handle(req: Request): Promise<Response> {
     }
     if (method === 'POST' && action === 'link_amocrm') {
       const r = await linkAmocrmId(ctx); status = r.status; return r
+    }
+    if (method === 'POST' && action === 'update_contact') {
+      const r = await updateStudentContact(ctx); status = r.status; return r
     }
     if (method === 'GET' && action === 'find') {
       const r = await findStudents(ctx, url); status = r.status; return r

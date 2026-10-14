@@ -126,6 +126,75 @@ export async function linkAmocrm(db, { student_id, amocrm_customer_id: amo }) {
   throw new Error('link_amocrm: conditional update matched 0 rows but column is still empty');
 }
 
+// ─── Contact update (overwrite) ─────────────────────────────────────────────
+
+// Validate an update_contact body. A field is "provided" when its key is not
+// undefined; null is NOT a clear request — it fails validation like any junk.
+// Returns { value } (only provided fields, normalized) or { field }.
+export function validateUpdateContact(body) {
+  const b = body && typeof body === 'object' ? body : {};
+  if (!isUuid(b.student_id)) return { field: 'student_id' };
+  if (b.phone === undefined && b.amocrm_customer_id === undefined) return { field: 'body' };
+  const value = { student_id: b.student_id };
+  if (b.phone !== undefined) {
+    const phone = normalizePhone(b.phone);
+    if (!phone) return { field: 'phone' };
+    value.phone = phone;
+  }
+  if (b.amocrm_customer_id !== undefined) {
+    const amo = parseAmocrmId(b.amocrm_customer_id);
+    if (amo === null) return { field: 'amocrm_customer_id' };
+    value.amocrm_customer_id = amo;
+  }
+  return { value };
+}
+
+// Update flow for POST ?action=update_contact (explicit overwrite path —
+// link_amocrm never overwrites), over an injected db adapter:
+//   db.getStudent(id)        → shaped student ({ id, phone, amocrm_customer_id, … }) | null
+//   db.findOwnerId(amo)      → id of the student holding amo | null
+//   db.update(id, patch)     → { row } (shaped, null when 0 rows) | { uniqueViolation: true }
+// The patch only ever contains parent_phone and/or amocrm_customer_id, and only
+// the provided values that differ from the current ones. Phone is not unique
+// (siblings share a parent's phone), so only the amoCRM id is conflict-checked.
+// Returns { status, body }.
+export async function updateContact(db, { student_id, phone = undefined, amocrm_customer_id: amo = undefined }) {
+  const notFound = { status: 404, body: { ok: false, reason: 'not_found' } };
+  const conflict = (ownerId) => ({
+    status: 409,
+    body: { ok: false, reason: 'amocrm_customer_id_conflict', ...(ownerId ? { conflict_student_id: ownerId } : {}) },
+  });
+
+  const current = await db.getStudent(student_id);
+  if (!current) return notFound;
+
+  const patch = {};
+  if (phone !== undefined && current.phone !== phone) patch.parent_phone = phone;
+  if (amo !== undefined && classifyLink(current.amocrm_customer_id, amo) !== 'same') patch.amocrm_customer_id = amo;
+  // Reported with the API's field names (parent_phone is exposed as `phone`).
+  const updated_fields = Object.keys(patch).map((k) => (k === 'parent_phone' ? 'phone' : k));
+  if (updated_fields.length === 0) return { status: 200, body: { ok: true, changed: false, student: current } };
+
+  if (patch.amocrm_customer_id !== undefined) {
+    const ownerId = await db.findOwnerId(amo);
+    if (ownerId && ownerId !== student_id) return conflict(ownerId);
+  }
+
+  const r = await db.update(student_id, patch);
+  if (r.uniqueViolation) return conflict(await db.findOwnerId(amo));
+  if (!r.row) return notFound;
+  return {
+    status: 200,
+    body: {
+      ok: true,
+      changed: true,
+      updated_fields,
+      previous: { phone: current.phone ?? null, amocrm_customer_id: current.amocrm_customer_id ?? null },
+      student: r.row,
+    },
+  };
+}
+
 // ─── Puzzle Rush (survival) ─────────────────────────────────────────────────
 
 // Upper bound for a pushed Puzzle Rush Survival score — anything above is

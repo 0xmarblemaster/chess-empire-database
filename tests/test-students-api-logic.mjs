@@ -8,6 +8,8 @@
  *  - splitFullName / phoneDigits helpers.
  *  - link_amocrm: input validation, outcome classification and the full link
  *    flow over an in-memory mock DB (writes only amocrm_customer_id).
+ *  - update_contact: input validation and the overwrite flow over an in-memory
+ *    mock DB (writes only parent_phone / amocrm_customer_id).
  *
  * Run: node tests/test-students-api-logic.mjs
  */
@@ -21,6 +23,8 @@ import {
   validateLinkAmocrm,
   classifyLink,
   linkAmocrm,
+  validateUpdateContact,
+  updateContact,
 } from '../supabase/functions/students-api/students-logic.mjs';
 
 let passed = 0;
@@ -242,6 +246,165 @@ const writes = (db) => db.calls.filter((c) => c[0] === 'setIfNull').length;
   const r = await linkAmocrm(db, { student_id: S1, amocrm_customer_id: 700 });
   eq(r.status, 409, 'race: different id won concurrently → 409');
   eq(db.table.get(S1).amocrm_customer_id, 701, 'race: concurrent winner value kept');
+}
+
+console.log('\n=== validateUpdateContact ==============================================\n');
+eq(validateUpdateContact({ student_id: 'nope', phone: '87011234567' }).field, 'student_id', 'bad uuid → field student_id');
+eq(validateUpdateContact(null).field, 'student_id', 'null body → field student_id');
+eq(validateUpdateContact({ student_id: S1 }).field, 'body', 'neither phone nor amo → field body');
+eq(validateUpdateContact({ student_id: S1, phone: '123' }).field, 'phone', 'bad phone → field phone');
+eq(validateUpdateContact({ student_id: S1, phone: null }).field, 'phone', 'phone null (clear) → field phone');
+eq(validateUpdateContact({ student_id: S1, amocrm_customer_id: 0 }).field, 'amocrm_customer_id', 'amo 0 → field amocrm_customer_id');
+eq(validateUpdateContact({ student_id: S1, amocrm_customer_id: null }).field, 'amocrm_customer_id', 'amo null (clear) → field amocrm_customer_id');
+eq(validateUpdateContact({ student_id: S1, phone: '+77011234567', amocrm_customer_id: 'x' }).field, 'amocrm_customer_id',
+  'valid phone + bad amo → field amocrm_customer_id');
+eq(JSON.stringify(validateUpdateContact({ student_id: S1, phone: '8 (701) 123-45-67' }).value),
+  JSON.stringify({ student_id: S1, phone: '+77011234567' }), 'phone only: normalized, amo key absent');
+eq(JSON.stringify(validateUpdateContact({ student_id: S1, amocrm_customer_id: '42' }).value),
+  JSON.stringify({ student_id: S1, amocrm_customer_id: 42 }), 'amo only: parsed, phone key absent');
+
+console.log('\n=== updateContact (mock DB) ===========================================\n');
+
+// In-memory students table holding raw columns; getStudent/update return the
+// shaped student like the edge-function adapter does.
+function contactDb(rows, { beforeUpdate } = {}) {
+  const table = new Map(rows.map((r) => [r.id, {
+    status: 'frozen', branch_id: 'b1', coach_id: 'c1', first_name: 'A', last_name: 'B',
+    parent_phone: null, amocrm_customer_id: null, ...r,
+  }]));
+  const view = (r) => ({ id: r.id, status: r.status, branch_id: r.branch_id, phone: r.parent_phone, amocrm_customer_id: r.amocrm_customer_id });
+  const calls = [];
+  return {
+    table, calls,
+    async getStudent(id) {
+      calls.push(['getStudent', id]);
+      const r = table.get(id);
+      return r ? view(r) : null;
+    },
+    async findOwnerId(amo) {
+      calls.push(['findOwnerId', amo]);
+      for (const r of table.values()) if (r.amocrm_customer_id === amo) return r.id;
+      return null;
+    },
+    async update(id, patch) {
+      calls.push(['update', id, patch]);
+      if (beforeUpdate) beforeUpdate(table);
+      if (patch.amocrm_customer_id !== undefined) {
+        for (const r of table.values()) if (r.amocrm_customer_id === patch.amocrm_customer_id && r.id !== id) return { uniqueViolation: true };
+      }
+      const r = table.get(id);
+      if (!r) return { row: null };
+      Object.assign(r, patch);
+      return { row: view(r) };
+    },
+  };
+}
+const updates = (db) => db.calls.filter((c) => c[0] === 'update');
+const ONLY_CONTACT_COLS = (db) => updates(db).every((c) => Object.keys(c[2]).every((k) => ['parent_phone', 'amocrm_customer_id'].includes(k)));
+
+{
+  const db = contactDb([{ id: S1, parent_phone: '+77010000000', amocrm_customer_id: 5 }]);
+  const r = await updateContact(db, { student_id: S1, phone: '+77011234567' });
+  eq(r.status, 200, 'phone only → 200');
+  eq(r.body.changed, true, 'phone only → changed:true');
+  eq(JSON.stringify(r.body.updated_fields), '["phone"]', 'phone only → updated_fields [phone]');
+  eq(JSON.stringify(r.body.previous), JSON.stringify({ phone: '+77010000000', amocrm_customer_id: 5 }), 'phone only → previous values');
+  eq(r.body.student.phone, '+77011234567', 'phone only → student shows new phone');
+  eq(JSON.stringify(updates(db).map((c) => c[2])), JSON.stringify([{ parent_phone: '+77011234567' }]), 'phone only → single UPDATE of parent_phone only');
+  eq(db.calls.filter((c) => c[0] === 'findOwnerId').length, 0, 'phone only → no amo conflict lookup (phone is not unique)');
+  eq(db.table.get(S1).amocrm_customer_id, 5, 'phone only → amo untouched');
+}
+
+{
+  // Sibling already has this phone — not a conflict.
+  const db = contactDb([{ id: S1, parent_phone: '+77010000000' }, { id: S2, parent_phone: '+77011234567' }]);
+  const r = await updateContact(db, { student_id: S1, phone: '+77011234567' });
+  eq(r.status, 200, 'phone shared with sibling → 200 (no uniqueness on phone)');
+}
+
+{
+  const db = contactDb([{ id: S1, parent_phone: '+77010000000', amocrm_customer_id: null }]);
+  const r = await updateContact(db, { student_id: S1, amocrm_customer_id: 321 });
+  eq(r.status, 200, 'amo only → 200');
+  eq(JSON.stringify(r.body.updated_fields), '["amocrm_customer_id"]', 'amo only → updated_fields [amocrm_customer_id]');
+  eq(JSON.stringify(updates(db).map((c) => c[2])), JSON.stringify([{ amocrm_customer_id: 321 }]), 'amo only → UPDATE of amocrm_customer_id only');
+  eq(db.table.get(S1).parent_phone, '+77010000000', 'amo only → phone untouched');
+}
+
+{
+  const db = contactDb([{ id: S1, parent_phone: '+77010000000', amocrm_customer_id: 111 }]);
+  const r = await updateContact(db, { student_id: S1, phone: '+77011234567', amocrm_customer_id: 222 });
+  eq(r.status, 200, 'both → 200');
+  eq(JSON.stringify(r.body.updated_fields), '["phone","amocrm_customer_id"]', 'both → both fields updated');
+  eq(JSON.stringify(r.body.previous), JSON.stringify({ phone: '+77010000000', amocrm_customer_id: 111 }), 'both → previous values');
+  eq(updates(db).length, 1, 'both → exactly one UPDATE');
+  const row = db.table.get(S1);
+  assert(row.parent_phone === '+77011234567' && row.amocrm_customer_id === 222, 'both → both persisted');
+  assert(row.status === 'frozen' && row.branch_id === 'b1' && row.coach_id === 'c1' && row.first_name === 'A',
+    'both → status / branch / coach / name unchanged');
+  assert(ONLY_CONTACT_COLS(db), 'only parent_phone / amocrm_customer_id ever written');
+  assert(db.calls.every((c) => ['getStudent', 'findOwnerId', 'update'].includes(c[0])), 'only the adapter is used');
+}
+
+{
+  // Overwrite an existing different amo id (link_amocrm would 409 here).
+  const db = contactDb([{ id: S1, parent_phone: '+77011234567', amocrm_customer_id: 111 }]);
+  const r = await updateContact(db, { student_id: S1, phone: '+77011234567', amocrm_customer_id: 999 });
+  eq(r.status, 200, 'overwrite different amo → 200');
+  eq(r.body.changed, true, 'overwrite different amo → changed:true');
+  eq(JSON.stringify(r.body.updated_fields), '["amocrm_customer_id"]', 'overwrite: unchanged phone not in updated_fields');
+  eq(r.body.previous.amocrm_customer_id, 111, 'overwrite → previous amo reported');
+  eq(JSON.stringify(updates(db).map((c) => c[2])), JSON.stringify([{ amocrm_customer_id: 999 }]), 'overwrite → unchanged phone not written');
+  eq(db.table.get(S1).amocrm_customer_id, 999, 'overwrite → new amo persisted');
+}
+
+{
+  const db = contactDb([{ id: S1, parent_phone: '+77011234567', amocrm_customer_id: '777' }]);
+  const before = JSON.stringify([...db.table.values()]);
+  const r = await updateContact(db, { student_id: S1, phone: '+77011234567', amocrm_customer_id: 777 });
+  eq(r.status, 200, 'same values → 200');
+  eq(r.body.changed, false, 'same values → changed:false (bigint-as-string amo compared numerically)');
+  eq(r.body.student.id, S1, 'same values → student returned');
+  assert(!('updated_fields' in r.body) && !('previous' in r.body), 'same values → no updated_fields / previous');
+  eq(updates(db).length, 0, 'same values → no write');
+  eq(JSON.stringify([...db.table.values()]), before, 'same values → data unchanged');
+}
+
+{
+  const db = contactDb([{ id: S1, amocrm_customer_id: null }, { id: S2, amocrm_customer_id: 555 }]);
+  const before = JSON.stringify([...db.table.values()]);
+  const r = await updateContact(db, { student_id: S1, phone: '+77011234567', amocrm_customer_id: 555 });
+  eq(r.status, 409, 'amo owned by other → 409');
+  eq(r.body.reason, 'amocrm_customer_id_conflict', 'amo owned by other → reason');
+  eq(r.body.conflict_student_id, S2, 'amo owned by other → conflict_student_id');
+  eq(updates(db).length, 0, 'amo owned by other → nothing written (not even phone)');
+  eq(JSON.stringify([...db.table.values()]), before, 'amo owned by other → data unchanged');
+}
+
+{
+  // Race: another student grabs the id between pre-check and write → 23505.
+  const db = contactDb([{ id: S1, amocrm_customer_id: null }, { id: S2, amocrm_customer_id: null }], {
+    beforeUpdate: (t) => { t.get(S2).amocrm_customer_id = 900; },
+  });
+  const r = await updateContact(db, { student_id: S1, phone: '+77011234567', amocrm_customer_id: 900 });
+  eq(r.status, 409, 'race: 23505 → 409');
+  eq(r.body.conflict_student_id, S2, 'race: 23505 → conflict_student_id from re-read');
+  eq(db.table.get(S1).parent_phone, null, 'race: 23505 → phone not written either');
+}
+
+{
+  const db = contactDb([{ id: S1 }]);
+  const r = await updateContact(db, { student_id: S3, phone: '+77011234567' });
+  eq(r.status, 404, 'unknown uuid → 404');
+  eq(r.body.reason, 'not_found', 'unknown uuid → not_found');
+  eq(updates(db).length, 0, 'unknown uuid → no write');
+}
+
+{
+  // Race: student deleted between read and write → 0 rows → 404.
+  const db = contactDb([{ id: S1 }], { beforeUpdate: (t) => { t.delete(S1); } });
+  const r = await updateContact(db, { student_id: S1, phone: '+77011234567' });
+  eq(r.status, 404, 'race: student deleted before write → 404');
 }
 
 console.log(`\n--- ${passed} passed, ${failed} failed ---`);
