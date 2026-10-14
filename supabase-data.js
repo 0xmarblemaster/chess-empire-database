@@ -111,7 +111,8 @@ const supabaseData = {
             // missing timestamp as "not registered" and a missing email as "no
             // email line".
             chessterRegisteredAt: data.chesster_registered_at || null,
-            chessterEmail: data.chesster_email || null
+            chessterEmail: data.chesster_email || null,
+            amocrmCustomerId: data.amocrm_customer_id ?? null
         };
     },
 

@@ -108,11 +108,12 @@ async function main() {
         && /t\('chesster\.notRegistered'\)/.test(STUDENT_SRC),
         'helper uses the chesster.* i18n keys');
 
-    // The panel must be inserted ABOVE the branch rank panel in renderProfile.
-    const chessterIdx = STUDENT_SRC.indexOf('${renderChessterStatusBox(student)}');
+    // The panel (inside the staff-only reference row) must be inserted ABOVE the
+    // branch rank panel in renderProfile.
+    const chessterIdx = STUDENT_SRC.indexOf("${isLoggedIn() ? renderStaffReferenceRow(student) : ''}");
     const branchRankIdx = STUDENT_SRC.indexOf('${renderLevelRankInfoBoxes(rankings).branchRankHTML}');
     assert(chessterIdx > -1 && branchRankIdx > -1 && chessterIdx < branchRankIdx,
-        'renderChessterStatusBox is rendered before the branch rank panel in the overview grid');
+        'staff-only Chesster row is rendered before the branch rank panel in the overview grid');
 
     // ========================================================================
     // 4. student-styles.css — tint + mobile order

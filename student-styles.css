@@ -431,6 +431,72 @@ body {
     color: #ef4444;
 }
 
+/* Staff-only reference row: Chesster status + amoCRM ID side by side. */
+.overview-mobile-grid .staff-reference-row {
+    grid-column: 1 / -1;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 1.5rem;
+}
+
+.overview-mobile-grid .staff-reference-row .chesster-status-banner {
+    grid-column: auto;
+}
+
+.amocrm-status-banner.amocrm-status--linked {
+    background: linear-gradient(135deg, #eff6ff 0%, #dbeafe 100%);
+    border-color: #3b82f6;
+}
+
+.amocrm-status-banner.amocrm-status--linked .chesster-status-label {
+    color: #1d4ed8;
+}
+
+.amocrm-status-banner.amocrm-status--linked .chesster-status-value {
+    color: #2563eb;
+}
+
+.amocrm-status-banner.amocrm-status--unlinked {
+    background: linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%);
+    border-color: #cbd5e1;
+}
+
+.amocrm-status-banner.amocrm-status--unlinked .chesster-status-label {
+    color: #64748b;
+}
+
+.amocrm-status-banner.amocrm-status--unlinked .chesster-status-value {
+    color: #94a3b8;
+}
+
+.amocrm-id {
+    font-variant-numeric: tabular-nums;
+    letter-spacing: 0.02em;
+    word-break: break-all;
+}
+
+.amocrm-copy {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.3rem;
+    font-size: 0.8125rem;
+    font-weight: 600;
+    color: #1d4ed8;
+    background: #fff;
+    border: 1px solid #bfdbfe;
+    border-radius: 0.5rem;
+    padding: 0.25rem 0.6rem;
+    cursor: pointer;
+}
+
+@media (max-width: 768px) {
+    .overview-mobile-grid .staff-reference-row {
+        grid-template-columns: 1fr;
+        gap: 1rem;
+        order: 0;
+    }
+}
+
 .progress-section {
     margin-top: 3rem;
     padding-top: 3rem;

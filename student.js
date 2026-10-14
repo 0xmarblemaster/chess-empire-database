@@ -427,6 +427,59 @@ function renderChessterStatusBox(student) {
     `;
 }
 
+// Render the amoCRM customer ID banner (staff-only, next to the Chesster banner).
+// Only null/undefined/'' read as "not linked"; any other value is shown in full.
+function renderAmocrmIdBox(student) {
+    const id = student ? student.amocrmCustomerId : null;
+    const isLinked = id !== null && id !== undefined && id !== '';
+    const stateClass = isLinked ? 'amocrm-status--linked' : 'amocrm-status--unlinked';
+
+    const main = isLinked
+        ? `<div class="info-value chesster-status-value">
+                    <i data-lucide="link" style="width: 18px; height: 18px;"></i>
+                    <span class="amocrm-id">${escapeHtmlSafe(String(id))}</span>
+                </div>
+                <button type="button" class="amocrm-copy" data-amocrm-id="${escapeHtmlSafe(String(id))}">
+                    <i data-lucide="copy" style="width: 13px; height: 13px;"></i>
+                    <span>${t('amocrm.copy') || 'Copy'}</span>
+                </button>`
+        : `<div class="info-value chesster-status-value">
+                    <i data-lucide="minus" style="width: 18px; height: 18px;"></i>
+                    <span>${t('amocrm.notLinked') || 'Not linked'}</span>
+                </div>`;
+
+    return `
+        <div class="chesster-status-banner amocrm-status-banner ${stateClass}">
+            <div class="info-label chesster-status-label">
+                <i data-lucide="hash" style="width: 14px; height: 14px;"></i>
+                ${t('amocrm.label') || 'amoCRM ID'}
+            </div>
+            <div class="chesster-status-main">
+                ${main}
+            </div>
+        </div>
+    `;
+}
+
+// Staff-only reference row: Chesster status + amoCRM ID side by side.
+// Callers must gate this behind isLoggedIn() so public profiles get no markup.
+function renderStaffReferenceRow(student) {
+    return `<div class="staff-reference-row mobile-order-0">${renderChessterStatusBox(student)}${renderAmocrmIdBox(student)}</div>`;
+}
+
+// Delegated click handler for the amoCRM ID copy button (value comes from the
+// data attribute, never interpolated into inline JS).
+document.addEventListener('click', (event) => {
+    const button = event.target.closest && event.target.closest('.amocrm-copy');
+    if (!button || !navigator.clipboard) return;
+    const label = button.querySelector('span');
+    navigator.clipboard.writeText(button.dataset.amocrmId).then(() => {
+        if (!label) return;
+        label.textContent = t('amocrm.copied') || 'Copied';
+        setTimeout(() => { label.textContent = t('amocrm.copy') || 'Copy'; }, 1500);
+    }).catch((error) => console.error('Failed to copy amoCRM ID:', error));
+});
+
 // Render puzzle score rank info boxes for the survival/puzzle tab
 // Shows position like "5 / 70" based on puzzle (survival) best score
 function renderPuzzleRankInfoBoxes(puzzleRankings) {
@@ -1269,8 +1322,8 @@ async function renderProfile() {
         <!-- Tab Content -->
         <div class="tab-content active" id="tab-overview">
             <div class="overview-mobile-grid">
-                <!-- Mobile order: 0. Chesster app registration status -->
-                ${renderChessterStatusBox(student)}
+                <!-- Mobile order: 0. Staff-only Chesster status + amoCRM ID -->
+                ${isLoggedIn() ? renderStaffReferenceRow(student) : ''}
 
                 <!-- Mobile order: 1. Branch rank, 2. School rank -->
                 ${renderLevelRankInfoBoxes(rankings).branchRankHTML}
