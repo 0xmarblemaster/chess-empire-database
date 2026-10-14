@@ -58,6 +58,76 @@ export function isUuid(s) {
   return typeof s === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(s);
 }
 
+// ─── Student code (CE-00001) ────────────────────────────────────────────────
+
+// Values of students.status (CHECK constraint in supabase-schema.sql).
+export const STUDENT_STATUSES = ['active', 'frozen', 'left'];
+
+// Normalize a human-readable Student ID: trim + uppercase, then require the
+// exact DB format (CE- and at least 5 digits — 'ce-452' is NOT padded for you).
+// Returns the canonical code or null.
+export function parseStudentCode(raw) {
+  if (typeof raw !== 'string') return null;
+  const code = raw.trim().toUpperCase();
+  return /^CE-[0-9]{5,}$/.test(code) ? code : null;
+}
+
+const present = (v) => v !== undefined && v !== null && v !== '';
+
+// Pick the student selector from a body / query: student_id (UUID) and/or
+// student_code. Returns { value: { student_id?, student_code? } } or { field }
+// naming the first invalid one; with neither given, { field: 'student_id' }
+// (unless required is false → { value: {} }).
+export function parseStudentRef(src, { required = true } = {}) {
+  const b = src && typeof src === 'object' ? src : {};
+  const value = {};
+  if (present(b.student_id)) {
+    if (!isUuid(b.student_id)) return { field: 'student_id' };
+    value.student_id = b.student_id;
+  }
+  if (present(b.student_code)) {
+    const code = parseStudentCode(b.student_code);
+    if (!code) return { field: 'student_code' };
+    value.student_code = code;
+  }
+  if (required && !value.student_id && !value.student_code) return { field: 'student_id' };
+  return { value };
+}
+
+// Resolve a parsed ref to a student UUID over an injected adapter:
+//   db.findIdByCode(code) → id | null
+// Without a code the id is returned as-is (no read — callers keep their own
+// not-found handling). Returns { id } or { error: { status, body } }: 404 for
+// an unknown code, 400 student_id_code_mismatch when both are given and name
+// different students.
+export async function resolveStudentRef(db, ref) {
+  if (!ref.student_code) return { id: ref.student_id };
+  const id = await db.findIdByCode(ref.student_code);
+  if (!id) return { error: { status: 404, body: { ok: false, reason: 'not_found' } } };
+  if (ref.student_id && ref.student_id.toLowerCase() !== String(id).toLowerCase()) {
+    return { error: { status: 400, body: { ok: false, reason: 'student_id_code_mismatch' } } };
+  }
+  return { id };
+}
+
+export const LIST_DEFAULT_LIMIT = 100;
+export const LIST_MAX_LIMIT = 500;
+
+// Parse GET ?action=list params (strings or null). Returns { value } or { field }.
+export function parseListParams(params) {
+  const p = params || {};
+  const int = (raw, dflt) => (present(raw) ? Number(raw) : dflt);
+  const limit = int(p.limit, LIST_DEFAULT_LIMIT);
+  if (!Number.isInteger(limit) || limit < 1 || limit > LIST_MAX_LIMIT) return { field: 'limit' };
+  const offset = int(p.offset, 0);
+  if (!Number.isInteger(offset) || offset < 0) return { field: 'offset' };
+  const branchId = present(p.branch_id) ? p.branch_id : null;
+  if (branchId !== null && !isUuid(branchId)) return { field: 'branch_id' };
+  const status = present(p.status) ? p.status : null;
+  if (status !== null && !STUDENT_STATUSES.includes(status)) return { field: 'status' };
+  return { value: { limit, offset, branch_id: branchId, status } };
+}
+
 // ─── amoCRM link ────────────────────────────────────────────────────────────
 
 // Parse a positive integer amoCRM customer id from a JSON number or a numeric
@@ -73,10 +143,11 @@ export function parseAmocrmId(raw) {
 // invalid field.
 export function validateLinkAmocrm(body) {
   const b = body && typeof body === 'object' ? body : {};
-  if (!isUuid(b.student_id)) return { field: 'student_id' };
+  const ref = parseStudentRef(b);
+  if (!ref.value) return ref;
   const amo = parseAmocrmId(b.amocrm_customer_id);
   if (amo === null) return { field: 'amocrm_customer_id' };
-  return { value: { student_id: b.student_id, amocrm_customer_id: amo } };
+  return { value: { ...ref.value, amocrm_customer_id: amo } };
 }
 
 // What linking `requested` onto a student whose current value is `current`
@@ -133,9 +204,10 @@ export async function linkAmocrm(db, { student_id, amocrm_customer_id: amo }) {
 // Returns { value } (only provided fields, normalized) or { field }.
 export function validateUpdateContact(body) {
   const b = body && typeof body === 'object' ? body : {};
-  if (!isUuid(b.student_id)) return { field: 'student_id' };
+  const ref = parseStudentRef(b);
+  if (!ref.value) return ref;
   if (b.phone === undefined && b.amocrm_customer_id === undefined) return { field: 'body' };
-  const value = { student_id: b.student_id };
+  const value = { ...ref.value };
   if (b.phone !== undefined) {
     const phone = normalizePhone(b.phone);
     if (!phone) return { field: 'phone' };
@@ -214,17 +286,18 @@ export function isValidSurvivalScore(score) {
 // insert fields, or { field } naming the first invalid field.
 export function validateSurvivalPush(body) {
   const b = body && typeof body === 'object' ? body : {};
-  if (!isUuid(b.student_id)) return { field: 'student_id' };
+  const ref = parseStudentRef(b);
+  if (!ref.value) return ref;
   if (!isValidSurvivalScore(b.score)) return { field: 'score' };
-  const ref = typeof b.external_ref === 'string' ? b.external_ref.trim() : '';
-  if (!ref || ref.length > 200) return { field: 'external_ref' };
+  const extRef = typeof b.external_ref === 'string' ? b.external_ref.trim() : '';
+  if (!extRef || extRef.length > 200) return { field: 'external_ref' };
   let achievedAt = null;
   if (b.achieved_at !== undefined && b.achieved_at !== null) {
     const ts = typeof b.achieved_at === 'string' ? Date.parse(b.achieved_at) : NaN;
     if (!Number.isFinite(ts)) return { field: 'achieved_at' };
     achievedAt = new Date(ts).toISOString();
   }
-  return { value: { student_id: b.student_id, score: b.score, external_ref: ref, achieved_at: achievedAt } };
+  return { value: { ...ref.value, score: b.score, external_ref: extRef, achieved_at: achievedAt } };
 }
 
 // Parse leaderboard query params (strings or null). A branch_id without an
@@ -238,8 +311,8 @@ export function parseLeaderboardParams(params, defaultLimit = 50) {
   if (scope === 'branch' && !branchId) return { field: 'branch_id' };
   const period = p.period || 'all';
   if (!LEADERBOARD_PERIODS.includes(period)) return { field: 'period' };
-  const studentId = p.student_id || null;
-  if (studentId !== null && !isUuid(studentId)) return { field: 'student_id' };
+  const ref = parseStudentRef(p, { required: false });
+  if (!ref.value) return ref;
   let limit = defaultLimit;
   if (p.limit !== undefined && p.limit !== null && p.limit !== '') {
     limit = Number(p.limit);
@@ -249,7 +322,8 @@ export function parseLeaderboardParams(params, defaultLimit = 50) {
     value: {
       scope, period,
       branch_id: scope === 'branch' ? branchId : null,
-      student_id: studentId, limit,
+      student_id: ref.value.student_id || null, limit,
+      ...(ref.value.student_code ? { student_code: ref.value.student_code } : {}),
     },
   };
 }

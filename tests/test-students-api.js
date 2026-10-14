@@ -155,7 +155,9 @@ assert(/ok\(\{ phone: norm, students: \(data \|\| \[\]\)\.map\(shape\) \}\)/.tes
 const oaStart = INDEX.indexOf("'/?action=link_amocrm'");
 const oaBlock = INDEX.slice(oaStart, INDEX.indexOf("'/?action=find'", oaStart));
 assert(oaStart > INDEX.indexOf('const OPENAPI_SPEC'), 'OpenAPI documents /?action=link_amocrm');
-assert(/required: \['student_id', 'amocrm_customer_id'\]/.test(oaBlock), 'OpenAPI link_amocrm request schema');
+assert(/required: \['amocrm_customer_id'\]/.test(oaBlock)
+  && /anyOf: \[\{ required: \['student_id'\] \}, \{ required: \['student_code'\] \}\]/.test(oaBlock),
+  'OpenAPI link_amocrm request schema (amocrm_customer_id + student_id or student_code)');
 assert(/changed: true/.test(oaBlock) && /changed: false/.test(oaBlock), 'OpenAPI link_amocrm 200 examples (changed true/false)');
 ['400', '404', '409'].forEach((c) => assert(new RegExp(`'${c}':`).test(oaBlock), `OpenAPI link_amocrm documents ${c}`));
 ['invalid_input', 'not_found', 'amocrm_customer_id_conflict'].forEach((r) =>
@@ -181,7 +183,7 @@ assert(!/student_status_history|applyStatusChange|pokeChesster|status:|branch_id
   'update_contact never touches status / branch / coach / status history / Chesster, never inserts or deletes');
 const ucOa = INDEX.slice(INDEX.indexOf("'/?action=update_contact'"), INDEX.indexOf("'/?action=find'"));
 assert(INDEX.indexOf("'/?action=update_contact'") > INDEX.indexOf('const OPENAPI_SPEC'), 'OpenAPI documents /?action=update_contact');
-assert(/required: \['student_id'\]/.test(ucOa) && /phone:/.test(ucOa) && /amocrm_customer_id:/.test(ucOa), 'OpenAPI update_contact request schema');
+assert(/anyOf: \[\{ required: \['student_id'\] \}, \{ required: \['student_code'\] \}\]/.test(ucOa) && /phone:/.test(ucOa) && /amocrm_customer_id:/.test(ucOa), 'OpenAPI update_contact request schema');
 assert(/changed: true/.test(ucOa) && /changed: false/.test(ucOa) && /updated_fields/.test(ucOa) && /previous/.test(ucOa),
   'OpenAPI update_contact 200 examples (changed true/false, updated_fields, previous)');
 ['400', '404', '409'].forEach((c) => assert(new RegExp(`'${c}':`).test(ucOa), `OpenAPI update_contact documents ${c}`));

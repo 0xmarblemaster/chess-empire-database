@@ -3,12 +3,12 @@
 // Unlike the read-only analytics-* functions, this one WRITES: create a
 // student, freeze / activate (unfreeze) a student, link an amoCRM customer id
 // to an existing student, correct (overwrite) a student's phone / amoCRM id,
-// find by phone / amoCRM id, list branches. Every write requires an `x-api-key` header checked against the
+// find by Student ID (student_code) / phone / amoCRM id, list students, list branches. Every write requires an `x-api-key` header checked against the
 // CHESS_EMPIRE_WRITE_KEY env var (a NEW key, distinct from the tournament-only
 // CHESS_EMPIRE_API_KEY — the two surfaces never share a key).
 //
 // Routing is on a `?action=` query param (create / freeze / activate /
-// link_amocrm / update_contact / find / branches / survival-score / survival-best / survival-leaderboard); GET with no action returns the OpenAPI self-doc. Modelled on
+// link_amocrm / update_contact / find / list / branches / survival-score / survival-best / survival-leaderboard); GET with no action returns the OpenAPI self-doc. Modelled on
 // tournaments-api/index.ts (Deno serve + CORS + json/ok/err helpers).
 //
 // Product rules enforced here:
@@ -19,6 +19,11 @@
 //    Coaches win over automation — this is a hard product rule.
 //  - Never touches student_time_slot_assignments (migration 081 blocks auto
 //    slot moves at the DB level by design).
+//  - Every student payload carries student_code (CE-00001, migration 096) —
+//    assigned by a DB trigger, immutable, never reused, never sent on insert.
+//    Wherever student_id is accepted, student_code is accepted instead; when
+//    both are given they must name the same student (400
+//    student_id_code_mismatch).
 
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts"
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
@@ -28,6 +33,12 @@ import {
   splitFullName,
   isManualChangeRecent,
   isUuid,
+  parseStudentCode,
+  parseStudentRef,
+  resolveStudentRef,
+  parseListParams,
+  LIST_MAX_LIMIT,
+  STUDENT_STATUSES,
   parseAmocrmId,
   validateLinkAmocrm,
   linkAmocrm,
@@ -65,7 +76,7 @@ const CHESSTER_SYNC_TOKEN = Deno.env.get('CHESSTER_SYNC_TOKEN') ?? ''
 const REASONS = [
   'unauthorized', 'not_found', 'invalid_input', 'invalid_branch',
   'ambiguous', 'manual_change_recent', 'student_inactive',
-  'amocrm_customer_id_conflict', 'server_error',
+  'amocrm_customer_id_conflict', 'student_id_code_mismatch', 'server_error',
 ] as const
 type Reason = typeof REASONS[number]
 
@@ -90,7 +101,7 @@ function authorized(req: Request): boolean {
 
 // parent_phone is the ONLY phone-like column on students (verified against the
 // schema — there is no bare `phone` column); dedup/find match on it.
-const STUDENT_SELECT = 'id, first_name, last_name, status, branch_id, amocrm_customer_id, parent_phone, branch:branches(name)'
+const STUDENT_SELECT = 'id, student_code, first_name, last_name, status, branch_id, amocrm_customer_id, parent_phone, branch:branches(name)'
 
 // Normalize both the direct-select row shape (branch:{name}) and the RPC row
 // shape (branch_name) into one public student object.
@@ -101,6 +112,7 @@ function shape(row: any) {
     : (row.branch ? row.branch.name : null)
   return {
     id: row.id,
+    student_code: row.student_code ?? null,
     name: `${row.first_name || ''} ${row.last_name || ''}`.trim(),
     first_name: row.first_name,
     last_name: row.last_name,
@@ -114,6 +126,28 @@ function shape(row: any) {
 
 // deno-lint-ignore no-explicit-any
 interface Ctx { supabase: any; req: Request }
+
+// Adapter for resolveStudentRef(): student_code → UUID.
+function codeLookup(ctx: Ctx) {
+  return {
+    async findIdByCode(code: string) {
+      const { data, error } = await ctx.supabase
+        .from('students').select('id').eq('student_code', code).maybeSingle()
+      if (error) throw error
+      return data ? data.id : null
+    },
+  }
+}
+
+// Resolve student_id / student_code from a query into a UUID. Returns { id }
+// or a ready error Response.
+async function resolveRef(ctx: Ctx, src: Record<string, unknown>): Promise<{ id?: string; res?: Response }> {
+  const ref = parseStudentRef(src)
+  if (!ref.value) return { res: err('invalid_input', 400, { field: ref.field }) }
+  const r = await resolveStudentRef(codeLookup(ctx), ref.value)
+  if (r.error) return { res: json(r.error.body, r.error.status) }
+  return { id: r.id }
+}
 
 // Fire the server-side freeze/thaw poke to Chesster. Mirrors the dashboard's
 // pokeChessterFreezeThaw(): only for active/frozen, Bearer token, short
@@ -143,13 +177,25 @@ async function pokeChesster(studentId: string, status: string): Promise<'ok' | '
   }
 }
 
-// Resolve a single student from { student_id } | { amocrm_customer_id } |
-// { phone }. Returns { student } (null = none), { multiple:true } when a
-// non-id lookup is ambiguous, or { error } for a malformed selector.
+// Resolve a single student from { student_code } | { student_id } |
+// { amocrm_customer_id } | { phone }. Returns { student } (null = none),
+// { multiple:true } when a non-id lookup is ambiguous, or { error } (+ field)
+// for a malformed selector / student_id–student_code mismatch.
 async function resolveStudent(
   ctx: Ctx,
   body: Record<string, unknown>,
-): Promise<{ student?: ReturnType<typeof shape> | null; multiple?: boolean; error?: Reason }> {
+): Promise<{ student?: ReturnType<typeof shape> | null; multiple?: boolean; error?: Reason; field?: string }> {
+  if (body.student_code !== undefined && body.student_code !== null && body.student_code !== '') {
+    const ref = parseStudentRef(body)
+    if (!ref.value) return { error: 'invalid_input', field: ref.field }
+    const r = await resolveStudentRef(codeLookup(ctx), ref.value)
+    if (r.error) return r.error.status === 404 ? { student: null } : { error: r.error.body.reason as Reason }
+    const { data, error } = await ctx.supabase
+      .from('students').select(STUDENT_SELECT).eq('id', r.id).maybeSingle()
+    if (error) throw error
+    return { student: data ? shape(data) : null }
+  }
+
   if (typeof body.student_id === 'string' && body.student_id) {
     if (!isUuid(body.student_id)) return { error: 'invalid_input' }
     const { data, error } = await ctx.supabase
@@ -330,7 +376,7 @@ async function changeStatus(ctx: Ctx, target: 'active' | 'frozen'): Promise<Resp
   }
 
   const r = await resolveStudent(ctx, body)
-  if (r.error) return err(r.error, 400)
+  if (r.error) return err(r.error, 400, r.field ? { field: r.field } : {})
   if (r.multiple) return err('ambiguous', 409)
   if (!r.student) return err('not_found', 404)
 
@@ -359,6 +405,8 @@ async function updateStudentContact(ctx: Ctx): Promise<Response> {
 
   const v = validateUpdateContact(body)
   if (!v.value) return err('invalid_input', 400, { field: v.field })
+  const ref = await resolveStudentRef(codeLookup(ctx), v.value)
+  if (ref.error) return json(ref.error.body, ref.error.status)
 
   const r = await updateContact({
     async getStudent(id: string) {
@@ -383,7 +431,7 @@ async function updateStudentContact(ctx: Ctx): Promise<Response> {
       }
       return { row: data && data[0] ? shape(data[0]) : null }
     },
-  }, v.value)
+  }, { ...v.value, student_id: ref.id })
   return json(r.body, r.status)
 }
 
@@ -402,6 +450,8 @@ async function linkAmocrmId(ctx: Ctx): Promise<Response> {
 
   const v = validateLinkAmocrm(body)
   if (!v.value) return err('invalid_input', 400, { field: v.field })
+  const ref = await resolveStudentRef(codeLookup(ctx), v.value)
+  if (ref.error) return json(ref.error.body, ref.error.status)
 
   const r = await linkAmocrm({
     async getStudent(id: string) {
@@ -427,13 +477,23 @@ async function linkAmocrmId(ctx: Ctx): Promise<Response> {
       }
       return { row: (data && data[0]) || null }
     },
-  }, v.value)
+  }, { ...v.value, student_id: ref.id })
   return json(r.body, r.status)
 }
 
-// amocrm_customer_id wins when both it and phone are given (exact id match is
-// the stronger selector); the response mirrors the phone lookup's shape.
+// Precedence: student_code > amocrm_customer_id > phone (exact ids are the
+// stronger selectors); the response mirrors the phone lookup's shape.
 async function findStudents(ctx: Ctx, url: URL): Promise<Response> {
+  const codeRaw = url.searchParams.get('student_code')
+  if (codeRaw !== null) {
+    const code = parseStudentCode(codeRaw)
+    if (!code) return err('invalid_input', 400, { field: 'student_code' })
+    const { data, error } = await ctx.supabase
+      .from('students').select(STUDENT_SELECT).eq('student_code', code)
+    if (error) throw error
+    return ok({ student_code: code, students: (data || []).map(shape) })
+  }
+
   const amoRaw = url.searchParams.get('amocrm_customer_id')
   if (amoRaw !== null) {
     const amo = parseAmocrmId(amoRaw)
@@ -450,6 +510,24 @@ async function findStudents(ctx: Ctx, url: URL): Promise<Response> {
     .rpc('find_students_by_phone_digits', { p_digits: phoneDigits(norm) })
   if (error) throw error
   return ok({ phone: norm, students: (data || []).map(shape) })
+}
+
+// Paginated student list ordered by student_code (zero-padded, so text order
+// equals numeric order up to CE-99999).
+async function listStudents(ctx: Ctx, url: URL): Promise<Response> {
+  const q = (k: string) => url.searchParams.get(k)
+  const parsed = parseListParams({ limit: q('limit'), offset: q('offset'), branch_id: q('branch_id'), status: q('status') })
+  if (!parsed.value) return err('invalid_input', 400, { field: parsed.field })
+  const p = parsed.value
+  let query = ctx.supabase
+    .from('students').select(STUDENT_SELECT, { count: 'exact' })
+    .order('student_code', { ascending: true })
+    .range(p.offset, p.offset + p.limit - 1)
+  if (p.branch_id) query = query.eq('branch_id', p.branch_id)
+  if (p.status) query = query.eq('status', p.status)
+  const { data, error, count } = await query
+  if (error) throw error
+  return ok({ total: count ?? 0, limit: p.limit, offset: p.offset, students: (data || []).map(shape) })
 }
 
 async function listBranches(ctx: Ctx): Promise<Response> {
@@ -492,7 +570,9 @@ async function pushSurvivalScore(ctx: Ctx): Promise<Response> {
 
   const v = validateSurvivalPush(body)
   if (!v.value) return err('invalid_input', 400, { field: v.field, max_score: SURVIVAL_SCORE_MAX })
-  const push = v.value
+  const ref = await resolveStudentRef(codeLookup(ctx), v.value)
+  if (ref.error) return json(ref.error.body, ref.error.status)
+  const push = { ...v.value, student_id: ref.id as string }
 
   const { data: student, error: sErr } = await ctx.supabase
     .from('students').select('id, status').eq('id', push.student_id).maybeSingle()
@@ -527,19 +607,26 @@ async function pushSurvivalScore(ctx: Ctx): Promise<Response> {
 }
 
 async function getSurvivalBest(ctx: Ctx, url: URL): Promise<Response> {
-  const studentId = url.searchParams.get('student_id')
-  if (!isUuid(studentId)) return err('invalid_input', 400, { field: 'student_id' })
-  return ok({ student_id: studentId, best: await survivalBest(ctx, studentId!) })
+  const r = await resolveRef(ctx, {
+    student_id: url.searchParams.get('student_id'), student_code: url.searchParams.get('student_code'),
+  })
+  if (r.res) return r.res
+  return ok({ student_id: r.id, best: await survivalBest(ctx, r.id!) })
 }
 
 async function getSurvivalLeaderboard(ctx: Ctx, url: URL): Promise<Response> {
   const q = (k: string) => url.searchParams.get(k)
   const parsed = parseLeaderboardParams({
     scope: q('scope'), period: q('period'), branch_id: q('branch_id'),
-    student_id: q('student_id'), limit: q('limit'),
+    student_id: q('student_id'), student_code: q('student_code'), limit: q('limit'),
   })
   if (!parsed.value) return err('invalid_input', 400, { field: parsed.field })
   const p = parsed.value
+  if (p.student_code) {
+    const r = await resolveRef(ctx, { student_id: p.student_id, student_code: p.student_code })
+    if (r.res) return r.res
+    p.student_id = r.id!
+  }
   const { data, error } = await ctx.supabase.rpc('get_puzzle_rush_leaderboard', {
     p_scope: p.scope, p_period: p.period, p_branch_id: p.branch_id,
     p_student_id: p.student_id, p_limit: p.limit,
@@ -561,7 +648,7 @@ const OPENAPI_SPEC = {
   info: {
     title: 'Chess Empire — Students (write) API',
     version: '1.0.0',
-    description: 'Write API for external integrations (e.g. AmoCRM, Chesster): create / freeze / activate students, link an amoCRM customer id to an existing student, correct the phone / amoCRM id, find by phone or amoCRM id, list branches, push Puzzle Rush survival scores and read Puzzle Rush rankings. All actions require an x-api-key header (CHESS_EMPIRE_WRITE_KEY).',
+    description: 'Write API for external integrations (e.g. AmoCRM, Chesster): create / freeze / activate students, link an amoCRM customer id to an existing student, correct the phone / amoCRM id, find by Student ID (student_code) / phone / amoCRM id, list students, list branches, push Puzzle Rush survival scores and read Puzzle Rush rankings. All actions require an x-api-key header (CHESS_EMPIRE_WRITE_KEY). Every student carries student_code — a permanent, human-readable Student ID (CE-00001; CE-100000 after CE-99999) assigned by the database, never edited and never reused. Wherever student_id is accepted, student_code may be given instead; if both are given they must name the same student (400 student_id_code_mismatch).',
   },
   servers: [
     { url: 'https://papgcizhfkngubwofjuo.supabase.co/functions/v1/students-api', description: 'Supabase edge function direct' },
@@ -574,10 +661,15 @@ const OPENAPI_SPEC = {
         type: 'object', required: ['ok', 'reason'],
         properties: { ok: { type: 'boolean', enum: [false] }, reason: { $ref: '#/components/schemas/Reason' } },
       },
+      StudentCode: {
+        type: 'string', pattern: '^CE-[0-9]{5,}$', example: 'CE-00452',
+        description: 'Permanent human-readable Student ID. Assigned by the DB on create; immutable; never reused. Input is trimmed and uppercased.',
+      },
       Student: {
         type: 'object',
         properties: {
           id: { type: 'string', format: 'uuid' },
+          student_code: { $ref: '#/components/schemas/StudentCode' },
           name: { type: 'string' },
           first_name: { type: 'string' },
           last_name: { type: 'string' },
@@ -612,9 +704,10 @@ const OPENAPI_SPEC = {
         security: [{ ApiKeyAuth: [] }],
         requestBody: { required: true, content: { 'application/json': { schema: {
           type: 'object',
-          properties: { student_id: { type: 'string', format: 'uuid' }, phone: { type: 'string' }, amocrm_customer_id: { type: 'integer' } },
+          description: 'One selector; precedence student_code > student_id > amocrm_customer_id > phone',
+          properties: { student_code: { $ref: '#/components/schemas/StudentCode' }, student_id: { type: 'string', format: 'uuid' }, phone: { type: 'string' }, amocrm_customer_id: { type: 'integer' } },
         } } } },
-        responses: { '200': { description: 'OK' }, '401': { description: 'Unauthorized' }, '404': { description: 'Not found' }, '409': { description: 'manual_change_recent / ambiguous' } },
+        responses: { '200': { description: 'OK' }, '400': { description: 'invalid_input / student_id_code_mismatch' }, '401': { description: 'Unauthorized' }, '404': { description: 'Not found' }, '409': { description: 'manual_change_recent / ambiguous' } },
       },
     },
     '/?action=activate': {
@@ -623,19 +716,23 @@ const OPENAPI_SPEC = {
         security: [{ ApiKeyAuth: [] }],
         requestBody: { required: true, content: { 'application/json': { schema: {
           type: 'object',
-          properties: { student_id: { type: 'string', format: 'uuid' }, phone: { type: 'string' }, amocrm_customer_id: { type: 'integer' } },
+          description: 'One selector; precedence student_code > student_id > amocrm_customer_id > phone',
+          properties: { student_code: { $ref: '#/components/schemas/StudentCode' }, student_id: { type: 'string', format: 'uuid' }, phone: { type: 'string' }, amocrm_customer_id: { type: 'integer' } },
         } } } },
-        responses: { '200': { description: 'OK' }, '401': { description: 'Unauthorized' }, '404': { description: 'Not found' }, '409': { description: 'manual_change_recent / ambiguous' } },
+        responses: { '200': { description: 'OK' }, '400': { description: 'invalid_input / student_id_code_mismatch' }, '401': { description: 'Unauthorized' }, '404': { description: 'Not found' }, '409': { description: 'manual_change_recent / ambiguous' } },
       },
     },
     '/?action=link_amocrm': {
       post: {
-        summary: 'Link an amoCRM customer id to an EXISTING student (by student_id only). Changes only students.amocrm_customer_id — never status, branch, coach or status history. Never overwrites a different id. Atomic conditional write.',
+        summary: 'Link an amoCRM customer id to an EXISTING student (by student_id or student_code). Changes only students.amocrm_customer_id — never status, branch, coach or status history. Never overwrites a different id. Atomic conditional write.',
         security: [{ ApiKeyAuth: [] }],
         requestBody: { required: true, content: { 'application/json': { schema: {
-          type: 'object', required: ['student_id', 'amocrm_customer_id'],
+          type: 'object', required: ['amocrm_customer_id'],
+          description: 'student_id or student_code is required',
+          anyOf: [{ required: ['student_id'] }, { required: ['student_code'] }],
           properties: {
             student_id: { type: 'string', format: 'uuid' },
+            student_code: { $ref: '#/components/schemas/StudentCode' },
             amocrm_customer_id: { type: 'integer', minimum: 1, description: 'Positive integer (a numeric string is accepted)' },
           },
         }, example: { student_id: '00000000-0000-4000-8000-000000000000', amocrm_customer_id: 123456 } } } },
@@ -647,9 +744,9 @@ const OPENAPI_SPEC = {
               already_linked: { value: { ok: true, changed: false, student: { id: '00000000-0000-4000-8000-000000000000', amocrm_customer_id: 123456 } } },
             } } },
           },
-          '400': { description: 'invalid_input — bad UUID or amoCRM id', content: { 'application/json': { example: { ok: false, reason: 'invalid_input', field: 'amocrm_customer_id' } } } },
+          '400': { description: 'invalid_input — bad UUID / student_code or amoCRM id; student_id_code_mismatch', content: { 'application/json': { example: { ok: false, reason: 'invalid_input', field: 'amocrm_customer_id' } } } },
           '401': { description: 'Unauthorized' },
-          '404': { description: 'not_found — no student with this UUID', content: { 'application/json': { example: { ok: false, reason: 'not_found' } } } },
+          '404': { description: 'not_found — no student with this UUID / student_code', content: { 'application/json': { example: { ok: false, reason: 'not_found' } } } },
           '409': {
             description: 'amocrm_customer_id_conflict — the student already has a different id, or this id belongs to another student (conflict_student_id when known). Nothing is changed.',
             content: { 'application/json': { examples: {
@@ -662,13 +759,15 @@ const OPENAPI_SPEC = {
     },
     '/?action=update_contact': {
       post: {
-        summary: 'Correct (overwrite) parent phone and/or amoCRM customer id on an EXISTING student (by student_id only). Changes only students.parent_phone / students.amocrm_customer_id — never status, branch, coach or status history. Clearing a value (null) is not supported. Phone is not unique (siblings share a parent phone); amocrm_customer_id is.',
+        summary: 'Correct (overwrite) parent phone and/or amoCRM customer id on an EXISTING student (by student_id or student_code). Changes only students.parent_phone / students.amocrm_customer_id — never status, branch, coach or status history. Clearing a value (null) is not supported. Phone is not unique (siblings share a parent phone); amocrm_customer_id is.',
         security: [{ ApiKeyAuth: [] }],
         requestBody: { required: true, content: { 'application/json': { schema: {
-          type: 'object', required: ['student_id'],
-          description: 'At least one of phone / amocrm_customer_id is required',
+          type: 'object',
+          description: 'student_id or student_code is required, plus at least one of phone / amocrm_customer_id',
+          anyOf: [{ required: ['student_id'] }, { required: ['student_code'] }],
           properties: {
             student_id: { type: 'string', format: 'uuid' },
+            student_code: { $ref: '#/components/schemas/StudentCode' },
             phone: { type: 'string', description: 'KZ/RU phone, normalized to +7XXXXXXXXXX' },
             amocrm_customer_id: { type: 'integer', minimum: 1, description: 'Positive integer (a numeric string is accepted)' },
           },
@@ -681,22 +780,36 @@ const OPENAPI_SPEC = {
               unchanged: { value: { ok: true, changed: false, student: { id: '00000000-0000-4000-8000-000000000000', phone: '+77011234567', amocrm_customer_id: 123456 } } },
             } } },
           },
-          '400': { description: 'invalid_input — bad UUID, phone or amoCRM id (field names it), or neither phone nor amocrm_customer_id given (field: body)', content: { 'application/json': { example: { ok: false, reason: 'invalid_input', field: 'phone' } } } },
+          '400': { description: 'student_id_code_mismatch, or invalid_input — bad UUID / student_code, phone or amoCRM id (field names it), or neither phone nor amocrm_customer_id given (field: body)', content: { 'application/json': { example: { ok: false, reason: 'invalid_input', field: 'phone' } } } },
           '401': { description: 'Unauthorized' },
-          '404': { description: 'not_found — no student with this UUID', content: { 'application/json': { example: { ok: false, reason: 'not_found' } } } },
+          '404': { description: 'not_found — no student with this UUID / student_code', content: { 'application/json': { example: { ok: false, reason: 'not_found' } } } },
           '409': { description: 'amocrm_customer_id_conflict — this id belongs to another student. Nothing is changed.', content: { 'application/json': { example: { ok: false, reason: 'amocrm_customer_id_conflict', conflict_student_id: '11111111-1111-4111-8111-111111111111' } } } },
         },
       },
     },
     '/?action=find': {
       get: {
-        summary: 'Find students by normalized phone or by amoCRM customer id (amocrm_customer_id wins when both are given)',
+        summary: 'Find students by Student ID, amoCRM customer id or normalized phone (precedence student_code > amocrm_customer_id > phone)',
         security: [{ ApiKeyAuth: [] }],
         parameters: [
-          { name: 'phone', in: 'query', required: false, schema: { type: 'string' }, description: 'Required unless amocrm_customer_id is given' },
+          { name: 'student_code', in: 'query', required: false, schema: { $ref: '#/components/schemas/StudentCode' }, description: 'Exact Student ID (trimmed, uppercased; must match CE- + at least 5 digits); takes precedence over everything else' },
+          { name: 'phone', in: 'query', required: false, schema: { type: 'string' }, description: 'Required unless student_code / amocrm_customer_id is given' },
           { name: 'amocrm_customer_id', in: 'query', required: false, schema: { type: 'integer', minimum: 1 }, description: 'Exact amoCRM customer id; takes precedence over phone' },
         ],
-        responses: { '200': { description: '{ok, phone, students[]} or {ok, amocrm_customer_id, students[]}' }, '400': { description: 'Bad phone / amocrm_customer_id' }, '401': { description: 'Unauthorized' } },
+        responses: { '200': { description: '{ok, student_code, students[]}, {ok, amocrm_customer_id, students[]} or {ok, phone, students[]}' }, '400': { description: 'Bad student_code / phone / amocrm_customer_id (field names it)' }, '401': { description: 'Unauthorized' } },
+      },
+    },
+    '/?action=list': {
+      get: {
+        summary: 'Paginated student list ordered by student_code',
+        security: [{ ApiKeyAuth: [] }],
+        parameters: [
+          { name: 'limit', in: 'query', schema: { type: 'integer', minimum: 1, maximum: LIST_MAX_LIMIT, default: 100 } },
+          { name: 'offset', in: 'query', schema: { type: 'integer', minimum: 0, default: 0 } },
+          { name: 'branch_id', in: 'query', schema: { type: 'string', format: 'uuid' } },
+          { name: 'status', in: 'query', schema: { type: 'string', enum: STUDENT_STATUSES } },
+        ],
+        responses: { '200': { description: '{ok, total, limit, offset, students[]} — total is the exact count for the filters' }, '400': { description: 'Bad limit / offset / branch_id / status (field names it)' }, '401': { description: 'Unauthorized' } },
       },
     },
     '/?action=branches': {
@@ -711,9 +824,12 @@ const OPENAPI_SPEC = {
         summary: `Push a Chesster Puzzle Rush Survival run (score 0..${SURVIVAL_SCORE_MAX}). Idempotent on external_ref: a repeat returns {ok:true, duplicate:true, id} without a second row.`,
         security: [{ ApiKeyAuth: [] }],
         requestBody: { required: true, content: { 'application/json': { schema: {
-          type: 'object', required: ['student_id', 'score', 'external_ref'],
+          type: 'object', required: ['score', 'external_ref'],
+          description: 'student_id or student_code is required',
+          anyOf: [{ required: ['student_id'] }, { required: ['student_code'] }],
           properties: {
             student_id: { type: 'string', format: 'uuid' },
+            student_code: { $ref: '#/components/schemas/StudentCode' },
             score: { type: 'integer', minimum: 0, maximum: SURVIVAL_SCORE_MAX },
             achieved_at: { type: 'string', format: 'date-time', nullable: true },
             external_ref: { type: 'string', description: 'Chesster run id (unique)' },
@@ -726,8 +842,11 @@ const OPENAPI_SPEC = {
       get: {
         summary: 'Student Puzzle Rush bests for the current week / month (Asia/Almaty) and all time',
         security: [{ ApiKeyAuth: [] }],
-        parameters: [{ name: 'student_id', in: 'query', required: true, schema: { type: 'string', format: 'uuid' } }],
-        responses: { '200': { description: '{ok, student_id, best:{week,month,all}}' }, '400': { description: 'Bad student_id' }, '401': { description: 'Unauthorized' } },
+        parameters: [
+          { name: 'student_id', in: 'query', schema: { type: 'string', format: 'uuid' }, description: 'student_id or student_code is required' },
+          { name: 'student_code', in: 'query', schema: { $ref: '#/components/schemas/StudentCode' } },
+        ],
+        responses: { '200': { description: '{ok, student_id, best:{week,month,all}}' }, '400': { description: 'Bad student_id / student_code, or student_id_code_mismatch' }, '404': { description: 'Unknown student_code' }, '401': { description: 'Unauthorized' } },
       },
     },
     '/?action=survival-leaderboard': {
@@ -739,9 +858,10 @@ const OPENAPI_SPEC = {
           { name: 'period', in: 'query', schema: { type: 'string', enum: ['week', 'month', 'all'], default: 'all' } },
           { name: 'branch_id', in: 'query', schema: { type: 'string', format: 'uuid' }, description: 'Required for scope=branch; implies scope=branch when scope is omitted' },
           { name: 'student_id', in: 'query', schema: { type: 'string', format: 'uuid' }, description: 'Appends this student\'s row (is_self) when outside the top N' },
+          { name: 'student_code', in: 'query', schema: { $ref: '#/components/schemas/StudentCode' }, description: 'Alternative to student_id' },
           { name: 'limit', in: 'query', schema: { type: 'integer', minimum: 1, maximum: 500, default: 50 } },
         ],
-        responses: { '200': { description: '{ok, scope, period, branch_id, window_start, total_count, rows[]}' }, '400': { description: 'Bad params' }, '401': { description: 'Unauthorized' } },
+        responses: { '200': { description: '{ok, scope, period, branch_id, window_start, total_count, rows[]} — each row carries student_id + student_code' }, '400': { description: 'Bad params' }, '401': { description: 'Unauthorized' } },
       },
     },
   },
@@ -792,6 +912,9 @@ export async function handle(req: Request): Promise<Response> {
     }
     if (method === 'GET' && action === 'find') {
       const r = await findStudents(ctx, url); status = r.status; return r
+    }
+    if (method === 'GET' && action === 'list') {
+      const r = await listStudents(ctx, url); status = r.status; return r
     }
     if (method === 'GET' && action === 'branches') {
       const r = await listBranches(ctx); status = r.status; return r
