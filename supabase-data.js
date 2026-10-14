@@ -40,7 +40,7 @@ const supabaseData = {
                     id, student_code, first_name, last_name, age, date_of_birth, gender,
                     photo_url, branch_id, coach_id, razryad, status,
                     current_level, current_lesson, total_lessons,
-                    parent_name, parent_phone, parent_email,
+                    parent_name, parent_phone, parent_email, amocrm_customer_id,
                     branch:branches(id, name, location),
                     coach:coaches(id, first_name, last_name)
                 `)
@@ -76,7 +76,8 @@ const supabaseData = {
             totalLessons: student.total_lessons,
             parentName: student.parent_name,
             parentPhone: student.parent_phone,
-            parentEmail: student.parent_email
+            parentEmail: student.parent_email,
+            amocrmCustomerId: student.amocrm_customer_id ?? null
         }));
     },
 

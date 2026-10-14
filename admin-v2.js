@@ -41,13 +41,38 @@ let currentFilters = {
     branch: 'all',
     coach: 'all',
     level: 'all',
+    amocrm: 'all',
     search: ''
 };
 
 function applyAdminTranslations() {
     applyTranslations();
     updateLevelFilterLabels();
+    updateAmocrmFilterLabels();
     updateResultCount();
+}
+
+// True iff the student has a real amoCRM customer ID (positive integer, number or numeric string)
+function isAmocrmLinked(student) {
+    const id = student?.amocrmCustomerId;
+    if (id === null || id === undefined || id === '') return false;
+    const n = Number(id);
+    return Number.isInteger(n) && n > 0;
+}
+
+// Linked / not-linked counts among students passing every filter except the amoCRM one
+function getAmocrmFilterCounts() {
+    const base = getFilteredStudents(true);
+    const linked = base.filter(isAmocrmLinked).length;
+    return { linked, unlinked: base.length - linked };
+}
+
+function updateAmocrmFilterLabels() {
+    const select = document.getElementById('amocrmFilter');
+    if (!select) return;
+    const { linked, unlinked } = getAmocrmFilterCounts();
+    select.querySelector('option[value="linked"]').textContent = t('admin.filters.amocrm.linkedCount', { count: linked });
+    select.querySelector('option[value="unlinked"]').textContent = t('admin.filters.amocrm.unlinkedCount', { count: unlinked });
 }
 
 function updateLevelFilterLabels() {
@@ -430,8 +455,8 @@ function populateFilterDropdowns() {
     }
 }
 
-// Get filtered students
-function getFilteredStudents() {
+// Get filtered students (ignoreAmocrm skips the amoCRM filter, used for its option counts)
+function getFilteredStudents(ignoreAmocrm = false) {
     return students.filter(student => {
         // Status filter
         if (currentFilters.status !== 'all' && student.status !== currentFilters.status) {
@@ -450,6 +475,15 @@ function getFilteredStudents() {
 
         // Level filter
         if (currentFilters.level !== 'all' && student.currentLevel !== parseInt(currentFilters.level)) {
+            return false;
+        }
+
+        // amoCRM link filter
+        const amocrm = ignoreAmocrm ? 'all' : currentFilters.amocrm;
+        if (amocrm === 'linked' && !isAmocrmLinked(student)) {
+            return false;
+        }
+        if (amocrm === 'unlinked' && isAmocrmLinked(student)) {
             return false;
         }
 
@@ -552,6 +586,7 @@ function loadStudents() {
 
     // Update result count
     updateResultCount(filteredStudents.length);
+    updateAmocrmFilterLabels();
 
     // Only render mobile cards on mobile/tablet devices (performance optimization)
     if (window.innerWidth <= 768) {
@@ -724,6 +759,11 @@ function setupEventListeners() {
         loadStudents();
     });
 
+    document.getElementById('amocrmFilter').addEventListener('change', (e) => {
+        currentFilters.amocrm = e.target.value;
+        loadStudents();
+    });
+
     // Search input listener with debouncing
     let searchTimeout;
     const searchInput = document.getElementById('searchInput');
@@ -798,6 +838,7 @@ function resetFilters() {
         branch: 'all',
         coach: 'all',
         level: 'all',
+        amocrm: 'all',
         search: ''
     };
 
@@ -805,6 +846,7 @@ function resetFilters() {
     document.getElementById('branchFilter').value = 'all';
     document.getElementById('coachFilter').value = 'all';
     document.getElementById('levelFilter').value = 'all';
+    document.getElementById('amocrmFilter').value = 'all';
     document.getElementById('searchInput').value = '';
 
     loadStudents();
