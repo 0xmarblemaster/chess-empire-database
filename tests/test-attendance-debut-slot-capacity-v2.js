@@ -162,10 +162,10 @@ assert(/rowsToRender\s*=\s*Math\.max\(\s*getDefaultRows\(\)\s*,\s*Math\.min\(\s*
     'rowsToRender uses getDefaultRows() and getMaxCapacity()');
 
 // Drop-target capacity check + toast (reassign flow on attendance grid).
-assert(/targetSlotStudents\.length\s*>=\s*getMaxCapacity\(\)/.test(ADMIN_SRC),
+assert(/const\s+maxCapacity\s*=\s*getMaxCapacity\(\);\s*if\s*\(targetSlotStudents\.length\s*>=\s*maxCapacity\)/.test(ADMIN_SRC),
     'drop-target capacity check uses getMaxCapacity()');
-assert(/\.replace\(\s*'10'\s*,\s*getMaxCapacity\(\)\.toString\(\)\s*\)/.test(ADMIN_SRC),
-    'drop-target toast number replacement uses getMaxCapacity()');
+assert(/const\s+maxCapacity\s*=\s*getMaxCapacity\(\)[\s\S]{0,400}\.replace\(\s*'\{max\}'\s*,\s*maxCapacity\.toString\(\)\s*\)/.test(ADMIN_SRC),
+    'drop-target toast {max} replacement uses getMaxCapacity()');
 
 // Add-student form — uses selectedBranch (a form-local value, not
 // attendanceCurrentBranch), so the helper would consult the wrong branch.
@@ -174,7 +174,7 @@ assert(/const\s+selectedBranchName\s*=\s*\(selectedBranch\s*\|\|\s*''\)\.toLower
     'add-student form derives selectedBranchName from the form field');
 assert(/const\s+selectedBranchIsDebut\s*=\s*selectedBranchName\.includes\('debut'\)\s*\|\|\s*selectedBranchName\.includes\('дебют'\)/.test(ADMIN_SRC),
     'add-student form detects Debut against the form field');
-assert(/const\s+selectedBranchMaxCapacity\s*=\s*selectedBranchIsDebut\s*\?\s*DEBUT_MAX_TIME_SLOT_CAPACITY\s*:\s*MAX_TIME_SLOT_CAPACITY/.test(ADMIN_SRC),
+assert(/const\s+selectedBranchMaxCapacity\s*=[^;]*selectedBranchIsDebut\s*\?\s*DEBUT_MAX_TIME_SLOT_CAPACITY\s*:\s*MAX_TIME_SLOT_CAPACITY/.test(ADMIN_SRC),
     'add-student form picks 20 vs 15 from the form field');
 assert(/studentsInSlot\.length\s*>=\s*selectedBranchMaxCapacity/.test(ADMIN_SRC),
     'add-student capacity gate uses selectedBranchMaxCapacity');

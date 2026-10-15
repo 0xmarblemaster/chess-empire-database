@@ -6647,6 +6647,12 @@ const DEFAULT_TIME_SLOT_ROWS = 10;      // Default visible rows
 const MAX_TIME_SLOT_CAPACITY = 15;      // Maximum students per slot
 const DEBUT_DEFAULT_TIME_SLOT_ROWS = 20; // Default visible rows (Debut branch)
 const DEBUT_MAX_TIME_SLOT_CAPACITY = 20; // Maximum students per slot (Debut branch)
+const VASILY_MAX_TIME_SLOT_CAPACITY = 16; // Maximum students per slot (coach Vasily Mikhaylovich, any branch)
+
+function isVasilyCoach(coachName) {
+    const name = (coachName || '').toLowerCase().trim();
+    return name.includes('vasily') || name.includes('василий');
+}
 
 function isDebutCurrentBranch() {
     const name = (attendanceCurrentBranch || '').toLowerCase();
@@ -6657,7 +6663,8 @@ function getDefaultRows() {
     return isDebutCurrentBranch() ? DEBUT_DEFAULT_TIME_SLOT_ROWS : DEFAULT_TIME_SLOT_ROWS;
 }
 
-function getMaxCapacity() {
+function getMaxCapacity(coachName = attendanceCurrentCoachName) {
+    if (isVasilyCoach(coachName)) return VASILY_MAX_TIME_SLOT_CAPACITY;
     return isDebutCurrentBranch() ? DEBUT_MAX_TIME_SLOT_CAPACITY : MAX_TIME_SLOT_CAPACITY;
 }
 
@@ -8904,11 +8911,12 @@ async function moveStudentToTimeSlot(studentId, fromSlotIndex, toSlotId, toSlotI
     const targetSlotStudents = getStudentsForTimeSlot(toSlotIndex, filteredData)
         .filter(s => s.id !== studentId);
 
-    if (targetSlotStudents.length >= getMaxCapacity()) {
+    const maxCapacity = getMaxCapacity();
+    if (targetSlotStudents.length >= maxCapacity) {
         showToast(
-            (t('admin.attendance.slotFull') || 'Time slot {slot} is full (15 students max)')
+            (t('admin.attendance.slotFull') || 'Time slot {slot} is full ({max} students max)')
                 .replace('{slot}', timeSlots[toSlotIndex] || `Slot ${toSlotIndex + 1}`)
-                .replace('10', getMaxCapacity().toString()),
+                .replace('{max}', maxCapacity.toString()),
             'error'
         );
         return;
@@ -9858,18 +9866,20 @@ async function submitAddStudentToCalendar() {
                    s.id !== studentId;
         });
 
-        const selectedBranchName = (selectedBranch || '').toLowerCase();
-        const selectedBranchIsDebut = selectedBranchName.includes('debut') || selectedBranchName.includes('дебют');
-        const selectedBranchMaxCapacity = selectedBranchIsDebut ? DEBUT_MAX_TIME_SLOT_CAPACITY : MAX_TIME_SLOT_CAPACITY;
-
         // Get coach name for the selected student — used for the capacity
-        // toast below and for logical_slot_id resolution on save.
+        // check below and for logical_slot_id resolution on save.
         const student = window.students?.find(s => s.id === studentId);
         let coachName = null;
         if (student && student.coachId) {
             const coach = window.coaches?.find(c => c.id === student.coachId);
             coachName = coach ? `${coach.firstName} ${coach.lastName}` : null;
         }
+
+        const selectedBranchName = (selectedBranch || '').toLowerCase();
+        const selectedBranchIsDebut = selectedBranchName.includes('debut') || selectedBranchName.includes('дебют');
+        const selectedBranchMaxCapacity = isVasilyCoach(coachName)
+            ? VASILY_MAX_TIME_SLOT_CAPACITY
+            : (selectedBranchIsDebut ? DEBUT_MAX_TIME_SLOT_CAPACITY : MAX_TIME_SLOT_CAPACITY);
 
         if (studentsInSlot.length >= selectedBranchMaxCapacity) {
             const timeSlots = getTimeSlotsForBranch(selectedBranch, selectedSchedule, coachName);
