@@ -416,7 +416,7 @@ returns the OpenAPI self-doc (public).
 
 | Action | Method | Body / Query | Description |
 |--------|--------|--------------|-------------|
-| `create` | POST | `{full_name, phone, branch_id, amocrm_customer_id?}` | Create a student (dedups first; see below). |
+| `create` | POST | `{full_name, branch_id, phone?, amocrm_customer_id?}` | Create-or-activate a student (Buyer ID first, then phone + name; see below). `phone` is required only without `amocrm_customer_id`. |
 | `freeze` | POST | `{student_code}` \| `{student_id}` \| `{phone}` \| `{amocrm_customer_id}` | Set status → `frozen`. |
 | `activate` | POST | `{student_code}` \| `{student_id}` \| `{phone}` \| `{amocrm_customer_id}` | Set status → `active` (unfreeze). |
 | `link_amocrm` | POST | `{student_id \| student_code, amocrm_customer_id}` | Link an amoCRM id to an existing student (never overwrites a different id). |
@@ -433,16 +433,40 @@ returns the OpenAPI self-doc (public).
 amocrm_customer_id, phone}`. `student_code` is never accepted on `create` — the
 database assigns it.
 
-**Phone normalization.** Phones are normalized to canonical KZ/RU `+7XXXXXXXXXX`
-(spaces/dashes/parens/dots stripped; a leading domestic `8` → `+7`; a bare
-10-digit number gets `+7` prepended). Matching is on the last 10 digits, so a
-student is found regardless of how their stored `parent_phone` is formatted.
+**Phones (E.164, any country).** Phones are validated with libphonenumber and
+normalized to E.164 — `+` country calling code + national number, no spaces —
+keeping the real country code (`+7`, `+351`, `+44`, `+420`, `+90`, …). Spaces,
+dashes, parens and dots are ignored and a `00` prefix is read as `+`. Legacy KZ
+input without a prefix still works: `8XXXXXXXXXX` / `7XXXXXXXXXX` / a bare 10-digit
+number → `+7…`. An invalid or impossible number (e.g. `+3…`, which is not a
+complete country code) → `400 {reason:"invalid_input", field:"phone", message}`;
+the country code is never guessed, truncated or rewritten. Lookups are exact on
+the full number (a `+44` number never matches a `+7` one with the same last 10
+digits); stored legacy `8…` / 10-digit values still match their `+7` form.
+**Phones are not unique** — siblings may share a parent's phone, so a phone
+lookup (`find`) returns **every** matching student. `freeze`/`activate` by a
+shared phone → `409 ambiguous` (use `student_id` / `amocrm_customer_id`).
 
-**Dedup (create).** Before creating, the API looks for an existing student by
-`amocrm_customer_id` (exact) and by normalized phone. On a hit it returns the
-existing student (`existing: true`) and does **not** create a duplicate; if the
-match is `frozen` it is reactivated (`reactivated: true`). A phone / amocrm
-selector that matches more than one student → `409 {reason:"ambiguous"}`.
+**Create (Buyer ID first, then phone + name).** `amocrm_customer_id` (the amoCRM
+Buyer ID) is unique and is the primary identity:
+1. If the Buyer ID already belongs to a student, that student is returned
+   (`existing:true, matched_by:"amocrm_customer_id"`) — a replay never creates a
+   duplicate, and a different student found by phone is never touched.
+2. Otherwise every student with the same phone is compared by normalized full
+   name (trimmed, spaces collapsed, case-insensitive, `ё` = `е`):
+   exactly one match → that student (`matched_by:"phone_name"`; the Buyer ID is
+   written onto it when it has none, `linked:true`; if it already has a
+   *different* Buyer ID → `409 amocrm_customer_id_conflict`); several matches →
+   `409 {reason:"ambiguous", candidates:[…]}` for manual review; no match → a
+   **new** student with the same phone (`201`).
+3. Without a phone (allowed only with a Buyer ID) a new student is created with
+   `phone: null` — no placeholder is ever generated. A phone that is present but
+   invalid is rejected (`400`), never silently dropped.
+
+A matched student that is `frozen` is reactivated (`reactivated: true`, subject
+to the 3-day guard below). Nothing is written on any 4xx; a concurrent create
+with the same Buyer ID → `409 amocrm_customer_id_conflict`. Verify a write by
+reading it back with `find?amocrm_customer_id=` or by `student_code`.
 
 **3-day manual guard.** Coaches win over automation: `freeze`/`activate` (and the
 create-time reactivation) are **refused** with `409 {reason:"manual_change_recent"}`
@@ -501,9 +525,20 @@ curl -X POST "$BASE?action=create" -H "x-api-key: $KEY" \
   -H 'content-type: application/json' \
   -d '{"full_name":"Askar Zhumabek","phone":"8 (777) 123-45-67","branch_id":"<uuid>","amocrm_customer_id":123456}'
 
-# Find by phone (any format) / by Student ID
+# Siblings sharing one phone: two Buyer IDs → two students (a replay of either returns the same id)
+curl -X POST "$BASE?action=create" -H "x-api-key: $KEY" -H 'content-type: application/json' \
+  -d '{"full_name":"Aru Sadykova","phone":"+7 700 123 45 67","branch_id":"<uuid>","amocrm_customer_id":1002}'
+
+# International phone (country code kept: stored as +351912345678) / no phone at all
+curl -X POST "$BASE?action=create" -H "x-api-key: $KEY" -H 'content-type: application/json' \
+  -d '{"full_name":"Maria Silva","phone":"+351 912 345 678","branch_id":"<uuid>","amocrm_customer_id":1003}'
+curl -X POST "$BASE?action=create" -H "x-api-key: $KEY" -H 'content-type: application/json' \
+  -d '{"full_name":"Timur Akhmetov","branch_id":"<uuid>","amocrm_customer_id":1004}'
+
+# Find by phone (any format; returns ALL students sharing it) / by Student ID / by Buyer ID
 curl "$BASE?action=find&phone=%2B77771234567" -H "x-api-key: $KEY"
 curl "$BASE?action=find&student_code=CE-00452" -H "x-api-key: $KEY"
+curl "$BASE?action=find&amocrm_customer_id=1003" -H "x-api-key: $KEY"
 
 # Page through all active students of a branch, 500 at a time
 curl "$BASE?action=list&status=active&branch_id=<uuid>&limit=500&offset=0" -H "x-api-key: $KEY"
@@ -524,7 +559,9 @@ curl "$BASE?action=survival-leaderboard&period=week&branch_id=<uuid>&student_id=
 
 Requires migration `091_students_api.sql` applied (adds
 `students.amocrm_customer_id`, the `student_status_history` actor columns, and
-the `find_students_by_phone_digits` lookup). The `survival-*` actions (and
+the `find_students_by_phone_digits` lookup) and `097_students_phone_e164_lookup.sql`
+(the exact `find_students_by_phone_e164` lookup used by `create` / `find` /
+`freeze` / `activate`). The `survival-*` actions (and
 `analytics-leaderboards?action=survival`) require migration
 `093_puzzle_rush_rankings.sql` (adds `survival_scores.source` / `external_ref` and
 the `get_puzzle_rush_leaderboard` / `get_student_puzzle_rush_best` RPCs).
