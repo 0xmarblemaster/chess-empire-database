@@ -215,8 +215,13 @@ assert(iResCode > 0 && iResCode < resolve.indexOf("typeof body.student_id === 's
   'freeze/activate resolve student_code first');
 assert(/'student_id_code_mismatch'/.test(INDEX.match(/const REASONS = \[[\s\S]*?\]/)[0]), 'REASONS includes student_id_code_mismatch');
 
-const inserts = INDEX.match(/\.from\('students'\)\s*\.insert\(\[\{[\s\S]*?\}\]\)/g) || [];
+// The create row is built in students-logic.mjs createStudent() and passed
+// through verbatim by the index.ts adapter.
+const LOGIC = fs.readFileSync(path.join(ROOT, 'supabase', 'functions', 'students-api', 'students-logic.mjs'), 'utf8');
+const inserts = LOGIC.match(/db\.insert\(\{[\s\S]*?\}\)/g) || [];
 assert(inserts.length === 1 && !/student_code/.test(inserts[0]), 'create never sends student_code (DB assigns it)');
+assert((INDEX.match(/\.from\('students'\)\.insert\(/g) || []).length === 1 && /\.from\('students'\)\.insert\(\[row\]\)/.test(INDEX),
+  'index.ts inserts exactly the row built by createStudent()');
 
 assert(/StudentCode:/.test(INDEX) && /student_code: \{ \$ref: '#\/components\/schemas\/StudentCode' \}/.test(INDEX), 'OpenAPI documents student_code');
 assert(/'\/\?action=list'/.test(INDEX), 'OpenAPI documents action=list');

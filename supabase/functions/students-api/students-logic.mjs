@@ -1,8 +1,11 @@
 // Pure, runtime-agnostic helpers for the students-api edge function.
 //
-// Kept in a dependency-free .mjs module (no Deno URL imports) so the exact same
-// code can be imported by the Deno edge function (index.ts) AND unit-tested
-// under Node (tests/test-students-api-logic.mjs) — no re-implementation / drift.
+// Imported by the Deno edge functions (students-api, analytics-*,
+// tournaments-api) AND unit-tested under Node (tests/test-students-api-logic.mjs)
+// — no re-implementation / drift. The only dependency is the bare specifier
+// 'libphonenumber-js/max': Node resolves it from node_modules (devDependency),
+// Deno through the deno.json import map of every function importing this file.
+import { parsePhoneNumberFromString } from 'libphonenumber-js/max';
 
 // Coaches must win over automation: an API freeze/activate is refused when the
 // most recent *manual* (dashboard) status change is younger than this window.
@@ -11,28 +14,25 @@ export const MANUAL_GUARD_DAYS = 3;
 // Allowed actor types recorded on student_status_history.changed_by_type.
 export const CHANGED_BY_TYPES = ['api', 'manual', 'system'];
 
-// Normalize a KZ/RU phone number to canonical +7XXXXXXXXXX form.
-// Strips spaces/dashes/parens/dots/plus, maps a leading domestic 8 → 7, and
-// promotes a bare 10-digit local number to +7…. Returns null when the input
-// cannot be coerced into a valid 11-digit +7 number.
+// Normalize a phone number to E.164 (+<country code><national number>), checked
+// against the libphonenumber "max" metadata. International input (leading +
+// or 00) keeps its country code; legacy KZ/RU input without a prefix is
+// promoted to +7 (8XXXXXXXXXX / 7XXXXXXXXXX / bare 10 digits). Spaces, dashes,
+// parens and dots are ignored. Returns null for anything invalid or impossible
+// — the country code is never guessed, truncated or rewritten.
 export function normalizePhone(raw) {
   if (typeof raw !== 'string') return null;
-  let digits = raw.replace(/[^0-9]/g, '');
-  if (!digits) return null;
-  if (digits.length === 11 && digits[0] === '8') {
-    digits = '7' + digits.slice(1);
-  } else if (digits.length === 10) {
-    digits = '7' + digits;
-  }
-  if (digits.length !== 11 || digits[0] !== '7') return null;
-  return '+' + digits;
-}
-
-// The last-10-digit core of a normalized phone — the key used for dedup lookups
-// (matches regardless of how the stored parent_phone happens to be formatted).
-export function phoneDigits(normalized) {
-  if (typeof normalized !== 'string') return '';
-  return normalized.replace(/[^0-9]/g, '').slice(-10);
+  const s = raw.trim();
+  if (!/^\+?[0-9\s().-]+$/.test(s)) return null;
+  const digits = s.replace(/[^0-9]/g, '');
+  let intl = null;
+  if (s[0] === '+') intl = '+' + digits;
+  else if (digits.startsWith('00')) intl = '+' + digits.slice(2);
+  else if (digits.length === 11 && (digits[0] === '8' || digits[0] === '7')) intl = '+7' + digits.slice(1);
+  else if (digits.length === 10) intl = '+7' + digits;
+  if (!intl) return null;
+  const parsed = parsePhoneNumberFromString(intl);
+  return parsed && parsed.isValid() ? parsed.number : null;
 }
 
 // Split a free-text full name into first/last. First whitespace-delimited token
@@ -290,6 +290,112 @@ export async function updateContact(db, { student_id, phone = undefined, amocrm_
       student: r.row,
     },
   };
+}
+
+// ─── Create (Buyer-ID first, then phone + name) ─────────────────────────────
+
+// Name key for the secondary phone match: NFC, trimmed, whitespace collapsed,
+// lower-cased, ё → е.
+export function normalizeName(raw) {
+  return String(raw == null ? '' : raw)
+    .normalize('NFC').trim().replace(/\s+/g, ' ').toLowerCase().replace(/ё/g, 'е');
+}
+
+// Validate a create body. phone is optional when amocrm_customer_id is given
+// (the Buyer ID is then the identity); absent = undefined / null / blank, and is
+// stored as null. A phone that is present but invalid is always rejected.
+// Returns { value } or { field } naming the first invalid field.
+export function validateCreate(body) {
+  const b = body && typeof body === 'object' ? body : {};
+  const name = splitFullName(typeof b.full_name === 'string' ? b.full_name : '');
+  if (!name) return { field: 'full_name' };
+  const phoneGiven = b.phone !== undefined && b.phone !== null && !(typeof b.phone === 'string' && b.phone.trim() === '');
+  const phone = phoneGiven ? normalizePhone(b.phone) : null;
+  if (phoneGiven && !phone) return { field: 'phone' };
+  if (!phoneGiven && !present(b.amocrm_customer_id)) return { field: 'phone' };
+  if (!isUuid(b.branch_id)) return { field: 'branch_id' };
+  let amo = null;
+  if (present(b.amocrm_customer_id)) {
+    amo = parseAmocrmId(b.amocrm_customer_id);
+    if (amo === null) return { field: 'amocrm_customer_id' };
+  }
+  return { value: { ...name, full_name: b.full_name, phone, branch_id: b.branch_id, amocrm_customer_id: amo } };
+}
+
+// Create flow for POST ?action=create, over an injected db adapter:
+//   db.branchExists(id)        → boolean
+//   db.findByAmocrmId(amo)     → shaped students[]
+//   db.findByPhone(e164)       → shaped students[] (exact E.164 match)
+//   db.linkIfNull(id, amo)     → { row } (shaped, null when 0 rows) | { uniqueViolation: true }
+//   db.insert(row)             → { row, status_history_id } | { uniqueViolation: true }
+//   db.activate(student)       → applyStatusChange() result
+// Order: (1) the Buyer ID owns a student → that student; (2) otherwise all
+// students sharing the phone, matched by normalized full name: one match → that
+// student (linking the Buyer ID when it has none; a different id → 409), several
+// → 409 ambiguous with candidates, none → (3) a NEW student with the same phone.
+// Nothing is written on any 4xx. A frozen match is reactivated (3-day guard
+// applies inside db.activate). Returns { status, body }.
+export async function createStudent(db, input) {
+  const { first_name, last_name, full_name, phone, branch_id, amocrm_customer_id: amo } = input;
+  const conflict = (ownerId) => ({
+    status: 409,
+    body: { ok: false, reason: 'amocrm_customer_id_conflict', ...(ownerId ? { conflict_student_id: ownerId } : {}) },
+  });
+  const existing = async (student, extra) => {
+    if (student.status !== 'frozen') return { status: 200, body: { ok: true, existing: true, ...extra, student } };
+    const r = await db.activate(student);
+    if (r.refused) return { status: 200, body: { ok: true, existing: true, ...extra, reactivated: false, reason: r.reason, student } };
+    return {
+      status: 200,
+      body: {
+        ok: true, existing: true, ...extra, reactivated: true, student: r.student,
+        status_history_id: r.status_history_id, chesster_poke: r.chesster_poke,
+      },
+    };
+  };
+
+  if (!(await db.branchExists(branch_id))) return { status: 400, body: { ok: false, reason: 'invalid_branch' } };
+
+  if (amo !== null) {
+    const owners = await db.findByAmocrmId(amo);
+    if (owners.length > 1) return { status: 409, body: { ok: false, reason: 'ambiguous', candidates: owners } };
+    if (owners.length === 1) return existing(owners[0], { matched_by: 'amocrm_customer_id' });
+  }
+
+  if (phone) {
+    const key = normalizeName(full_name);
+    const matches = (await db.findByPhone(phone))
+      .filter((s) => normalizeName(`${s.first_name || ''} ${s.last_name || ''}`) === key);
+    if (matches.length > 1) return { status: 409, body: { ok: false, reason: 'ambiguous', candidates: matches } };
+    if (matches.length === 1) {
+      const match = matches[0];
+      const c = amo === null ? 'same' : classifyLink(match.amocrm_customer_id, amo);
+      if (c === 'conflict') return conflict(match.id);
+      if (c === 'same') return existing(match, { matched_by: 'phone_name' });
+      const r = await db.linkIfNull(match.id, amo);
+      if (r.uniqueViolation) return conflict((await db.findByAmocrmId(amo))[0]?.id);
+      if (r.row) return existing(r.row, { matched_by: 'phone_name', linked: true });
+      // 0 rows: a concurrent request set the column first — idempotent only if it is ours.
+      const owner = (await db.findByAmocrmId(amo))[0];
+      if (owner && owner.id === match.id) return existing(owner, { matched_by: 'phone_name' });
+      return conflict(match.id);
+    }
+  }
+
+  // New student. Defaults mirror the dashboard's addStudent() so NOT NULL
+  // columns are satisfied; parent_phone stays null when no phone was given.
+  const r = await db.insert({
+    first_name, last_name, branch_id,
+    parent_phone: phone,
+    amocrm_customer_id: amo,
+    status: 'active',
+    razryad: 'none',
+    current_level: 1,
+    current_lesson: 1,
+    total_lessons: 120,
+  });
+  if (r.uniqueViolation) return conflict(amo === null ? null : (await db.findByAmocrmId(amo))[0]?.id);
+  return { status: 201, body: { ok: true, existing: false, student: r.row, status_history_id: r.status_history_id } };
 }
 
 // ─── Puzzle Rush (survival) ─────────────────────────────────────────────────

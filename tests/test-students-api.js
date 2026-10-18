@@ -8,6 +8,8 @@
  *  (b) supabase/migrations/091_students_api.sql — amocrm column + partial
  *      unique index, student_status_history actor columns (NOT a redefine of
  *      the pre-existing table), insert RLS, phone-lookup RPC.
+ *  (b2) supabase/migrations/097_students_phone_e164_lookup.sql — exact E.164
+ *      lookup RPC; the old RPC and students data are left alone.
  *  (c) supabase-data.js — dashboard updateStudent records a 'manual' row only
  *      on a real status change, non-blocking.
  *
@@ -27,6 +29,7 @@ function assert(cond, msg) {
 const ROOT = path.resolve(__dirname, '..');
 const INDEX = fs.readFileSync(path.join(ROOT, 'supabase', 'functions', 'students-api', 'index.ts'), 'utf8');
 const MIG = fs.readFileSync(path.join(ROOT, 'supabase', 'migrations', '091_students_api.sql'), 'utf8');
+const MIG97 = fs.readFileSync(path.join(ROOT, 'supabase', 'migrations', '097_students_phone_e164_lookup.sql'), 'utf8');
 const DATA = fs.readFileSync(path.join(ROOT, 'supabase-data.js'), 'utf8');
 
 // Strip comments so "must NOT reference" checks test actual CODE, not prose
@@ -63,16 +66,18 @@ assert(/method === 'GET' && action === 'find'/.test(INDEX), 'find is GET');
 
 // Dedup + reactivate
 assert(/eq\('amocrm_customer_id', amo\)/.test(INDEX), 'dedup by amocrm_customer_id');
-assert(/rpc\('find_students_by_phone_digits'/.test(INDEX), 'dedup/find by normalized phone via RPC');
-assert(/existing[\s\S]*status === 'frozen'[\s\S]*applyStatusChange\(ctx, existing, 'active'\)/.test(INDEX),
-  'a frozen dedup-hit is reactivated');
+assert(/rpc\('find_students_by_phone_e164', \{ p_e164: e164 \}\)/.test(INDEX), 'dedup/find by exact E.164 phone via RPC');
+assert(!/find_students_by_phone_digits|phoneDigits/.test(INDEX_CODE), 'last-10-digit lookup no longer called');
+assert(/activate: \(student[^)]*\) => applyStatusChange\(ctx, student, 'active'\)/.test(INDEX),
+  'a frozen dedup-hit is reactivated (create adapter → applyStatusChange)');
+assert(/validateCreate\(body\)[\s\S]*createStudentFlow\(\{/.test(INDEX), 'create validates then delegates to the shared createStudent()');
 assert(/existing: true/.test(INDEX), 'dedup-hit response carries existing:true');
 assert(/ambiguous/.test(INDEX) && /409/.test(INDEX),
   'ambiguous multi-match is a 409');
 
 // Branch validation — never silently default
-assert(/from\('branches'\)\.select\('id'\)\.eq\('id', branchId\)/.test(INDEX) && /invalid_branch', 400/.test(INDEX),
-  'branch_id is validated against branches → 400 invalid_branch');
+assert(/from\('branches'\)\.select\('id'\)\.eq\('id', branchId\)/.test(INDEX) && /async branchExists\(/.test(INDEX),
+  'branch_id is validated against branches (400 invalid_branch in createStudent())');
 
 // 3-day manual guard
 assert(/isManualChangeRecent\(latest, Date\.now\(\)\)/.test(INDEX),
@@ -148,8 +153,10 @@ assert(/ok\(\{ amocrm_customer_id: amo, students: \(data \|\| \[\]\)\.map\(shape
   'find by amocrm id mirrors the phone response shape (students[] of shape())');
 assert(fdBlock.indexOf("get('amocrm_customer_id')") < fdBlock.indexOf("get('phone')"),
   'find: amocrm_customer_id takes precedence over phone');
-assert(/ok\(\{ phone: norm, students: \(data \|\| \[\]\)\.map\(shape\) \}\)/.test(fdBlock),
-  'find by phone unchanged');
+assert(/ok\(\{ phone: norm, students: await findByPhone\(ctx, norm\) \}\)/.test(fdBlock),
+  'find by phone returns every match (students[] of shape())');
+assert(/return \(data \|\| \[\]\)\.map\(shape\)/.test(INDEX.slice(INDEX.indexOf('async function findByPhone('))),
+  'findByPhone returns all RPC rows, shaped');
 
 // OpenAPI
 const oaStart = INDEX.indexOf("'/?action=link_amocrm'");
@@ -233,6 +240,25 @@ assert(/REVOKE ALL ON FUNCTION find_students_by_phone_digits\(TEXT\) FROM anon/.
 assert(/BEGIN;[\s\S]*COMMIT;/.test(MIG), 'wrapped in a transaction');
 assert(!/student_time_slot_assignments/.test(MIG_CODE),
   'migration SQL never touches student_time_slot_assignments');
+
+// ---------------------------------------------------------------------------
+console.log('\n=== (b2) migration 097\n');
+
+const MIG97_CODE = stripSqlComments(MIG97);
+assert(/CREATE OR REPLACE FUNCTION find_students_by_phone_e164\(p_e164 TEXT\)/.test(MIG97), 'defines find_students_by_phone_e164(p_e164 TEXT)');
+assert(/RETURNS TABLE \([\s\S]*student_code TEXT[\s\S]*branch_name TEXT[\s\S]*parent_phone TEXT/.test(MIG97),
+  'returns the same columns as find_students_by_phone_digits (incl. student_code)');
+assert(/SECURITY DEFINER/.test(MIG97) && /SET search_path = public/.test(MIG97), 'SECURITY DEFINER with pinned search_path');
+['PUBLIC', 'anon', 'authenticated'].forEach((r) =>
+  assert(new RegExp(`REVOKE ALL ON FUNCTION find_students_by_phone_e164\\(TEXT\\) FROM ${r};`).test(MIG97), `execute revoked from ${r}`));
+assert(/GRANT EXECUTE ON FUNCTION find_students_by_phone_e164\(TEXT\) TO service_role;/.test(MIG97), 'execute granted to service_role');
+assert(!/right\(/.test(MIG97_CODE), 'no last-N-digit matching');
+assert(/q\.d ~ '\^7\[0-9\]\{10\}\$'/.test(MIG97_CODE), 'legacy unprefixed formats only considered for +7 input');
+assert(!/DROP\s+FUNCTION/i.test(MIG97_CODE) && !/find_students_by_phone_digits/.test(MIG97_CODE), 'old find_students_by_phone_digits not dropped or changed');
+assert(!/\bUPDATE\b|\bDELETE\b|\bINSERT\b|ALTER TABLE/i.test(MIG97_CODE), 'no data rewrite / no table change');
+assert(!/UNIQUE/i.test(MIG97_CODE), 'no uniqueness added on parent_phone');
+assert(/CREATE INDEX IF NOT EXISTS idx_students_parent_phone_digits/.test(MIG97), 'non-unique expression index, IF NOT EXISTS');
+assert(/BEGIN;[\s\S]*COMMIT;/.test(MIG97), 'wrapped in a transaction');
 
 // ---------------------------------------------------------------------------
 console.log('\n=== (c) supabase-data.js dashboard wiring\n');

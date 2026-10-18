@@ -2,10 +2,11 @@
  * Unit tests for the students-api pure helpers (shared, runtime-agnostic
  * module imported by the edge function itself — no re-implementation).
  *
- *  - normalizePhone: KZ/RU normalization to +7XXXXXXXXXX (8→+7, bare 10-digit
- *    promotion, junk rejected).
+ *  - normalizePhone: legacy KZ/RU inputs still normalize to +7XXXXXXXXXX (8→+7,
+ *    bare 10-digit promotion, junk rejected); E.164 / create-flow coverage
+ *    lives in tests/test-students-api-phones.mjs.
  *  - isManualChangeRecent: the 3-day "coaches win over automation" guard.
- *  - splitFullName / phoneDigits helpers.
+ *  - splitFullName helper.
  *  - link_amocrm: input validation, outcome classification and the full link
  *    flow over an in-memory mock DB (writes only amocrm_customer_id).
  *  - update_contact: input validation and the overwrite flow over an in-memory
@@ -15,7 +16,6 @@
  */
 import {
   normalizePhone,
-  phoneDigits,
   splitFullName,
   isManualChangeRecent,
   MANUAL_GUARD_DAYS,
@@ -48,17 +48,13 @@ eq(normalizePhone('7.777.123.45.67'), '+77771234567', 'dots stripped');
 eq(normalizePhone(''), null, 'empty → null');
 eq(normalizePhone('   '), null, 'whitespace → null');
 eq(normalizePhone('123'), null, 'too short → null');
-eq(normalizePhone('+1 212 555 0100'), null, 'non-+7 11-digit (leading 1) → null');
+eq(normalizePhone('+1 212 555 0100'), '+12125550100', '+1 with explicit + keeps its country code');
+eq(normalizePhone('1 212 555 0100'), null, 'unprefixed non-+7 11-digit (leading 1) → null');
 eq(normalizePhone('abc'), null, 'letters → null');
 eq(normalizePhone(null), null, 'null input → null');
 eq(normalizePhone(77771234567), null, 'non-string input → null');
 // idempotent
 eq(normalizePhone(normalizePhone('87771234567')), '+77771234567', 'idempotent on already-normalized');
-
-console.log('\n=== phoneDigits =======================================================\n');
-eq(phoneDigits('+77771234567'), '7771234567', 'last 10 digits of normalized');
-eq(phoneDigits('+7 777 123 45 67'), '7771234567', 'strips non-digits then last 10');
-eq(phoneDigits(null), '', 'null → empty');
 
 console.log('\n=== splitFullName =====================================================\n');
 assert(JSON.stringify(splitFullName('Askar Zhumabek')) === JSON.stringify({ first_name: 'Askar', last_name: 'Zhumabek' }), 'two tokens');

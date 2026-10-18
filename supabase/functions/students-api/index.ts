@@ -12,8 +12,13 @@
 // tournaments-api/index.ts (Deno serve + CORS + json/ok/err helpers).
 //
 // Product rules enforced here:
-//  - Dedup on create by normalized phone OR amocrm_customer_id — never create a
-//    duplicate; a dedup-hit that is frozen is reactivated.
+//  - Create is idempotent on amocrm_customer_id (the Buyer ID is checked
+//    first). Phones are NOT unique — siblings share a parent's phone — so a
+//    phone hit only counts when the normalized full name matches too (one match
+//    → that student, several → 409 ambiguous, none → a new student with the
+//    same phone). A matched student that is frozen is reactivated.
+//  - Phones are E.164 (+<country code><number>, libphonenumber-validated);
+//    phone is optional on create when amocrm_customer_id is given.
 //  - 3-day manual guard: an API freeze/activate is refused (409) when the
 //    latest *manual* (dashboard/coach) status change is younger than 3 days.
 //    Coaches win over automation — this is a hard product rule.
@@ -29,8 +34,6 @@ import { serve } from "https://deno.land/std@0.168.0/http/server.ts"
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 import {
   normalizePhone,
-  phoneDigits,
-  splitFullName,
   isManualChangeRecent,
   isUuid,
   parseStudentCode,
@@ -45,6 +48,8 @@ import {
   linkAmocrm,
   validateUpdateContact,
   updateContact,
+  validateCreate,
+  createStudent as createStudentFlow,
   validateSurvivalPush,
   parseLeaderboardParams,
   almatyWindowStart,
@@ -125,8 +130,19 @@ function shape(row: any) {
   }
 }
 
+const PHONE_MESSAGE = 'phone must be a valid number in international format with its country code (E.164, e.g. +77001234567, +351912345678); KZ numbers may also be given as 8XXXXXXXXXX or 10 digits'
+
 // deno-lint-ignore no-explicit-any
 interface Ctx { supabase: any; req: Request }
+
+// Every student whose parent_phone is this E.164 number (exact country code;
+// legacy unprefixed KZ formats only match +7). Phones are shared by siblings,
+// so this is a list — never "the" student.
+async function findByPhone(ctx: Ctx, e164: string): Promise<ReturnType<typeof shape>[]> {
+  const { data, error } = await ctx.supabase.rpc('find_students_by_phone_e164', { p_e164: e164 })
+  if (error) throw error
+  return (data || []).map(shape)
+}
 
 // Adapter for resolveStudentRef(): student_code → UUID.
 const codeLookup = (ctx: Ctx) => studentCodeLookup(ctx.supabase)
@@ -209,12 +225,9 @@ async function resolveStudent(
   if (typeof body.phone === 'string' && body.phone) {
     const norm = normalizePhone(body.phone)
     if (!norm) return { error: 'invalid_input' }
-    const { data, error } = await ctx.supabase
-      .rpc('find_students_by_phone_digits', { p_digits: phoneDigits(norm) })
-    if (error) throw error
-    const rows = data || []
+    const rows = await findByPhone(ctx, norm)
     if (rows.length > 1) return { multiple: true }
-    return { student: rows[0] ? shape(rows[0]) : null }
+    return { student: rows[0] ?? null }
   }
 
   return { error: 'invalid_input' }
@@ -269,6 +282,9 @@ async function applyStatusChange(
 
 // ─── Handlers ───────────────────────────────────────────────────────────────
 
+// Buyer-ID first, then phone + name (shared family phones). Flow + outcome
+// mapping live in createStudent() (students-logic.mjs); this supplies the DB
+// adapter. student_time_slot_assignments is intentionally untouched (081).
 async function createStudent(ctx: Ctx): Promise<Response> {
   let body: Record<string, unknown> = {}
   try {
@@ -278,84 +294,52 @@ async function createStudent(ctx: Ctx): Promise<Response> {
     return err('invalid_input', 400)
   }
 
-  const name = splitFullName(typeof body.full_name === 'string' ? body.full_name : '')
-  if (!name) return err('invalid_input', 400, { field: 'full_name' })
+  const v = validateCreate(body)
+  if (!v.value) return err('invalid_input', 400, v.field === 'phone' ? { field: 'phone', message: PHONE_MESSAGE } : { field: v.field })
 
-  const norm = normalizePhone(typeof body.phone === 'string' ? body.phone : '')
-  if (!norm) return err('invalid_input', 400, { field: 'phone' })
-
-  const branchId = typeof body.branch_id === 'string' ? body.branch_id : ''
-  if (!isUuid(branchId)) return err('invalid_input', 400, { field: 'branch_id' })
-
-  let amo: number | null = null
-  if (body.amocrm_customer_id !== undefined && body.amocrm_customer_id !== null && body.amocrm_customer_id !== '') {
-    amo = Number(body.amocrm_customer_id)
-    if (!Number.isInteger(amo)) return err('invalid_input', 400, { field: 'amocrm_customer_id' })
-  }
-
-  // Validate the branch exists — never silently default to some other branch.
-  const { data: branch, error: bErr } = await ctx.supabase
-    .from('branches').select('id').eq('id', branchId).maybeSingle()
-  if (bErr) throw bErr
-  if (!branch) return err('invalid_branch', 400)
-
-  // Dedup: amocrm_customer_id (exact) first, then normalized phone.
-  let existing: ReturnType<typeof shape> | null = null
-  if (amo !== null) {
-    const { data, error } = await ctx.supabase
-      .from('students').select(STUDENT_SELECT).eq('amocrm_customer_id', amo).limit(2)
-    if (error) throw error
-    if ((data || []).length > 1) return err('ambiguous', 409)
-    existing = data && data[0] ? shape(data[0]) : null
-  }
-  if (!existing) {
-    const { data, error } = await ctx.supabase
-      .rpc('find_students_by_phone_digits', { p_digits: phoneDigits(norm) })
-    if (error) throw error
-    const rows = data || []
-    if (rows.length > 1) return err('ambiguous', 409)
-    existing = rows[0] ? shape(rows[0]) : null
-  }
-
-  if (existing) {
-    if (existing.status === 'frozen') {
-      const r = await applyStatusChange(ctx, existing, 'active')
-      if (r.refused) return ok({ existing: true, reactivated: false, reason: r.reason, student: existing })
-      return ok({
-        existing: true, reactivated: true, student: r.student,
-        status_history_id: r.status_history_id, chesster_poke: r.chesster_poke,
-      })
-    }
-    return ok({ existing: true, student: existing })
-  }
-
-  // New student. Defaults mirror the dashboard's addStudent() so NOT NULL
-  // columns are satisfied. student_time_slot_assignments is intentionally
-  // untouched (migration 081).
-  const { data: inserted, error: iErr } = await ctx.supabase
-    .from('students')
-    .insert([{
-      first_name: name.first_name,
-      last_name: name.last_name,
-      branch_id: branchId,
-      parent_phone: norm,
-      amocrm_customer_id: amo,
-      status: 'active',
-      razryad: 'none',
-      current_level: 1,
-      current_lesson: 1,
-      total_lessons: 120,
-    }])
-    .select(STUDENT_SELECT).single()
-  if (iErr) throw iErr
-
-  const { data: row, error: rErr } = await ctx.supabase
-    .from('student_status_history')
-    .insert([{ student_id: inserted.id, old_status: null, new_status: 'active', changed_by_type: 'api', source: 'students-api' }])
-    .select('id').single()
-  if (rErr) throw rErr
-
-  return ok({ existing: false, student: shape(inserted), status_history_id: row.id }, 201)
+  const r = await createStudentFlow({
+    async branchExists(branchId: string) {
+      // Validate the branch exists — never silently default to some other branch.
+      const { data, error } = await ctx.supabase
+        .from('branches').select('id').eq('id', branchId).maybeSingle()
+      if (error) throw error
+      return !!data
+    },
+    async findByAmocrmId(amo: number) {
+      const { data, error } = await ctx.supabase
+        .from('students').select(STUDENT_SELECT).eq('amocrm_customer_id', amo).limit(2)
+      if (error) throw error
+      return (data || []).map(shape)
+    },
+    findByPhone: (e164: string) => findByPhone(ctx, e164),
+    async linkIfNull(id: string, amo: number) {
+      const { data, error } = await ctx.supabase
+        .from('students').update({ amocrm_customer_id: amo })
+        .eq('id', id).is('amocrm_customer_id', null)
+        .select(STUDENT_SELECT)
+      if (error) {
+        if (error.code === '23505') return { uniqueViolation: true }
+        throw error
+      }
+      return { row: data && data[0] ? shape(data[0]) : null }
+    },
+    async insert(row: Record<string, unknown>) {
+      const { data: inserted, error: iErr } = await ctx.supabase
+        .from('students').insert([row]).select(STUDENT_SELECT).single()
+      if (iErr) {
+        if (iErr.code === '23505') return { uniqueViolation: true }
+        throw iErr
+      }
+      const { data: hist, error: rErr } = await ctx.supabase
+        .from('student_status_history')
+        .insert([{ student_id: inserted.id, old_status: null, new_status: 'active', changed_by_type: 'api', source: 'students-api' }])
+        .select('id').single()
+      if (rErr) throw rErr
+      return { row: shape(inserted), status_history_id: hist.id }
+    },
+    activate: (student: ReturnType<typeof shape>) => applyStatusChange(ctx, student, 'active'),
+  }, v.value)
+  return json(r.body, r.status)
 }
 
 async function changeStatus(ctx: Ctx, target: 'active' | 'frozen'): Promise<Response> {
@@ -497,11 +481,8 @@ async function findStudents(ctx: Ctx, url: URL): Promise<Response> {
   }
 
   const norm = normalizePhone(url.searchParams.get('phone') || '')
-  if (!norm) return err('invalid_input', 400, { field: 'phone' })
-  const { data, error } = await ctx.supabase
-    .rpc('find_students_by_phone_digits', { p_digits: phoneDigits(norm) })
-  if (error) throw error
-  return ok({ phone: norm, students: (data || []).map(shape) })
+  if (!norm) return err('invalid_input', 400, { field: 'phone', message: PHONE_MESSAGE })
+  return ok({ phone: norm, students: await findByPhone(ctx, norm) })
 }
 
 // Paginated student list ordered by student_code (zero-padded, so text order
@@ -640,7 +621,7 @@ const OPENAPI_SPEC = {
   info: {
     title: 'Chess Empire — Students (write) API',
     version: '1.0.0',
-    description: 'Write API for external integrations (e.g. AmoCRM, Chesster): create / freeze / activate students, link an amoCRM customer id to an existing student, correct the phone / amoCRM id, find by Student ID (student_code) / phone / amoCRM id, list students, list branches, push Puzzle Rush survival scores and read Puzzle Rush rankings. All actions require an x-api-key header (CHESS_EMPIRE_WRITE_KEY). Every student carries student_code — a permanent, human-readable Student ID (CE-00001; CE-100000 after CE-99999) assigned by the database, never edited and never reused. Wherever student_id is accepted, student_code may be given instead; if both are given they must name the same student (400 student_id_code_mismatch).',
+    description: 'Write API for external integrations (e.g. AmoCRM, Chesster): create / freeze / activate students, link an amoCRM customer id to an existing student, correct the phone / amoCRM id, find by Student ID (student_code) / phone / amoCRM id, list students, list branches, push Puzzle Rush survival scores and read Puzzle Rush rankings. All actions require an x-api-key header (CHESS_EMPIRE_WRITE_KEY). Every student carries student_code — a permanent, human-readable Student ID (CE-00001; CE-100000 after CE-99999) assigned by the database, never edited and never reused. Wherever student_id is accepted, student_code may be given instead; if both are given they must name the same student (400 student_id_code_mismatch). Phones are E.164 with any country code and are NOT unique (siblings may share one); amocrm_customer_id is unique and is the primary identity for create.',
   },
   servers: [
     { url: 'https://papgcizhfkngubwofjuo.supabase.co/functions/v1/students-api', description: 'Supabase edge function direct' },
@@ -657,6 +638,10 @@ const OPENAPI_SPEC = {
         type: 'string', pattern: '^CE-[0-9]{5,}$', example: 'CE-00452',
         description: 'Permanent human-readable Student ID. Assigned by the DB on create; immutable; never reused. Input is trimmed and uppercased.',
       },
+      Phone: {
+        type: 'string', example: '+351912345678',
+        description: 'E.164 phone: + country calling code + national number, validated with libphonenumber (any country — e.g. +7, +351, +44, +420, +90). Spaces, dashes, parens and dots are ignored; a 00 prefix is read as +. Legacy KZ input without a prefix is promoted to +7 (8XXXXXXXXXX, 7XXXXXXXXXX, bare 10 digits). Invalid / impossible numbers (e.g. +3…, which is not a complete country code) are rejected with 400 invalid_input field:phone — the country code is never guessed or rewritten. Phones are NOT unique: siblings may share one.',
+      },
       Student: {
         type: 'object',
         properties: {
@@ -669,7 +654,7 @@ const OPENAPI_SPEC = {
           branch_id: { type: 'string', format: 'uuid', nullable: true },
           branch: { type: 'string', nullable: true },
           amocrm_customer_id: { type: 'integer', nullable: true },
-          phone: { type: 'string', nullable: true },
+          phone: { type: 'string', nullable: true, description: 'Stored parent phone (E.164 for writes through this API; null when none)' },
         },
       },
     },
@@ -677,17 +662,55 @@ const OPENAPI_SPEC = {
   paths: {
     '/?action=create': {
       post: {
-        summary: 'Create a student (dedups by phone / amocrm_customer_id; reactivates a frozen match)',
+        summary: 'Create-or-activate a student. Identity is amocrm_customer_id (Buyer ID), checked first: an id that already belongs to a student returns that student (replays are idempotent). Otherwise every student with the same phone is compared by normalized full name (trim, collapsed spaces, case-insensitive, ё=е): exactly one match → that student (the Buyer ID is linked if it has none); several → 409 ambiguous for manual review; none → a NEW student with the same phone. A matched frozen student is reactivated. Phone is optional when amocrm_customer_id is given (stored as null — never a placeholder). Nothing is written on any 4xx.',
         security: [{ ApiKeyAuth: [] }],
         requestBody: { required: true, content: { 'application/json': { schema: {
-          type: 'object', required: ['full_name', 'phone', 'branch_id'],
+          type: 'object', required: ['full_name', 'branch_id'],
+          description: 'phone is required unless amocrm_customer_id is given',
+          anyOf: [{ required: ['phone'] }, { required: ['amocrm_customer_id'] }],
           properties: {
-            full_name: { type: 'string' }, phone: { type: 'string' },
+            full_name: { type: 'string' },
+            phone: { $ref: '#/components/schemas/Phone' },
             branch_id: { type: 'string', format: 'uuid' },
-            amocrm_customer_id: { type: 'integer', nullable: true },
+            amocrm_customer_id: { type: 'integer', minimum: 1, nullable: true, description: 'amoCRM Buyer ID — unique per student (a numeric string is accepted)' },
           },
+        }, examples: {
+          sibling_same_phone: { value: { full_name: 'Aru Sadykova', phone: '+7 700 123 45 67', branch_id: '22222222-2222-4222-8222-222222222222', amocrm_customer_id: 1002 } },
+          international_phone: { value: { full_name: 'Maria Silva', phone: '+351 912 345 678', branch_id: '22222222-2222-4222-8222-222222222222', amocrm_customer_id: 1003 } },
+          no_phone: { value: { full_name: 'Timur Akhmetov', branch_id: '22222222-2222-4222-8222-222222222222', amocrm_customer_id: 1004 } },
         } } } },
-        responses: { '200': { description: 'Existing / reactivated' }, '201': { description: 'Created' }, '400': { description: 'Bad request' }, '401': { description: 'Unauthorized' }, '409': { description: 'Ambiguous dedup match' } },
+        responses: {
+          '200': {
+            description: 'Existing student (existing:true, matched_by amocrm_customer_id | phone_name; linked:true when the Buyer ID was written onto it; reactivated true/false when it was frozen). Read back by UUID or amocrm_customer_id with action=find.',
+            content: { 'application/json': { examples: {
+              replay_same_buyer_id: { value: { ok: true, existing: true, matched_by: 'amocrm_customer_id', student: { id: '00000000-0000-4000-8000-00000000000b', student_code: 'CE-00453', name: 'Aru Sadykova', status: 'active', amocrm_customer_id: 1002, phone: '+77001234567' } } },
+              phone_and_name_match: { value: { ok: true, existing: true, matched_by: 'phone_name', linked: true, student: { id: '00000000-0000-4000-8000-00000000000a', student_code: 'CE-00452', name: 'Ali Sadykov', status: 'active', amocrm_customer_id: 1001, phone: '+77001234567' } } },
+            } } },
+          },
+          '201': {
+            description: 'Created (existing:false). Two Buyer IDs sharing one phone create two students.',
+            content: { 'application/json': { examples: {
+              sibling_same_phone: { value: { ok: true, existing: false, student: { id: '00000000-0000-4000-8000-00000000000b', student_code: 'CE-00453', name: 'Aru Sadykova', status: 'active', amocrm_customer_id: 1002, phone: '+77001234567' }, status_history_id: '33333333-3333-4333-8333-333333333333' } },
+              international_phone: { value: { ok: true, existing: false, student: { id: '00000000-0000-4000-8000-00000000000c', student_code: 'CE-00454', name: 'Maria Silva', status: 'active', amocrm_customer_id: 1003, phone: '+351912345678' }, status_history_id: '33333333-3333-4333-8333-333333333334' } },
+              no_phone: { value: { ok: true, existing: false, student: { id: '00000000-0000-4000-8000-00000000000d', student_code: 'CE-00455', name: 'Timur Akhmetov', status: 'active', amocrm_customer_id: 1004, phone: null }, status_history_id: '33333333-3333-4333-8333-333333333335' } },
+            } } },
+          },
+          '400': {
+            description: 'invalid_input (field names it: full_name, phone, branch_id, amocrm_customer_id) or invalid_branch. Nothing is written.',
+            content: { 'application/json': { examples: {
+              invalid_phone: { value: { ok: false, reason: 'invalid_input', field: 'phone', message: 'phone must be a valid number in international format with its country code (E.164, …)' } },
+              phone_required_without_buyer_id: { value: { ok: false, reason: 'invalid_input', field: 'phone', message: '…' } },
+            } } },
+          },
+          '401': { description: 'Unauthorized' },
+          '409': {
+            description: 'ambiguous — several students share this phone AND the normalized name (candidates listed for manual review); amocrm_customer_id_conflict — the phone+name match already has a different Buyer ID, or the id was taken concurrently (conflict_student_id). Nothing is written.',
+            content: { 'application/json': { examples: {
+              ambiguous: { value: { ok: false, reason: 'ambiguous', candidates: [{ id: '00000000-0000-4000-8000-00000000000a', student_code: 'CE-00452', name: 'Ali Sadykov', status: 'active', amocrm_customer_id: 1001, phone: '+77001234567' }, { id: '00000000-0000-4000-8000-00000000000e', student_code: 'CE-00460', name: 'Ali Sadykov', status: 'frozen', amocrm_customer_id: null, phone: '+77001234567' }] } },
+              conflict: { value: { ok: false, reason: 'amocrm_customer_id_conflict', conflict_student_id: '00000000-0000-4000-8000-00000000000a' } },
+            } } },
+          },
+        },
       },
     },
     '/?action=freeze': {
@@ -697,9 +720,9 @@ const OPENAPI_SPEC = {
         requestBody: { required: true, content: { 'application/json': { schema: {
           type: 'object',
           description: 'One selector; precedence student_code > student_id > amocrm_customer_id > phone',
-          properties: { student_code: { $ref: '#/components/schemas/StudentCode' }, student_id: { type: 'string', format: 'uuid' }, phone: { type: 'string' }, amocrm_customer_id: { type: 'integer' } },
+          properties: { student_code: { $ref: '#/components/schemas/StudentCode' }, student_id: { type: 'string', format: 'uuid' }, phone: { $ref: '#/components/schemas/Phone' }, amocrm_customer_id: { type: 'integer' } },
         } } } },
-        responses: { '200': { description: 'OK' }, '400': { description: 'invalid_input / student_id_code_mismatch' }, '401': { description: 'Unauthorized' }, '404': { description: 'Not found' }, '409': { description: 'manual_change_recent / ambiguous' } },
+        responses: { '200': { description: 'OK' }, '400': { description: 'invalid_input / student_id_code_mismatch' }, '401': { description: 'Unauthorized' }, '404': { description: 'Not found' }, '409': { description: 'manual_change_recent / ambiguous (e.g. a phone shared by several students — use student_id / amocrm_customer_id)' } },
       },
     },
     '/?action=activate': {
@@ -709,9 +732,9 @@ const OPENAPI_SPEC = {
         requestBody: { required: true, content: { 'application/json': { schema: {
           type: 'object',
           description: 'One selector; precedence student_code > student_id > amocrm_customer_id > phone',
-          properties: { student_code: { $ref: '#/components/schemas/StudentCode' }, student_id: { type: 'string', format: 'uuid' }, phone: { type: 'string' }, amocrm_customer_id: { type: 'integer' } },
+          properties: { student_code: { $ref: '#/components/schemas/StudentCode' }, student_id: { type: 'string', format: 'uuid' }, phone: { $ref: '#/components/schemas/Phone' }, amocrm_customer_id: { type: 'integer' } },
         } } } },
-        responses: { '200': { description: 'OK' }, '400': { description: 'invalid_input / student_id_code_mismatch' }, '401': { description: 'Unauthorized' }, '404': { description: 'Not found' }, '409': { description: 'manual_change_recent / ambiguous' } },
+        responses: { '200': { description: 'OK' }, '400': { description: 'invalid_input / student_id_code_mismatch' }, '401': { description: 'Unauthorized' }, '404': { description: 'Not found' }, '409': { description: 'manual_change_recent / ambiguous (e.g. a phone shared by several students — use student_id / amocrm_customer_id)' } },
       },
     },
     '/?action=link_amocrm': {
@@ -760,10 +783,13 @@ const OPENAPI_SPEC = {
           properties: {
             student_id: { type: 'string', format: 'uuid' },
             student_code: { $ref: '#/components/schemas/StudentCode' },
-            phone: { type: 'string', description: 'KZ/RU phone, normalized to +7XXXXXXXXXX' },
+            phone: { $ref: '#/components/schemas/Phone' },
             amocrm_customer_id: { type: 'integer', minimum: 1, description: 'Positive integer (a numeric string is accepted)' },
           },
-        }, example: { student_id: '00000000-0000-4000-8000-000000000000', phone: '+77011234567', amocrm_customer_id: 123456 } } } },
+        }, examples: {
+          kz: { value: { student_id: '00000000-0000-4000-8000-000000000000', phone: '+77011234567', amocrm_customer_id: 123456 } },
+          international: { value: { student_id: '00000000-0000-4000-8000-000000000000', phone: '+44 7400 123456' } },
+        } } } },
         responses: {
           '200': {
             description: 'Updated (changed:true, with updated_fields and previous values) or every provided value already current (changed:false, no write). student uses the same shape as find.',
@@ -785,10 +811,19 @@ const OPENAPI_SPEC = {
         security: [{ ApiKeyAuth: [] }],
         parameters: [
           { name: 'student_code', in: 'query', required: false, schema: { $ref: '#/components/schemas/StudentCode' }, description: 'Exact Student ID (trimmed, uppercased; must match CE- + at least 5 digits); takes precedence over everything else' },
-          { name: 'phone', in: 'query', required: false, schema: { type: 'string' }, description: 'Required unless student_code / amocrm_customer_id is given' },
+          { name: 'phone', in: 'query', required: false, schema: { $ref: '#/components/schemas/Phone' }, description: 'Required unless student_code / amocrm_customer_id is given. Exact E.164 match (a +44 number never matches a +7 one); returns EVERY student sharing the phone (e.g. siblings). URL-encode + as %2B.' },
           { name: 'amocrm_customer_id', in: 'query', required: false, schema: { type: 'integer', minimum: 1 }, description: 'Exact amoCRM customer id; takes precedence over phone' },
         ],
-        responses: { '200': { description: '{ok, student_code, students[]}, {ok, amocrm_customer_id, students[]} or {ok, phone, students[]}' }, '400': { description: 'Bad student_code / phone / amocrm_customer_id (field names it)' }, '401': { description: 'Unauthorized' } },
+        responses: {
+          '200': {
+            description: '{ok, student_code, students[]}, {ok, amocrm_customer_id, students[]} or {ok, phone, students[]} — phone is the normalized E.164 value; students[] holds all matches',
+            content: { 'application/json': { examples: {
+              shared_phone: { value: { ok: true, phone: '+77001234567', students: [{ id: '00000000-0000-4000-8000-00000000000a', student_code: 'CE-00452', name: 'Ali Sadykov', status: 'active', amocrm_customer_id: 1001, phone: '+77001234567' }, { id: '00000000-0000-4000-8000-00000000000b', student_code: 'CE-00453', name: 'Aru Sadykova', status: 'active', amocrm_customer_id: 1002, phone: '+77001234567' }] } },
+            } } },
+          },
+          '400': { description: 'Bad student_code / phone / amocrm_customer_id (field names it)' },
+          '401': { description: 'Unauthorized' },
+        },
       },
     },
     '/?action=list': {
