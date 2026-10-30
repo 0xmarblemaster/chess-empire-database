@@ -186,9 +186,10 @@ eq(Object.keys(shaped).slice(0, 2), ['id', 'student_code'], 'student_code sits n
 
 // Every students select that reaches a client response uses STUDENT_SELECT.
 const studentSelects = INDEX.match(/\.from\('students'\)\.select\(([^)]*)\)/g) || [];
-const nonShaped = studentSelects.filter((s) => !/STUDENT_SELECT/.test(s));
-assert(nonShaped.every((s) => /select\('id(, (status|amocrm_customer_id))?'\)/.test(s)),
+const nonShaped = studentSelects.filter((s) => !/STUDENT_SELECT|ROSTER_SELECT/.test(s));
+assert(nonShaped.every((s) => /select\('id(, (status|amocrm_customer_id))?'(, \{ count: 'exact', head: true \})?\)/.test(s)),
   `non-STUDENT_SELECT student reads are internal id/status lookups only (${nonShaped.join(' | ')})`);
+assert(/const ROSTER_SELECT = 'id, student_code,/.test(INDEX), 'roster export select carries student_code');
 assert(/\.update\(patch\)\.eq\('id', id\)\s*\.select\(STUDENT_SELECT\)/.test(INDEX), 'update_contact returns STUDENT_SELECT row');
 
 assert(/action === 'list'/.test(INDEX) && /listStudents\(ctx, url\)/.test(INDEX), 'routes GET action=list');

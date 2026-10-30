@@ -153,6 +153,136 @@ export function parseListParams(params) {
   return { value: { limit, offset, branch_id: branchId, status } };
 }
 
+// ─── Roster + rank history (weekly rank-tracking export) ────────────────────
+
+export const EXPORT_DEFAULT_LIMIT = 1000;
+export const EXPORT_MAX_LIMIT = 1000;
+// students.razryad NULL is exported as this explicit value, never null.
+export const RANK_NONE = 'none';
+export const ROSTER_STATUSES = [...STUDENT_STATUSES, 'all'];
+
+const personName = (first, last) => `${first || ''} ${last || ''}`.trim() || null;
+const isoOrNull = (ts) => (ts ? new Date(ts).toISOString() : null);
+
+// Shared limit / offset / after_id parsing. Keyset (after_id) and offset are
+// alternatives — combining them is rejected so a page is never ambiguous.
+function parsePage(p) {
+  const limit = present(p.limit) ? Number(p.limit) : EXPORT_DEFAULT_LIMIT;
+  if (!Number.isInteger(limit) || limit < 1 || limit > EXPORT_MAX_LIMIT) return { field: 'limit' };
+  const offset = present(p.offset) ? Number(p.offset) : 0;
+  if (!Number.isInteger(offset) || offset < 0) return { field: 'offset' };
+  const afterId = present(p.after_id) ? p.after_id : null;
+  if (afterId !== null && (!isUuid(afterId) || offset > 0)) return { field: 'after_id' };
+  return { value: { limit, offset, after_id: afterId } };
+}
+
+// GET ?action=roster params. status defaults to 'active'; 'all' = no filter.
+export function parseRosterParams(params) {
+  const p = params || {};
+  const status = present(p.status) ? p.status : 'active';
+  if (!ROSTER_STATUSES.includes(status)) return { field: 'status' };
+  const page = parsePage(p);
+  if (!page.value) return page;
+  return { value: { ...page.value, status } };
+}
+
+// Stage = students.current_level (1-8, UI label «Ступень»); no stage table.
+export function stageName(level) {
+  return Number.isInteger(level) ? `Ступень ${level}` : null;
+}
+
+// Map a students row (+ branch / coach name lookups) to a roster row.
+export function rosterRow(row, { branchNames = {}, coachNames = {} } = {}) {
+  const level = row.current_level ?? null;
+  return {
+    student_id: row.id,
+    student_code: row.student_code ?? null,
+    full_name: personName(row.first_name, row.last_name),
+    status: row.status,
+    branch_id: row.branch_id ?? null,
+    branch_name: (row.branch_id && branchNames[row.branch_id]) || null,
+    trainer_id: row.coach_id ?? null,
+    trainer_name: (row.coach_id && coachNames[row.coach_id]) || null,
+    stage_id: level,
+    stage_name: stageName(level),
+    current_rank: row.razryad || RANK_NONE,
+    student_created_at: isoOrNull(row.created_at),
+  };
+}
+
+// Keyset cursor for the next page: the last id of a full page, else null.
+export function nextAfterId(rows, limit) {
+  return rows.length === limit && rows.length > 0 ? rows[rows.length - 1].id : null;
+}
+
+// Strict ISO-8601 instant: a date (YYYY-MM-DD = 00:00 UTC) or a date-time WITH
+// an explicit offset (Z / ±HH:MM) — a zone-less time is ambiguous and rejected.
+// Returns the canonical ISO string or null.
+export function parseIsoInstant(raw) {
+  if (typeof raw !== 'string') return null;
+  const s = raw.trim();
+  if (!/^\d{4}-\d{2}-\d{2}(T\d{2}:\d{2}(:\d{2}(\.\d{1,6})?)?(Z|[+-]\d{2}:?\d{2}))?$/.test(s)) return null;
+  const ms = Date.parse(s);
+  if (!Number.isFinite(ms)) return null;
+  // Reject calendar overflow (e.g. 2026-02-30) that Date.parse would roll over.
+  if (new Date(Date.parse(s.slice(0, 10))).toISOString().slice(0, 10) !== s.slice(0, 10)) return null;
+  return new Date(ms).toISOString();
+}
+
+// GET ?action=rank_history params: optional student_id / student_code, from
+// (inclusive) / to (exclusive) ISO instants, from < to, plus paging.
+export function parseRankHistoryParams(params) {
+  const p = params || {};
+  const ref = parseStudentRef(p, { required: false });
+  if (!ref.value) return ref;
+  const from = present(p.from) ? parseIsoInstant(p.from) : null;
+  if (present(p.from) && !from) return { field: 'from' };
+  const to = present(p.to) ? parseIsoInstant(p.to) : null;
+  if (present(p.to) && !to) return { field: 'to' };
+  if (from && to && from >= to) return { field: 'to' };
+  if (present(p.after_id)) return { field: 'after_id' };
+  const page = parsePage(p);
+  if (!page.value) return page;
+  return { value: { ...ref.value, from, to, limit: page.value.limit, offset: page.value.offset } };
+}
+
+// Map a razryad_history row (+ student code / name lookups) to the API shape.
+export function rankHistoryRow(row, { studentCodes = {}, coachNames = {}, userNames = {} } = {}) {
+  return {
+    rank_change_id: row.id,
+    student_id: row.student_id,
+    student_code: studentCodes[row.student_id] ?? null,
+    previous_rank: row.old_razryad || RANK_NONE,
+    new_rank: row.new_razryad || RANK_NONE,
+    changed_at: isoOrNull(row.changed_at),
+    changed_by_id: row.changed_by ?? null,
+    changed_by_name: (row.changed_by && userNames[row.changed_by]) || null,
+    source: row.source,
+    source_derived: row.source_derived === true,
+    trainer_id_at_change: row.trainer_id_at_change ?? null,
+    trainer_name_at_change: (row.trainer_id_at_change && coachNames[row.trainer_id_at_change]) || null,
+    trainer_attribution: row.trainer_attribution ?? 'unknown',
+  };
+}
+
+// { id: "First Last" } from rows with id / first_name / last_name.
+/** @returns {Record<string, string | null>} */
+export function nameMap(rows) {
+  const out = {};
+  for (const r of rows || []) out[r.id] = personName(r.first_name, r.last_name);
+  return out;
+}
+
+// changed_by display names: a coach account → its coach's name, otherwise the
+// staff account email (emailById), otherwise absent (→ null in the row).
+export function userNameMap(roleRows, coachNames, emailById = {}) {
+  const out = { ...emailById };
+  for (const r of roleRows || []) {
+    if (r.coach_id && coachNames[r.coach_id]) out[r.user_id] = coachNames[r.coach_id];
+  }
+  return out;
+}
+
 // ─── amoCRM link ────────────────────────────────────────────────────────────
 
 // Parse a positive integer amoCRM customer id from a JSON number or a numeric

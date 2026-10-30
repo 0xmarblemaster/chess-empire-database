@@ -3,12 +3,13 @@
 // Unlike the read-only analytics-* functions, this one WRITES: create a
 // student, freeze / activate (unfreeze) a student, link an amoCRM customer id
 // to an existing student, correct (overwrite) a student's phone / amoCRM id,
-// find by Student ID (student_code) / phone / amoCRM id, list students, list branches. Every write requires an `x-api-key` header checked against the
+// find by Student ID (student_code) / phone / amoCRM id, list students, list branches, and export the
+// weekly roster + rank change history (read-only). Every call requires an `x-api-key` header checked against the
 // CHESS_EMPIRE_WRITE_KEY env var (a NEW key, distinct from the tournament-only
 // CHESS_EMPIRE_API_KEY — the two surfaces never share a key).
 //
 // Routing is on a `?action=` query param (create / freeze / activate /
-// link_amocrm / update_contact / find / list / branches / survival-score / survival-best / survival-leaderboard); GET with no action returns the OpenAPI self-doc. Modelled on
+// link_amocrm / update_contact / find / list / branches / roster / rank_history / survival-score / survival-best / survival-leaderboard); GET with no action returns the OpenAPI self-doc. Modelled on
 // tournaments-api/index.ts (Deno serve + CORS + json/ok/err helpers).
 //
 // Product rules enforced here:
@@ -42,6 +43,15 @@ import {
   studentCodeLookup,
   parseListParams,
   LIST_MAX_LIMIT,
+  parseRosterParams,
+  rosterRow,
+  nextAfterId,
+  parseRankHistoryParams,
+  rankHistoryRow,
+  nameMap,
+  userNameMap,
+  EXPORT_MAX_LIMIT,
+  ROSTER_STATUSES,
   STUDENT_STATUSES,
   parseAmocrmId,
   validateLinkAmocrm,
@@ -510,6 +520,110 @@ async function listBranches(ctx: Ctx): Promise<Response> {
   return ok({ branches: (data || []).map((b: any) => ({ id: b.id, name: b.name })) })
 }
 
+// ─── Roster + rank history (weekly rank-tracking export, read-only) ──────────
+
+const ROSTER_SELECT = 'id, student_code, first_name, last_name, status, branch_id, coach_id, current_level, razryad, created_at'
+const RANK_HISTORY_SELECT = 'id, student_id, old_razryad, new_razryad, changed_at, changed_by, source, source_derived, trainer_id_at_change, trainer_attribution, student:students(student_code)'
+
+interface RankHistoryDbRow { student_id: string; changed_by: string | null; student: { student_code: string | null } | null }
+interface UserRoleRow { user_id: string; coach_id: string | null }
+
+// Coaches and branches are small tables — one read each beats long id lists.
+async function coachNames(ctx: Ctx): Promise<Record<string, string | null>> {
+  const { data, error } = await ctx.supabase.from('coaches').select('id, first_name, last_name')
+  if (error) throw error
+  return nameMap(data)
+}
+
+async function branchNames(ctx: Ctx): Promise<Record<string, string>> {
+  const { data, error } = await ctx.supabase.from('branches').select('id, name')
+  if (error) throw error
+  return Object.fromEntries((data || []).map((b: { id: string; name: string }) => [b.id, b.name]))
+}
+
+// Weekly roster snapshot ordered by id. total is the exact count for the
+// status filter at as_of (independent of the page / cursor).
+async function getRoster(ctx: Ctx, url: URL): Promise<Response> {
+  const q = (k: string) => url.searchParams.get(k)
+  const parsed = parseRosterParams({ status: q('status'), limit: q('limit'), offset: q('offset'), after_id: q('after_id') })
+  if (!parsed.value) return err('invalid_input', 400, { field: parsed.field })
+  const p = parsed.value
+  const asOf = new Date().toISOString()
+
+  let query = ctx.supabase.from('students').select(ROSTER_SELECT).order('id', { ascending: true })
+  let countQuery = ctx.supabase.from('students').select('id', { count: 'exact', head: true })
+  if (p.status !== 'all') {
+    query = query.eq('status', p.status)
+    countQuery = countQuery.eq('status', p.status)
+  }
+  query = p.after_id
+    ? query.gt('id', p.after_id).limit(p.limit)
+    : query.range(p.offset, p.offset + p.limit - 1)
+
+  const [rows, counted, coaches, branches] = await Promise.all([query, countQuery, coachNames(ctx), branchNames(ctx)])
+  if (rows.error) throw rows.error
+  if (counted.error) throw counted.error
+  const data = rows.data || []
+  return ok({
+    as_of: asOf, status: p.status, total: counted.count ?? 0, limit: p.limit, offset: p.offset,
+    after_id: p.after_id, next_after_id: nextAfterId(data, p.limit),
+    students: data.map((r: Record<string, unknown>) => rosterRow(r, { branchNames: branches, coachNames: coaches })),
+  })
+}
+
+// changed_by display names: coach accounts → coach name; other staff → their
+// auth email (service-role read); unknown / deleted users → null.
+async function userNames(ctx: Ctx, userIds: string[], coaches: Record<string, string | null>) {
+  if (userIds.length === 0) return {}
+  const { data, error } = await ctx.supabase.from('user_roles').select('user_id, coach_id').in('user_id', userIds)
+  if (error) throw error
+  const roles: UserRoleRow[] = data || []
+  const coachUsers = new Set(roles.filter((r) => r.coach_id && coaches[r.coach_id]).map((r) => r.user_id))
+  const emails: Record<string, string> = {}
+  await Promise.all(userIds.filter((id) => !coachUsers.has(id)).map(async (id) => {
+    const { data: u } = await ctx.supabase.auth.admin.getUserById(id)
+    if (u?.user?.email) emails[id] = u.user.email
+  }))
+  return userNameMap(roles, coaches, emails)
+}
+
+// Append-only rank change log ordered by changed_at, id. from inclusive, to
+// exclusive. History starts 2026-05-18 — earlier ranks have no events.
+async function getRankHistory(ctx: Ctx, url: URL): Promise<Response> {
+  const q = (k: string) => url.searchParams.get(k)
+  const parsed = parseRankHistoryParams({
+    student_id: q('student_id'), student_code: q('student_code'), from: q('from'), to: q('to'),
+    limit: q('limit'), offset: q('offset'), after_id: q('after_id'),
+  })
+  if (!parsed.value) return err('invalid_input', 400, { field: parsed.field })
+  const p = parsed.value
+  let studentId: string | null = p.student_id ?? null
+  if (p.student_code) {
+    const r = await resolveStudentRef(codeLookup(ctx), p)
+    if (r.error) return json(r.error.body, r.error.status)
+    studentId = r.id
+  }
+
+  let query = ctx.supabase.from('razryad_history').select(RANK_HISTORY_SELECT, { count: 'exact' })
+    .order('changed_at', { ascending: true }).order('id', { ascending: true })
+    .range(p.offset, p.offset + p.limit - 1)
+  if (studentId) query = query.eq('student_id', studentId)
+  if (p.from) query = query.gte('changed_at', p.from)
+  if (p.to) query = query.lt('changed_at', p.to)
+
+  const [rows, coaches] = await Promise.all([query, coachNames(ctx)])
+  if (rows.error) throw rows.error
+  const data: RankHistoryDbRow[] = rows.data || []
+  const studentCodes = Object.fromEntries(data.map((r) => [r.student_id, r.student?.student_code ?? null]))
+  const changers = [...new Set(data.map((r) => r.changed_by).filter((id): id is string => !!id))]
+  const users = await userNames(ctx, changers, coaches)
+  return ok({
+    as_of: new Date().toISOString(), student_id: studentId, from: p.from, to: p.to,
+    total: rows.count ?? 0, limit: p.limit, offset: p.offset,
+    rank_changes: data.map((r) => rankHistoryRow(r, { studentCodes, coachNames: coaches, userNames: users })),
+  })
+}
+
 // ─── Puzzle Rush (survival) ─────────────────────────────────────────────────
 
 const SURVIVAL_NOTES = 'Chesster Puzzle Rush (survival)'
@@ -621,7 +735,7 @@ const OPENAPI_SPEC = {
   info: {
     title: 'Chess Empire — Students (write) API',
     version: '1.0.0',
-    description: 'Write API for external integrations (e.g. AmoCRM, Chesster): create / freeze / activate students, link an amoCRM customer id to an existing student, correct the phone / amoCRM id, find by Student ID (student_code) / phone / amoCRM id, list students, list branches, push Puzzle Rush survival scores and read Puzzle Rush rankings. All actions require an x-api-key header (CHESS_EMPIRE_WRITE_KEY). Every student carries student_code — a permanent, human-readable Student ID (CE-00001; CE-100000 after CE-99999) assigned by the database, never edited and never reused. Wherever student_id is accepted, student_code may be given instead; if both are given they must name the same student (400 student_id_code_mismatch). Phones are E.164 with any country code and are NOT unique (siblings may share one); amocrm_customer_id is unique and is the primary identity for create.',
+    description: 'Write API for external integrations (e.g. AmoCRM, Chesster): create / freeze / activate students, link an amoCRM customer id to an existing student, correct the phone / amoCRM id, find by Student ID (student_code) / phone / amoCRM id, list students, list branches, export the weekly roster and rank change history (read-only), push Puzzle Rush survival scores and read Puzzle Rush rankings. All actions require an x-api-key header (CHESS_EMPIRE_WRITE_KEY). Every student carries student_code — a permanent, human-readable Student ID (CE-00001; CE-100000 after CE-99999) assigned by the database, never edited and never reused. Wherever student_id is accepted, student_code may be given instead; if both are given they must name the same student (400 student_id_code_mismatch). Phones are E.164 with any country code and are NOT unique (siblings may share one); amocrm_customer_id is unique and is the primary identity for create.',
   },
   servers: [
     { url: 'https://papgcizhfkngubwofjuo.supabase.co/functions/v1/students-api', description: 'Supabase edge function direct' },
@@ -846,6 +960,34 @@ const OPENAPI_SPEC = {
         responses: { '200': { description: 'OK' }, '401': { description: 'Unauthorized' } },
       },
     },
+    '/?action=roster': {
+      get: {
+        summary: 'Weekly roster snapshot ordered by id: student_id, student_code, full_name, status, branch_id, branch_name, trainer_id, trainer_name, stage_id (current_level), stage_name ("Ступень N"), current_rank (never null — "none"), student_created_at (record creation, NOT training start). Read-only.',
+        security: [{ ApiKeyAuth: [] }],
+        parameters: [
+          { name: 'status', in: 'query', schema: { type: 'string', enum: ROSTER_STATUSES, default: 'active' } },
+          { name: 'limit', in: 'query', schema: { type: 'integer', minimum: 1, maximum: EXPORT_MAX_LIMIT, default: EXPORT_MAX_LIMIT } },
+          { name: 'offset', in: 'query', schema: { type: 'integer', minimum: 0, default: 0 } },
+          { name: 'after_id', in: 'query', schema: { type: 'string', format: 'uuid' }, description: 'Keyset cursor (next_after_id of the previous page); not combinable with offset' },
+        ],
+        responses: { '200': { description: '{ok, as_of, status, total, limit, offset, after_id, next_after_id, students[]} — total is the exact count for the status filter; next_after_id is null on the last page' }, '400': { description: 'Bad status / limit / offset / after_id (field names it)' }, '401': { description: 'Unauthorized' } },
+      },
+    },
+    '/?action=rank_history': {
+      get: {
+        summary: 'Append-only rank (razryad) change log ordered by changed_at, id: rank_change_id, student_id, student_code, previous_rank, new_rank, changed_at, changed_by_id, changed_by_name, source, source_derived, trainer_id_at_change, trainer_name_at_change, trainer_attribution. History starts 2026-05-18; downgrades/corrections are included. Read-only.',
+        security: [{ ApiKeyAuth: [] }],
+        parameters: [
+          { name: 'student_id', in: 'query', schema: { type: 'string', format: 'uuid' } },
+          { name: 'student_code', in: 'query', schema: { $ref: '#/components/schemas/StudentCode' } },
+          { name: 'from', in: 'query', schema: { type: 'string' }, description: 'Inclusive lower bound: ISO date (00:00 UTC) or date-time with offset' },
+          { name: 'to', in: 'query', schema: { type: 'string' }, description: 'Exclusive upper bound, same format; must be after from' },
+          { name: 'limit', in: 'query', schema: { type: 'integer', minimum: 1, maximum: EXPORT_MAX_LIMIT, default: EXPORT_MAX_LIMIT } },
+          { name: 'offset', in: 'query', schema: { type: 'integer', minimum: 0, default: 0 } },
+        ],
+        responses: { '200': { description: '{ok, as_of, student_id, from, to, total, limit, offset, rank_changes[]}' }, '400': { description: 'Bad student_id / student_code / from / to / limit / offset, or student_id_code_mismatch' }, '404': { description: 'Unknown student_code' }, '401': { description: 'Unauthorized' } },
+      },
+    },
     '/?action=survival-score': {
       post: {
         summary: `Push a Chesster Puzzle Rush Survival run (score 0..${SURVIVAL_SCORE_MAX}). Idempotent on external_ref: a repeat returns {ok:true, duplicate:true, id} without a second row.`,
@@ -945,6 +1087,12 @@ export async function handle(req: Request): Promise<Response> {
     }
     if (method === 'GET' && action === 'branches') {
       const r = await listBranches(ctx); status = r.status; return r
+    }
+    if (method === 'GET' && action === 'roster') {
+      const r = await getRoster(ctx, url); status = r.status; return r
+    }
+    if (method === 'GET' && action === 'rank_history') {
+      const r = await getRankHistory(ctx, url); status = r.status; return r
     }
     if (method === 'POST' && action === 'survival-score') {
       const r = await pushSurvivalScore(ctx); status = r.status; return r
