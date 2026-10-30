@@ -237,6 +237,24 @@ with tempfile.TemporaryDirectory() as tmp:
           'weekly: no Cohort churn sheet')
     check('Includes' not in open(out['summary'], encoding='utf-8').read(), 'no cleanup line without backdated leavers')
 
+    print('\nempty coaches')
+    p = payload('month')
+    zero = {k: 0 for k in ('active_students', 'new_students', 'left', 'frozen_30d', 'churn', 'net_growth')}
+    empty = dict(coach(7, 'Пустой Тренер', None, 40.0, small=True), rank=None, **zero,
+                 razryad_changes={'promotions': 0, 'downgrades': 0}, podiums={'finishes': 0})
+    lost_all = dict(coach(6, 'Ушли Все', None, 20.0, small=True), rank=None, **dict(zero, left=5, churn=5))
+    p['report']['coaches'] += [empty, lost_all]
+    p['cohort']['coaches'].append({'coach_id': empty['coach_id'], 'coach_name': 'Пустой Тренер', 'max_months': 0,
+                                   'rows': []})
+    out = cr.write_report(p, os.path.join(tmp, 'empty'))
+    wb = load_workbook(out['xlsx'])
+    for sheet in ('Ranking', 'Per-coach detail', 'Cohort churn', 'Tournaments'):
+        names = [r[0 if sheet != 'Ranking' else 1] for r in wb[sheet].iter_rows(values_only=True)]
+        check('Пустой Тренер' not in names, f'{sheet}: coach with 0 students and no activity dropped')
+    check('Ушли Все' in [r[1] for r in wb['Ranking'].iter_rows(values_only=True)],
+          'coach with 0 active but leavers in period is kept')
+    check(len(p['report']['coaches']) == 10, 'input payload not mutated')
+
     print('\nCLI')
     calls = []
     cr.fetch = lambda base, key, params: calls.append(params) or (payload('week')['report'])

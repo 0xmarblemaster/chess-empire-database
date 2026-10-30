@@ -353,7 +353,27 @@ def build_summary(payload):
     return '\n'.join(lines) + '\n'
 
 
+def is_empty_coach(c):
+    """No active students and nothing credited to them in the period: nothing to report."""
+    rz = c.get('razryad_changes') or {}
+    pod = c.get('podiums') or {}
+    return not any([c.get('active_students'), c.get('new_students'), c.get('left'), c.get('frozen_30d'),
+                    rz.get('promotions'), rz.get('downgrades'), pod.get('finishes')])
+
+
+def drop_empty_coaches(payload):
+    """Remove empty coaches from every sheet and the summary; school totals are unaffected."""
+    report = dict(payload['report'])
+    empty = {c.get('coach_id') for c in report['coaches'] if is_empty_coach(c)}
+    report['coaches'] = [c for c in report['coaches'] if c.get('coach_id') not in empty]
+    cohort = payload.get('cohort')
+    if cohort is not None:
+        cohort = dict(cohort, coaches=[c for c in cohort.get('coaches', []) if c.get('coach_id') not in empty])
+    return dict(payload, report=report, cohort=cohort)
+
+
 def write_report(payload, out_dir):
+    payload = drop_empty_coaches(payload)
     report = payload['report']
     w = report['period']
     os.makedirs(out_dir, exist_ok=True)
