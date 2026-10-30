@@ -1,0 +1,293 @@
+openapi: 3.1.0
+info:
+  title: Chess Empire — Coach Reports API (analytics-coaches)
+  version: 1.0.0
+  description: |
+    Read-only coach performance reports (PRD_COACH_REPORTS.md), backed by the
+    migration 101 RPCs `coach_report` and `coach_cohort_matrix`.
+
+    Auth — either:
+      * `x-api-key` (as analytics-tournaments) AND `Authorization: Bearer <access
+        token of an admin session>`; a non-admin session gets 403;
+      * `Authorization: Bearer <service-role / sb_secret key>` (cron script
+        `scripts/coach_report.py`).
+
+    Rules:
+      * Counts are credited to the coach at the time of the event (audit_log
+        coach_id timeline); unknown or deleted coach → the `unattributed` row.
+        Razryad changes use `razryad_history.trainer_id_at_change`.
+      * New = first activation in the window (new student row, or left → active
+        after more than 60 days). `left` and `frozen_30d` (frozen 30+ days, not
+        reactivated by window end) are separate; `churn` = left + frozen_30d.
+      * Status events are de-duplicated (same student + transition within 5 minutes).
+      * Active roster, razryad snapshot and participation buckets are the current roster.
+      * Data limits: tournament / razryad metrics start May 2026; retention for
+        students who started before Dec 2025 is a lower bound.
+servers:
+  - url: https://papgcizhfkngubwofjuo.supabase.co/functions/v1/analytics-coaches
+    description: Supabase edge function direct
+security:
+  - ApiKeyAuth: []
+    AdminSession: []
+  - ServiceKey: []
+
+components:
+  securitySchemes:
+    ApiKeyAuth:
+      type: apiKey
+      in: header
+      name: x-api-key
+    AdminSession:
+      type: http
+      scheme: bearer
+      description: Access token of a dashboard session whose user_roles.role = 'admin'.
+    ServiceKey:
+      type: http
+      scheme: bearer
+      description: Service-role / sb_secret key (server-side only).
+
+  responses:
+    BadRequest:
+      description: Invalid parameter
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+    Unauthorized:
+      description: No valid credentials
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+    Forbidden:
+      description: Signed in, but not an admin
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+
+  schemas:
+    Error:
+      type: object
+      properties:
+        success: { type: boolean, const: false }
+        error: { type: string }
+    Share:
+      type: object
+      properties:
+        count: { type: integer }
+        pct: { type: [number, 'null'], description: '% of the denominator (1 dp); null when it is 0' }
+    Buckets:
+      type: object
+      description: Active students by number of tournaments played (one upload = one tournament).
+      properties:
+        '0': { $ref: '#/components/schemas/Share' }
+        '1': { $ref: '#/components/schemas/Share' }
+        '2': { $ref: '#/components/schemas/Share' }
+        '3': { $ref: '#/components/schemas/Share' }
+        '4+': { $ref: '#/components/schemas/Share' }
+    Window:
+      type: object
+      properties:
+        period: { type: string, enum: [week, month, quarter, half, year] }
+        start_date: { type: string, format: date }
+        end_date: { type: string, format: date, description: Last day (inclusive) }
+        start: { type: string, format: date-time, example: '2026-10-01T00:00:00+05:00' }
+        end: { type: string, format: date-time, description: Exclusive, Almaty midnight }
+    MetricsRow:
+      type: object
+      properties:
+        coach_id: { type: [string, 'null'], format: uuid, description: 'null for Unattributed / School total' }
+        coach_name: { type: string }
+        active_students: { type: integer }
+        small_sample: { type: boolean, description: Fewer than 10 active students }
+        new_students: { type: integer }
+        left: { type: integer }
+        frozen_30d: { type: integer }
+        churn: { type: integer, description: left + frozen_30d }
+        net_growth: { type: integer, description: new_students − left }
+        retention:
+          type: object
+          properties:
+            n: { type: integer }
+            events: { type: integer, description: Students who left }
+            left_censored: { type: integer, description: 'Start ≤ Dec 2025 (lower bound)' }
+            mean_months: { type: [number, 'null'] }
+            median_months: { type: [number, 'null'] }
+            km_survival_3m: { type: [number, 'null'], description: Kaplan–Meier S(3 months), 0..1 }
+            km_survival_6m: { type: [number, 'null'], description: Kaplan–Meier S(6 months), 0..1 }
+        razryad_snapshot:
+          type: object
+          properties:
+            none: { $ref: '#/components/schemas/Share' }
+            4th: { $ref: '#/components/schemas/Share' }
+            3rd: { $ref: '#/components/schemas/Share' }
+            2nd: { $ref: '#/components/schemas/Share' }
+            1st: { $ref: '#/components/schemas/Share' }
+            other: { $ref: '#/components/schemas/Share' }
+        razryad_changes:
+          type: object
+          properties:
+            promotions: { type: integer }
+            downgrades: { type: integer }
+            promotions_by_razryad: { type: object, additionalProperties: { type: integer }, description: Keyed by new razryad }
+            downgrades_by_razryad: { type: object, additionalProperties: { type: integer }, description: Keyed by new razryad }
+        participation:
+          type: object
+          properties:
+            period: { $ref: '#/components/schemas/Buckets' }
+            lifetime: { $ref: '#/components/schemas/Buckets' }
+        podiums:
+          type: object
+          properties:
+            participants: { type: integer, description: Distinct students with a result in the window }
+            students: { type: integer, description: Distinct students placing 1st–3rd }
+            finishes: { type: integer }
+            pct_of_participants: { type: [number, 'null'] }
+            by_kind:
+              type: object
+              properties:
+                league_c: { type: integer }
+                league_b: { type: integer }
+                razryad_4: { type: integer }
+                razryad_3: { type: integer }
+                rated: { type: integer }
+    RankedCoach:
+      allOf:
+        - $ref: '#/components/schemas/MetricsRow'
+        - type: object
+          properties:
+            score: { type: number, minimum: 0, maximum: 100 }
+            sub_scores:
+              type: object
+              description: Each 0..1
+              properties:
+                retention: { type: number }
+                net_growth: { type: number }
+                razryad_promotions: { type: number }
+                tournament_participation: { type: number }
+                podiums: { type: number }
+            rank: { type: [integer, 'null'], description: Competition rank (ties share); null = not ranked }
+            ranks:
+              type: object
+              description: Per-metric competition ranks
+              additionalProperties: { type: integer }
+    Mover:
+      type: object
+      properties:
+        coach_id: { type: string, format: uuid }
+        coach_name: { type: string }
+        score: { type: number }
+        previous_score: { type: number }
+        score_delta: { type: number }
+        rank: { type: integer }
+        previous_rank: { type: integer }
+        rank_delta: { type: integer, description: previous_rank − rank (positive = moved up) }
+    Report:
+      type: object
+      properties:
+        period: { $ref: '#/components/schemas/Window' }
+        previous_period: { $ref: '#/components/schemas/Window' }
+        generated_at: { type: string, format: date-time }
+        weights:
+          type: object
+          example: { retention: 30, net_growth: 20, razryad_promotions: 20, tournament_participation: 15, podiums: 15 }
+        coaches: { type: array, items: { $ref: '#/components/schemas/RankedCoach' } }
+        unattributed: { $ref: '#/components/schemas/MetricsRow' }
+        school: { $ref: '#/components/schemas/MetricsRow' }
+        previous:
+          type: object
+          properties:
+            coaches:
+              type: array
+              items:
+                type: object
+                properties:
+                  coach_id: { type: string, format: uuid }
+                  coach_name: { type: string }
+                  score: { type: number }
+                  rank: { type: [integer, 'null'] }
+            school: { $ref: '#/components/schemas/MetricsRow' }
+        movers:
+          type: object
+          properties:
+            up: { type: array, items: { $ref: '#/components/schemas/Mover' } }
+            down: { type: array, items: { $ref: '#/components/schemas/Mover' } }
+    CohortMatrix:
+      type: object
+      properties:
+        coach_id: { type: [string, 'null'], format: uuid }
+        generated_at: { type: string, format: date-time }
+        max_months: { type: integer }
+        rows:
+          type: array
+          items:
+            type: object
+            properties:
+              start_month: { type: string, example: '2026-03' }
+              cohort_size: { type: integer }
+              left_censored: { type: boolean, description: 'Cohort ≤ Dec 2025' }
+              left_pct: { type: array, items: { type: number }, description: 'Cumulative % left within k months (index k)' }
+              churn_pct: { type: array, items: { type: number }, description: 'Cumulative % left or frozen 30+ within k months' }
+        by_level_at_leaving:
+          type: array
+          items:
+            type: object
+            properties:
+              level: { type: string }
+              left: { type: integer }
+              churn: { type: integer }
+        by_razryad_at_leaving:
+          type: array
+          items:
+            type: object
+            properties:
+              razryad: { type: string }
+              left: { type: integer }
+              churn: { type: integer }
+
+paths:
+  /?action=report:
+    get:
+      summary: Ranked coach report for one period (+ previous period for movers)
+      parameters:
+        - name: period
+          in: query
+          required: true
+          schema: { type: string, enum: [week, month, quarter, half, year] }
+          description: 'Asia/Almaty windows: week Mon–Sun, calendar month / quarter, Jan–Jun / Jul–Dec, calendar year.'
+        - name: date
+          in: query
+          schema: { type: string, format: date }
+          description: Any day inside the wanted period. Default = yesterday in Almaty (the period that just ended when run on its first day).
+      responses:
+        '200':
+          description: Report
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean, const: true }
+                  data: { $ref: '#/components/schemas/Report' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+  /?action=cohort_matrix:
+    get:
+      summary: Churn by start cohort (start month × months since start)
+      parameters:
+        - name: coach_id
+          in: query
+          schema: { type: string, format: uuid }
+          description: Cohort = students whose coach at the start date was this coach. Omit for school-wide.
+      responses:
+        '200':
+          description: Cohort matrix
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean, const: true }
+                  data: { $ref: '#/components/schemas/CohortMatrix' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }

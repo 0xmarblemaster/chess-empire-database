@@ -299,6 +299,80 @@ curl -H "x-api-key: <CHESS_EMPIRE_READONLY_KEY — see supabase secrets>" \
 
 ---
 
+## 8a. Analytics - Coach reports (`analytics-coaches`)
+
+Ranked coach performance reports (PRD_COACH_REPORTS.md). **Read-only**; reads
+the migration `101_coach_reports.sql` RPCs `coach_report` / `coach_cohort_matrix`
+(EXECUTE for `service_role` only). Full schemas: `docs/openapi/analytics-coaches.yaml`.
+
+**Auth** (either):
+- `x-api-key` (as analytics-tournaments) **and** `Authorization: Bearer <access
+  token of an admin session>` — non-admin sessions get `403`.
+- `Authorization: Bearer <service-role / sb_secret key>` — used by the cron
+  script `scripts/coach_report.py`.
+
+**`GET ?action=report&period=week|month|quarter|half|year[&date=YYYY-MM-DD]`** —
+the period that contains `date` (default: **yesterday in Almaty**, so a run on
+Monday / the 1st reports the period that just ended). Windows are Asia/Almaty
+(UTC+5): week Mon–Sun, calendar month, calendar quarter, Jan–Jun / Jul–Dec,
+calendar year; `end` is exclusive. Response `data`:
+`{period, previous_period, generated_at, weights, coaches:[…], unattributed,
+school, previous:{coaches:[{coach_id, coach_name, score, rank}], school}, movers:{up, down}}`.
+
+Each coach row (and `unattributed` / `school`, which have no score):
+`active_students`, `small_sample` (< 10 active), `new_students`, `left`,
+`frozen_30d`, `churn` (= left + frozen_30d), `net_growth` (= new − left),
+`retention {n, events, left_censored, mean_months, median_months,
+km_survival_3m, km_survival_6m}`, `razryad_snapshot {none|4th|3rd|2nd|1st|other:
+{count, pct}}`, `razryad_changes {promotions, downgrades, promotions_by_razryad,
+downgrades_by_razryad}`, `participation {period, lifetime}` (buckets `0`–`4+`,
+`{count, pct}` of active students), `podiums {participants, students, finishes,
+pct_of_participants, by_kind}`; ranked coaches add `score` (0–100),
+`sub_scores`, `rank` and per-metric `ranks`.
+
+Rules:
+- Counts are credited to the **coach at the time of the event** (audit_log
+  coach_id timeline; no coach change since 2026-02-10 → current coach); unknown
+  or deleted coach → `unattributed`. Razryad changes use
+  `razryad_history.trainer_id_at_change`.
+- New = first activation in the window (new student row, or left → active after
+  > 60 days). Left and frozen 30+ (frozen ≥ 30 days, not reactivated by the end
+  of the window) are separate; headline churn = left + frozen 30+.
+- Status events are de-duplicated (same student + transition within 5 minutes).
+- Active roster, razryad snapshot and participation buckets are the **current**
+  roster.
+- Score = Σ weight × sub-score (0..1): retention 30 (KM 6-month survival, else
+  3-month, else 0.5), net growth 20 (0.5 ± (new − left) / active × 5),
+  razryad promotions 20 (promotions / active × 4), tournament participation 15
+  (share of active students with ≥ 1 tournament), podiums 15 (podium students /
+  participants). Weights live in `REPORT_WEIGHTS`
+  (`supabase/functions/analytics-coaches/coach-reports-logic.mjs`). Ties share a
+  rank; coaches with no roster and no movement are unranked (`rank: null`).
+- Movers = biggest score gains / drops vs the previous period (top 3 each).
+
+**`GET ?action=cohort_matrix[&coach_id=<uuid>]`** — start month × months since
+start: `{coach_id, generated_at, max_months, rows:[{start_month, cohort_size,
+left_censored, left_pct:[…], churn_pct:[…]}], by_level_at_leaving:[{level, left,
+churn}], by_razryad_at_leaving:[{razryad, left, churn}]}`. `left_pct[k]` /
+`churn_pct[k]` = cumulative % of the cohort that left (or left + frozen 30+)
+within `k` months. Cohort membership per coach = coach at the start date;
+no `coach_id` = school-wide.
+
+Data limits: tournament / razryad metrics start May 2026 (2026 yearly report is
+partial); retention for students who started before Dec 2025 is a lower bound;
+the cohort matrix is only used for monthly and longer reports.
+
+```bash
+curl -H "Authorization: Bearer $CE_SERVICE_KEY" -H "apikey: $CE_SERVICE_KEY" \
+  "https://papgcizhfkngubwofjuo.supabase.co/functions/v1/analytics-coaches?action=report&period=month&date=2026-10-15"
+
+CE_SERVICE_KEY=… CE_SUPABASE_URL=https://papgcizhfkngubwofjuo.supabase.co \
+  python3 scripts/coach_report.py --period month --out /tmp/coach-reports
+# → {"xlsx": "/tmp/coach-reports/coach-report-month-2026-10-01.xlsx", "summary": "…-summary.txt"}
+```
+
+---
+
 ## Response Format
 
 **Success:**
@@ -643,6 +717,7 @@ supabase functions deploy analytics-attendance
 supabase functions deploy analytics-leaderboards
 supabase functions deploy analytics-students
 supabase functions deploy analytics-schedule
+supabase functions deploy analytics-coaches   # apply migration 101 first
 
 # Tournament registration API (or run scripts/deploy-tournaments-api.sh)
 supabase secrets set CHESS_EMPIRE_API_KEY='<CHESS_EMPIRE_API_KEY — see supabase secrets>'
