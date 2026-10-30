@@ -134,9 +134,10 @@ spans AS (  -- the window, its 7-day chunks and the 3 months of its quarter
 ),
 span_rep AS (
     SELECT sp.kind, sp.s,
-           (coach_report(sp.s, sp.e) -> 'school' ->> 'frozen_30d')::INT AS frozen_30d,
-           (coach_report(sp.s, sp.e) -> 'school' ->> 'left')::INT AS left_n
+           (x.j -> 'school' ->> 'frozen_30d')::INT AS frozen_30d,
+           (x.j -> 'school' ->> 'left')::INT AS left_n
     FROM spans sp
+    CROSS JOIN LATERAL (SELECT coach_report(sp.s, sp.e) AS j) x
 ),
 s1 AS (
     SELECT
