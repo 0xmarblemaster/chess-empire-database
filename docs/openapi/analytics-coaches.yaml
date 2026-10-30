@@ -31,7 +31,10 @@ info:
         row are excluded from retention and the cohort matrix.
       * Active roster, razryad snapshot and participation buckets are the roster
         as of the window end (live while the window is running); the previous
-        period is its own as-of report.
+        period is its own as-of report. A previous period ending before the
+        first status history row (2026-02-04) has no known roster:
+        `previous_roster_known: false`, no previous ranks / movers, and
+        `data_notes.previous_period` explains why.
       * Data limits: tournament / razryad metrics start May 2026; retention for
         students who started before Dec 2025 is a lower bound.
 servers:
@@ -236,11 +239,22 @@ components:
         excluded_pre_history_leavers:
           type: integer
           description: Students whose first `left` is a Feb 2026 backfill row — excluded from retention
+        status_history_start:
+          type: [string, 'null']
+          format: date
+          description: Date (Almaty) of the first student_status_history row; rosters of windows ending before it are unknown
+        previous_period:
+          type: string
+          description: Only when previous_roster_known is false
+          example: previous period predates status history (2026-02-04)
     Report:
       type: object
       properties:
         period: { $ref: '#/components/schemas/Window' }
         previous_period: { $ref: '#/components/schemas/Window' }
+        previous_roster_known:
+          type: boolean
+          description: false when the previous period ends before status history — previous.coaches and movers are then empty
         generated_at: { type: string, format: date-time }
         weights:
           type: object

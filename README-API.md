@@ -317,7 +317,7 @@ the period that contains `date` (default: **yesterday in Almaty**, so a run on
 Monday / the 1st reports the period that just ended). Windows are Asia/Almaty
 (UTC+5): week Mon–Sun, calendar month, calendar quarter, Jan–Jun / Jul–Dec,
 calendar year; `end` is exclusive. Response `data`:
-`{period, previous_period, generated_at, weights, coaches:[…], unattributed,
+`{period, previous_period, previous_roster_known, generated_at, weights, coaches:[…], unattributed,
 school, data_notes, previous:{coaches:[{coach_id, coach_name, score, rank}], school}, movers:{up, down}}`.
 
 Each coach row (and `unattributed` / `school`, which have no score):
@@ -352,10 +352,16 @@ Rules:
   are excluded from retention / cohort matrix (`excluded_pre_history_leavers`).
 - Active roster, razryad snapshot and participation buckets are the roster **as
   of the window end** (live while the window is running); the previous period
-  is its own as-of report.
+  is its own as-of report. A previous period ending before the first status
+  history row (the 2026-02-04 backfill, e.g. 2025 for the 2026 yearly report)
+  has no known roster: `previous_roster_known: false`, `previous.coaches` and
+  `movers` are empty and `data_notes.previous_period` says
+  `previous period predates status history (2026-02-04)`.
 - `data_notes`: `cleanup_freeze {label, window, evaluated_at, batch_students,
   returned, real_left, cleanup_leavers_dated {total, in_window, by_coach},
-  cleanup_leavers_undated {total, by_coach}}`, `excluded_pre_history_leavers`.
+  cleanup_leavers_undated {total, by_coach}}`, `excluded_pre_history_leavers`,
+  `status_history_start` (date), `previous_period` (only when the previous
+  roster is unknown).
 - Score = Σ weight × sub-score (0..1): retention 30 (KM 6-month survival, else
   3-month, else 0.5), net growth 20 (0.5 ± (new − left) / active × 5),
   razryad promotions 20 (promotions / active × 4), tournament participation 15

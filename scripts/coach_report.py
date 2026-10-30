@@ -12,7 +12,9 @@ Calls the analytics-coaches edge function (?action=report, plus
                                               leavers per coach)
   coach-report-<period>-<start>-summary.txt   short Telegram text: school
                                               headline, cleanup note, top 3,
-                                              bottom 3, movers
+                                              bottom 3, movers (or why there are
+                                              none: previous period before
+                                              status history)
 
 Prints {"xlsx": ..., "summary": ...} on stdout. Read-only.
 
@@ -137,6 +139,13 @@ def cleanup_note(report):
     return ((report.get('data_notes') or {}).get('cleanup_freeze')) or {}
 
 
+def previous_note(report):
+    """data_notes.previous_period when the previous roster is unknown (before status history), else None."""
+    if report.get('previous_roster_known') is not False:
+        return None
+    return (report.get('data_notes') or {}).get('previous_period') or 'previous period predates status history'
+
+
 def cleanup_by_coach(cf):
     """[(coach name, dated total, dated in period, undated)] merged per coach, Unattributed last."""
     rows = {}
@@ -256,7 +265,7 @@ def build_workbook(payload, path):
     w = report['period']
     rows = [
         ['Period', f"{w['period']} {window_label(w)} (Asia/Almaty)"],
-        ['Previous period', window_label(report['previous_period'])],
+        ['Previous period', ' — '.join(filter(None, [window_label(report['previous_period']), previous_note(report)]))],
         ['Generated at', report.get('generated_at') or ''],
         ['Score weights', ', '.join(f'{k} {v}' for k, v in (report.get('weights') or {}).items())],
         [],
@@ -335,7 +344,10 @@ def build_summary(payload):
 
     mv = report.get('movers') or {}
     moves = [('▲', m) for m in mv.get('up', [])] + [('▼', m) for m in mv.get('down', [])]
-    if moves:
+    note = previous_note(report)
+    if note:
+        lines += ['', f'Movers vs previous period: n/a — {note}']
+    elif moves:
         lines += ['', 'Movers vs previous period:']
         lines += [f"{a} {m['coach_name']} {m['score_delta']:+} (rank {m['previous_rank']} → {m['rank']})" for a, m in moves]
     return '\n'.join(lines) + '\n'

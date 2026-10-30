@@ -284,6 +284,19 @@ def run_tests(psycopg2, port):
     check(abs(float(rt['km_survival_3m']) - km(samples, 3)) < 1e-4, f"KM S(3m) = {km(samples, 3):.4f}")
     check(abs(float(rt['km_survival_6m']) - km(samples, 6)) < 1e-4, f"KM S(6m) = {km(samples, 6):.4f}")
 
+    print('\nprevious-period roster vs status history start (2026-05-01 in this fixture)')
+    check(rep['roster_known'] is True and rep['data_notes']['status_history_start'] == '2026-05-01',
+          'Sep: roster_known, data_notes.status_history_start = first history row (Almaty date)')
+    apr = q1("SELECT coach_report(%s, %s)", ('2026-04-01 00:00+05', '2026-05-01 00:00+05'))
+    check(apr['roster_known'] is False and apr['school']['active_students'] == 0
+          and all(c['active_students'] == 0 for c in apr['coaches']),
+          "Apr (ends before history): roster unknown → empty, not today's actives (S4, S5, S6)")
+    check(q1("SELECT coach_report(%s, %s)", ('2025-01-01 00:00+05', '2026-01-01 00:00+05'))['roster_known'] is False,
+          '2025 (previous of the 2026 yearly report): roster unknown')
+    may = q1("SELECT coach_report(%s, %s)", ('2026-05-01 00:00+05', '2026-06-01 00:00+05'))
+    check(may['roster_known'] is True and may['school']['active_students'] == 2,
+          'May (ends after history start): S4 + S5 only — S1 / S7 created after p_end never in the roster')
+
     try:
         q1("SELECT coach_report(%s, %s)", (WIN[1], WIN[0]))
         check(False, 'p_start >= p_end raises')

@@ -88,7 +88,11 @@
 --     previous period of a report is its own as-of report, not today's
 --     roster. Windows that end before a cleanup batch judge it as of now()
 --     (the batch is the only source of those departures). A window still
---     running (p_end ≥ now()) uses the live students table.
+--     running (p_end ≥ now()) uses the live students table. A past window
+--     ending at or before the first student_status_history row (the
+--     2026-02-04 backfill) has no status to reconstruct: roster_known = false
+--     and the roster is empty (never today's statuses); data_notes carries
+--     status_history_start so callers can explain the missing comparison.
 --   * coach_cohort_matrix(p_coach) — start month × months since start,
 --     cumulative % left and % left + frozen 30+ days, plus exits split by
 --     current_level and razryad at leaving (audit_log, else current value).
@@ -383,6 +387,8 @@ DECLARE
     v_asof       TIMESTAMPTZ;
     v_cl_asof    TIMESTAMPTZ;  -- cleanup batches judged as of this instant
     v_live       BOOLEAN;      -- window still running → live students table
+    v_hist_start TIMESTAMPTZ;  -- first status history row
+    v_roster_known BOOLEAN;    -- false: past window ending before status history
 BEGIN
     IF p_start IS NULL OR p_end IS NULL OR p_start >= p_end THEN
         RAISE EXCEPTION 'coach_report: p_start must be before p_end' USING ERRCODE = 'invalid_parameter_value';
@@ -393,6 +399,8 @@ BEGIN
     v_live       := p_end >= now();
     v_cl_asof    := CASE WHEN v_asof >= (SELECT max(b.ends_at) FROM coach_report_cleanup_batches() b)
                          THEN v_asof ELSE now() END;
+    v_hist_start := (SELECT min(h.changed_at) FROM student_status_history h);
+    v_roster_known := v_live OR p_end > v_hist_start;
 
     RETURN (
     WITH
@@ -486,7 +494,7 @@ BEGIN
             WHERE e.student_id = s.id AND e.changed_at < p_end
             ORDER BY e.changed_at DESC, e.id DESC LIMIT 1
         ) st ON true
-        WHERE NOT v_live
+        WHERE NOT v_live AND v_roster_known
           AND s.created_at < p_end
           AND COALESCE(st.new_status, s.status) = 'active'
           AND NOT EXISTS (
@@ -779,13 +787,15 @@ BEGIN
                 JOIN v_student_start st ON st.student_id = fl.student_id
                 WHERE fl.source = 'backfill' AND st.start_date IS NOT NULL
                   AND (st.start_date::TIMESTAMP AT TIME ZONE 'Asia/Almaty') < v_asof
-            )
+            ),
+            'status_history_start', (v_hist_start AT TIME ZONE 'Asia/Almaty')::DATE
         ) AS j
     )
     SELECT jsonb_build_object(
         'period', jsonb_build_object('start', p_start, 'end', p_end),
         'generated_at', now(),
         'as_of', v_asof,
+        'roster_known', COALESCE(v_roster_known, false),
         'coaches', COALESCE((SELECT jsonb_agg(j ORDER BY ord, coach_name) FROM out_rows WHERE scope <> 'school'), '[]'::JSONB),
         'school', (SELECT j FROM out_rows WHERE scope = 'school'),
         'data_notes', (SELECT j FROM notes)

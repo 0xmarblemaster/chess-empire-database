@@ -9,6 +9,7 @@ scripts/coach_report.py: fake analytics-coaches payload → xlsx + summary.
   * week report: no Cohort churn sheet, no cohort_matrix call
   * summary: school headline, cleanup line (only when the period has backdated
     cleanup leavers), top 3, bottom 3, movers; Russian names as stored
+  * previous period before status history: note instead of movers / previous ranks
   * CLI: missing env → exit 2; stdout is {"xlsx", "summary"} JSON (fetch stubbed)
 
 Run: python3 tests/test_coach_report_py.py
@@ -209,6 +210,26 @@ with tempfile.TemporaryDirectory() as tmp:
     check('Зоя Новая' not in summary, 'unranked coach not in top / bottom')
     check('▲ Анна Иванова +30.0 (rank 4 → 1)' in summary and '▼ Вера Смирнова -15.0' in summary, 'movers')
     check(len(summary) < 4096, 'fits one Telegram message')
+
+    print('\nprevious period before status history')
+    early = payload('month')
+    rp = early['report']
+    rp['previous_roster_known'] = False
+    rp['previous']['coaches'] = []
+    rp['movers'] = {'up': [], 'down': []}
+    rp['data_notes']['previous_period'] = 'previous period predates status history (2026-02-04)'
+    with tempfile.TemporaryDirectory() as tmp2:
+        out2 = cr.write_report(early, tmp2)
+        s2 = open(out2['summary'], encoding='utf-8').read()
+        check('Movers vs previous period: n/a — previous period predates status history (2026-02-04)' in s2
+              and '▲' not in s2, 'summary: note instead of movers')
+        wb2 = load_workbook(out2['xlsx'])
+        r2 = [r for r in wb2['Ranking'].iter_rows(min_row=2, values_only=True)]
+        check(all(r[15] is None and r[16] is None for r in r2), 'Ranking: no previous rank / score Δ')
+        dn2 = {r[0]: r[1] for r in wb2['Data notes'].iter_rows(values_only=True) if r[0]}
+        check(dn2['Previous period'] == '2026-09-01 … 2026-09-30 — previous period predates status history (2026-02-04)',
+              'Data notes: previous period carries the note')
+    check(cr.previous_note(payload('month')['report']) is None, 'no note when previous_roster_known is absent')
 
     print('\nweek report')
     out = cr.write_report(payload('week'), tmp)

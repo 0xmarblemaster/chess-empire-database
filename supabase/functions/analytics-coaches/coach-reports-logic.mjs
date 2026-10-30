@@ -226,19 +226,27 @@ export function movers(current, previous, limit = 3) {
   };
 }
 
-// Final ?action=report payload from two coach_report() results.
+// Final ?action=report payload from two coach_report() results. A previous
+// period ending before status history (roster_known = false) has no roster to
+// compare against: no previous ranks, no movers, a data note instead.
 export function buildReport({ window, previousWindow, current, previous, weights = REPORT_WEIGHTS }) {
   const coaches = rankCoaches(current.coaches || [], weights, current.school);
-  const prevCoaches = rankCoaches(previous.coaches || [], weights, previous.school);
+  const previousRosterKnown = previous.roster_known !== false;
+  const prevCoaches = previousRosterKnown ? rankCoaches(previous.coaches || [], weights, previous.school) : [];
+  const historyStart = previous.data_notes?.status_history_start;
   return {
     period: window,
     previous_period: previousWindow,
+    previous_roster_known: previousRosterKnown,
     generated_at: current.generated_at ?? null,
     weights,
     coaches,
     unattributed: (current.coaches || []).find((r) => r.coach_id == null) ?? null,
     school: current.school ?? null,
-    data_notes: current.data_notes ?? null,
+    data_notes: previousRosterKnown ? current.data_notes ?? null : {
+      ...current.data_notes,
+      previous_period: `previous period predates status history${historyStart ? ` (${historyStart})` : ''}`,
+    },
     previous: {
       coaches: prevCoaches.map((r) => ({ coach_id: r.coach_id, coach_name: r.coach_name, score: r.score, rank: r.rank })),
       school: previous.school ?? null,

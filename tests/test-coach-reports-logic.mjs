@@ -233,6 +233,25 @@ eq(rep.coaches.length, 4, 'coaches exclude Unattributed');
 eq(rep.school.active_students, 52, 'school totals passed through');
 eq(rep.weights, REPORT_WEIGHTS, 'weights echoed');
 eq(rep.data_notes, { excluded_pre_history_leavers: 3 }, 'data_notes passed through');
+eq(rep.previous_roster_known, true, 'previous roster known by default (roster_known absent)');
+
+const PREV_ROWS = CUR.map((r) => ({ ...r, active_students: 0 }));
+const early = buildReport({
+  window: resolvePeriod('year', '2026-03-01'), previousWindow: previousPeriod(resolvePeriod('year', '2026-03-01')),
+  current: { coaches: CUR, school: {}, data_notes: { excluded_pre_history_leavers: 3 } },
+  previous: { coaches: PREV_ROWS, school: {}, roster_known: false, data_notes: { status_history_start: '2026-02-04' } },
+});
+eq(early.previous_roster_known, false, 'previous period before status history → previous_roster_known false');
+eq(early.movers, { up: [], down: [] }, 'no biggest changes against an unknown roster');
+eq(early.previous.coaches, [], 'no previous ranks against an unknown roster');
+eq(early.data_notes, { excluded_pre_history_leavers: 3, previous_period: 'previous period predates status history (2026-02-04)' },
+  'data note explains the missing comparison');
+const known = buildReport({
+  window: WIN, previousWindow: previousPeriod(WIN), current: { coaches: CUR, school: {} },
+  previous: { coaches: PREV, school: {}, roster_known: true },
+});
+assert(known.previous_roster_known === true && known.movers.up.length > 0 && known.data_notes === null,
+  'known previous roster → movers, no extra note');
 
 console.log('\n=== index.ts static checks ==============================================\n');
 const here = path.dirname(fileURLToPath(import.meta.url));
