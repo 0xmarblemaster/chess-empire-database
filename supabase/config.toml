@@ -18,6 +18,10 @@ verify_jwt = false
 [functions.analytics-sessions]
 verify_jwt = false
 
+[functions.analytics-coaches]
+# Auth inside the function: x-api-key + admin user JWT, or a service key Bearer.
+verify_jwt = false
+
 [functions.analytics-status]
 verify_jwt = false
 
