@@ -1,0 +1,502 @@
+openapi: 3.1.0
+info:
+  title: Chess Empire — Students API
+  version: 1.1.0
+  description: |
+    Students API for external integrations (AmoCRM, Chesster, rank-tracking export).
+    Routing is on the `action` query parameter; `GET /students-api` with no action
+    returns the live self-doc (public). Every action requires the `x-api-key` header
+    (`CHESS_EMPIRE_WRITE_KEY` — distinct from the tournament-only key).
+
+    Every student carries `student_code` — a permanent, human-readable Student ID
+    (`CE-00001`) assigned by the database, never edited and never reused. Wherever
+    `student_id` is accepted, `student_code` may be given instead; if both are given
+    they must name the same student (400 `student_id_code_mismatch`).
+
+    `roster` and `rank_history` are read-only exports for the weekly rank-tracking
+    report. Interpretation rules:
+      * `student_created_at` is when the DB record was created, NOT the training start
+        (522 records were bulk-imported in 2025-11).
+      * Rank history starts 2026-05-18; earlier ranks have no events.
+      * Downgrades / corrections are real rows — a promotion is
+        `order(new_rank) > order(previous_rank)` with `none < 4th < 3rd < 2nd < 1st < kms`.
+      * `trainer_attribution: unknown` means no evidence — it is NOT the current
+        trainer and NOT a conversion / churn signal.
+servers:
+  - url: https://papgcizhfkngubwofjuo.supabase.co/functions/v1/students-api
+    description: Supabase edge function direct
+security:
+  - ApiKeyAuth: []
+
+components:
+  securitySchemes:
+    ApiKeyAuth:
+      type: apiKey
+      in: header
+      name: x-api-key
+
+  parameters:
+    StudentIdQuery:
+      name: student_id
+      in: query
+      schema: { type: string, format: uuid }
+    StudentCodeQuery:
+      name: student_code
+      in: query
+      schema: { $ref: '#/components/schemas/StudentCode' }
+    Offset:
+      name: offset
+      in: query
+      schema: { type: integer, minimum: 0, default: 0 }
+    ExportLimit:
+      name: limit
+      in: query
+      schema: { type: integer, minimum: 1, maximum: 1000, default: 1000 }
+
+  responses:
+    Unauthorized:
+      description: Missing or wrong x-api-key
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+          example: { ok: false, reason: unauthorized }
+    InvalidInput:
+      description: invalid_input — `field` names the offending parameter / body field
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+          example: { ok: false, reason: invalid_input, field: limit }
+    NotFound:
+      description: not_found
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+          example: { ok: false, reason: not_found }
+
+  schemas:
+    Reason:
+      type: string
+      enum: [unauthorized, not_found, invalid_input, invalid_branch, ambiguous, manual_change_recent,
+             student_inactive, amocrm_customer_id_conflict, student_id_code_mismatch, server_error]
+    Error:
+      type: object
+      required: [ok, reason]
+      properties:
+        ok: { const: false }
+        reason: { $ref: '#/components/schemas/Reason' }
+        field: { type: string, description: Offending field for invalid_input }
+        message: { type: string }
+    StudentCode:
+      type: string
+      pattern: '^CE-[0-9]{5,}$'
+      example: CE-00452
+      description: Permanent Student ID. Input is trimmed and uppercased.
+    Phone:
+      type: string
+      example: '+351912345678'
+      description: >-
+        E.164 phone (any country, libphonenumber-validated). Spaces, dashes, parens and dots
+        are ignored; a 00 prefix is read as +. Legacy KZ input without a prefix is promoted
+        to +7. Phones are NOT unique — siblings may share one.
+    Rank:
+      type: string
+      enum: [none, 4th, 3rd, 2nd, 1st, kms]
+      description: Razryad. Never null — no rank is `none`.
+    Student:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        student_code: { $ref: '#/components/schemas/StudentCode' }
+        name: { type: string }
+        first_name: { type: string }
+        last_name: { type: string }
+        status: { type: string, enum: [active, frozen, left] }
+        branch_id: { type: [string, 'null'], format: uuid }
+        branch: { type: [string, 'null'] }
+        amocrm_customer_id: { type: [integer, 'null'] }
+        phone: { type: [string, 'null'] }
+    StudentSelector:
+      type: object
+      description: One selector; precedence student_code > student_id > amocrm_customer_id > phone
+      properties:
+        student_code: { $ref: '#/components/schemas/StudentCode' }
+        student_id: { type: string, format: uuid }
+        amocrm_customer_id: { type: integer, minimum: 1 }
+        phone: { $ref: '#/components/schemas/Phone' }
+    RosterRow:
+      type: object
+      required: [student_id, student_code, full_name, status, branch_id, branch_name, trainer_id,
+                 trainer_name, stage_id, stage_name, current_rank, student_created_at]
+      properties:
+        student_id: { type: string, format: uuid }
+        student_code: { type: [string, 'null'], pattern: '^CE-[0-9]{5,}$' }
+        full_name: { type: [string, 'null'], description: '"first_name last_name", trimmed' }
+        status: { type: string, enum: [active, frozen, left] }
+        branch_id: { type: [string, 'null'], format: uuid }
+        branch_name: { type: [string, 'null'] }
+        trainer_id: { type: [string, 'null'], format: uuid, description: Current coach (students.coach_id) }
+        trainer_name: { type: [string, 'null'] }
+        stage_id: { type: [integer, 'null'], minimum: 1, maximum: 8, description: students.current_level }
+        stage_name: { type: [string, 'null'], example: Ступень 4 }
+        current_rank: { $ref: '#/components/schemas/Rank' }
+        student_created_at:
+          type: [string, 'null']
+          format: date-time
+          description: DB record creation time (UTC ISO). NOT the training start date.
+    RosterResponse:
+      type: object
+      required: [ok, as_of, status, total, limit, offset, after_id, next_after_id, students]
+      properties:
+        ok: { const: true }
+        as_of: { type: string, format: date-time, description: Server time of the snapshot }
+        status: { type: string, enum: [active, frozen, left, all] }
+        total: { type: integer, description: Exact count for the status filter, independent of the page }
+        limit: { type: integer }
+        offset: { type: integer }
+        after_id: { type: [string, 'null'], format: uuid }
+        next_after_id:
+          type: [string, 'null']
+          format: uuid
+          description: Pass as after_id for the next page; null on the last page
+        students:
+          type: array
+          items: { $ref: '#/components/schemas/RosterRow' }
+    RankChange:
+      type: object
+      required: [rank_change_id, student_id, student_code, previous_rank, new_rank, changed_at,
+                 changed_by_id, changed_by_name, source, source_derived, trainer_id_at_change,
+                 trainer_name_at_change, trainer_attribution]
+      properties:
+        rank_change_id: { type: string, format: uuid }
+        student_id: { type: string, format: uuid }
+        student_code: { type: [string, 'null'] }
+        previous_rank: { $ref: '#/components/schemas/Rank' }
+        new_rank: { $ref: '#/components/schemas/Rank' }
+        changed_at: { type: string, format: date-time, description: Server time of the change (UTC ISO) }
+        changed_by_id: { type: [string, 'null'], format: uuid, description: Auth user who saved the change }
+        changed_by_name:
+          type: [string, 'null']
+          description: Coach name for coach accounts, staff email otherwise, null if unknown / deleted
+        source:
+          type: string
+          enum: [admin_ui, coach_ui, api, tournament, system, trigger, manual, import]
+          description: >-
+            admin_ui / coach_ui = dashboard edit by an admin / coach account; api = service-role
+            write; tournament = auto-promotion from a razryad tournament result; system = no user;
+            trigger = legacy row whose origin could not be resolved.
+        source_derived:
+          type: boolean
+          description: true = reconstructed after the fact (rows before migration 099), not captured at event time
+        trainer_id_at_change: { type: [string, 'null'], format: uuid }
+        trainer_name_at_change: { type: [string, 'null'] }
+        trainer_attribution:
+          type: string
+          enum: [event_time, derived_audit_log, unknown]
+          description: >-
+            event_time = coach who held the student at the change (a save changing coach and rank
+            credits the previous coach); derived_audit_log = reconstructed from the coach-change
+            audit log; unknown = no evidence (not the current coach, not a conversion signal).
+    RankHistoryResponse:
+      type: object
+      required: [ok, as_of, student_id, from, to, total, limit, offset, rank_changes]
+      properties:
+        ok: { const: true }
+        as_of: { type: string, format: date-time }
+        student_id: { type: [string, 'null'], format: uuid }
+        from: { type: [string, 'null'], format: date-time }
+        to: { type: [string, 'null'], format: date-time }
+        total: { type: integer, description: Exact count for the filters }
+        limit: { type: integer }
+        offset: { type: integer }
+        rank_changes:
+          type: array
+          items: { $ref: '#/components/schemas/RankChange' }
+
+paths:
+  /?action=create:
+    post:
+      summary: Create-or-activate a student
+      description: >-
+        Identity is amocrm_customer_id (Buyer ID), checked first — replays are idempotent.
+        Otherwise students with the same phone are compared by normalized full name: one match →
+        that student (Buyer ID linked if it has none), several → 409 ambiguous, none → a new
+        student. A matched frozen student is reactivated. Nothing is written on any 4xx.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [full_name, branch_id]
+              anyOf: [{ required: [phone] }, { required: [amocrm_customer_id] }]
+              properties:
+                full_name: { type: string }
+                phone: { $ref: '#/components/schemas/Phone' }
+                branch_id: { type: string, format: uuid }
+                amocrm_customer_id: { type: [integer, 'null'], minimum: 1 }
+      responses:
+        '200': { description: 'Existing student {ok, existing:true, matched_by, student, linked?, reactivated?}' }
+        '201': { description: 'Created {ok, existing:false, student, status_history_id}' }
+        '400': { $ref: '#/components/responses/InvalidInput' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '409': { description: 'ambiguous (candidates[]) or amocrm_customer_id_conflict' }
+
+  /?action=freeze:
+    post:
+      summary: Freeze a student (409 manual_change_recent if a manual change is < 3 days old)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/StudentSelector' }
+      responses:
+        '200': { description: '{ok, changed, student, status_history_id?, chesster_poke}' }
+        '400': { $ref: '#/components/responses/InvalidInput' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { description: manual_change_recent / ambiguous }
+
+  /?action=activate:
+    post:
+      summary: Activate (unfreeze) a student (409 manual_change_recent if a manual change is < 3 days old)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/StudentSelector' }
+      responses:
+        '200': { description: '{ok, changed, student, status_history_id?, chesster_poke}' }
+        '400': { $ref: '#/components/responses/InvalidInput' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { description: manual_change_recent / ambiguous }
+
+  /?action=link_amocrm:
+    post:
+      summary: Link an amoCRM customer id to an existing student (never overwrites a different id)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [amocrm_customer_id]
+              anyOf: [{ required: [student_id] }, { required: [student_code] }]
+              properties:
+                student_id: { type: string, format: uuid }
+                student_code: { $ref: '#/components/schemas/StudentCode' }
+                amocrm_customer_id: { type: integer, minimum: 1 }
+      responses:
+        '200': { description: '{ok, changed, student}' }
+        '400': { $ref: '#/components/responses/InvalidInput' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { description: amocrm_customer_id_conflict }
+
+  /?action=update_contact:
+    post:
+      summary: Overwrite parent phone and/or amoCRM customer id on an existing student
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              anyOf: [{ required: [student_id] }, { required: [student_code] }]
+              properties:
+                student_id: { type: string, format: uuid }
+                student_code: { $ref: '#/components/schemas/StudentCode' }
+                phone: { $ref: '#/components/schemas/Phone' }
+                amocrm_customer_id: { type: integer, minimum: 1 }
+      responses:
+        '200': { description: '{ok, changed, updated_fields?, previous?, student}' }
+        '400': { $ref: '#/components/responses/InvalidInput' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { description: amocrm_customer_id_conflict }
+
+  /?action=find:
+    get:
+      summary: Find students by student_code > amocrm_customer_id > phone (all students sharing a phone)
+      parameters:
+        - $ref: '#/components/parameters/StudentCodeQuery'
+        - { name: amocrm_customer_id, in: query, schema: { type: integer, minimum: 1 } }
+        - { name: phone, in: query, schema: { $ref: '#/components/schemas/Phone' } }
+      responses:
+        '200':
+          description: '{ok, student_code | amocrm_customer_id | phone, students[]}'
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ok: { const: true }
+                  students: { type: array, items: { $ref: '#/components/schemas/Student' } }
+        '400': { $ref: '#/components/responses/InvalidInput' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+
+  /?action=list:
+    get:
+      summary: Paginated student list ordered by student_code
+      parameters:
+        - { name: limit, in: query, schema: { type: integer, minimum: 1, maximum: 500, default: 100 } }
+        - $ref: '#/components/parameters/Offset'
+        - { name: branch_id, in: query, schema: { type: string, format: uuid } }
+        - { name: status, in: query, schema: { type: string, enum: [active, frozen, left] } }
+      responses:
+        '200': { description: '{ok, total, limit, offset, students[]}' }
+        '400': { $ref: '#/components/responses/InvalidInput' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+
+  /?action=branches:
+    get:
+      summary: List all branches (id + name), ordered by name
+      responses:
+        '200': { description: '{ok, branches:[{id, name}]}' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+
+  /?action=roster:
+    get:
+      summary: Weekly roster snapshot (read-only), ordered by id
+      description: >-
+        One row per student. Page with `offset` OR the keyset cursor `after_id` (the previous
+        page's `next_after_id`); combining a non-zero offset with after_id is rejected.
+      parameters:
+        - { name: status, in: query, schema: { type: string, enum: [active, frozen, left, all], default: active } }
+        - $ref: '#/components/parameters/ExportLimit'
+        - $ref: '#/components/parameters/Offset'
+        - { name: after_id, in: query, schema: { type: string, format: uuid }, description: Keyset cursor }
+      responses:
+        '200':
+          description: Roster page
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/RosterResponse' }
+              example:
+                ok: true
+                as_of: '2026-10-30T09:00:00.000Z'
+                status: active
+                total: 731
+                limit: 1000
+                offset: 0
+                after_id: null
+                next_after_id: null
+                students:
+                  - student_id: 00000000-0000-4000-8000-00000000000a
+                    student_code: CE-00452
+                    full_name: Ali Sadykov
+                    status: active
+                    branch_id: 22222222-2222-4222-8222-222222222222
+                    branch_name: Халык
+                    trainer_id: 33333333-3333-4333-8333-333333333333
+                    trainer_name: Ivan Petrov
+                    stage_id: 4
+                    stage_name: Ступень 4
+                    current_rank: none
+                    student_created_at: '2025-11-03T10:00:00.000Z'
+        '400': { $ref: '#/components/responses/InvalidInput' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+
+  /?action=rank_history:
+    get:
+      summary: Rank (razryad) change log (read-only, append-only), ordered by changed_at, id
+      description: >-
+        `from` is inclusive and `to` exclusive. Each is an ISO date (`2026-10-19` = 00:00 UTC) or a
+        date-time WITH an offset (`2026-10-19T00:00:00+05:00`; URL-encode `+` as `%2B`). Zone-less
+        times, impossible dates or `to` <= `from` → 400 invalid_input naming the field.
+        History starts 2026-05-18.
+      parameters:
+        - $ref: '#/components/parameters/StudentIdQuery'
+        - $ref: '#/components/parameters/StudentCodeQuery'
+        - { name: from, in: query, schema: { type: string }, example: '2026-10-19T00:00:00+05:00' }
+        - { name: to, in: query, schema: { type: string }, example: '2026-10-26T00:00:00+05:00' }
+        - $ref: '#/components/parameters/ExportLimit'
+        - $ref: '#/components/parameters/Offset'
+      responses:
+        '200':
+          description: Rank changes page
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/RankHistoryResponse' }
+              example:
+                ok: true
+                as_of: '2026-10-30T09:00:00.000Z'
+                student_id: null
+                from: '2026-10-18T19:00:00.000Z'
+                to: '2026-10-25T19:00:00.000Z'
+                total: 1
+                limit: 1000
+                offset: 0
+                rank_changes:
+                  - rank_change_id: 44444444-4444-4444-8444-444444444444
+                    student_id: 00000000-0000-4000-8000-00000000000a
+                    student_code: CE-00452
+                    previous_rank: none
+                    new_rank: 4th
+                    changed_at: '2026-10-21T06:12:00.000Z'
+                    changed_by_id: 55555555-5555-4555-8555-555555555555
+                    changed_by_name: Ivan Petrov
+                    source: coach_ui
+                    source_derived: false
+                    trainer_id_at_change: 33333333-3333-4333-8333-333333333333
+                    trainer_name_at_change: Ivan Petrov
+                    trainer_attribution: event_time
+        '400':
+          description: invalid_input (student_id / student_code / from / to / limit / offset) or student_id_code_mismatch
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+              example: { ok: false, reason: invalid_input, field: from }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { description: Unknown student_code }
+
+  /?action=survival-score:
+    post:
+      summary: Push a Chesster Puzzle Rush Survival run (score 0..200), idempotent on external_ref
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [score, external_ref]
+              anyOf: [{ required: [student_id] }, { required: [student_code] }]
+              properties:
+                student_id: { type: string, format: uuid }
+                student_code: { $ref: '#/components/schemas/StudentCode' }
+                score: { type: integer, minimum: 0, maximum: 200 }
+                achieved_at: { type: [string, 'null'], format: date-time }
+                external_ref: { type: string, maxLength: 200 }
+      responses:
+        '200': { description: '{ok, id, best:{week,month,all}} or {ok, duplicate:true, id}' }
+        '400': { $ref: '#/components/responses/InvalidInput' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { description: student_inactive }
+
+  /?action=survival-best:
+    get:
+      summary: Student Puzzle Rush bests for the current week / month (Asia/Almaty) and all time
+      parameters:
+        - $ref: '#/components/parameters/StudentIdQuery'
+        - $ref: '#/components/parameters/StudentCodeQuery'
+      responses:
+        '200': { description: '{ok, student_id, best:{week,month,all}}' }
+        '400': { $ref: '#/components/responses/InvalidInput' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { description: Unknown student_code }
+
+  /?action=survival-leaderboard:
+    get:
+      summary: Puzzle Rush leaderboard (best per active student, competition rank; Asia/Almaty windows)
+      parameters:
+        - { name: scope, in: query, schema: { type: string, enum: [school, branch], default: school } }
+        - { name: period, in: query, schema: { type: string, enum: [week, month, all], default: all } }
+        - { name: branch_id, in: query, schema: { type: string, format: uuid } }
+        - $ref: '#/components/parameters/StudentIdQuery'
+        - $ref: '#/components/parameters/StudentCodeQuery'
+        - { name: limit, in: query, schema: { type: integer, minimum: 1, maximum: 500, default: 50 } }
+      responses:
+        '200': { description: '{ok, scope, period, branch_id, window_start, total_count, rows[]}' }
+        '400': { $ref: '#/components/responses/InvalidInput' }
+        '401': { $ref: '#/components/responses/Unauthorized' }

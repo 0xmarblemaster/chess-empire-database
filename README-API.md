@@ -424,6 +424,8 @@ returns the OpenAPI self-doc (public).
 | `find` | GET | `?student_code=` \| `?amocrm_customer_id=` \| `?phone=` | Look up students. Precedence `student_code` > `amocrm_customer_id` > `phone`. Response `{ok, student_code\|amocrm_customer_id\|phone, students:[…]}`. |
 | `list` | GET | `?limit=&offset=&branch_id=&status=` | Paginated list ordered by `student_code`: `limit` 1..500 (default 100), `offset` ≥ 0, `status` ∈ `active` `frozen` `left`. Response `{ok, total, limit, offset, students:[…]}` (`total` = exact count for the filters). |
 | `branches` | GET | — | List all branches (`id` + `name`) for branch mapping. |
+| `roster` | GET | `?status=&limit=&offset=\|after_id=` | Weekly roster snapshot ordered by `id` (see *Rank tracking export* below). Read-only. |
+| `rank_history` | GET | `?student_id=\|student_code=&from=&to=&limit=&offset=` | Rank (razryad) change log ordered by `changed_at, id`. Read-only. |
 | `survival-score` | POST | `{student_id \| student_code, score, external_ref, achieved_at?}` | Push a Chesster Puzzle Rush **Survival** run (see below). |
 | `survival-best` | GET | `?student_id=` \| `?student_code=` | `{best:{week,month,all}}` — the student's Puzzle Rush bests. |
 | `survival-leaderboard` | GET | `?scope=&period=&branch_id=&student_id=\|student_code=&limit=` | Puzzle Rush ranking board. |
@@ -511,6 +513,58 @@ total_count, is_self}]}`.
 The API never touches `student_time_slot_assignments` (migration 081 blocks
 automatic slot moves at the DB level by design).
 
+### Rank tracking export (`roster` / `rank_history`)
+
+Two **read-only** actions for the weekly rank-tracking export (same
+`x-api-key`). Full schemas: `docs/openapi/students-api.yaml`.
+
+**`GET ?action=roster`** — one row per student, ordered by `id`:
+`{student_id, student_code, full_name, status, branch_id, branch_name, trainer_id,
+trainer_name, stage_id, stage_name, current_rank, student_created_at}`.
+`status` = `active` (default) | `frozen` | `left` | `all`. `limit` 1..1000
+(default 1000), then page either with `offset` **or** with the keyset cursor
+`after_id=<next_after_id of the previous page>` (not both → 400). Response
+`{ok, as_of, status, total, limit, offset, after_id, next_after_id, students:[…]}`
+— `total` is the exact count for the status filter (independent of the page);
+`next_after_id` is `null` on the last page.
+
+**`GET ?action=rank_history`** — one row per rank change, ordered by
+`changed_at, id`: `{rank_change_id, student_id, student_code, previous_rank,
+new_rank, changed_at, changed_by_id, changed_by_name, source, source_derived,
+trainer_id_at_change, trainer_name_at_change, trainer_attribution}`. Filters:
+`student_id` / `student_code`, `from` (inclusive) and `to` (exclusive) — an ISO
+date (`2026-10-19` = 00:00 **UTC**) or a date-time **with** an offset
+(`2026-10-19T00:00:00+05:00`); anything else, or `to` ≤ `from`, → `400
+invalid_input` naming the field. `limit` 1..1000 (default 1000), `offset`.
+Response `{ok, as_of, student_id, from, to, total, limit, offset, rank_changes:[…]}`.
+
+Field rules:
+
+- **`current_rank` / `previous_rank` / `new_rank`** ∈ `none` `4th` `3rd` `2nd`
+  `1st` `kms` — never null (no rank = `none`).
+- **`stage_id`** = `students.current_level` (1–8); `stage_name` = `"Ступень N"`.
+- **`student_created_at`** is when the DB record was created, **not** when
+  training started (522 records were bulk-imported in 2025-11).
+- **`source`**: `admin_ui` / `coach_ui` (dashboard edit by an admin / coach
+  account), `api` (service-role write), `tournament` (auto-promotion from a
+  razryad tournament result), `system` (no user), `trigger` (legacy row whose
+  origin could not be resolved). `source_derived: true` = reconstructed after the
+  fact by migration 099 for rows before it, not captured at event time.
+- **`trainer_attribution`**: `event_time` (the coach who held the student when the
+  rank changed — when one save changes both coach and rank the **previous** coach
+  is credited), `derived_audit_log` (reconstructed from the coach-change audit
+  log), `unknown` (no evidence — **not** the current coach, and not a conversion
+  signal).
+- **`changed_by_name`**: the coach's name for coach accounts, otherwise the
+  staff account email; `null` for deleted / unknown users.
+
+Interpretation: rank history starts **2026-05-18** — earlier ranks have no
+events (a student's current rank may pre-date the history). Downgrades and
+corrections (e.g. `3rd → none`) are real rows; do not count every row as a
+promotion — compare `razryad` order of `previous_rank` and `new_rank`. Rows are
+append-only (never edited or deleted, except when the student itself is
+hard-deleted).
+
 ### Examples
 
 ```bash
@@ -543,6 +597,14 @@ curl "$BASE?action=find&amocrm_customer_id=1003" -H "x-api-key: $KEY"
 # Page through all active students of a branch, 500 at a time
 curl "$BASE?action=list&status=active&branch_id=<uuid>&limit=500&offset=0" -H "x-api-key: $KEY"
 
+# Weekly roster: all active students (one page of ≤1000; follow next_after_id if present)
+curl "$BASE?action=roster" -H "x-api-key: $KEY"
+curl "$BASE?action=roster&status=all&limit=500&after_id=<next_after_id>" -H "x-api-key: $KEY"
+
+# Rank changes in one week (Almaty Monday 00:00 → next Monday 00:00) / one student's full history
+curl "$BASE?action=rank_history&from=2026-10-19T00:00:00%2B05:00&to=2026-10-26T00:00:00%2B05:00" -H "x-api-key: $KEY"
+curl "$BASE?action=rank_history&student_code=CE-00452" -H "x-api-key: $KEY"
+
 # Freeze / activate (resolve by id, phone, or amocrm_customer_id)
 curl -X POST "$BASE?action=freeze"   -H "x-api-key: $KEY" -H 'content-type: application/json' -d '{"amocrm_customer_id":123456}'
 curl -X POST "$BASE?action=activate" -H "x-api-key: $KEY" -H 'content-type: application/json' -d '{"phone":"+77771234567"}'
@@ -566,7 +628,9 @@ the `find_students_by_phone_digits` lookup) and `097_students_phone_e164_lookup.
 `093_puzzle_rush_rankings.sql` (adds `survival_scores.source` / `external_ref` and
 the `get_puzzle_rush_leaderboard` / `get_student_puzzle_rush_best` RPCs).
 `student_code` everywhere (and `action=list` ordering) requires migration
-`096_student_code.sql`.
+`096_student_code.sql`. `rank_history` (the `source_derived` / `trainer_*` /
+`evidence` columns and event-time attribution) requires migration
+`099_rank_history_attribution.sql`.
 
 ## Deployment
 
