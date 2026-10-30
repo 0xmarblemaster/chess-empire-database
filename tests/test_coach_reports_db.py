@@ -10,7 +10,8 @@ expectations (Kaplan–Meier recomputed independently in Python), then runs
 101_coach_reports_verify.sql and requires every check to be ok.
 
 A second database seeds the 2026-10-14 cleanup batch and the 022 backfill
-(B1 / B2), frozen-30d additivity (S1) and the as-of-p_end roster (S3).
+(B1 / B2), frozen-30d / non-cleanup-left additivity (S1, incl. a returner whose
+last lesson falls in the batch week) and the as-of-p_end roster (S3).
 
 Run: python3 tests/test_coach_reports_db.py   (needs psycopg2 + PG bins)
 Exits 0 with a SKIP line when Postgres binaries are not installed.
@@ -322,7 +323,8 @@ def run_tests(psycopg2, port):
 
 # ---------------------------------------------------------------- B1 / B2 / S1 / S3 fixture
 C = {k: f'cccccccc-0000-4000-8000-0000000000{i:02d}' for i, k in enumerate(
-    ['L1', 'L2', 'R1', 'R2', 'R3', 'RL', 'RL2', 'F1', 'F2', 'F3', 'BF1', 'BF2', 'T1', 'T2', 'T3'], start=1)}
+    ['L1', 'L2', 'R1', 'R2', 'R3', 'RL', 'RL2', 'F1', 'F2', 'F3', 'BF1', 'BF2', 'T1', 'T2', 'T3', 'R4'],
+    start=1)}
 ADMIN = '99999999-0000-4000-8000-000000000009'
 WAVE1, WAVE2 = '2026-10-14 16:10+00', '2026-10-14 16:50+00'  # cleanup batch, logged twice
 BACKFILL_AT = '2026-02-04 10:00+00'
@@ -347,6 +349,7 @@ def seed_cleanup(cur):
         ('T1', 'active', B, apr, '4th'),                    # coach A→B 10-05, razryad none→4th 10-06
         ('T2', 'left', A, apr, None),                       # active→left 10-10
         ('T3', 'active', A, '2026-10-05 10:00+05', None),   # created in October
+        ('R4', 'active', A, apr, None),                     # last lesson 10-12 (week 10-08), →active 10-22
     ]
     cur.executemany("INSERT INTO students(id, status, coach_id, created_at, razryad) VALUES (%s,%s,%s,%s,%s)",
                     [(C[k], st, co, cr, rz) for k, st, co, cr, rz in students])
@@ -365,8 +368,9 @@ def seed_cleanup(cur):
         (C['T2'], 'active', 'left', '2026-10-10 10:00+05', ADMIN, 'admin@x'),
         (C['R1'], 'frozen', 'active', '2026-10-20 10:00+05', ADMIN, 'admin@x'),
         (C['R3'], 'frozen', 'active', '2026-10-25 10:00+05', ADMIN, 'admin@x'),
+        (C['R4'], 'frozen', 'active', '2026-10-22 10:00+05', ADMIN, 'admin@x'),
     ]
-    for k in ('L1', 'L2', 'R1', 'R2', 'R3', 'RL2'):  # both waves, > 5 min apart (survive the dedupe)
+    for k in ('L1', 'L2', 'R1', 'R2', 'R3', 'R4', 'RL2'):  # both waves, > 5 min apart (survive the dedupe)
         hist += [(C[k], 'active', 'frozen', WAVE1, None, None), (C[k], 'active', 'frozen', WAVE2, None, 'system@chessempire.kz')]
     hist.append((C['RL'], 'left', 'frozen', WAVE1, None, None))
     cur.executemany("INSERT INTO student_status_history(student_id, old_status, new_status, changed_at, changed_by, "
@@ -380,6 +384,7 @@ def seed_cleanup(cur):
     cur.executemany("INSERT INTO attendance VALUES (%s, %s, 'present')", [
         (C['L1'], '2026-09-05'), (C['L1'], '2026-09-20'), (C['R1'], '2026-09-10'), (C['R2'], '2026-09-12'),
         (C['R2'], '2026-10-22'), (C['R3'], '2026-09-15'), (C['RL'], '2026-08-10'), (C['RL2'], '2026-08-10'),
+        (C['R4'], '2026-08-12'), (C['R4'], '2026-10-12'),
     ])
 
 
@@ -406,10 +411,11 @@ def run_cleanup_tests(psycopg2, port):
     cls = {r[0]: r[1:] for r in cur.fetchall()}
     inv = {v: k for k, v in C.items()}
     got = {inv[k]: v for k, v in cls.items()}
-    check(set(got) == {'L1', 'L2', 'R1', 'R2', 'R3', 'RL', 'RL2'}, 'batch = distinct students of both waves (7, not 13 rows)')
+    check(set(got) == {'L1', 'L2', 'R1', 'R2', 'R3', 'R4', 'RL', 'RL2'},
+          'batch = distinct students of both waves (8, not 15 rows)')
     check(got['L1'] == ('dated', '2026-09-20'), 'still frozen, no later lesson → dated at last present lesson')
     check(got['L2'][0] == 'undated', 'never attended → undated')
-    check(got['R1'][0] == got['R2'][0] == got['R3'][0] == 'returned', 'later →active or later lesson → returned')
+    check(got['R1'][0] == got['R2'][0] == got['R3'][0] == got['R4'][0] == 'returned', 'later →active or later lesson → returned')
     check(got['RL'][0] == 'real_left' and got['RL2'][0] == 'real_left',
           'real →left before the batch (status left / after last lesson) overrides the lesson date')
 
@@ -424,7 +430,7 @@ def run_cleanup_tests(psycopg2, port):
     check((day14['left'], day14['frozen_30d'], nov13['left'], nov13['frozen_30d']) == (0, 0, 0, 0),
           'nothing lands on 2026-10-14 or 2026-11-13 (batch + 30 days)')
     cf = octo['data_notes']['cleanup_freeze']
-    check(cf['label'] == 'cleanup_freeze_2026_10_14' and cf['batch_students'] == 7 and cf['returned'] == 3
+    check(cf['label'] == 'cleanup_freeze_2026_10_14' and cf['batch_students'] == 8 and cf['returned'] == 4
           and cf['real_left'] == 2, 'data_notes.cleanup_freeze: label, batch students, returned, real_left')
     d = cf['cleanup_leavers_dated']
     check(d['total'] == 1 and d['in_window'] == 0 and d['by_coach'] == [
@@ -437,20 +443,20 @@ def run_cleanup_tests(psycopg2, port):
     print('\nB1 as of p_end')
     wk = rep('2026-10-12 00:00+05', '2026-10-19 00:00+05')
     wd = wk['data_notes']['cleanup_freeze']
-    check(wd['cleanup_leavers_dated']['total'] == 4 and wd['returned'] == 0,
-          'week ending 10-19: R1–R3 had not returned yet → dated leavers as of p_end')
+    check(wd['cleanup_leavers_dated']['total'] == 5 and wd['returned'] == 0,
+          'week ending 10-19: R1–R4 had not returned yet → dated leavers as of p_end')
     check(by(wk)[A]['active_students'] == 3 and wk['school']['active_students'] == 4,
           'week ending 10-19: roster as of p_end (dated leavers gone, transfers by coach_at)')
 
     print('\nB2 022 backfill')
     rt = octo['school']['retention']
     check(octo['data_notes']['excluded_pre_history_leavers'] == 1, 'backfill →left → excluded_pre_history_leavers')
-    check((rt['n'], rt['events']) == (13, 4),
+    check((rt['n'], rt['events']) == (14, 4),
           'retention excludes backfill leaver + undated leaver; events = L1 (lesson date), RL, RL2, T2')
     check(rep(*month(2))['school']['left'] == 0, 'Feb: backfill →left is not a departure')
     check(rep(*month(3))['school']['frozen_30d'] == 0, 'Mar: backfill →frozen is not a freeze spell (no fake 30+)')
 
-    print('\nS1 frozen_30d additivity')
+    print('\nS1 frozen_30d / non-cleanup left additivity')
     check(sep['school']['frozen_30d'] == 1 and octo['school']['frozen_30d'] == 1,
           'Sep: 30th day 09-24 counts even though the spell ended 09-28; Oct: F1 (30th day 10-20)')
     q3 = rep('2026-07-01 00:00+05', '2026-10-01 00:00+05')['school']
@@ -461,14 +467,29 @@ def run_cleanup_tests(psycopg2, port):
     check(q4['frozen_30d'] == sum(rep(*month(m))['school']['frozen_30d'] for m in (10, 11, 12)),
           'Oct + Nov + Dec = Q4 (frozen_30d)')
     weeks = [rep(f'2026-10-{d:02d} 00:00+05', f'2026-10-{d + 7:02d} 00:00+05' if d + 7 <= 31 else '2026-11-01 00:00+05')
-             ['school'] for d in (1, 8, 15, 22, 29)]
-    check(sum(w['frozen_30d'] for w in weeks) == octo['school']['frozen_30d']
-          and sum(w['left'] for w in weeks) == octo['school']['left'], 'weeks inside October sum to October')
+             for d in (1, 8, 15, 22, 29)]
+    check(sum(w['school']['frozen_30d'] for w in weeks) == octo['school']['frozen_30d'],
+          'weeks inside October sum to October (frozen_30d)')
+
+    def non_cleanup_left(r):
+        return r['school']['left'] - r['data_notes']['cleanup_freeze']['cleanup_leavers_dated']['in_window']
+
+    wk2 = weeks[1]
+    check(wk2['school']['left'] == 2 and by(wk2)[A]['left'] == 2
+          and wk2['data_notes']['cleanup_freeze']['cleanup_leavers_dated']['in_window'] == 1,
+          'week 10-08 (contains the batch, judged as of 10-15): T2 + R4 left on 10-12 — R4 returned only on 10-22')
+    check(sum(w['school']['left'] for w in weeks) == octo['school']['left'] + 1,
+          'Σ weeks left = October + 1: cleanup left is judged per window end, not additive (intended)')
+    check(sum(non_cleanup_left(w) for w in weeks) == non_cleanup_left(octo) == 1,
+          'non-cleanup left (left − cleanup in_window) stays additive: Σ weeks = October')
+    check(sum(non_cleanup_left(rep(*month(m))) for m in (10, 11, 12))
+          == non_cleanup_left(rep('2026-10-01 00:00+05', '2027-01-01 00:00+05')),
+          'Oct + Nov + Dec = Q4 (non-cleanup left)')
 
     print('\nS3 roster as of p_end')
-    check((sa[A]['active_students'], sa[B]['active_students'], sep['school']['active_students']) == (6, 2, 8),
+    check((sa[A]['active_students'], sa[B]['active_students'], sep['school']['active_students']) == (7, 2, 9),
           'Sep (p_end 10-01): roster reconstructed — T1 still with A, T2 still active, dated leaver L1 gone')
-    check((oa[A]['active_students'], oa[B]['active_students']) == (5, 1), 'Oct (running): live roster')
+    check((oa[A]['active_students'], oa[B]['active_students']) == (6, 1), 'Oct (running): live roster')
     check(sa[A]['razryad_snapshot']['4th']['count'] == 0 and oa[B]['razryad_snapshot']['4th']['count'] == 1,
           'razryad snapshot as of p_end (T1 4th only from 10-06)')
 

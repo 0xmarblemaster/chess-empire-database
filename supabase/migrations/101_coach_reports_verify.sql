@@ -9,8 +9,12 @@
 --       returned / real_left / dated (left on last present lesson) / undated
 --   B2  022 backfill rows (old NULL, changed_by NULL, system@, 2026-02-04 UTC,
 --       ≥ 1 day after the student row) are initial state, not transitions
---   S1  frozen_30d / left are additive: the window's 7-day chunks and the
---       three months of its quarter sum to the window / quarter.
+--   S1  frozen_30d and non-cleanup left (left − cleanup_leavers_dated.in_window)
+--       are additive: the window's 7-day chunks and the three months of its
+--       quarter sum to the window / quarter. Cleanup-sourced left is NOT
+--       additive by design: each span judges the batch as of its own end, so a
+--       student whose last lesson falls in a week and who returns after that
+--       week ends is `left` in the week but not in the month.
 
 WITH
 w AS (
@@ -135,7 +139,8 @@ spans AS (  -- the window, its 7-day chunks and the 3 months of its quarter
 span_rep AS (
     SELECT sp.kind, sp.s,
            (x.j -> 'school' ->> 'frozen_30d')::INT AS frozen_30d,
-           (x.j -> 'school' ->> 'left')::INT AS left_n
+           (x.j -> 'school' ->> 'left')::INT
+             - (x.j -> 'data_notes' -> 'cleanup_freeze' -> 'cleanup_leavers_dated' ->> 'in_window')::INT AS left_n
     FROM spans sp
     CROSS JOIN LATERAL (SELECT coach_report(sp.s, sp.e) AS j) x
 ),
@@ -252,11 +257,11 @@ FROM (SELECT (SELECT (coach_report(TIMESTAMPTZ '2026-11-13 00:00:00+05', TIMESTA
 UNION ALL
 SELECT 'S1: Σ 7-day chunks frozen_30d = window', s1.weeks_frozen, s1.win_frozen, s1.weeks_frozen = s1.win_frozen FROM s1
 UNION ALL
-SELECT 'S1: Σ 7-day chunks left = window', s1.weeks_left, s1.win_left, s1.weeks_left = s1.win_left FROM s1
+SELECT 'S1: Σ 7-day chunks non-cleanup left = window', s1.weeks_left, s1.win_left, s1.weeks_left = s1.win_left FROM s1
 UNION ALL
 SELECT 'S1: Σ months frozen_30d = quarter', s1.months_frozen, s1.q_frozen, s1.months_frozen = s1.q_frozen FROM s1
 UNION ALL
-SELECT 'S1: Σ months left = quarter', s1.months_left, s1.q_left, s1.months_left = s1.q_left FROM s1
+SELECT 'S1: Σ months non-cleanup left = quarter', s1.months_left, s1.q_left, s1.months_left = s1.q_left FROM s1
 UNION ALL
 SELECT 'unattributed.active = active students without coach (running window)',
        (SELECT (x ->> 'active_students')::BIGINT FROM coach_rows WHERE x ->> 'coach_id' IS NULL), direct.active_no_coach,
