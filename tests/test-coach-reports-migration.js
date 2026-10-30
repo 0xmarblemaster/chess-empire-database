@@ -58,7 +58,9 @@ assert(coachAt && /p_student UUID, p_ts TIMESTAMPTZ/.test(coachAt.args) && /RETU
 
 console.log('\nGrants (service_role only)');
 for (const sig of ['coach_report(TIMESTAMPTZ, TIMESTAMPTZ)', 'coach_cohort_matrix(UUID)', 'coach_at(UUID, TIMESTAMPTZ)',
-    'coach_report_field_at(UUID, TEXT, TIMESTAMPTZ)', 'coach_report_share(BIGINT, BIGINT)']) {
+    'coach_report_field_at(UUID, TEXT, TIMESTAMPTZ)', 'coach_report_share(BIGINT, BIGINT)', 'coach_cohort_matrix_all()',
+    'coach_report_cohort_scopes()', 'coach_report_cleanup_batches()', 'coach_report_cleanup(TIMESTAMPTZ)',
+    'coach_report_status_events(TIMESTAMPTZ)']) {
     const esc = sig.replace(/[()]/g, '\\$&');
     assert(new RegExp(`REVOKE ALL ON FUNCTION ${esc} FROM PUBLIC, anon, authenticated;`).test(CODE)
         && new RegExp(`GRANT EXECUTE ON FUNCTION ${esc} TO service_role;`).test(CODE), `${sig}: revoked from anon/authenticated, granted to service_role`);
@@ -92,10 +94,36 @@ assert(/km_survival_3m/.test(rb) && /km_survival_6m/.test(rb), 'Kaplan–Meier s
 assert(/DATE '2025-12-31'/.test(CODE), 'left_censored cut-off 2025-12-31');
 assert(/WHERE status = 'present'/.test(CODE), "start = first 'present' attendance");
 
+console.log('\nCleanup batch (B1) + 022 backfill (B2) + frozen 30d (S1)');
+const batches = fnBody('coach_report_cleanup_batches');
+assert(batches && /IMMUTABLE/.test(batches.header)
+    && /'cleanup_freeze_2026_10_14'::TEXT,\s*TIMESTAMPTZ '2026-10-14 16:00:00\+00', TIMESTAMPTZ '2026-10-14 17:15:00\+00'/.test(batches.body),
+    'batch defined once: immutable VALUES list, label cleanup_freeze_2026_10_14, 16:00–17:15 UTC');
+assert((CODE.match(/2026-10-14 16:00:00/g) || []).length === 1, 'the batch window literal appears only in that function');
+const cleanup = fnBody('coach_report_cleanup');
+assert(cleanup && /e\.new_status = 'frozen' AND e\.changed_by IS NULL/.test(cleanup.body)
+    && /'returned'/.test(cleanup.body) && /'real_left'/.test(cleanup.body) && /'undated'/.test(cleanup.body)
+    && /'dated'/.test(cleanup.body), 'batch rows = →frozen with changed_by NULL; outcomes returned / real_left / undated / dated');
+const events = fnBody('coach_report_status_events');
+assert(events && /e\.old_status IS NULL AND e\.changed_by IS NULL\s+AND e\.changed_by_email = 'system@chessempire\.kz'/.test(events.body)
+    && /2026-02-04 00:00:00\+00/.test(events.body) && /'backfill'/.test(events.body) && /'cleanup_left'/.test(events.body),
+    '022 backfill marker (old NULL, changed_by NULL, system@, 2026-02-04) tagged; synthetic cleanup_left');
+assert(/ev\.new_status = 'frozen' AND ev\.source = 'event'/.test(rb), 'freeze spells only from real events (no backfill / batch)');
+assert(!/next_at >= p_end/.test(rb) && /ev\.next_at > ev\.changed_at \+ INTERVAL '30 days'/.test(rb),
+    'frozen_30d decided by the 30th day only (unbroken then), not by p_end (S1)');
+assert(/fl\.source IS DISTINCT FROM 'backfill'/.test(rb) && /'excluded_pre_history_leavers'/.test(rb),
+    'retention excludes backfill leavers and reports them in data_notes');
+assert(/'cleanup_freeze'/.test(rb) && /'cleanup_leavers_dated'/.test(rb) && /'cleanup_leavers_undated'/.test(rb),
+    'data_notes.cleanup_freeze with dated / undated leavers');
+assert(/v_live\s+:= p_end >= now\(\)/.test(rb) && /coach_at\(s\.id, p_end\)/.test(rb), 'roster as of p_end for past windows (S3)');
+assert(fnBody('coach_cohort_matrix_all') && /coach_report_cohort_scopes\(\)/.test(fnBody('coach_cohort_matrix_all').body),
+    'coach_cohort_matrix_all(): school + per-coach matrices in one call');
+
 console.log('\nVerify script');
 assert(!/\b(INSERT|UPDATE|DELETE|ALTER|DROP|CREATE|TRUNCATE|GRANT|REVOKE)\b/i.test(VCODE), 'verify script is read-only');
 assert(/coach_report\(/.test(VCODE) && /student_status_history/.test(VCODE) && /tournament_results/.test(VCODE),
     'verify recounts directly from source tables');
+assert(/'B1: /.test(VCODE) && /'B2: /.test(VCODE) && /'S1: /.test(VCODE), 'verify has B1 / B2 / S1 recounts');
 
 console.log(`\n  passed: ${passed}\n  failed: ${failed}`);
 process.exit(failed ? 1 : 0);

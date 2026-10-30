@@ -9,6 +9,9 @@ coach_at / v_status_events_dedup / v_student_start against hand-computed
 expectations (Kaplan–Meier recomputed independently in Python), then runs
 101_coach_reports_verify.sql and requires every check to be ok.
 
+A second database seeds the 2026-10-14 cleanup batch and the 022 backfill
+(B1 / B2), frozen-30d additivity (S1) and the as-of-p_end roster (S3).
+
 Run: python3 tests/test_coach_reports_db.py   (needs psycopg2 + PG bins)
 Exits 0 with a SKIP line when Postgres binaries are not installed.
 """
@@ -80,7 +83,7 @@ CREATE TABLE audit_log (
 );
 CREATE TABLE student_status_history (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(), student_id uuid, old_status text, new_status text,
-  changed_at timestamptz, changed_by_email text
+  changed_at timestamptz, changed_by uuid, changed_by_email text
 );
 CREATE TABLE attendance (student_id uuid, attendance_date date, status text);
 CREATE TABLE razryad_history (
@@ -186,8 +189,8 @@ def months(a, b):
     return max(0.0, (b - a).total_seconds()) / 86400 / 30.4375
 
 
-def run_tests(psycopg2, port):
-    conn = psycopg2.connect(f'host=127.0.0.1 port={port} user=postgres dbname=postgres')
+def setup_db(psycopg2, port, dbname):
+    conn = psycopg2.connect(f'host=127.0.0.1 port={port} user=postgres dbname={dbname}')
     conn.autocommit = True
     cur = conn.cursor()
     cur.execute(STUB_SCHEMA)
@@ -195,6 +198,16 @@ def run_tests(psycopg2, port):
     mig = open(os.path.join(MIG, '101_coach_reports.sql')).read()
     cur.execute(mig)
     cur.execute(mig)
+    return conn, cur
+
+
+def verify_rows(cur):
+    cur.execute(open(os.path.join(MIG, '101_coach_reports_verify.sql')).read().split('-- Informational')[0])
+    return [r for r in cur.fetchall() if r[3] is not True]
+
+
+def run_tests(psycopg2, port):
+    conn, cur = setup_db(psycopg2, port, 'postgres')
     check(True, 'migration 101 applies twice (idempotent)')
     seed(cur)
 
@@ -297,13 +310,185 @@ def run_tests(psycopg2, port):
     check(not q1("SELECT has_table_privilege('anon', 'v_status_events_dedup', 'SELECT')"), 'views not readable by anon')
 
     print('\nverify script')
-    cur.execute(open(os.path.join(MIG, '101_coach_reports_verify.sql')).read().split('-- Informational')[0])
-    bad = [r for r in cur.fetchall() if r[3] is not True]
+    bad = verify_rows(cur)
     check(not bad, f'101_coach_reports_verify.sql: all checks ok {bad or ""}')
 
+    cur.execute('CREATE DATABASE cleanup_fx')
     conn.close()
+    run_cleanup_tests(psycopg2, port)
     print(f'\n  passed: {passed}\n  failed: {failed}')
     return 1 if failed else 0
+
+
+# ---------------------------------------------------------------- B1 / B2 / S1 / S3 fixture
+C = {k: f'cccccccc-0000-4000-8000-0000000000{i:02d}' for i, k in enumerate(
+    ['L1', 'L2', 'R1', 'R2', 'R3', 'RL', 'RL2', 'F1', 'F2', 'F3', 'BF1', 'BF2', 'T1', 'T2', 'T3'], start=1)}
+ADMIN = '99999999-0000-4000-8000-000000000009'
+WAVE1, WAVE2 = '2026-10-14 16:10+00', '2026-10-14 16:50+00'  # cleanup batch, logged twice
+BACKFILL_AT = '2026-02-04 10:00+00'
+
+
+def seed_cleanup(cur):
+    cur.execute("INSERT INTO coaches VALUES (%s, 'Анна', 'Иванова'), (%s, 'Борис', 'Петров')", (A, B))
+    apr = '2026-04-01 10:00+05'
+    students = [  # key, status, coach, created_at, razryad
+        ('L1', 'frozen', B, '2026-03-01 10:00+05', None),   # dated cleanup leaver (last lesson 09-20, coach A then)
+        ('L2', 'frozen', B, '2026-09-01 10:00+05', None),   # undated cleanup leaver (never attended)
+        ('R1', 'active', A, apr, None),                     # returned: →active 10-20
+        ('R2', 'frozen', A, apr, None),                     # returned: lesson 10-22, status still frozen
+        ('R3', 'active', A, apr, None),                     # returned: →active 10-25
+        ('RL', 'frozen', B, apr, None),                     # already left 08-20, batch row left→frozen
+        ('RL2', 'frozen', B, apr, None),                    # left 08-20 after last lesson 08-10, →active 08-25, batch
+        ('F1', 'frozen', A, apr, None),                     # frozen 09-20 → 30d on 10-20
+        ('F2', 'active', A, apr, None),                     # frozen 09-25, active 10-10 (broken before 30d)
+        ('F3', 'active', A, apr, None),                     # frozen 08-25 → 30d 09-24, active 09-28 (counts in Sep)
+        ('BF1', 'left', B, '2025-06-01 10:00+05', None),    # 022 backfill null→left
+        ('BF2', 'frozen', B, '2025-06-01 10:00+05', None),  # 022 backfill null→frozen
+        ('T1', 'active', B, apr, '4th'),                    # coach A→B 10-05, razryad none→4th 10-06
+        ('T2', 'left', A, apr, None),                       # active→left 10-10
+        ('T3', 'active', A, '2026-10-05 10:00+05', None),   # created in October
+    ]
+    cur.executemany("INSERT INTO students(id, status, coach_id, created_at, razryad) VALUES (%s,%s,%s,%s,%s)",
+                    [(C[k], st, co, cr, rz) for k, st, co, cr, rz in students])
+    hist = [(C[k], None, 'active', cr, ADMIN, 'admin@x') for k, st, co, cr, rz in students if not k.startswith('BF')]
+    hist += [
+        (C['BF1'], None, 'left', BACKFILL_AT, None, 'system@chessempire.kz'),
+        (C['BF2'], None, 'frozen', BACKFILL_AT, None, 'system@chessempire.kz'),
+        (C['RL'], 'active', 'left', '2026-08-20 10:00+05', ADMIN, 'admin@x'),
+        (C['RL2'], 'active', 'left', '2026-08-20 10:00+05', ADMIN, 'admin@x'),
+        (C['RL2'], 'left', 'active', '2026-08-25 10:00+05', ADMIN, 'admin@x'),
+        (C['F1'], 'active', 'frozen', '2026-09-20 10:00+05', ADMIN, 'admin@x'),
+        (C['F2'], 'active', 'frozen', '2026-09-25 10:00+05', ADMIN, 'admin@x'),
+        (C['F2'], 'frozen', 'active', '2026-10-10 10:00+05', ADMIN, 'admin@x'),
+        (C['F3'], 'active', 'frozen', '2026-08-25 10:00+05', ADMIN, 'admin@x'),
+        (C['F3'], 'frozen', 'active', '2026-09-28 10:00+05', ADMIN, 'admin@x'),
+        (C['T2'], 'active', 'left', '2026-10-10 10:00+05', ADMIN, 'admin@x'),
+        (C['R1'], 'frozen', 'active', '2026-10-20 10:00+05', ADMIN, 'admin@x'),
+        (C['R3'], 'frozen', 'active', '2026-10-25 10:00+05', ADMIN, 'admin@x'),
+    ]
+    for k in ('L1', 'L2', 'R1', 'R2', 'R3', 'RL2'):  # both waves, > 5 min apart (survive the dedupe)
+        hist += [(C[k], 'active', 'frozen', WAVE1, None, None), (C[k], 'active', 'frozen', WAVE2, None, 'system@chessempire.kz')]
+    hist.append((C['RL'], 'left', 'frozen', WAVE1, None, None))
+    cur.executemany("INSERT INTO student_status_history(student_id, old_status, new_status, changed_at, changed_by, "
+                    "changed_by_email) VALUES (%s,%s,%s,%s,%s,%s)", hist)
+    cur.executemany("INSERT INTO audit_log(entity_type, entity_id, action, field_name, old_value, new_value, changed_at) "
+                    "VALUES ('students', %s, 'UPDATE', %s, %s, %s, %s)", [
+                        (C['L1'], 'coach_id', A, B, '2026-10-01 10:00+05'),
+                        (C['T1'], 'coach_id', A, B, '2026-10-05 10:00+05'),
+                        (C['T1'], 'razryad', 'none', '4th', '2026-10-06 10:00+05'),
+                    ])
+    cur.executemany("INSERT INTO attendance VALUES (%s, %s, 'present')", [
+        (C['L1'], '2026-09-05'), (C['L1'], '2026-09-20'), (C['R1'], '2026-09-10'), (C['R2'], '2026-09-12'),
+        (C['R2'], '2026-10-22'), (C['R3'], '2026-09-15'), (C['RL'], '2026-08-10'), (C['RL2'], '2026-08-10'),
+    ])
+
+
+def run_cleanup_tests(psycopg2, port):
+    conn, cur = setup_db(psycopg2, port, 'cleanup_fx')
+    seed_cleanup(cur)
+
+    def q1(sql, args=()):
+        cur.execute(sql, args)
+        return cur.fetchone()[0]
+
+    def rep(s, e):
+        return q1("SELECT coach_report(%s, %s)", (s, e))
+
+    def by(r):
+        return {x['coach_id']: x for x in r['coaches']}
+
+    def month(m, y=2026):
+        nm, ny = (1, y + 1) if m == 12 else (m + 1, y)
+        return f'{y}-{m:02d}-01 00:00+05', f'{ny}-{nm:02d}-01 00:00+05'
+
+    print('\nB1 cleanup batch classification (as of now)')
+    cur.execute("SELECT student_id::text, outcome, leave_date::text FROM coach_report_cleanup(now())")
+    cls = {r[0]: r[1:] for r in cur.fetchall()}
+    inv = {v: k for k, v in C.items()}
+    got = {inv[k]: v for k, v in cls.items()}
+    check(set(got) == {'L1', 'L2', 'R1', 'R2', 'R3', 'RL', 'RL2'}, 'batch = distinct students of both waves (7, not 13 rows)')
+    check(got['L1'] == ('dated', '2026-09-20'), 'still frozen, no later lesson → dated at last present lesson')
+    check(got['L2'][0] == 'undated', 'never attended → undated')
+    check(got['R1'][0] == got['R2'][0] == got['R3'][0] == 'returned', 'later →active or later lesson → returned')
+    check(got['RL'][0] == 'real_left' and got['RL2'][0] == 'real_left',
+          'real →left before the batch (status left / after last lesson) overrides the lesson date')
+
+    sep, octo = rep(*month(9)), rep(*month(10))
+    sa, oa = by(sep), by(octo)
+    check((sa[A]['left'], sa[B]['left'], sep['school']['left']) == (1, 0, 1),
+          'Sep: dated leaver counted as left on 09-20, credited to coach then (A, not current B)')
+    check(rep(*month(8))['school']['left'] == 2, 'Aug: real lefts counted once each (RL, RL2) — no synthetic double')
+    check(octo['school']['left'] == 1 and oa[A]['left'] == 1, 'Oct: only the real →left (T2); batch is not a departure')
+    day14 = rep('2026-10-14 00:00+05', '2026-10-15 00:00+05')['school']
+    nov13 = rep('2026-11-13 00:00+05', '2026-11-14 00:00+05')['school']
+    check((day14['left'], day14['frozen_30d'], nov13['left'], nov13['frozen_30d']) == (0, 0, 0, 0),
+          'nothing lands on 2026-10-14 or 2026-11-13 (batch + 30 days)')
+    cf = octo['data_notes']['cleanup_freeze']
+    check(cf['label'] == 'cleanup_freeze_2026_10_14' and cf['batch_students'] == 7 and cf['returned'] == 3
+          and cf['real_left'] == 2, 'data_notes.cleanup_freeze: label, batch students, returned, real_left')
+    d = cf['cleanup_leavers_dated']
+    check(d['total'] == 1 and d['in_window'] == 0 and d['by_coach'] == [
+        {'coach_id': A, 'coach_name': 'Анна Иванова', 'total': 1, 'in_window': 0}], 'dated leavers per coach (Oct)')
+    check(sep['data_notes']['cleanup_freeze']['cleanup_leavers_dated']['in_window'] == 1, 'Sep: dated leaver in window')
+    u = cf['cleanup_leavers_undated']
+    check(u['total'] == 1 and u['by_coach'] == [{'coach_id': B, 'coach_name': 'Борис Петров', 'total': 1}],
+          'undated leavers per coach at batch time (data_notes only)')
+
+    print('\nB1 as of p_end')
+    wk = rep('2026-10-12 00:00+05', '2026-10-19 00:00+05')
+    wd = wk['data_notes']['cleanup_freeze']
+    check(wd['cleanup_leavers_dated']['total'] == 4 and wd['returned'] == 0,
+          'week ending 10-19: R1–R3 had not returned yet → dated leavers as of p_end')
+    check(by(wk)[A]['active_students'] == 3 and wk['school']['active_students'] == 4,
+          'week ending 10-19: roster as of p_end (dated leavers gone, transfers by coach_at)')
+
+    print('\nB2 022 backfill')
+    rt = octo['school']['retention']
+    check(octo['data_notes']['excluded_pre_history_leavers'] == 1, 'backfill →left → excluded_pre_history_leavers')
+    check((rt['n'], rt['events']) == (13, 4),
+          'retention excludes backfill leaver + undated leaver; events = L1 (lesson date), RL, RL2, T2')
+    check(rep(*month(2))['school']['left'] == 0, 'Feb: backfill →left is not a departure')
+    check(rep(*month(3))['school']['frozen_30d'] == 0, 'Mar: backfill →frozen is not a freeze spell (no fake 30+)')
+
+    print('\nS1 frozen_30d additivity')
+    check(sep['school']['frozen_30d'] == 1 and octo['school']['frozen_30d'] == 1,
+          'Sep: 30th day 09-24 counts even though the spell ended 09-28; Oct: F1 (30th day 10-20)')
+    q3 = rep('2026-07-01 00:00+05', '2026-10-01 00:00+05')['school']
+    check(q3['frozen_30d'] == sum(rep(*month(m))['school']['frozen_30d'] for m in (7, 8, 9)) == 1
+          and q3['left'] == sum(rep(*month(m))['school']['left'] for m in (7, 8, 9)) == 3,
+          'Jul + Aug + Sep = Q3 (frozen_30d, left)')
+    q4 = rep('2026-10-01 00:00+05', '2027-01-01 00:00+05')['school']
+    check(q4['frozen_30d'] == sum(rep(*month(m))['school']['frozen_30d'] for m in (10, 11, 12)),
+          'Oct + Nov + Dec = Q4 (frozen_30d)')
+    weeks = [rep(f'2026-10-{d:02d} 00:00+05', f'2026-10-{d + 7:02d} 00:00+05' if d + 7 <= 31 else '2026-11-01 00:00+05')
+             ['school'] for d in (1, 8, 15, 22, 29)]
+    check(sum(w['frozen_30d'] for w in weeks) == octo['school']['frozen_30d']
+          and sum(w['left'] for w in weeks) == octo['school']['left'], 'weeks inside October sum to October')
+
+    print('\nS3 roster as of p_end')
+    check((sa[A]['active_students'], sa[B]['active_students'], sep['school']['active_students']) == (6, 2, 8),
+          'Sep (p_end 10-01): roster reconstructed — T1 still with A, T2 still active, dated leaver L1 gone')
+    check((oa[A]['active_students'], oa[B]['active_students']) == (5, 1), 'Oct (running): live roster')
+    check(sa[A]['razryad_snapshot']['4th']['count'] == 0 and oa[B]['razryad_snapshot']['4th']['count'] == 1,
+          'razryad snapshot as of p_end (T1 4th only from 10-06)')
+
+    print('\ncohort matrix (B1 / B2)')
+    cm = q1("SELECT coach_cohort_matrix()")
+    rows = {r['start_month']: r for r in cm['rows']}
+    check(rows['2026-09']['cohort_size'] == 4 and rows['2026-09']['left_pct'][0] == 25.0,
+          'Sep cohort: L1 left in month 0; returned R1–R3 not leavers')
+    check(cm['excluded_pre_history_leavers'] == 1 and cm['cleanup_leavers_undated'] == 1,
+          'backfill leaver + undated leaver excluded and counted')
+    allm = q1("SELECT coach_cohort_matrix_all()")
+    ca = {c['coach_id']: c for c in allm['coaches']}
+    check(allm['school'] == cm | {'generated_at': allm['school']['generated_at']}, 'all: school block = coach_cohort_matrix()')
+    check(ca[A]['coach_name'] == 'Анна Иванова' and ca[A]['rows'] == q1("SELECT coach_cohort_matrix(%s)", (A,))['rows'],
+          'all: per-coach block = coach_cohort_matrix(coach)')
+
+    print('\nverify script (cleanup fixture)')
+    bad = verify_rows(cur)
+    check(not bad, f'101_coach_reports_verify.sql: all checks ok {bad or ""}')
+    conn.close()
 
 
 def main():
