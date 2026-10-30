@@ -6,7 +6,8 @@ Calls the analytics-coaches edge function (?action=report, plus
 
   coach-report-<period>-<start>.xlsx          sheets: Ranking, Per-coach detail,
                                               Cohort churn (month+ only: school
-                                              + one block per coach),
+                                              + one block per coach, each with
+                                              exits by level / razryad),
                                               Tournaments, Data notes (+ cleanup
                                               leavers per coach)
   coach-report-<period>-<start>-summary.txt   short Telegram text: school
@@ -228,12 +229,11 @@ def build_workbook(payload, path):
                                 + list(r.get(key) or []))
             rows.append(['Excluded: left before history', m.get('excluded_pre_history_leavers', 0)])
             rows.append(['Excluded: cleanup leavers without a lesson', m.get('cleanup_leavers_undated', 0)])
+            rows.append([f'Exits by level at leaving ({name})', 'Left', 'Left + frozen 30+'])
+            rows += [[f"Level {x['level']}", x['left'], x['churn']] for x in m.get('by_level_at_leaving', [])]
+            rows.append([f'Exits by razryad at leaving ({name})', 'Left', 'Left + frozen 30+'])
+            rows += [[x['razryad'], x['left'], x['churn']] for x in m.get('by_razryad_at_leaving', [])]
             rows.append([])
-        rows.append(['Exits by level at leaving (school)', 'Left', 'Left + frozen 30+'])
-        rows += [[f"Level {x['level']}", x['left'], x['churn']] for x in school_m.get('by_level_at_leaving', [])]
-        rows.append([])
-        rows.append(['Exits by razryad at leaving (school)', 'Left', 'Left + frozen 30+'])
-        rows += [[x['razryad'], x['left'], x['churn']] for x in school_m.get('by_razryad_at_leaving', [])]
         _sheet(wb, 'Cohort churn', header + [f'M{k}' for k in range(n)], rows, [28, 12, 16])
 
     # Tournaments

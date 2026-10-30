@@ -5,7 +5,7 @@ scripts/coach_report.py: fake analytics-coaches payload → xlsx + summary.
   * month report: the 5 sheets (Ranking, Per-coach detail, Cohort churn,
     Tournaments, Data notes), ranking order, Data notes carry the PRD limits
     and the cleanup-leavers table per coach, Cohort churn has a school block
-    plus one block per coach
+    plus one block per coach, each with its exits by level / razryad at leaving
   * week report: no Cohort churn sheet, no cohort_matrix call
   * summary: school headline, cleanup line (only when the period has backdated
     cleanup leavers), top 3, bottom 3, movers; Russian names as stored
@@ -118,10 +118,14 @@ def payload(period):
                 {'coach_id': coaches[0]['coach_id'], 'coach_name': NAMES[0], 'max_months': 1,
                  'rows': [{'start_month': '2026-09', 'cohort_size': 12, 'left_censored': False,
                            'left_pct': [8.3, 16.7], 'churn_pct': [8.3, 25.0]}],
+                 'by_level_at_leaving': [{'level': '1', 'left': 1, 'churn': 2}, {'level': '3', 'left': 2, 'churn': 3}],
+                 'by_razryad_at_leaving': [{'razryad': '4th', 'left': 3, 'churn': 4}],
                  'excluded_pre_history_leavers': 2, 'cleanup_leavers_undated': 0},
                 {'coach_id': coaches[1]['coach_id'], 'coach_name': NAMES[1], 'max_months': 0,
                  'rows': [{'start_month': '2026-10', 'cohort_size': 4, 'left_censored': False,
                            'left_pct': [0.0], 'churn_pct': [25.0]}],
+                 'by_level_at_leaving': [{'level': '2', 'left': 0, 'churn': 1}],
+                 'by_razryad_at_leaving': [{'razryad': 'none', 'left': 0, 'churn': 1}],
                  'excluded_pre_history_leavers': 0, 'cleanup_leavers_undated': 7},
             ],
         },
@@ -153,6 +157,26 @@ with tempfile.TemporaryDirectory() as tmp:
           and any(r[0] == 'Left + frozen 30+ %' for r in block_a), "per-coach block carries that coach's matrix")
     check(any(r[0] == 'Excluded: cleanup leavers without a lesson' and r[1] == 7 for r in cohort[i_b:]),
           'per-coach excluded counts')
+
+    def split(block, title):
+        i = next(k for k, r in enumerate(block) if r[0] == title)
+        check(block[i][1:3] == ('Left', 'Left + frozen 30+'), f'{title}: header')
+        out = []
+        for r in block[i + 1:]:
+            if r[0] is None or str(r[0]).startswith('Exits by'):
+                break
+            out.append(list(r[:3]))
+        return out
+
+    cm = payload('month')['cohort']
+    for name, m, block in (('School total', cm['school'], cohort[i_school:i_a]),
+                           (NAMES[0], cm['coaches'][0], block_a), (NAMES[1], cm['coaches'][1], cohort[i_b:])):
+        check(split(block, f'Exits by level at leaving ({name})')
+              == [[f"Level {x['level']}", x['left'], x['churn']] for x in m['by_level_at_leaving']],
+              f'{name}: level-at-leaving table matches the payload')
+        check(split(block, f'Exits by razryad at leaving ({name})')
+              == [[x['razryad'], x['left'], x['churn']] for x in m['by_razryad_at_leaving']],
+              f'{name}: razryad-at-leaving table matches the payload')
     dn = [r for r in wb['Data notes'].iter_rows(values_only=True)]
     hdr = next(i for i, r in enumerate(dn) if r[0] == 'Cleanup leavers by coach')
     check(dn[hdr][1:4] == ('Dated by last lesson (total)', 'Dated, left in this period', 'Without any lesson'),
