@@ -2,13 +2,16 @@
 """Coach performance report (PRD_COACH_REPORTS.md) → .xlsx + Telegram summary.
 
 Calls the analytics-coaches edge function (?action=report, plus
-?action=cohort_matrix for month and longer periods) and writes:
+?action=cohort_matrix&coach_id=all for month and longer periods) and writes:
 
   coach-report-<period>-<start>.xlsx          sheets: Ranking, Per-coach detail,
-                                              Cohort churn (month+ only),
-                                              Tournaments, Data notes
+                                              Cohort churn (month+ only: school
+                                              + one block per coach),
+                                              Tournaments, Data notes (+ cleanup
+                                              leavers per coach)
   coach-report-<period>-<start>-summary.txt   short Telegram text: school
-                                              headline, top 3, bottom 3, movers
+                                              headline, cleanup note, top 3,
+                                              bottom 3, movers
 
 Prints {"xlsx": ..., "summary": ...} on stdout. Read-only.
 
@@ -43,16 +46,25 @@ DATA_NOTES = [
     'Retention for students who started before Dec 2025 is a lower bound (attendance starts 2025-12-01; '
     'their start is marked "start ≤ Dec 2025").',
     'The weekly cohort matrix is too thin, so the Cohort churn sheet only appears in the monthly report and longer ones.',
+    'The 14 Oct 2026 inactive-student cleanup froze students who had already stopped coming. Those still gone are '
+    'counted as left on their last lesson date (so past periods, e.g. September, include them); students who came back '
+    'are ignored; cleanup leavers who never attended have no leave date and only appear in the table below.',
+    'The Feb 2026 status-history backfill is initial state, not events: students who had already left then have an '
+    'unknown leave date and are excluded from retention and the cohort matrix.',
 ]
 
 DEFINITIONS = [
     'Counts are credited to the coach at the time of the event (audit_log coach_id timeline, complete since '
     '2026-02-10); unknown or deleted coach → "Unattributed". Razryad changes use razryad_history.trainer_id_at_change.',
     'New = first activation in the period (new student row, or left → active after more than 60 days).',
-    'Left and Frozen 30+ (frozen 30+ days and not reactivated by period end) are separate; churn = left + frozen 30+.',
+    'Left and Frozen 30+ (a freeze that reaches its 30th day inside the period while still frozen) are separate; '
+    'churn = left + frozen 30+. Weeks add up to their month and months to their quarter.',
     'Net growth = new − left. Duplicate status events (same transition within 5 minutes) are counted once.',
     'Retention: start (first present attendance, else created_at) → first leave; Kaplan–Meier survival at 3 / 6 months.',
-    'Active roster, razryad snapshot and tournament participation buckets use the current roster (snapshot at run time).',
+    'Active roster, razryad snapshot and tournament participation buckets use the roster as of the period end '
+    '(live roster while the period is running), also for the previous period used for movers.',
+    'Podium score = Coach KPI top-3 finish rate (podium finishes / tournament entries), pulled toward the school rate '
+    'by 10 entries so one lucky result is not full marks.',
     'Small sample = fewer than 10 active students.',
 ]
 
@@ -77,7 +89,7 @@ def fetch_payload(base_url, key, period, date=None):
     if date:
         params['date'] = date
     report = fetch(base_url, key, params)
-    cohort = fetch(base_url, key, {'action': 'cohort_matrix'}) if period != 'week' else None
+    cohort = fetch(base_url, key, {'action': 'cohort_matrix', 'coach_id': 'all'}) if period != 'week' else None
     return {'report': report, 'cohort': cohort}
 
 
@@ -114,6 +126,24 @@ def extra_rows(report):
 
 def window_label(w):
     return f"{w['start_date']} … {w['end_date']}"
+
+
+MONTHS = ('Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec')
+
+
+def cleanup_note(report):
+    """data_notes.cleanup_freeze or {}."""
+    return ((report.get('data_notes') or {}).get('cleanup_freeze')) or {}
+
+
+def cleanup_by_coach(cf):
+    """[(coach name, dated total, dated in period, undated)] merged per coach, Unattributed last."""
+    rows = {}
+    for x in (cf.get('cleanup_leavers_dated') or {}).get('by_coach', []):
+        rows[x.get('coach_id')] = [x['coach_name'], x.get('total', 0), x.get('in_window', 0), 0]
+    for x in (cf.get('cleanup_leavers_undated') or {}).get('by_coach', []):
+        rows.setdefault(x.get('coach_id'), [x['coach_name'], 0, 0, 0])[3] = x.get('total', 0)
+    return sorted(rows.values(), key=lambda r: (r[0] == 'Unattributed', r[0]))
 
 
 # ---------------------------------------------------------------- workbook
@@ -182,21 +212,28 @@ def build_workbook(payload, path):
         'Promotions', 'Downgrades', 'Promotions by razryad', 'Downgrades by razryad',
     ], rows, [28])
 
-    # Cohort churn (month and longer)
+    # Cohort churn (month and longer): school block, then one block per coach
     if cohort is not None:
-        n = cohort.get('max_months', 0) + 1
+        school_m = cohort.get('school') or {}
+        blocks = [('School total', school_m)] + [(c['coach_name'], c) for c in cohort.get('coaches', [])]
+        n = max(m.get('max_months', 0) for _, m in blocks) + 1
         header = ['Start month', 'Cohort size', 'Start ≤ Dec 2025']
         rows = []
-        for label, key in (('Left %', 'left_pct'), ('Left + frozen 30+ %', 'churn_pct')):
-            rows.append([label])
-            for r in cohort.get('rows', []):
-                rows.append([r['start_month'], r['cohort_size'], 'yes' if r.get('left_censored') else ''] + list(r.get(key) or []))
+        for name, m in blocks:
+            rows.append([name])
+            for label, key in (('Left %', 'left_pct'), ('Left + frozen 30+ %', 'churn_pct')):
+                rows.append([label])
+                for r in m.get('rows', []):
+                    rows.append([r['start_month'], r['cohort_size'], 'yes' if r.get('left_censored') else '']
+                                + list(r.get(key) or []))
+            rows.append(['Excluded: left before history', m.get('excluded_pre_history_leavers', 0)])
+            rows.append(['Excluded: cleanup leavers without a lesson', m.get('cleanup_leavers_undated', 0)])
             rows.append([])
-        rows.append(['Exits by level at leaving', 'Left', 'Left + frozen 30+'])
-        rows += [[f"Level {x['level']}", x['left'], x['churn']] for x in cohort.get('by_level_at_leaving', [])]
+        rows.append(['Exits by level at leaving (school)', 'Left', 'Left + frozen 30+'])
+        rows += [[f"Level {x['level']}", x['left'], x['churn']] for x in school_m.get('by_level_at_leaving', [])]
         rows.append([])
-        rows.append(['Exits by razryad at leaving', 'Left', 'Left + frozen 30+'])
-        rows += [[x['razryad'], x['left'], x['churn']] for x in cohort.get('by_razryad_at_leaving', [])]
+        rows.append(['Exits by razryad at leaving (school)', 'Left', 'Left + frozen 30+'])
+        rows += [[x['razryad'], x['left'], x['churn']] for x in school_m.get('by_razryad_at_leaving', [])]
         _sheet(wb, 'Cohort churn', header + [f'M{k}' for k in range(n)], rows, [28, 12, 16])
 
     # Tournaments
@@ -225,6 +262,22 @@ def build_workbook(payload, path):
         [],
         ['Data limits'],
     ] + [['', note] for note in DATA_NOTES] + [[], ['Definitions']] + [['', d] for d in DEFINITIONS]
+    cf = cleanup_note(report)
+    if cf:
+        dated, undated = cf.get('cleanup_leavers_dated') or {}, cf.get('cleanup_leavers_undated') or {}
+        win = cf.get('window') or {}
+        rows += [
+            [],
+            ['Inactive-student cleanup', f"{cf.get('label')} ({win.get('start')} … {win.get('end')})"],
+            ['', f"Batch students: {cf.get('batch_students', 0)} · returned (cleanup ignored): {cf.get('returned', 0)}"
+                 f" · left by a real status change: {cf.get('real_left', 0)}"],
+            ['', f"Cleanup leavers dated by last lesson: {dated.get('total', 0)}"
+                 f" (in this period: {dated.get('in_window', 0)}) · without any lesson: {undated.get('total', 0)}"],
+            ['', 'Left before status history (excluded from retention): '
+                 f"{(report.get('data_notes') or {}).get('excluded_pre_history_leavers', 0)}"],
+            [],
+            ['Cleanup leavers by coach', 'Dated by last lesson (total)', 'Dated, left in this period', 'Without any lesson'],
+        ] + cleanup_by_coach(cf)
     ws = _sheet(wb, 'Data notes', ['Item', 'Value'], rows, [18, 120])
     ws.freeze_panes = None
 
@@ -237,6 +290,20 @@ def build_workbook(payload, path):
 def _line(c):
     tag = ' (small sample)' if c.get('small_sample') else ''
     return f"{c['rank']}. {c['coach_name']} — {c['score']}{tag}"
+
+
+def cleanup_line(report):
+    """One line when the period contains backdated cleanup leavers, else None."""
+    cf = cleanup_note(report)
+    n = (cf.get('cleanup_leavers_dated') or {}).get('in_window', 0)
+    if not n:
+        return None
+    w = report['period']
+    when = MONTHS[int(w['start_date'][5:7]) - 1] if w['period'] == 'month' else 'this period'
+    day = ((cf.get('window') or {}).get('start') or '')[:10]
+    batch = f"{int(day[8:10])} {MONTHS[int(day[5:7]) - 1]}" if len(day) == 10 else 'inactive-student'
+    return (f"Includes {n} students who left in {when} "
+            f"(found in the {batch} inactive-student cleanup, dated by last lesson)")
 
 
 def build_summary(payload):
@@ -257,6 +324,11 @@ def build_summary(payload):
         f"Razryads: +{rz.get('promotions', 0)} promotions, {rz.get('downgrades', 0)} downgrades"
         f" · Podiums: {pod.get('students', 0)} students, {pod.get('finishes', 0)} finishes"
         f" · Survival 6m: {pct(rt.get('km_survival_6m')) if rt.get('km_survival_6m') is not None else 'n/a'}%",
+    ]
+    line = cleanup_line(report)
+    if line:
+        lines.append(line)
+    lines += [
         '',
         'Top 3:',
     ] + [_line(c) for c in top] + ['', 'Bottom 3:'] + [_line(c) for c in bottom]

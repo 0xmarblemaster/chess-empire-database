@@ -4,8 +4,11 @@ scripts/coach_report.py: fake analytics-coaches payload → xlsx + summary.
 
   * month report: the 5 sheets (Ranking, Per-coach detail, Cohort churn,
     Tournaments, Data notes), ranking order, Data notes carry the PRD limits
+    and the cleanup-leavers table per coach, Cohort churn has a school block
+    plus one block per coach
   * week report: no Cohort churn sheet, no cohort_matrix call
-  * summary: school headline, top 3, bottom 3, movers; Russian names as stored
+  * summary: school headline, cleanup line (only when the period has backdated
+    cleanup leavers), top 3, bottom 3, movers; Russian names as stored
   * CLI: missing env → exit 2; stdout is {"xlsx", "summary"} JSON (fetch stubbed)
 
 Run: python3 tests/test_coach_report_py.py
@@ -78,6 +81,19 @@ def payload(period):
             'weights': {'retention': 30, 'net_growth': 20, 'razryad_promotions': 20,
                         'tournament_participation': 15, 'podiums': 15},
             'coaches': coaches, 'unattributed': unattributed, 'school': school,
+            'data_notes': {
+                'excluded_pre_history_leavers': 18,
+                'cleanup_freeze': {
+                    'label': 'cleanup_freeze_2026_10_14',
+                    'window': {'start': '2026-10-14T16:00:00+00:00', 'end': '2026-10-14T17:15:00+00:00'},
+                    'batch_students': 162, 'returned': 83, 'real_left': 0,
+                    'cleanup_leavers_dated': {'total': 72, 'in_window': 20 if period == 'month' else 0, 'by_coach': [
+                        {'coach_id': coaches[0]['coach_id'], 'coach_name': NAMES[0], 'total': 50, 'in_window': 15},
+                        {'coach_id': None, 'coach_name': 'Unattributed', 'total': 22, 'in_window': 5}]},
+                    'cleanup_leavers_undated': {'total': 7, 'by_coach': [
+                        {'coach_id': coaches[1]['coach_id'], 'coach_name': NAMES[1], 'total': 7}]},
+                },
+            },
             'previous': {'coaches': [{'coach_id': c['coach_id'], 'coach_name': c['coach_name'],
                                       'score': 60.0, 'rank': 4} for c in coaches[:3]], 'school': None},
             'movers': {
@@ -88,13 +104,26 @@ def payload(period):
             },
         },
         'cohort': None if period == 'week' else {
-            'coach_id': None, 'max_months': 2,
-            'rows': [{'start_month': '2025-11', 'cohort_size': 400, 'left_censored': True,
-                      'left_pct': [1.0, 2.5, 4.0], 'churn_pct': [2.0, 5.0, 9.0]},
-                     {'start_month': '2026-09', 'cohort_size': 30, 'left_censored': False,
-                      'left_pct': [0.0, 3.3], 'churn_pct': [0.0, 6.7]}],
-            'by_level_at_leaving': [{'level': '2', 'left': 5, 'churn': 9}],
-            'by_razryad_at_leaving': [{'razryad': 'none', 'left': 5, 'churn': 9}],
+            'school': {
+                'coach_id': None, 'max_months': 2,
+                'rows': [{'start_month': '2025-11', 'cohort_size': 400, 'left_censored': True,
+                          'left_pct': [1.0, 2.5, 4.0], 'churn_pct': [2.0, 5.0, 9.0]},
+                         {'start_month': '2026-09', 'cohort_size': 30, 'left_censored': False,
+                          'left_pct': [0.0, 3.3], 'churn_pct': [0.0, 6.7]}],
+                'by_level_at_leaving': [{'level': '2', 'left': 5, 'churn': 9}],
+                'by_razryad_at_leaving': [{'razryad': 'none', 'left': 5, 'churn': 9}],
+                'excluded_pre_history_leavers': 18, 'cleanup_leavers_undated': 7,
+            },
+            'coaches': [
+                {'coach_id': coaches[0]['coach_id'], 'coach_name': NAMES[0], 'max_months': 1,
+                 'rows': [{'start_month': '2026-09', 'cohort_size': 12, 'left_censored': False,
+                           'left_pct': [8.3, 16.7], 'churn_pct': [8.3, 25.0]}],
+                 'excluded_pre_history_leavers': 2, 'cleanup_leavers_undated': 0},
+                {'coach_id': coaches[1]['coach_id'], 'coach_name': NAMES[1], 'max_months': 0,
+                 'rows': [{'start_month': '2026-10', 'cohort_size': 4, 'left_censored': False,
+                           'left_pct': [0.0], 'churn_pct': [25.0]}],
+                 'excluded_pre_history_leavers': 0, 'cleanup_leavers_undated': 7},
+            ],
         },
     }
 
@@ -116,6 +145,25 @@ with tempfile.TemporaryDirectory() as tmp:
     check(cohort[0][:5] == ('Start month', 'Cohort size', 'Start ≤ Dec 2025', 'M0', 'M1'), 'cohort header M0..')
     check(any(r[0] == '2025-11' and r[2] == 'yes' and r[3] == 1.0 for r in cohort), 'cohort row with left-censored flag')
     check(any(r[0] == 'Level 2' for r in cohort), 'exits by level at leaving')
+    names = [r[0] for r in cohort]
+    i_school, i_a, i_b = names.index('School total'), names.index(NAMES[0]), names.index(NAMES[1])
+    check(i_school < i_a < i_b, 'Cohort churn: school block, then one block per coach')
+    block_a = cohort[i_a:i_b]
+    check(any(r[0] == '2026-09' and r[1] == 12 and r[3] == 8.3 for r in block_a)
+          and any(r[0] == 'Left + frozen 30+ %' for r in block_a), "per-coach block carries that coach's matrix")
+    check(any(r[0] == 'Excluded: cleanup leavers without a lesson' and r[1] == 7 for r in cohort[i_b:]),
+          'per-coach excluded counts')
+    dn = [r for r in wb['Data notes'].iter_rows(values_only=True)]
+    hdr = next(i for i, r in enumerate(dn) if r[0] == 'Cleanup leavers by coach')
+    check(dn[hdr][1:4] == ('Dated by last lesson (total)', 'Dated, left in this period', 'Without any lesson'),
+          'Data notes: cleanup-leavers table header')
+    check(list(dn[hdr + 1][:4]) == [NAMES[0], 50, 15, 0] and list(dn[hdr + 2][:4]) == [NAMES[1], 0, 0, 7]
+          and list(dn[hdr + 3][:4]) == ['Unattributed', 22, 5, 0],
+          'Data notes: per-coach rows (dated / in period / undated), Unattributed last')
+    dn_text = ' '.join(str(c) for r in dn for c in r if c)
+    check('Batch students: 162' in dn_text and 'returned (cleanup ignored): 83' in dn_text
+          and 'in this period: 20' in dn_text and 'excluded from retention): 18' in dn_text,
+          'Data notes: batch summary numbers')
     tourn = [r for r in wb['Tournaments'].iter_rows(values_only=True)]
     check('Lifetime: 4+ tournaments' in tourn[0] and 'Podiums rated' in tourn[0], 'tournament buckets + podium kinds')
     notes = ' '.join(str(c) for r in wb['Data notes'].iter_rows(values_only=True) for c in r if c)
@@ -126,6 +174,8 @@ with tempfile.TemporaryDirectory() as tmp:
     summary = open(out['summary'], encoding='utf-8').read()
     print('\nsummary')
     check(summary.startswith('Coach report — month 2026-10-01 … 2026-10-31'), 'header with period')
+    check('Includes 20 students who left in Oct (found in the 14 Oct inactive-student cleanup, dated by last lesson)'
+          in summary, 'cleanup line when the period has backdated leavers')
     check('active 731' in summary and 'churn 50' in summary and 'net +15' in summary, 'school headline numbers')
     top = summary.split('Top 3:')[1].split('Bottom 3:')[0]
     bottom = summary.split('Bottom 3:')[1].split('Movers')[0]
@@ -140,6 +190,7 @@ with tempfile.TemporaryDirectory() as tmp:
     out = cr.write_report(payload('week'), tmp)
     check(load_workbook(out['xlsx']).sheetnames == ['Ranking', 'Per-coach detail', 'Tournaments', 'Data notes'],
           'weekly: no Cohort churn sheet')
+    check('Includes' not in open(out['summary'], encoding='utf-8').read(), 'no cleanup line without backdated leavers')
 
     print('\nCLI')
     calls = []
@@ -160,6 +211,7 @@ with tempfile.TemporaryDirectory() as tmp:
         cr.main(['--period', 'month', '--out', tmp])
     check([c['action'] for c in calls] == ['report', 'cohort_matrix'] and 'date' not in calls[0],
           'month: report + cohort_matrix; no --date → server default')
+    check(calls[1] == {'action': 'cohort_matrix', 'coach_id': 'all'}, 'cohort matrix fetched for all coaches in one call')
 
 print(f'\n  passed: {passed}\n  failed: {failed}')
 sys.exit(1 if failed else 0)
