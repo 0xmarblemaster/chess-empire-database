@@ -99,9 +99,10 @@ export function parseReportParams(params, nowMs) {
 }
 
 // ?action=cohort_matrix params → { value: { coach_id } } | { error }.
+// coach_id = 'all' → school + every coach in one call.
 export function parseCohortParams(params) {
   const id = params.coach_id == null || params.coach_id === '' ? null : params.coach_id;
-  if (id !== null && !isUuid(id)) return { error: 'coach_id must be a UUID' };
+  if (id !== null && id !== 'all' && !isUuid(id)) return { error: "coach_id must be a UUID or 'all'" };
   return { value: { coach_id: id } };
 }
 
@@ -124,24 +125,41 @@ export function kaplanMeier(samples, t) {
 
 const clamp01 = (n) => (Number.isFinite(n) ? Math.min(1, Math.max(0, n)) : 0);
 
+// Coach KPI top-3 finish rate, exactly as analytics-tournaments
+// coach_leaderboard: podium finishes / played entries (games_played ≥ 1), 0
+// without entries.
+export function top3FinishRate(top3Count, entries) {
+  return entries > 0 ? top3Count / entries : 0;
+}
+
+// The Coach KPI rate has no minimum-sample handling, so one podium from one
+// entry would score 1. Shrink it toward the school rate with a prior worth
+// PODIUM_PRIOR_ENTRIES entries; large samples converge to the KPI rate.
+export const PODIUM_PRIOR_ENTRIES = 10;
+
+export function podiumScore(finishes, entries, priorRate = 0) {
+  if (!(entries > 0)) return top3FinishRate(finishes, entries);
+  return clamp01((finishes + PODIUM_PRIOR_ENTRIES * clamp01(priorRate)) / (entries + PODIUM_PRIOR_ENTRIES));
+}
+
 // Sub-scores 0..1 for one coach_report row.
 //   retention:  KM 6-month survival (3-month if 6 is unknown; 0.5 if neither)
 //   net_growth: 0.5 ± (new − left) / active × 5 (±10 % of roster → 1 / 0)
 //   razryad_promotions: promotions / active × 4 (25 % of roster → 1)
 //   tournament_participation: share of active students with ≥ 1 tournament
-//   podiums: podium students / tournament participants
-export function subScores(row) {
+//   podiums: podiumScore (Coach KPI top-3 rate, shrunk toward podiumPrior)
+export function subScores(row, podiumPrior = 0) {
   const active = row.active_students || 0;
   const r = row.retention || {};
   const km = r.km_survival_6m ?? r.km_survival_3m;
   const zeroBucket = row.participation?.period?.['0']?.count ?? active;
-  const pod = row.podiums?.pct_of_participants;
+  const pod = row.podiums || {};
   return {
     retention: km == null ? 0.5 : clamp01(Number(km)),
     net_growth: active > 0 ? clamp01(0.5 + (row.net_growth / active) * 5) : 0.5,
     razryad_promotions: active > 0 ? clamp01(((row.razryad_changes?.promotions || 0) / active) * 4) : 0,
     tournament_participation: active > 0 ? clamp01((active - zeroBucket) / active) : 0,
-    podiums: pod == null ? 0 : clamp01(Number(pod) / 100),
+    podiums: podiumScore(pod.finishes || 0, pod.entries || 0, podiumPrior),
   };
 }
 
@@ -168,10 +186,12 @@ export function isRanked(row) {
 }
 
 // coach_report() rows → ranked rows (score, sub_scores, overall rank, per-metric
-// ranks); unranked coaches keep rank null and go last.
-export function rankCoaches(rows, weights = REPORT_WEIGHTS) {
+// ranks); unranked coaches keep rank null and go last. `school` (the school
+// row) gives the podium prior.
+export function rankCoaches(rows, weights = REPORT_WEIGHTS, school = null) {
+  const prior = top3FinishRate(school?.podiums?.finishes || 0, school?.podiums?.entries || 0);
   const scored = rows.filter((r) => r.coach_id != null).map((r) => {
-    const sub = subScores(r);
+    const sub = subScores(r, prior);
     return { ...r, sub_scores: sub, score: compositeScore(sub, weights), rank: null, ranks: {} };
   });
   const ranked = scored.filter(isRanked);
@@ -208,8 +228,8 @@ export function movers(current, previous, limit = 3) {
 
 // Final ?action=report payload from two coach_report() results.
 export function buildReport({ window, previousWindow, current, previous, weights = REPORT_WEIGHTS }) {
-  const coaches = rankCoaches(current.coaches || [], weights);
-  const prevCoaches = rankCoaches(previous.coaches || [], weights);
+  const coaches = rankCoaches(current.coaches || [], weights, current.school);
+  const prevCoaches = rankCoaches(previous.coaches || [], weights, previous.school);
   return {
     period: window,
     previous_period: previousWindow,
@@ -218,6 +238,7 @@ export function buildReport({ window, previousWindow, current, previous, weights
     coaches,
     unattributed: (current.coaches || []).find((r) => r.coach_id == null) ?? null,
     school: current.school ?? null,
+    data_notes: current.data_notes ?? null,
     previous: {
       coaches: prevCoaches.map((r) => ({ coach_id: r.coach_id, coach_name: r.coach_name, score: r.score, rank: r.rank })),
       school: previous.school ?? null,

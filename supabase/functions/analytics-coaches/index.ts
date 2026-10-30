@@ -9,7 +9,7 @@ import {
 } from './coach-reports-logic.mjs'
 
 // Coach performance reports (PRD_COACH_REPORTS.md). Read-only: only calls the
-// migration 101 RPCs coach_report / coach_cohort_matrix.
+// migration 101 RPCs coach_report / coach_cohort_matrix / coach_cohort_matrix_all.
 //
 // Auth: the Coach KPI x-api-key gate (as analytics-tournaments) plus an admin
 // session (Bearer user JWT whose user_roles.role = 'admin'), OR a service key
@@ -82,7 +82,9 @@ serve(async (req) => {
     if (action === 'cohort_matrix') {
       const { value, error: paramError } = parseCohortParams(params)
       if (paramError || !value) return json({ success: false, error: paramError }, 400)
-      const { data, error } = await supabase.rpc('coach_cohort_matrix', { p_coach: value.coach_id })
+      const { data, error } = value.coach_id === 'all'
+        ? await supabase.rpc('coach_cohort_matrix_all')
+        : await supabase.rpc('coach_cohort_matrix', { p_coach: value.coach_id })
       if (error) throw error
       return json({ success: true, data })
     }

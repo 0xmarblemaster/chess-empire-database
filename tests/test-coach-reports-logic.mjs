@@ -15,6 +15,7 @@ import { fileURLToPath } from 'node:url';
 import {
   ALMATY_OFFSET,
   PERIODS,
+  PODIUM_PRIOR_ENTRIES,
   REPORT_WEIGHTS,
   addDays,
   almatyDate,
@@ -27,10 +28,12 @@ import {
   movers,
   parseCohortParams,
   parseReportParams,
+  podiumScore,
   previousPeriod,
   rankCoaches,
   resolvePeriod,
   subScores,
+  top3FinishRate,
 } from '../supabase/functions/analytics-coaches/coach-reports-logic.mjs';
 
 let passed = 0;
@@ -99,6 +102,7 @@ eq(parseCohortParams({}), { value: { coach_id: null } }, 'cohort: no coach → s
 eq(parseCohortParams({ coach_id: 'aaaaaaaa-0000-4000-8000-000000000001' }).value.coach_id,
   'aaaaaaaa-0000-4000-8000-000000000001', 'cohort: coach uuid');
 assert(parseCohortParams({ coach_id: 'nope' }).error, 'cohort: bad coach_id → error');
+eq(parseCohortParams({ coach_id: 'all' }), { value: { coach_id: 'all' } }, "cohort: coach_id=all → every coach in one call");
 
 console.log('\n=== Kaplan–Meier =========================================================\n');
 // Same 7 students as tests/test_coach_reports_db.py (SQL got 0.8333 / 0.6667).
@@ -137,17 +141,17 @@ function row(id, name, o = {}) {
     retention: { km_survival_3m: o.km3 ?? null, km_survival_6m: o.km6 ?? null },
     razryad_changes: { promotions: o.promotions ?? 0 },
     participation: { period: { 0: { count: active - (o.players ?? 0) } } },
-    podiums: { pct_of_participants: o.podPct ?? null },
+    podiums: { finishes: o.fin ?? 0, entries: o.ent ?? 0 },
   };
 }
 
-const perfect = subScores(row('p', 'P', { km6: 1, new: 2, promotions: 5, players: 20, podPct: 100 }));
+const perfect = subScores(row('p', 'P', { km6: 1, new: 2, promotions: 5, players: 20, fin: 30, ent: 30 }), 1);
 eq(perfect, { retention: 1, net_growth: 1, razryad_promotions: 1, tournament_participation: 1, podiums: 1 }, 'perfect sub-scores');
 eq(compositeScore(perfect), 100, 'perfect → 100');
 eq(compositeScore(subScores(row('z', 'Z', { km6: 0, left: 2, players: 0 }))), 0, 'worst → 0');
-const mid = subScores(row('m', 'M', { km3: 0.8, new: 1, left: 1, promotions: 1, players: 5, podPct: 40 }));
+const mid = subScores(row('m', 'M', { km3: 0.8, new: 1, left: 1, promotions: 1, players: 5, fin: 4, ent: 10 }), 0.4);
 eq(mid, { retention: 0.8, net_growth: 0.5, razryad_promotions: 0.2, tournament_participation: 0.25, podiums: 0.4 },
-  'sub-scores: KM 3m fallback, net 0 → 0.5, promotions 1/20×4, 5/20 played, 40 % podium');
+  'sub-scores: KM 3m fallback, net 0 → 0.5, promotions 1/20×4, 5/20 played, podium (4 + 10×0.4) / (10 + 10)');
 eq(compositeScore(mid), 47.8, 'composite = Σ weight × sub-score = 24 + 10 + 4 + 3.75 + 6 → 47.8 (1 dp)');
 eq(subScores(row('n', 'N', {})).retention, 0.5, 'unknown retention → neutral 0.5');
 eq(subScores(row('e', 'E', { active: 0 })).net_growth, 0.5, 'empty roster → neutral net growth');
@@ -164,8 +168,8 @@ assert(!isRanked(row('x', 'X', { active: 0 })), 'coach with no roster and no mov
 assert(isRanked(row('x', 'X', { active: 0, left: 1 })), 'coach with leavers but no roster is ranked');
 
 const CUR = [
-  row('a', 'Анна', { km6: 0.9, new: 2, promotions: 2, players: 10, podPct: 50 }),
-  row('b', 'Борис', { km6: 0.9, new: 2, promotions: 2, players: 10, podPct: 50 }),
+  row('a', 'Анна', { km6: 0.9, new: 2, promotions: 2, players: 10, fin: 5, ent: 10 }),
+  row('b', 'Борис', { km6: 0.9, new: 2, promotions: 2, players: 10, fin: 5, ent: 10 }),
   row('c', 'Вера', { km6: 0.5, left: 3, players: 2, active: 8 }),
   row('d', 'Глеб', { active: 0 }),
   row(null, 'Unattributed', { active: 4 }),
@@ -179,7 +183,7 @@ eq(ranked[2].small_sample, true, 'small_sample passed through (8 active)');
 
 const PREV = rankCoaches([
   row('a', 'Анна', { km6: 0.5, players: 2 }),
-  row('b', 'Борис', { km6: 0.95, new: 3, promotions: 4, players: 15, podPct: 80 }),
+  row('b', 'Борис', { km6: 0.95, new: 3, promotions: 4, players: 15, fin: 8, ent: 10 }),
   row('c', 'Вера', { km6: 0.5, left: 3, players: 2, active: 8 }),
 ]);
 const mv = movers(ranked, PREV);
@@ -190,10 +194,36 @@ assert(mv.up[0].score_delta > 0 && mv.up[0].rank_delta === PREV.find((x) => x.co
 assert(!mv.up.concat(mv.down).some((x) => x.coach_name === 'Вера'), 'unchanged score is not a mover');
 eq(movers(ranked, []).up, [], 'no previous period → no movers');
 
+console.log('\n=== podium score = Coach KPI top-3 rate (S4) ==========================\n');
+// The exact expression from analytics-tournaments coach_leaderboard, evaluated.
+const KPI_SRC = fs.readFileSync(path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'supabase', 'functions',
+  'analytics-tournaments', 'index.ts'), 'utf8');
+const kpiExpr = /const top3_finish_rate = (r\.internalEntries > 0\s*\?\s*r\.top3Count \/ r\.internalEntries\s*:\s*0)/.exec(KPI_SRC);
+assert(kpiExpr, 'Coach KPI top3_finish_rate expression found in analytics-tournaments');
+assert(/r\.games_played >= 1[\s\S]{0,600}r\.rank <= 3\) top3Count\+\+/.test(KPI_SRC),
+  'KPI counts podiums (rank ≤ 3) among played entries (games_played ≥ 1) — same as podiums.entries / finishes');
+const kpiRate = new Function('r', `return ${kpiExpr[1]}`);
+const cases = [[0, 0], [1, 1], [3, 10], [12, 30], [0, 7], [5, 5]];
+assert(cases.every(([t, e]) => top3FinishRate(t, e) === kpiRate({ top3Count: t, internalEntries: e })),
+  'top3FinishRate ≡ Coach KPI formula on every case');
+eq(podiumScore(0, 0, 0.4), 0, 'no entries → 0 (as the KPI)');
+assert(Math.abs(podiumScore(120, 300, 0.13) - top3FinishRate(120, 300)) < 0.01, 'large samples converge to the KPI rate');
+eq(PODIUM_PRIOR_ENTRIES, 10, 'prior worth 10 entries');
+
+// Fixture: one participant, one entry, one podium vs a big coach with a 40 % rate.
+const SCHOOL = { podiums: { finishes: 449, entries: 3430 } };  // live 2026 school rate ≈ 13 %
+const single = row('s', 'Single', { km6: 0.9, new: 1, promotions: 1, players: 1, active: 1, fin: 1, ent: 1 });
+const big = row('g', 'Big', { km6: 0.9, new: 1, promotions: 1, players: 15, active: 20, fin: 12, ent: 30 });
+const sRanked = rankCoaches([single, big], REPORT_WEIGHTS, SCHOOL);
+const sOne = sRanked.find((x) => x.coach_id === 's');
+assert(sOne.sub_scores.podiums < 0.25, `single podium from one entry is not full marks (${sOne.sub_scores.podiums.toFixed(3)})`);
+assert(sOne.ranks.podiums === 2 && sRanked.find((x) => x.coach_id === 'g').ranks.podiums === 1,
+  'the 12/30 coach out-ranks the 1/1 coach on podiums');
+
 const WIN = resolvePeriod('month', '2026-10-05');
 const rep = buildReport({
   window: WIN, previousWindow: previousPeriod(WIN),
-  current: { generated_at: 'x', coaches: CUR, school: { active_students: 52 } },
+  current: { generated_at: 'x', coaches: CUR, school: { active_students: 52 }, data_notes: { excluded_pre_history_leavers: 3 } },
   previous: { coaches: [], school: null },
 });
 eq(rep.period.start_date, '2026-10-01', 'report carries the period window');
@@ -202,6 +232,7 @@ eq(rep.unattributed.coach_name, 'Unattributed', 'Unattributed row returned separ
 eq(rep.coaches.length, 4, 'coaches exclude Unattributed');
 eq(rep.school.active_students, 52, 'school totals passed through');
 eq(rep.weights, REPORT_WEIGHTS, 'weights echoed');
+eq(rep.data_notes, { excluded_pre_history_leavers: 3 }, 'data_notes passed through');
 
 console.log('\n=== index.ts static checks ==============================================\n');
 const here = path.dirname(fileURLToPath(import.meta.url));
@@ -209,6 +240,7 @@ const SRC = fs.readFileSync(path.join(here, '..', 'supabase', 'functions', 'anal
 assert(/from '\.\/coach-reports-logic\.mjs'/.test(SRC), 'imports the tested pure helpers');
 assert(/action === 'report'/.test(SRC) && /action === 'cohort_matrix'/.test(SRC), 'report + cohort_matrix actions');
 assert(/rpc\('coach_report'/.test(SRC) && /rpc\('coach_cohort_matrix'/.test(SRC), 'calls the migration 101 RPCs');
+assert(/coach_id === 'all'[\s\S]{0,80}rpc\('coach_cohort_matrix_all'\)/.test(SRC), "coach_id=all → coach_cohort_matrix_all (one RPC)");
 assert(!/\.(insert|update|upsert|delete)\(/.test(SRC), 'read-only (no insert/update/upsert/delete)');
 assert(/req\.method !== 'GET'/.test(SRC), 'GET only');
 assert(/validBearer\(header\)\) return 200/.test(SRC), 'service key Bearer accepted (cron)');
