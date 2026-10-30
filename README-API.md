@@ -302,7 +302,8 @@ curl -H "x-api-key: <CHESS_EMPIRE_READONLY_KEY — see supabase secrets>" \
 ## 8a. Analytics - Coach reports (`analytics-coaches`)
 
 Ranked coach performance reports (PRD_COACH_REPORTS.md). **Read-only**; reads
-the migration `101_coach_reports.sql` RPCs `coach_report` / `coach_cohort_matrix`
+the migration `101_coach_reports.sql` RPCs `coach_report` / `coach_cohort_matrix` /
+`coach_cohort_matrix_all`
 (EXECUTE for `service_role` only). Full schemas: `docs/openapi/analytics-coaches.yaml`.
 
 **Auth** (either):
@@ -317,7 +318,7 @@ Monday / the 1st reports the period that just ended). Windows are Asia/Almaty
 (UTC+5): week Mon–Sun, calendar month, calendar quarter, Jan–Jun / Jul–Dec,
 calendar year; `end` is exclusive. Response `data`:
 `{period, previous_period, generated_at, weights, coaches:[…], unattributed,
-school, previous:{coaches:[{coach_id, coach_name, score, rank}], school}, movers:{up, down}}`.
+school, data_notes, previous:{coaches:[{coach_id, coach_name, score, rank}], school}, movers:{up, down}}`.
 
 Each coach row (and `unattributed` / `school`, which have no score):
 `active_students`, `small_sample` (< 10 active), `new_students`, `left`,
@@ -327,7 +328,7 @@ km_survival_3m, km_survival_6m}`, `razryad_snapshot {none|4th|3rd|2nd|1st|other:
 {count, pct}}`, `razryad_changes {promotions, downgrades, promotions_by_razryad,
 downgrades_by_razryad}`, `participation {period, lifetime}` (buckets `0`–`4+`,
 `{count, pct}` of active students), `podiums {participants, students, finishes,
-pct_of_participants, by_kind}`; ranked coaches add `score` (0–100),
+entries, pct_of_participants, by_kind}`; ranked coaches add `score` (0–100),
 `sub_scores`, `rank` and per-metric `ranks`.
 
 Rules:
@@ -336,16 +337,31 @@ Rules:
   or deleted coach → `unattributed`. Razryad changes use
   `razryad_history.trainer_id_at_change`.
 - New = first activation in the window (new student row, or left → active after
-  > 60 days). Left and frozen 30+ (frozen ≥ 30 days, not reactivated by the end
-  of the window) are separate; headline churn = left + frozen 30+.
+  > 60 days). Left and frozen 30+ (a freeze whose 30th day falls in the window
+  while still frozen — weeks sum to months, months to quarters) are separate;
+  headline churn = left + frozen 30+.
 - Status events are de-duplicated (same student + transition within 5 minutes).
-- Active roster, razryad snapshot and participation buckets are the **current**
-  roster.
+- **2026-10-14 inactive-student cleanup** (`cleanup_freeze_2026_10_14`, →frozen
+  with `changed_by` NULL 16:00–17:15 UTC): the batch freeze never counts itself.
+  Students who came back (→active or a lesson later) are ignored; students
+  still gone are `left` on their **last present lesson** (credited to the coach
+  then — past windows such as September change on purpose); those who never
+  attended only appear in `data_notes`.
+- The **Feb 2026 status-history backfill** (022) is initial state: no
+  departures, no freeze spells; students whose first `left` is a backfill row
+  are excluded from retention / cohort matrix (`excluded_pre_history_leavers`).
+- Active roster, razryad snapshot and participation buckets are the roster **as
+  of the window end** (live while the window is running); the previous period
+  is its own as-of report.
+- `data_notes`: `cleanup_freeze {label, window, evaluated_at, batch_students,
+  returned, real_left, cleanup_leavers_dated {total, in_window, by_coach},
+  cleanup_leavers_undated {total, by_coach}}`, `excluded_pre_history_leavers`.
 - Score = Σ weight × sub-score (0..1): retention 30 (KM 6-month survival, else
   3-month, else 0.5), net growth 20 (0.5 ± (new − left) / active × 5),
   razryad promotions 20 (promotions / active × 4), tournament participation 15
-  (share of active students with ≥ 1 tournament), podiums 15 (podium students /
-  participants). Weights live in `REPORT_WEIGHTS`
+  (share of active students with ≥ 1 tournament), podiums 15 (Coach KPI top-3
+  rate = finishes / entries, shrunk toward the school rate:
+  (finishes + 10 × school rate) / (entries + 10); 0 without entries). Weights live in `REPORT_WEIGHTS`
   (`supabase/functions/analytics-coaches/coach-reports-logic.mjs`). Ties share a
   rank; coaches with no roster and no movement are unranked (`rank: null`).
 - Movers = biggest score gains / drops vs the previous period (top 3 each).
@@ -356,7 +372,9 @@ left_censored, left_pct:[…], churn_pct:[…]}], by_level_at_leaving:[{level, l
 churn}], by_razryad_at_leaving:[{razryad, left, churn}]}`. `left_pct[k]` /
 `churn_pct[k]` = cumulative % of the cohort that left (or left + frozen 30+)
 within `k` months. Cohort membership per coach = coach at the start date;
-no `coach_id` = school-wide.
+no `coach_id` = school-wide; also `excluded_pre_history_leavers` /
+`cleanup_leavers_undated` (not in the cohorts). `coach_id=all` →
+`{generated_at, school, coaches:[{…matrix, coach_name}]}` in one call.
 
 Data limits: tournament / razryad metrics start May 2026 (2026 yearly report is
 partial); retention for students who started before Dec 2025 is a lower bound;

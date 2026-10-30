@@ -1,10 +1,10 @@
 openapi: 3.1.0
 info:
   title: Chess Empire — Coach Reports API (analytics-coaches)
-  version: 1.0.0
+  version: 1.1.0
   description: |
     Read-only coach performance reports (PRD_COACH_REPORTS.md), backed by the
-    migration 101 RPCs `coach_report` and `coach_cohort_matrix`.
+    migration 101 RPCs `coach_report`, `coach_cohort_matrix` and `coach_cohort_matrix_all`.
 
     Auth — either:
       * `x-api-key` (as analytics-tournaments) AND `Authorization: Bearer <access
@@ -17,10 +17,21 @@ info:
         coach_id timeline); unknown or deleted coach → the `unattributed` row.
         Razryad changes use `razryad_history.trainer_id_at_change`.
       * New = first activation in the window (new student row, or left → active
-        after more than 60 days). `left` and `frozen_30d` (frozen 30+ days, not
-        reactivated by window end) are separate; `churn` = left + frozen_30d.
+        after more than 60 days). `left` and `frozen_30d` (a freeze whose 30th day
+        falls in the window while still frozen — weeks add up to months, months
+        to quarters) are separate; `churn` = left + frozen_30d.
       * Status events are de-duplicated (same student + transition within 5 minutes).
-      * Active roster, razryad snapshot and participation buckets are the current roster.
+      * 2026-10-14 inactive-student cleanup (`cleanup_freeze_2026_10_14`): the
+        batch freeze never counts itself. Students who came back are ignored;
+        students still gone are `left` on their last present lesson (credited to
+        the coach then — past windows change on purpose); those who never
+        attended are only counted in `data_notes`.
+      * The Feb 2026 (022) status-history backfill is initial state: no
+        departures, no freeze spells; students whose first `left` is a backfill
+        row are excluded from retention and the cohort matrix.
+      * Active roster, razryad snapshot and participation buckets are the roster
+        as of the window end (live while the window is running); the previous
+        period is its own as-of report.
       * Data limits: tournament / razryad metrics start May 2026; retention for
         students who started before Dec 2025 is a lower bound.
 servers:
@@ -140,6 +151,7 @@ components:
             participants: { type: integer, description: Distinct students with a result in the window }
             students: { type: integer, description: Distinct students placing 1st–3rd }
             finishes: { type: integer }
+            entries: { type: integer, description: Played tournament entries (games_played > 0) — Coach KPI top-3 rate denominator }
             pct_of_participants: { type: [number, 'null'] }
             by_kind:
               type: object
@@ -163,7 +175,11 @@ components:
                 net_growth: { type: number }
                 razryad_promotions: { type: number }
                 tournament_participation: { type: number }
-                podiums: { type: number }
+                podiums:
+                  type: number
+                  description: >-
+                    Coach KPI top-3 finish rate (finishes / entries), shrunk toward the
+                    school rate with a 10-entry prior: (finishes + 10 × school rate) / (entries + 10); 0 without entries.
             rank: { type: [integer, 'null'], description: Competition rank (ties share); null = not ranked }
             ranks:
               type: object
@@ -180,6 +196,46 @@ components:
         rank: { type: integer }
         previous_rank: { type: integer }
         rank_delta: { type: integer, description: previous_rank − rank (positive = moved up) }
+    CoachLeavers:
+      type: object
+      properties:
+        coach_id: { type: [string, 'null'], format: uuid, description: null = Unattributed }
+        coach_name: { type: string }
+        total: { type: integer }
+        in_window: { type: integer, description: Dated leavers whose leave date is in the window (dated only) }
+    DataNotes:
+      type: object
+      properties:
+        cleanup_freeze:
+          type: object
+          description: Bulk inactive-student cleanup batches, classified as of the report.
+          properties:
+            label: { type: string, example: cleanup_freeze_2026_10_14 }
+            window:
+              type: object
+              properties:
+                start: { type: string, format: date-time }
+                end: { type: string, format: date-time }
+            evaluated_at: { type: string, format: date-time, description: 'min(window end, now); now for windows ending before the cleanup' }
+            batch_students: { type: integer, description: Distinct students frozen by the batch }
+            returned: { type: integer, description: Later →active or a present lesson after the batch (batch ignored) }
+            real_left: { type: integer, description: Left by a real status change (before or after the batch) }
+            cleanup_leavers_dated:
+              type: object
+              description: Counted as left on their last present lesson date
+              properties:
+                total: { type: integer }
+                in_window: { type: integer }
+                by_coach: { type: array, items: { $ref: '#/components/schemas/CoachLeavers' }, description: Coach at the leave date }
+            cleanup_leavers_undated:
+              type: object
+              description: Never attended — leave date unknown; not in left / retention / cohort matrix
+              properties:
+                total: { type: integer }
+                by_coach: { type: array, items: { $ref: '#/components/schemas/CoachLeavers' }, description: Coach at the batch }
+        excluded_pre_history_leavers:
+          type: integer
+          description: Students whose first `left` is a Feb 2026 backfill row — excluded from retention
     Report:
       type: object
       properties:
@@ -192,6 +248,7 @@ components:
         coaches: { type: array, items: { $ref: '#/components/schemas/RankedCoach' } }
         unattributed: { $ref: '#/components/schemas/MetricsRow' }
         school: { $ref: '#/components/schemas/MetricsRow' }
+        data_notes: { $ref: '#/components/schemas/DataNotes' }
         previous:
           type: object
           properties:
@@ -242,6 +299,22 @@ components:
               razryad: { type: string }
               left: { type: integer }
               churn: { type: integer }
+        excluded_pre_history_leavers: { type: integer, description: 'First `left` is a Feb 2026 backfill row — not in the cohorts' }
+        cleanup_leavers_undated: { type: integer, description: 'Cleanup leavers who never attended — not in the cohorts' }
+    CohortMatrixAll:
+      type: object
+      properties:
+        generated_at: { type: string, format: date-time }
+        school: { $ref: '#/components/schemas/CohortMatrix' }
+        coaches:
+          type: array
+          description: Every coach with at least one cohort member (Unattributed last, coach_id null)
+          items:
+            allOf:
+              - $ref: '#/components/schemas/CohortMatrix'
+              - type: object
+                properties:
+                  coach_name: { type: string }
 
 paths:
   /?action=report:
@@ -276,8 +349,13 @@ paths:
       parameters:
         - name: coach_id
           in: query
-          schema: { type: string, format: uuid }
-          description: Cohort = students whose coach at the start date was this coach. Omit for school-wide.
+          schema:
+            oneOf:
+              - { type: string, format: uuid }
+              - { type: string, const: all }
+          description: >-
+            Cohort = students whose coach at the start date was this coach. Omit for school-wide;
+            `all` = school + one matrix per coach in a single call (CohortMatrixAll).
       responses:
         '200':
           description: Cohort matrix
@@ -287,7 +365,10 @@ paths:
                 type: object
                 properties:
                   success: { type: boolean, const: true }
-                  data: { $ref: '#/components/schemas/CohortMatrix' }
+                  data:
+                    oneOf:
+                      - $ref: '#/components/schemas/CohortMatrix'
+                      - $ref: '#/components/schemas/CohortMatrixAll'
         '400': { $ref: '#/components/responses/BadRequest' }
         '401': { $ref: '#/components/responses/Unauthorized' }
         '403': { $ref: '#/components/responses/Forbidden' }
