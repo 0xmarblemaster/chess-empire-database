@@ -155,8 +155,16 @@ assert(fdBlock.indexOf("get('amocrm_customer_id')") < fdBlock.indexOf("get('phon
   'find: amocrm_customer_id takes precedence over phone');
 assert(/ok\(\{ phone: norm, students: await findByPhone\(ctx, norm\) \}\)/.test(fdBlock),
   'find by phone returns every match (students[] of shape())');
-assert(/return \(data \|\| \[\]\)\.map\(shape\)/.test(INDEX.slice(INDEX.indexOf('async function findByPhone('))),
-  'findByPhone returns all RPC rows, shaped');
+{
+  const fbp = INDEX.slice(INDEX.indexOf('async function findByPhone('), INDEX.indexOf('// Adapter for resolveStudentRef'));
+  assert(/return rows\.map\(/.test(fbp) && /shape\(\{ \.\.\.r, coach_id:/.test(fbp),
+    'findByPhone returns all RPC rows, shaped');
+  assert(/\.from\('students'\)\s*\.select\('id, coach_id, coach:coaches\(first_name, last_name\)'\)\s*\.in\('id',/.test(fbp),
+    'findByPhone merges coach_id / coach for the matched ids');
+  assert(/if \(rows\.length === 0\) return \[\]/.test(fbp), 'findByPhone skips the coach query when nothing matched');
+  assert(/if \(coachErr\) throw coachErr/.test(fbp), 'findByPhone surfaces coach-query errors');
+  assert(!/always null in phone-lookup/.test(INDEX), 'OpenAPI no longer documents phone results as coachless');
+}
 
 // OpenAPI
 const oaStart = INDEX.indexOf("'/?action=link_amocrm'");

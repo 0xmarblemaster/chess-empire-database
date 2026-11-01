@@ -126,7 +126,7 @@ const STUDENT_SELECT = 'id, student_code, first_name, last_name, status, branch_
 
 // Normalize both the direct-select row shape (branch:{name}) and the RPC row
 // shape (branch_name) into one public student object. The phone RPC has no
-// coach columns, so coach_id / coach are null on those rows.
+// coach columns; findByPhone merges them in before shaping.
 // deno-lint-ignore no-explicit-any
 function shape(row: any) {
   const branch = row.branch_name !== undefined
@@ -159,7 +159,23 @@ interface Ctx { supabase: any; req: Request }
 async function findByPhone(ctx: Ctx, e164: string): Promise<ReturnType<typeof shape>[]> {
   const { data, error } = await ctx.supabase.rpc('find_students_by_phone_e164', { p_e164: e164 })
   if (error) throw error
-  return (data || []).map(shape)
+  const rows = data || []
+  if (rows.length === 0) return []
+  // The RPC returns no coach columns — fetch them for the matched ids so phone
+  // results carry the same coach_id / coach as every other student object.
+  const { data: coachRows, error: coachErr } = await ctx.supabase
+    .from('students')
+    .select('id, coach_id, coach:coaches(first_name, last_name)')
+    .in('id', rows.map((r: { id: string }) => r.id))
+  if (coachErr) throw coachErr
+  // deno-lint-ignore no-explicit-any
+  const coachById = new Map((coachRows || []).map((c: any) => [c.id, c]))
+  // deno-lint-ignore no-explicit-any
+  return rows.map((r: any) => {
+    // deno-lint-ignore no-explicit-any
+    const c: any = coachById.get(r.id)
+    return shape({ ...r, coach_id: c?.coach_id ?? null, coach: c?.coach ?? null })
+  })
 }
 
 // Adapter for resolveStudentRef(): student_code → UUID.
@@ -798,8 +814,8 @@ const OPENAPI_SPEC = {
           branch: { type: 'string', nullable: true },
           amocrm_customer_id: { type: 'integer', nullable: true },
           phone: { type: 'string', nullable: true, description: 'Stored parent phone (E.164 for writes through this API; null when none)' },
-          coach_id: { type: 'string', format: 'uuid', nullable: true, description: 'Assigned coach (null when none; always null in phone-lookup results)' },
-          coach: { type: 'string', nullable: true, description: 'Coach display name "First Last" (null when none; always null in phone-lookup results)' },
+          coach_id: { type: 'string', format: 'uuid', nullable: true, description: 'Assigned coach (null when none)' },
+          coach: { type: 'string', nullable: true, description: 'Coach display name "First Last" (null when none)' },
         },
       },
     },

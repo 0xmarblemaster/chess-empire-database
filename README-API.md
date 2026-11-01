@@ -532,8 +532,7 @@ returns the OpenAPI self-doc (public).
 **Student object.** Every student in a response has the same shape:
 `{id, student_code, name, first_name, last_name, status, branch_id, branch,
 amocrm_customer_id, phone, coach_id, coach}` (`coach` = the coach's "First Last";
-`coach_id` / `coach` are null when unassigned, and always null in phone-lookup
-results). `student_code` is never accepted on `create` — the database assigns it.
+`coach_id` / `coach` are null when unassigned — phone lookups included). `student_code` is never accepted on `create` — the database assigns it.
 
 **Phones (E.164, any country).** Phones are validated with libphonenumber and
 normalized to E.164 — `+` country calling code + national number, no spaces —
