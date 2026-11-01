@@ -283,6 +283,33 @@ export function userNameMap(roleRows, coachNames, emailById = {}) {
   return out;
 }
 
+// GET ?action=coaches params. Returns { value: { branch_id } } or { field }.
+export function parseCoachesParams(params) {
+  const p = params || {};
+  const branchId = present(p.branch_id) ? p.branch_id : null;
+  if (branchId !== null && !isUuid(branchId)) return { field: 'branch_id' };
+  return { value: { branch_id: branchId } };
+}
+
+// Map coaches rows (coach_branches embedded as [{ branch_id }]) to the API
+// shape: a coach's branches are coaches.branch_id ∪ its coach_branches rows.
+// Optional branch filter on that union; sorted by name.
+export function coachList(rows, branchId = null) {
+  return (rows || [])
+    .map((r) => {
+      const ids = [r.branch_id, ...(r.coach_branches || []).map((cb) => cb.branch_id)].filter(Boolean);
+      return {
+        id: r.id,
+        name: personName(r.first_name, r.last_name),
+        first_name: r.first_name,
+        last_name: r.last_name,
+        branch_ids: [...new Set(ids)],
+      };
+    })
+    .filter((c) => !branchId || c.branch_ids.includes(branchId))
+    .sort((a, b) => String(a.name || '').localeCompare(String(b.name || '')));
+}
+
 // ─── amoCRM link ────────────────────────────────────────────────────────────
 
 // Parse a positive integer amoCRM customer id from a JSON number or a numeric
@@ -434,7 +461,8 @@ export function normalizeName(raw) {
 // Validate a create body. phone is optional when amocrm_customer_id is given
 // (the Buyer ID is then the identity); absent = undefined / null / blank, and is
 // stored as null. A phone that is present but invalid is always rejected.
-// Returns { value } or { field } naming the first invalid field.
+// coach_id is optional (absent / null / blank → null) but must be a UUID when
+// given. Returns { value } or { field } naming the first invalid field.
 export function validateCreate(body) {
   const b = body && typeof body === 'object' ? body : {};
   const name = splitFullName(typeof b.full_name === 'string' ? b.full_name : '');
@@ -449,11 +477,15 @@ export function validateCreate(body) {
     amo = parseAmocrmId(b.amocrm_customer_id);
     if (amo === null) return { field: 'amocrm_customer_id' };
   }
-  return { value: { ...name, full_name: b.full_name, phone, branch_id: b.branch_id, amocrm_customer_id: amo } };
+  const coachGiven = present(b.coach_id) && !(typeof b.coach_id === 'string' && b.coach_id.trim() === '');
+  if (coachGiven && !isUuid(b.coach_id)) return { field: 'coach_id' };
+  const coachId = coachGiven ? b.coach_id : null;
+  return { value: { ...name, full_name: b.full_name, phone, branch_id: b.branch_id, amocrm_customer_id: amo, coach_id: coachId } };
 }
 
 // Create flow for POST ?action=create, over an injected db adapter:
 //   db.branchExists(id)        → boolean
+//   db.coachInBranch(coach, branch) → 'ok' | 'not_found' | 'wrong_branch'
 //   db.findByAmocrmId(amo)     → shaped students[]
 //   db.findByPhone(e164)       → shaped students[] (exact E.164 match)
 //   db.linkIfNull(id, amo)     → { row } (shaped, null when 0 rows) | { uniqueViolation: true }
@@ -464,9 +496,11 @@ export function validateCreate(body) {
 // student (linking the Buyer ID when it has none; a different id → 409), several
 // → 409 ambiguous with candidates, none → (3) a NEW student with the same phone.
 // Nothing is written on any 4xx. A frozen match is reactivated (3-day guard
-// applies inside db.activate). Returns { status, body }.
+// applies inside db.activate). coach_id is only applied to a NEW student — an
+// existing match never gets its coach written or overwritten (coaches win over
+// automation). Returns { status, body }.
 export async function createStudent(db, input) {
-  const { first_name, last_name, full_name, phone, branch_id, amocrm_customer_id: amo } = input;
+  const { first_name, last_name, full_name, phone, branch_id, amocrm_customer_id: amo, coach_id = null } = input;
   const conflict = (ownerId) => ({
     status: 409,
     body: { ok: false, reason: 'amocrm_customer_id_conflict', ...(ownerId ? { conflict_student_id: ownerId } : {}) },
@@ -485,6 +519,11 @@ export async function createStudent(db, input) {
   };
 
   if (!(await db.branchExists(branch_id))) return { status: 400, body: { ok: false, reason: 'invalid_branch' } };
+  if (coach_id !== null) {
+    const c = await db.coachInBranch(coach_id, branch_id);
+    if (c === 'not_found') return { status: 400, body: { ok: false, reason: 'invalid_coach' } };
+    if (c !== 'ok') return { status: 400, body: { ok: false, reason: 'coach_branch_mismatch' } };
+  }
 
   if (amo !== null) {
     const owners = await db.findByAmocrmId(amo);
@@ -515,7 +554,7 @@ export async function createStudent(db, input) {
   // New student. Defaults mirror the dashboard's addStudent() so NOT NULL
   // columns are satisfied; parent_phone stays null when no phone was given.
   const r = await db.insert({
-    first_name, last_name, branch_id,
+    first_name, last_name, branch_id, coach_id,
     parent_phone: phone,
     amocrm_customer_id: amo,
     status: 'active',

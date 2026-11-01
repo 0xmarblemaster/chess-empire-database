@@ -83,7 +83,7 @@ eq(validateCreate({ full_name: 'Ali Sadykov', phone: 77001234567, branch_id: BRA
 eq(validateCreate({ full_name: 'Ali Sadykov', phone: SHARED, branch_id: 'x' }).field, 'branch_id', 'bad branch → branch_id');
 eq(validateCreate({ full_name: 'Ali Sadykov', phone: SHARED, branch_id: BRANCH, amocrm_customer_id: 0 }).field, 'amocrm_customer_id', 'amo 0 → amocrm_customer_id');
 eq(validateCreate({ full_name: 'Timur Akhmetov', branch_id: BRANCH, amocrm_customer_id: '1004' }).value,
-  { first_name: 'Timur', last_name: 'Akhmetov', full_name: 'Timur Akhmetov', phone: null, branch_id: BRANCH, amocrm_customer_id: 1004 },
+  { first_name: 'Timur', last_name: 'Akhmetov', full_name: 'Timur Akhmetov', phone: null, branch_id: BRANCH, amocrm_customer_id: 1004, coach_id: null },
   'no phone + Buyer ID → valid, phone null');
 eq(validateCreate({ full_name: 'Timur Akhmetov', phone: '', branch_id: BRANCH, amocrm_customer_id: 1004 }).value.phone, null,
   'empty phone + Buyer ID → phone null');

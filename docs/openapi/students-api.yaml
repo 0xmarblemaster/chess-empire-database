@@ -76,7 +76,7 @@ components:
   schemas:
     Reason:
       type: string
-      enum: [unauthorized, not_found, invalid_input, invalid_branch, ambiguous, manual_change_recent,
+      enum: [unauthorized, not_found, invalid_input, invalid_branch, invalid_coach, coach_branch_mismatch, ambiguous, manual_change_recent,
              student_inactive, amocrm_customer_id_conflict, student_id_code_mismatch, server_error]
     Error:
       type: object
@@ -115,6 +115,8 @@ components:
         branch: { type: [string, 'null'] }
         amocrm_customer_id: { type: [integer, 'null'] }
         phone: { type: [string, 'null'] }
+        coach_id: { type: [string, 'null'], format: uuid, description: 'Assigned coach; always null in phone-lookup results' }
+        coach: { type: [string, 'null'], description: 'Coach display name "First Last"; always null in phone-lookup results' }
     StudentSelector:
       type: object
       description: One selector; precedence student_code > student_id > amocrm_customer_id > phone
@@ -221,6 +223,8 @@ paths:
         Otherwise students with the same phone are compared by normalized full name: one match →
         that student (Buyer ID linked if it has none), several → 409 ambiguous, none → a new
         student. A matched frozen student is reactivated. Nothing is written on any 4xx.
+        coach_id is only applied to a NEW student (an existing match never has its coach
+        written or overwritten) and must belong to branch_id.
       requestBody:
         required: true
         content:
@@ -234,10 +238,17 @@ paths:
                 phone: { $ref: '#/components/schemas/Phone' }
                 branch_id: { type: string, format: uuid }
                 amocrm_customer_id: { type: [integer, 'null'], minimum: 1 }
+                coach_id:
+                  type: [string, 'null']
+                  format: uuid
+                  description: >-
+                    Optional coach (ids from action=coaches). Only applied when a NEW student is
+                    created; ignored for an existing match. Must belong to branch_id
+                    (coaches.branch_id or a coach_branches assignment). Absent / null / blank = no coach.
       responses:
         '200': { description: 'Existing student {ok, existing:true, matched_by, student, linked?, reactivated?}' }
         '201': { description: 'Created {ok, existing:false, student, status_history_id}' }
-        '400': { $ref: '#/components/responses/InvalidInput' }
+        '400': { description: 'invalid_input (field: full_name, phone, branch_id, amocrm_customer_id, coach_id), invalid_branch, invalid_coach (no such coach) or coach_branch_mismatch (coach not in branch_id). Nothing is written.' }
         '401': { $ref: '#/components/responses/Unauthorized' }
         '409': { description: 'ambiguous (candidates[]) or amocrm_customer_id_conflict' }
 
@@ -353,6 +364,17 @@ paths:
       summary: List all branches (id + name), ordered by name
       responses:
         '200': { description: '{ok, branches:[{id, name}]}' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+
+  /?action=coaches:
+    get:
+      summary: List coaches (id, name, first_name, last_name, branch_ids), ordered by name
+      description: branch_ids = coaches.branch_id ∪ coach_branches assignments. Use the id as coach_id on create.
+      parameters:
+        - { name: branch_id, in: query, schema: { type: string, format: uuid }, description: Only coaches belonging to this branch }
+      responses:
+        '200': { description: '{ok, coaches:[{id, name, first_name, last_name, branch_ids[]}]}' }
+        '400': { $ref: '#/components/responses/InvalidInput' }
         '401': { $ref: '#/components/responses/Unauthorized' }
 
   /?action=roster:

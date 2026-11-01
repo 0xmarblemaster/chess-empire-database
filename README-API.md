@@ -514,7 +514,7 @@ returns the OpenAPI self-doc (public).
 
 | Action | Method | Body / Query | Description |
 |--------|--------|--------------|-------------|
-| `create` | POST | `{full_name, branch_id, phone?, amocrm_customer_id?}` | Create-or-activate a student (Buyer ID first, then phone + name; see below). `phone` is required only without `amocrm_customer_id`. |
+| `create` | POST | `{full_name, branch_id, phone?, amocrm_customer_id?, coach_id?}` | Create-or-activate a student (Buyer ID first, then phone + name; see below). `phone` is required only without `amocrm_customer_id`. `coach_id` is applied only to a new student. |
 | `freeze` | POST | `{student_code}` \| `{student_id}` \| `{phone}` \| `{amocrm_customer_id}` | Set status → `frozen`. |
 | `activate` | POST | `{student_code}` \| `{student_id}` \| `{phone}` \| `{amocrm_customer_id}` | Set status → `active` (unfreeze). |
 | `link_amocrm` | POST | `{student_id \| student_code, amocrm_customer_id}` | Link an amoCRM id to an existing student (never overwrites a different id). |
@@ -522,6 +522,7 @@ returns the OpenAPI self-doc (public).
 | `find` | GET | `?student_code=` \| `?amocrm_customer_id=` \| `?phone=` | Look up students. Precedence `student_code` > `amocrm_customer_id` > `phone`. Response `{ok, student_code\|amocrm_customer_id\|phone, students:[…]}`. |
 | `list` | GET | `?limit=&offset=&branch_id=&status=` | Paginated list ordered by `student_code`: `limit` 1..500 (default 100), `offset` ≥ 0, `status` ∈ `active` `frozen` `left`. Response `{ok, total, limit, offset, students:[…]}` (`total` = exact count for the filters). |
 | `branches` | GET | — | List all branches (`id` + `name`) for branch mapping. |
+| `coaches` | GET | `?branch_id=` | List coaches for `coach_id` mapping: `{ok, coaches:[{id, name, first_name, last_name, branch_ids}]}` sorted by name. `branch_ids` = `coaches.branch_id` ∪ `coach_branches`; `branch_id` filters on that (bad UUID → `400 invalid_input field:branch_id`). |
 | `roster` | GET | `?status=&limit=&offset=\|after_id=` | Weekly roster snapshot ordered by `id` (see *Rank tracking export* below). Read-only. |
 | `rank_history` | GET | `?student_id=\|student_code=&from=&to=&limit=&offset=` | Rank (razryad) change log ordered by `changed_at, id`. Read-only. |
 | `survival-score` | POST | `{student_id \| student_code, score, external_ref, achieved_at?}` | Push a Chesster Puzzle Rush **Survival** run (see below). |
@@ -530,8 +531,9 @@ returns the OpenAPI self-doc (public).
 
 **Student object.** Every student in a response has the same shape:
 `{id, student_code, name, first_name, last_name, status, branch_id, branch,
-amocrm_customer_id, phone}`. `student_code` is never accepted on `create` — the
-database assigns it.
+amocrm_customer_id, phone, coach_id, coach}` (`coach` = the coach's "First Last";
+`coach_id` / `coach` are null when unassigned, and always null in phone-lookup
+results). `student_code` is never accepted on `create` — the database assigns it.
 
 **Phones (E.164, any country).** Phones are validated with libphonenumber and
 normalized to E.164 — `+` country calling code + national number, no spaces —
@@ -562,6 +564,16 @@ Buyer ID) is unique and is the primary identity:
 3. Without a phone (allowed only with a Buyer ID) a new student is created with
    `phone: null` — no placeholder is ever generated. A phone that is present but
    invalid is rejected (`400`), never silently dropped.
+
+**Coach on create.** `coach_id` (optional, a UUID from `action=coaches`) is set
+**only when a brand-new student is created**. An existing match (by Buyer ID or
+phone + name, including link / reactivate) never has its coach written or
+overwritten — coaches win over automation. The coach must belong to `branch_id`
+(`coaches.branch_id` or a `coach_branches` assignment) and is checked before any
+match or write: malformed → `400 invalid_input field:coach_id`, unknown coach →
+`400 invalid_coach`, coach of another branch → `400 coach_branch_mismatch`.
+Absent / `null` / blank → no coach; one is never defaulted or guessed. There is
+no action to change the coach of an existing student.
 
 A matched student that is `frozen` is reactivated (`reactivated: true`, subject
 to the 3-day guard below). Nothing is written on any 4xx; a concurrent create
@@ -672,6 +684,9 @@ KEY='<CHESS_EMPIRE_WRITE_KEY — see supabase secrets>'
 # List branches (for mapping AmoCRM → branch_id)
 curl "$BASE?action=branches" -H "x-api-key: $KEY"
 
+# Coaches of a branch (use the id as coach_id on create)
+curl "$BASE?action=coaches&branch_id=<uuid>" -H "x-api-key: $KEY"
+
 # Create (or dedup to an existing / reactivate a frozen) student
 curl -X POST "$BASE?action=create" -H "x-api-key: $KEY" \
   -H 'content-type: application/json' \
@@ -686,6 +701,10 @@ curl -X POST "$BASE?action=create" -H "x-api-key: $KEY" -H 'content-type: applic
   -d '{"full_name":"Maria Silva","phone":"+351 912 345 678","branch_id":"<uuid>","amocrm_customer_id":1003}'
 curl -X POST "$BASE?action=create" -H "x-api-key: $KEY" -H 'content-type: application/json' \
   -d '{"full_name":"Timur Akhmetov","branch_id":"<uuid>","amocrm_customer_id":1004}'
+
+# New student with a coach (coach_id ignored if the student already exists)
+curl -X POST "$BASE?action=create" -H "x-api-key: $KEY" -H 'content-type: application/json' \
+  -d '{"full_name":"Dana Sadykova","phone":"+7 700 123 45 67","branch_id":"<uuid>","amocrm_customer_id":1005,"coach_id":"<coach uuid>"}'
 
 # Find by phone (any format; returns ALL students sharing it) / by Student ID / by Buyer ID
 curl "$BASE?action=find&phone=%2B77771234567" -H "x-api-key: $KEY"

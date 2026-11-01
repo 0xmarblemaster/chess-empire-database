@@ -3,13 +3,13 @@
 // Unlike the read-only analytics-* functions, this one WRITES: create a
 // student, freeze / activate (unfreeze) a student, link an amoCRM customer id
 // to an existing student, correct (overwrite) a student's phone / amoCRM id,
-// find by Student ID (student_code) / phone / amoCRM id, list students, list branches, and export the
+// find by Student ID (student_code) / phone / amoCRM id, list students, list branches / coaches, and export the
 // weekly roster + rank change history (read-only). Every call requires an `x-api-key` header checked against the
 // CHESS_EMPIRE_WRITE_KEY env var (a NEW key, distinct from the tournament-only
 // CHESS_EMPIRE_API_KEY — the two surfaces never share a key).
 //
 // Routing is on a `?action=` query param (create / freeze / activate /
-// link_amocrm / update_contact / find / list / branches / roster / rank_history / survival-score / survival-best / survival-leaderboard); GET with no action returns the OpenAPI self-doc. Modelled on
+// link_amocrm / update_contact / find / list / branches / coaches / roster / rank_history / survival-score / survival-best / survival-leaderboard); GET with no action returns the OpenAPI self-doc. Modelled on
 // tournaments-api/index.ts (Deno serve + CORS + json/ok/err helpers).
 //
 // Product rules enforced here:
@@ -18,6 +18,8 @@
 //    phone hit only counts when the normalized full name matches too (one match
 //    → that student, several → 409 ambiguous, none → a new student with the
 //    same phone). A matched student that is frozen is reactivated.
+//  - create may set coach_id, but ONLY on a brand-new student (the coach must
+//    belong to the branch); an existing match never has its coach written.
 //  - Phones are E.164 (+<country code><number>, libphonenumber-validated);
 //    phone is optional on create when amocrm_customer_id is given.
 //  - 3-day manual guard: an API freeze/activate is refused (409) when the
@@ -59,6 +61,8 @@ import {
   validateUpdateContact,
   updateContact,
   validateCreate,
+  parseCoachesParams,
+  coachList,
   createStudent as createStudentFlow,
   validateSurvivalPush,
   parseLeaderboardParams,
@@ -91,6 +95,7 @@ const CHESSTER_SYNC_TOKEN = Deno.env.get('CHESSTER_SYNC_TOKEN') ?? ''
 
 const REASONS = [
   'unauthorized', 'not_found', 'invalid_input', 'invalid_branch',
+  'invalid_coach', 'coach_branch_mismatch',
   'ambiguous', 'manual_change_recent', 'student_inactive',
   'amocrm_customer_id_conflict', 'student_id_code_mismatch', 'server_error',
 ] as const
@@ -117,10 +122,11 @@ function authorized(req: Request): boolean {
 
 // parent_phone is the ONLY phone-like column on students (verified against the
 // schema — there is no bare `phone` column); dedup/find match on it.
-const STUDENT_SELECT = 'id, student_code, first_name, last_name, status, branch_id, amocrm_customer_id, parent_phone, branch:branches(name)'
+const STUDENT_SELECT = 'id, student_code, first_name, last_name, status, branch_id, amocrm_customer_id, parent_phone, coach_id, branch:branches(name), coach:coaches(first_name, last_name)'
 
 // Normalize both the direct-select row shape (branch:{name}) and the RPC row
-// shape (branch_name) into one public student object.
+// shape (branch_name) into one public student object. The phone RPC has no
+// coach columns, so coach_id / coach are null on those rows.
 // deno-lint-ignore no-explicit-any
 function shape(row: any) {
   const branch = row.branch_name !== undefined
@@ -137,6 +143,8 @@ function shape(row: any) {
     branch: branch || null,
     amocrm_customer_id: row.amocrm_customer_id ?? null,
     phone: row.parent_phone ?? null,
+    coach_id: row.coach_id ?? null,
+    coach: row.coach ? (`${row.coach.first_name || ''} ${row.coach.last_name || ''}`.trim() || null) : null,
   }
 }
 
@@ -314,6 +322,15 @@ async function createStudent(ctx: Ctx): Promise<Response> {
         .from('branches').select('id').eq('id', branchId).maybeSingle()
       if (error) throw error
       return !!data
+    },
+    async coachInBranch(coachId: string, branchId: string) {
+      // A coach belongs to a branch via coaches.branch_id OR a coach_branches row.
+      const { data, error } = await ctx.supabase
+        .from('coaches').select('id, first_name, last_name, branch_id, coach_branches(branch_id)')
+        .eq('id', coachId).maybeSingle()
+      if (error) throw error
+      if (!data) return 'not_found'
+      return coachList([data])[0].branch_ids.includes(branchId) ? 'ok' : 'wrong_branch'
     },
     async findByAmocrmId(amo: number) {
       const { data, error } = await ctx.supabase
@@ -518,6 +535,18 @@ async function listBranches(ctx: Ctx): Promise<Response> {
     .from('branches').select('id, name').order('name', { ascending: true })
   if (error) throw error
   return ok({ branches: (data || []).map((b: any) => ({ id: b.id, name: b.name })) })
+}
+
+// Coaches (id + name + branch_ids) for integration coach mapping; optional
+// branch_id filter matches coaches.branch_id or a coach_branches row. The
+// coaches table has no status / active column, so every coach is listed.
+async function listCoaches(ctx: Ctx, url: URL): Promise<Response> {
+  const parsed = parseCoachesParams({ branch_id: url.searchParams.get('branch_id') })
+  if (!parsed.value) return err('invalid_input', 400, { field: parsed.field })
+  const { data, error } = await ctx.supabase
+    .from('coaches').select('id, first_name, last_name, branch_id, coach_branches(branch_id)')
+  if (error) throw error
+  return ok({ coaches: coachList(data, parsed.value.branch_id) })
 }
 
 // ─── Roster + rank history (weekly rank-tracking export, read-only) ──────────
@@ -735,7 +764,7 @@ const OPENAPI_SPEC = {
   info: {
     title: 'Chess Empire — Students (write) API',
     version: '1.0.0',
-    description: 'Write API for external integrations (e.g. AmoCRM, Chesster): create / freeze / activate students, link an amoCRM customer id to an existing student, correct the phone / amoCRM id, find by Student ID (student_code) / phone / amoCRM id, list students, list branches, export the weekly roster and rank change history (read-only), push Puzzle Rush survival scores and read Puzzle Rush rankings. All actions require an x-api-key header (CHESS_EMPIRE_WRITE_KEY). Every student carries student_code — a permanent, human-readable Student ID (CE-00001; CE-100000 after CE-99999) assigned by the database, never edited and never reused. Wherever student_id is accepted, student_code may be given instead; if both are given they must name the same student (400 student_id_code_mismatch). Phones are E.164 with any country code and are NOT unique (siblings may share one); amocrm_customer_id is unique and is the primary identity for create.',
+    description: 'Write API for external integrations (e.g. AmoCRM, Chesster): create / freeze / activate students, link an amoCRM customer id to an existing student, correct the phone / amoCRM id, find by Student ID (student_code) / phone / amoCRM id, list students, list branches and coaches, export the weekly roster and rank change history (read-only), push Puzzle Rush survival scores and read Puzzle Rush rankings. All actions require an x-api-key header (CHESS_EMPIRE_WRITE_KEY). Every student carries student_code — a permanent, human-readable Student ID (CE-00001; CE-100000 after CE-99999) assigned by the database, never edited and never reused. Wherever student_id is accepted, student_code may be given instead; if both are given they must name the same student (400 student_id_code_mismatch). Phones are E.164 with any country code and are NOT unique (siblings may share one); amocrm_customer_id is unique and is the primary identity for create.',
   },
   servers: [
     { url: 'https://papgcizhfkngubwofjuo.supabase.co/functions/v1/students-api', description: 'Supabase edge function direct' },
@@ -769,6 +798,8 @@ const OPENAPI_SPEC = {
           branch: { type: 'string', nullable: true },
           amocrm_customer_id: { type: 'integer', nullable: true },
           phone: { type: 'string', nullable: true, description: 'Stored parent phone (E.164 for writes through this API; null when none)' },
+          coach_id: { type: 'string', format: 'uuid', nullable: true, description: 'Assigned coach (null when none; always null in phone-lookup results)' },
+          coach: { type: 'string', nullable: true, description: 'Coach display name "First Last" (null when none; always null in phone-lookup results)' },
         },
       },
     },
@@ -787,11 +818,13 @@ const OPENAPI_SPEC = {
             phone: { $ref: '#/components/schemas/Phone' },
             branch_id: { type: 'string', format: 'uuid' },
             amocrm_customer_id: { type: 'integer', minimum: 1, nullable: true, description: 'amoCRM Buyer ID — unique per student (a numeric string is accepted)' },
+            coach_id: { type: 'string', format: 'uuid', nullable: true, description: 'Optional coach (ids from action=coaches). Only applied when a NEW student is created; ignored for an existing match (an existing coach is never written or overwritten). Must belong to branch_id (coaches.branch_id or a coach_branches assignment). Absent / null / blank = no coach — never defaulted or guessed.' },
           },
         }, examples: {
           sibling_same_phone: { value: { full_name: 'Aru Sadykova', phone: '+7 700 123 45 67', branch_id: '22222222-2222-4222-8222-222222222222', amocrm_customer_id: 1002 } },
           international_phone: { value: { full_name: 'Maria Silva', phone: '+351 912 345 678', branch_id: '22222222-2222-4222-8222-222222222222', amocrm_customer_id: 1003 } },
           no_phone: { value: { full_name: 'Timur Akhmetov', branch_id: '22222222-2222-4222-8222-222222222222', amocrm_customer_id: 1004 } },
+          with_coach: { value: { full_name: 'Dana Sadykova', phone: '+7 700 123 45 67', branch_id: '22222222-2222-4222-8222-222222222222', amocrm_customer_id: 1005, coach_id: '44444444-4444-4444-8444-444444444444' } },
         } } } },
         responses: {
           '200': {
@@ -810,10 +843,13 @@ const OPENAPI_SPEC = {
             } } },
           },
           '400': {
-            description: 'invalid_input (field names it: full_name, phone, branch_id, amocrm_customer_id) or invalid_branch. Nothing is written.',
+            description: 'invalid_input (field names it: full_name, phone, branch_id, amocrm_customer_id, coach_id), invalid_branch, invalid_coach (no such coach) or coach_branch_mismatch (the coach does not belong to branch_id). Nothing is written.',
             content: { 'application/json': { examples: {
               invalid_phone: { value: { ok: false, reason: 'invalid_input', field: 'phone', message: 'phone must be a valid number in international format with its country code (E.164, …)' } },
               phone_required_without_buyer_id: { value: { ok: false, reason: 'invalid_input', field: 'phone', message: '…' } },
+              invalid_coach_id: { value: { ok: false, reason: 'invalid_input', field: 'coach_id' } },
+              invalid_coach: { value: { ok: false, reason: 'invalid_coach' } },
+              coach_branch_mismatch: { value: { ok: false, reason: 'coach_branch_mismatch' } },
             } } },
           },
           '401': { description: 'Unauthorized' },
@@ -960,6 +996,25 @@ const OPENAPI_SPEC = {
         responses: { '200': { description: 'OK' }, '401': { description: 'Unauthorized' } },
       },
     },
+    '/?action=coaches': {
+      get: {
+        summary: 'List coaches (id, name, first_name, last_name, branch_ids) sorted by name, for coach_id mapping on create. branch_ids = coaches.branch_id ∪ coach_branches assignments.',
+        security: [{ ApiKeyAuth: [] }],
+        parameters: [
+          { name: 'branch_id', in: 'query', required: false, schema: { type: 'string', format: 'uuid' }, description: 'Only coaches belonging to this branch' },
+        ],
+        responses: {
+          '200': {
+            description: '{ok, coaches[]}',
+            content: { 'application/json': { examples: {
+              coaches: { value: { ok: true, coaches: [{ id: '44444444-4444-4444-8444-444444444444', name: 'Aidar Nurlanov', first_name: 'Aidar', last_name: 'Nurlanov', branch_ids: ['22222222-2222-4222-8222-222222222222'] }] } },
+            } } },
+          },
+          '400': { description: 'Bad branch_id (invalid_input, field branch_id)' },
+          '401': { description: 'Unauthorized' },
+        },
+      },
+    },
     '/?action=roster': {
       get: {
         summary: 'Weekly roster snapshot ordered by id: student_id, student_code, full_name, status, branch_id, branch_name, trainer_id, trainer_name, stage_id (current_level), stage_name ("Ступень N"), current_rank (never null — "none"), student_created_at (record creation, NOT training start). Read-only.',
@@ -1087,6 +1142,9 @@ export async function handle(req: Request): Promise<Response> {
     }
     if (method === 'GET' && action === 'branches') {
       const r = await listBranches(ctx); status = r.status; return r
+    }
+    if (method === 'GET' && action === 'coaches') {
+      const r = await listCoaches(ctx, url); status = r.status; return r
     }
     if (method === 'GET' && action === 'roster') {
       const r = await getRoster(ctx, url); status = r.status; return r
