@@ -164,8 +164,8 @@ assert(/student\.timeSlotIndexes\?\.includes\(slotIndex\)|student\.timeSlotIndex
     'getStudentsForTimeSlot filters by timeSlotIndexes.includes(slotIndex)');
 assert(/timeSlotIndexes\s*=\s*Array\.from\(assignmentMap\.get\(student\.id\)\)/.test(ADMIN_SRC),
     'loadAttendanceData builds student.timeSlotIndexes from assignmentMap (studentId → Set<slot>)');
-assert(/student\.timeSlotIndexes\s*=\s*\[slot\]/.test(ADMIN_SRC),
-    'initializeStudentTimeSlots writes timeSlotIndexes = [slot] for Halyk auto-seed');
+assert(!/initializeStudentTimeSlots/.test(ADMIN_SRC) && !/student\.timeSlotIndexes\s*=\s*\[slot\]/.test(ADMIN_SRC),
+    'no Halyk auto-seed: students without a saved assignment are never placed into a slot');
 
 const delBody = fnBody(ADMIN_SRC, 'deleteStudentFromCalendar');
 assert(delBody.length > 0, 'located deleteStudentFromCalendar function body');

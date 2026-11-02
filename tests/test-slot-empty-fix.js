@@ -10,7 +10,8 @@
  *        - creating a new earlier slot leaves it empty (no auto-seed leak);
  *        - legacy NULL-logical rows resolve to the SAME slot before and after a
  *          new earlier slot is inserted (stable under reorder);
- *        - auto-seed still runs for genuine fallback-mode buckets.
+ *        - no bucket (DB or fallback mode, any branch) auto-seeds — students
+ *          enter the grid only manually (rule 2026-11-02).
  *
  * Run: node tests/test-slot-empty-fix.js
  */
@@ -101,8 +102,8 @@ console.log('\n=== admin-v2.js source contract =================================
 
 const ADMIN_SRC = fs.readFileSync(path.join(ROOT, 'admin-v2.js'), 'utf8');
 
-// 2a. new resolver + gate helpers exist and are exported
-for (const fn of ['getSlotPositionForSlotIndex', 'isDbModeSlotBucket']) {
+// 2a. new resolver helper exists and is exported
+for (const fn of ['getSlotPositionForSlotIndex']) {
     assert(new RegExp(`function ${fn}\\(`).test(ADMIN_SRC), `${fn} is defined`);
     assert(new RegExp(`window\\.${fn}\\s*=\\s*${fn}`).test(ADMIN_SRC), `${fn} is exported on window`);
 }
@@ -111,15 +112,12 @@ assert(fnBody(ADMIN_SRC, 'getSlotPositionForSlotIndex').includes('s.slotIndex ==
 assert(fnBody(ADMIN_SRC, 'getSlotPositionForSlotIndex').includes('findIndex'),
     'getSlotPositionForSlotIndex returns the render position via findIndex');
 
-// 2b. auto-seed is gated on DB mode
-const initBody = fnBody(ADMIN_SRC, 'initializeStudentTimeSlots');
-assert(/if\s*\(isDbModeSlotBucket\(attendanceCurrentBranch, attendanceCurrentSchedule,\s*\n?\s*attendanceCurrentCoachName[\s\S]*?\)\)\s*\{\s*\n?\s*return;/.test(initBody),
-    'initializeStudentTimeSlots returns early for DB-mode buckets (no positional auto-seed)');
-// the Halyk gate + the /10 bucketing must still be present (unchanged behavior for fallback)
-assert(/attendanceCurrentBranch !== 'Halyk Arena'/.test(initBody),
-    'initializeStudentTimeSlots keeps the Halyk-Arena gate');
-assert(/Math\.floor\(index \/ DEFAULT_TIME_SLOT_ROWS\)/.test(initBody),
-    'initializeStudentTimeSlots keeps floor(index / DEFAULT_TIME_SLOT_ROWS) fallback bucketing');
+// 2b. no positional auto-seed at all (manual-only rule, 2026-11-02) — the
+// DB-mode gate (isDbModeSlotBucket) went away together with the auto-seed.
+assert(!/initializeStudentTimeSlots/.test(ADMIN_SRC) && !/isDbModeSlotBucket/.test(ADMIN_SRC),
+    'initializeStudentTimeSlots auto-seed and its DB-mode gate are removed');
+assert(!/Math\.floor\(index \/ DEFAULT_TIME_SLOT_ROWS\)/.test(ADMIN_SRC),
+    'no floor(index / DEFAULT_TIME_SLOT_ROWS) positional bucketing');
 
 // 2c. legacy read-path resolution maps slot_index -> current render position
 const loadBody = fnBody(ADMIN_SRC, 'loadAttendanceData');
@@ -196,11 +194,9 @@ function resolveMembership(bucket, assignment, coachName) {
     return slotIdx;
 }
 
-// Mirror of isDbModeSlotBucket + the initializeStudentTimeSlots gate.
-function shouldPositionalAutoSeed(branchName, bucket) {
-    if (branchName !== 'Halyk Arena') return false;      // Halyk-only gate
-    if (bucket && bucket.length > 0) return false;        // DB mode -> never seed
-    return true;                                          // fallback mode -> seed
+// Manual-only rule (2026-11-02): no branch/bucket ever positionally seeds.
+function shouldPositionalAutoSeed() {
+    return false;
 }
 
 function coach(idx, lid, s, e, eff = '1970-01-01', del = null) {
@@ -286,31 +282,16 @@ console.log('\n=== criterion 2: legacy rows stable under reorder ===============
 }
 
 // ---------------------------------------------------------------------------
-// Criterion 3: auto-seed still works for genuine fallback-mode buckets.
+// Criterion 3: no auto-seed for fallback-mode buckets either.
 // ---------------------------------------------------------------------------
-console.log('\n=== criterion 3: fallback-mode auto-seed still runs ==================\n');
+console.log('\n=== criterion 3: fallback-mode buckets never auto-seed ===============\n');
 {
-    // No DB slots for this coach/schedule -> fallback mode (no cache bucket).
-    assert(shouldPositionalAutoSeed('Halyk Arena', null) === true,
-        'Halyk fallback-mode bucket (no cache) still positionally auto-seeds');
-    assert(shouldPositionalAutoSeed('Halyk Arena', []) === true,
-        'Halyk empty-cache bucket still positionally auto-seeds');
-
-    // Non-Halyk branches never auto-seed, DB or fallback.
+    assert(shouldPositionalAutoSeed('Halyk Arena', null) === false,
+        'Halyk fallback-mode bucket (no cache) does not auto-seed');
+    assert(shouldPositionalAutoSeed('Halyk Arena', []) === false,
+        'Halyk empty-cache bucket does not auto-seed');
     assert(shouldPositionalAutoSeed('Debut', null) === false,
         'non-Halyk branch never positionally auto-seeds');
-
-    // Faithful port of the floor(index/10) bucketing over a fallback array of 3
-    // slots: first 10 students -> slot 0, next 10 -> slot 1, overflow clamps.
-    const DEFAULT_TIME_SLOT_ROWS = 10;
-    const numSlots = 3;
-    function autoSeedIndex(listIndex) {
-        let slot = Math.floor(listIndex / DEFAULT_TIME_SLOT_ROWS);
-        if (slot >= numSlots) slot = numSlots - 1;
-        return slot;
-    }
-    assertEqual([0, 9, 10, 19, 20, 29, 30].map(autoSeedIndex), [0, 0, 1, 1, 2, 2, 2],
-        'fallback auto-seed: 10 students per slot, overflow clamps to the last slot');
 }
 
 console.log(`\n--- ${passed} passed, ${failed} failed ---\n`);

@@ -4686,49 +4686,6 @@ function getMaxCapacity() {
     return isDebutCurrentBranch() ? DEBUT_MAX_TIME_SLOT_CAPACITY : MAX_TIME_SLOT_CAPACITY;
 }
 
-// Initialize time slot indices for all students
-// Students without a time_slot_index get assigned based on their array position
-// skipStudentIds: Set of student IDs that already have saved assignments (don't override them)
-function initializeStudentTimeSlots(skipStudentIds = new Set()) {
-    // Only auto-assign for Halyk Arena
-    // All other branches require manual assignment via "Add Student" button
-    if (attendanceCurrentBranch !== 'Halyk Arena') {
-        // For non-Halyk Arena branches, leave students unassigned
-        // They will not appear in any time slot until manually assigned
-        return;
-    }
-
-    const timeSlots = getTimeSlotsForBranch(attendanceCurrentBranch, attendanceCurrentSchedule, attendanceCurrentCoachName);
-    const numSlots = timeSlots.length;
-
-    // For students without a slot, assign them sequentially (Halyk Arena only)
-    let unassignedCount = 0;
-    attendanceCalendarData.forEach((student, index) => {
-        // Skip students who already have a saved assignment from the database
-        if (skipStudentIds.has(student.id)) {
-            return;
-        }
-
-        if (student.time_slot_index === null || student.time_slot_index === undefined) {
-            // Assign based on position: first 10 to slot 0, next 10 to slot 1, etc.
-            // Use DEFAULT_TIME_SLOT_ROWS (10) — this code path is gated by the
-            // attendanceCurrentBranch === 'Halyk Arena' check above, so Debut
-            // never reaches here. Bucketing is also persisted via time_slot_index,
-            // so changing the divisor would shift previously saved slot indices.
-            student.time_slot_index = Math.floor(index / DEFAULT_TIME_SLOT_ROWS);
-            // Clamp to available slots (last slot gets overflow)
-            if (student.time_slot_index >= numSlots) {
-                student.time_slot_index = numSlots - 1;
-            }
-            unassignedCount++;
-        }
-    });
-
-    if (unassignedCount > 0) {
-        console.log(`Initialized time_slot_index for ${unassignedCount} students`);
-    }
-}
-
 // Get students assigned to a specific time slot index
 function getStudentsForTimeSlot(slotIndex, filteredData) {
     return filteredData.filter(student => student.time_slot_index === slotIndex);
@@ -5891,7 +5848,7 @@ async function loadAttendanceData() {
                         first_name: student.firstName,
                         last_name: student.lastName,
                         attendance: attendanceArray,
-                        time_slot_index: null // Will be assigned from database or initialized
+                        time_slot_index: null // Only ever assigned from saved database rows
                     };
                 });
             } else {
@@ -5902,8 +5859,6 @@ async function loadAttendanceData() {
         }
 
         // Apply saved time slot assignments from database
-        // Track which students have been explicitly assigned (from database)
-        const assignedStudentIds = new Set();
         // Track students that have been explicitly deleted (time_slot_index = -1)
         const deletedStudentIds = new Set();
         // Reset the global set for current schedule students
@@ -5935,7 +5890,6 @@ async function loadAttendanceData() {
                         // Track that this student has a time slot in the CURRENT schedule
                         attendanceCurrentScheduleStudents.add(student.id);
                     }
-                    assignedStudentIds.add(student.id);
                 }
             });
 
@@ -5948,9 +5902,8 @@ async function loadAttendanceData() {
             console.log(`Applied ${savedAssignments.length - deletedStudentIds.size} saved time slot assignments`);
         }
 
-        // Initialize time slot indices for students that don't have a saved assignment
-        // This ensures new students and students without explicit assignments get auto-assigned
-        initializeStudentTimeSlots(assignedStudentIds);
+        // Students without a saved assignment are NOT placed into any slot —
+        // coaches add students to the attendance grid manually only.
 
         // Render calendar (only after calendar data is processed)
         renderAttendanceCalendar();

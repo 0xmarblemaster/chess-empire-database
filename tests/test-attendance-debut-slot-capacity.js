@@ -17,10 +17,9 @@
  *   - Static check: the six rewired call sites no longer reference the raw
  *     constants — they go through the helpers (or the local selectedBranch
  *     check for the add-student form, which uses a different branch source).
- *   - Static check: the Halyk-Arena-only auto-bucketing path keeps
- *     DEFAULT_TIME_SLOT_ROWS because the value is persisted via
- *     time_slot_index — changing the divisor would shift previously saved
- *     slot indices for existing Halyk Arena students.
+ *   - Static check: the removed Halyk-Arena auto-bucketing
+ *     (initializeStudentTimeSlots) stays gone — students enter the grid only
+ *     manually (rule 2026-11-02).
  *
  * Run: node tests/test-attendance-debut-slot-capacity.js
  */
@@ -181,19 +180,13 @@ assert(/students max\)\. Please select a different time slot\./.test(ADMIN_SRC),
 assert(/Time slot \$\{slotName\} is full \(\$\{selectedBranchMaxCapacity\} students max\)/.test(ADMIN_SRC),
     'add-student full-slot toast uses selectedBranchMaxCapacity');
 
-console.log('\n=== Halyk-Arena auto-bucketing path keeps DEFAULT_TIME_SLOT_ROWS ======\n');
-// The auto-bucketing at line 4699 (now wrapped with a comment) is gated by
-// attendanceCurrentBranch === 'Halyk Arena' check above. Debut never reaches
-// it. The value is persisted via time_slot_index — changing the divisor would
-// shift previously saved slot indices for existing Halyk Arena students.
-// So this site MUST keep raw DEFAULT_TIME_SLOT_ROWS.
-assert(/initializeStudentTimeSlots/.test(ADMIN_SRC),
-    'initializeStudentTimeSlots function still present');
-assert(/student\.time_slot_index\s*=\s*Math\.floor\(\s*index\s*\/\s*DEFAULT_TIME_SLOT_ROWS\s*\)/.test(ADMIN_SRC),
-    'auto-bucketing still divides by DEFAULT_TIME_SLOT_ROWS (not getDefaultRows())');
-// The comment explains the reasoning.
-assert(/this code path is gated by[\s\S]{0,200}Halyk Arena/.test(ADMIN_SRC),
-    'comment explains why DEFAULT_TIME_SLOT_ROWS is intentional (Halyk Arena gate)');
+console.log('\n=== no Halyk-Arena auto-bucketing (manual-only rule) ==================\n');
+// Students enter the attendance grid ONLY manually (rule 2026-11-02), so the
+// positional DEFAULT_TIME_SLOT_ROWS bucketing must not come back.
+assert(!/initializeStudentTimeSlots/.test(ADMIN_SRC),
+    'initializeStudentTimeSlots auto-seed removed');
+assert(!/Math\.floor\(\s*index\s*\/\s*DEFAULT_TIME_SLOT_ROWS\s*\)/.test(ADMIN_SRC),
+    'no positional Math.floor(index / DEFAULT_TIME_SLOT_ROWS) bucketing');
 
 console.log('\n=== no stray direct constant refs in the rewired flows ================\n');
 // Cross-check: every direct `MAX_TIME_SLOT_CAPACITY` reference in admin.js

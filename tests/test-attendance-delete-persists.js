@@ -11,9 +11,9 @@
  *      ({ assignments, hiddenStudentIds }) — the four PRD scenarios.
  *   2. A pure-JS source-contract guard on admin-v2.js confirming
  *      loadAttendanceData reads `hiddenStudentIds` and filters
- *      `attendanceCalendarData` by it before calling
- *      initializeStudentTimeSlots. This is the regression guard against the
- *      Halyk Arena auto-seed bug.
+ *      `attendanceCalendarData` by it, and that no positional auto-seed
+ *      (initializeStudentTimeSlots, removed 2026-11-02) can re-place
+ *      students without a saved assignment.
  *
  * Run: node tests/test-attendance-delete-persists.js
  */
@@ -83,17 +83,15 @@ assert(/assignments:\s*savedAssignments[^}]*hiddenStudentIds(?:\s*=\s*\[\])?/.te
     || /hiddenStudentIds(?:\s*=\s*\[\])?[^}]*assignments:\s*savedAssignments/.test(loadBody),
     'loadAttendanceData destructures `assignments` and `hiddenStudentIds` from timeSlotAssignmentsResult.value');
 
-// Filters attendanceCalendarData by hiddenStudentIds — the regression
-// guard. Without this, Halyk auto-seed resurrects the hidden student.
+// Filters attendanceCalendarData by hiddenStudentIds so hidden students
+// do not render.
 assert(/attendanceCalendarData\s*=\s*attendanceCalendarData\.filter\([^)]*hiddenIdSet/.test(loadBody),
     'loadAttendanceData filters attendanceCalendarData by the hiddenStudentIds set');
 
-// The filter has to run BEFORE initializeStudentTimeSlots so the
-// auto-seed cannot resurrect the hidden student.
-const filterIdx = loadBody.search(/attendanceCalendarData\s*=\s*attendanceCalendarData\.filter\([^)]*hiddenIdSet/);
-const initIdx = loadBody.indexOf('initializeStudentTimeSlots(');
-assert(filterIdx > 0 && initIdx > filterIdx,
-    'attendanceCalendarData filter runs BEFORE initializeStudentTimeSlots (auto-seed cannot resurrect hidden students)');
+// Students are only ever added manually (rule 2026-11-02): no auto-seed
+// exists that could resurrect a hidden student.
+assert(!/initializeStudentTimeSlots/.test(ADMIN_V2_SRC),
+    'no initializeStudentTimeSlots auto-seed (hidden students cannot be resurrected)');
 
 // Cleared cached schedule assignment for removed students — matches the
 // pre-061 cleanup at the old splice site.
@@ -290,14 +288,14 @@ async function runLive() {
 
         // ------------------------------------------------------------------
         // (4) Student with NO rows in this schedule → NOT in
-        //     hiddenStudentIds (Halyk auto-seed must still work for new
-        //     students).
+        //     hiddenStudentIds (a new student is simply unassigned until a
+        //     coach adds them manually).
         // ------------------------------------------------------------------
         await cleanup();
         {
             const result = await supabaseData.getTimeSlotAssignments(TEST_BRANCH, SCHEDULE, YEAR, MONTH);
             assert(!result.hiddenStudentIds.includes(TEST_STUDENT),
-                '(4) student with no rows at all is not in hiddenStudentIds (genuinely-new student stays auto-seedable)');
+                '(4) student with no rows at all is not in hiddenStudentIds (genuinely-new student stays unassigned, not hidden)');
             assert(!result.hiddenStudentIds.includes(NEW_STUDENT),
                 '(4) NEW_STUDENT (never inserted) is not in hiddenStudentIds');
             assert(!result.assignments.some(r => r.studentId === TEST_STUDENT),

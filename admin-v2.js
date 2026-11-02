@@ -5949,22 +5949,6 @@ function getSlotPositionForSlotIndex(branchName, scheduleType, coachName, slotIn
 }
 window.getSlotPositionForSlotIndex = getSlotPositionForSlotIndex;
 
-// A (branch, coach, schedule) bucket is in DB mode when the versioned time_slots
-// cache holds at least one slot for it. DB-mode buckets NEVER positionally
-// auto-seed (initializeStudentTimeSlots): students without an assignment row
-// stay unassigned so a freshly created slot starts empty. A bucket with no cache
-// entry is fallback mode (hard-coded ATTENDANCE_TIME_SLOTS_* arrays), where the
-// legacy auto-seed still applies. Requires a concrete coach — "all coaches" has
-// no single bucket and keeps the pre-existing fallback behavior.
-function isDbModeSlotBucket(branchName, scheduleType, coachName, monthKey) {
-    if (!TIME_SLOTS_CACHE || !branchName || !scheduleType || !coachName) return false;
-    const mk = monthKey || _currentAttendanceMonthKey();
-    const key = `${branchName.toLowerCase()}|${coachName.toLowerCase()}|${scheduleType}|${mk}`;
-    const bucket = TIME_SLOTS_CACHE[key];
-    return !!(bucket && bucket.length > 0);
-}
-window.isDbModeSlotBucket = isDbModeSlotBucket;
-
 // Physical time_slots.slot_index of the slot at display position `position`.
 // Write paths (add / drag / hide) store this — NOT the render position — as
 // student_time_slot_assignments.time_slot_index, so the value matches how
@@ -6666,64 +6650,6 @@ function getDefaultRows() {
 function getMaxCapacity(coachName = attendanceCurrentCoachName) {
     if (isVasilyCoach(coachName)) return VASILY_MAX_TIME_SLOT_CAPACITY;
     return isDebutCurrentBranch() ? DEBUT_MAX_TIME_SLOT_CAPACITY : MAX_TIME_SLOT_CAPACITY;
-}
-
-// Initialize time slot indices for all students
-// Students without an explicit assignment get auto-seeded by their array
-// position (Halyk Arena only). Writes student.timeSlotIndexes = [slot] —
-// migration 061 multi-slot model.
-// skipStudentIds: Set of student IDs that already have saved assignments
-// (don't override them).
-function initializeStudentTimeSlots(skipStudentIds = new Set()) {
-    // Only auto-assign for Halyk Arena
-    // All other branches require manual assignment via "Add Student" button
-    if (attendanceCurrentBranch !== 'Halyk Arena') {
-        // For non-Halyk Arena branches, leave students unassigned
-        // They will not appear in any time slot until manually assigned
-        return;
-    }
-
-    // DB-mode gate (specs/slot-empty-fix-20260903.md): once a coach's Halyk
-    // bucket has real time_slots rows, positional auto-seed is FORBIDDEN — a
-    // student with no assignment row must render as unassigned, never be merged
-    // into a rendered slot by position. Otherwise a newly created slot (which
-    // may sort to render position 0) inherits every auto-seeded student. Only
-    // genuine fallback-mode buckets (hard-coded arrays, no DB rows) still seed.
-    if (isDbModeSlotBucket(attendanceCurrentBranch, attendanceCurrentSchedule,
-                           attendanceCurrentCoachName, _currentAttendanceMonthKey())) {
-        return;
-    }
-
-    const timeSlots = getTimeSlotsForBranch(attendanceCurrentBranch, attendanceCurrentSchedule, attendanceCurrentCoachName);
-    const numSlots = timeSlots.length;
-
-    // For students without a slot, assign them sequentially (Halyk Arena only)
-    let unassignedCount = 0;
-    attendanceCalendarData.forEach((student, index) => {
-        // Skip students who already have a saved assignment from the database
-        if (skipStudentIds.has(student.id)) {
-            return;
-        }
-
-        if (!student.timeSlotIndexes || student.timeSlotIndexes.length === 0) {
-            // Assign based on position: first 10 to slot 0, next 10 to slot 1, etc.
-            // Use DEFAULT_TIME_SLOT_ROWS (10) — this code path is gated by the
-            // attendanceCurrentBranch === 'Halyk Arena' check above, so Debut
-            // never reaches here. Bucketing is also persisted via time_slot_index,
-            // so changing the divisor would shift previously saved slot indices.
-            let slot = Math.floor(index / DEFAULT_TIME_SLOT_ROWS);
-            // Clamp to available slots (last slot gets overflow)
-            if (slot >= numSlots) {
-                slot = numSlots - 1;
-            }
-            student.timeSlotIndexes = [slot];
-            unassignedCount++;
-        }
-    });
-
-    if (unassignedCount > 0) {
-        console.log(`Initialized timeSlotIndexes for ${unassignedCount} students`);
-    }
 }
 
 // Get students assigned to a specific time slot index.
@@ -7964,7 +7890,8 @@ async function loadAttendanceData() {
                         // Set of time slot indices this student is assigned to in
                         // the current branch+schedule. Empty until populated from
                         // getTimeSlotAssignments (migration 061: multi-slot per
-                        // schedule) or initializeStudentTimeSlots auto-seed.
+                        // schedule). Students are never auto-placed into a slot:
+                        // without a saved assignment they stay unassigned.
                         timeSlotIndexes: []
                     };
                 });
@@ -7984,11 +7911,8 @@ async function loadAttendanceData() {
         //   each.
         // - hiddenStudentIds: students with rows in this branch+schedule but
         //   no visible slot (covers legacy -1 schedule-wide hides AND new
-        //   per-slot hidden=TRUE rows). Must be filtered out of
-        //   attendanceCalendarData BEFORE initializeStudentTimeSlots runs,
-        //   otherwise Halyk Arena auto-seed will resurrect them. See
-        //   PRD_ATTENDANCE_DELETE_FIX.md for the regression context.
-        const assignedStudentIds = new Set();
+        //   per-slot hidden=TRUE rows). Filtered out of
+        //   attendanceCalendarData (PRD_ATTENDANCE_DELETE_FIX.md).
         // Reset the global set for current schedule students
         attendanceCurrentScheduleStudents = new Set();
 
@@ -8062,15 +7986,13 @@ async function loadAttendanceData() {
                 if (assignmentMap.has(student.id)) {
                     student.timeSlotIndexes = Array.from(assignmentMap.get(student.id));
                     attendanceCurrentScheduleStudents.add(student.id);
-                    assignedStudentIds.add(student.id);
                 }
             });
 
             // Filter out students intentionally hidden from this schedule —
             // either a legacy -1 schedule-wide hide row OR a per-slot
-            // hidden=TRUE row that drained their last visible slot. Without
-            // this filter, initializeStudentTimeSlots auto-seeds them back
-            // on Halyk Arena (PRD_ATTENDANCE_DELETE_FIX.md regression).
+            // hidden=TRUE row that drained their last visible slot
+            // (PRD_ATTENDANCE_DELETE_FIX.md).
             if (hiddenStudentIds.length > 0) {
                 const hiddenIdSet = new Set(hiddenStudentIds);
                 attendanceCalendarData = attendanceCalendarData.filter(s => !hiddenIdSet.has(s.id));
@@ -8087,9 +8009,8 @@ async function loadAttendanceData() {
             console.log(`Applied ${savedAssignments.length} saved time slot assignments across ${assignmentMap.size} students`);
         }
 
-        // Initialize time slot indices for students that don't have a saved assignment
-        // This ensures new students and students without explicit assignments get auto-assigned
-        initializeStudentTimeSlots(assignedStudentIds);
+        // Students without a saved assignment are NOT placed into any slot —
+        // coaches add students to the attendance grid manually only.
 
         // Render calendar (only after calendar data is processed)
         renderAttendanceCalendar();
