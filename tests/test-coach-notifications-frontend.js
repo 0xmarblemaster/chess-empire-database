@@ -222,10 +222,10 @@ const HALYK = 'b146c01e-4a37-440e-84e7-4540358a21b9';
 const ONLINE = '0b631805-16b9-4d9e-bbda-d595865cb96d';
 const DEBUT = '99999999-9999-4999-8999-999999999999';
 const LIST = [HALYK, ONLINE];
-assert(JSON.stringify(cn.ENABLED_BRANCH_IDS) === JSON.stringify(LIST), 'ENABLED_BRANCH_IDS = [Halyk, Online]');
+assert(cn.ENABLED_BRANCH_IDS === null, 'ENABLED_BRANCH_IDS === null (every branch)');
 assert(cn.bellEnabledFor([HALYK], cn.ENABLED_BRANCH_IDS) === true, 'Halyk coach → bell');
-assert(cn.bellEnabledFor([DEBUT], cn.ENABLED_BRANCH_IDS) === false, 'Debut-only coach → no bell');
-assert(cn.bellEnabledFor([], cn.ENABLED_BRANCH_IDS) === false, 'coach with no branches → no bell');
+assert(cn.bellEnabledFor([DEBUT], cn.ENABLED_BRANCH_IDS) === true, 'Debut-only coach → bell');
+assert(cn.bellEnabledFor([], cn.ENABLED_BRANCH_IDS) === true, 'coach with no branches → bell');
 {
     const refreshFn = SRC.slice(SRC.indexOf('async function refresh()'), SRC.indexOf('async function init()'));
     assert(/if \(ENABLED_BRANCH_IDS !== null\) q = q\.in\('branch_id', ENABLED_BRANCH_IDS\);/.test(refreshFn),

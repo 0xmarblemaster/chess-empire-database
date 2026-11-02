@@ -41,7 +41,7 @@
     const POLL_MS = 60000;
     // Rollout gate: the bell only shows for coaches of these branches (null =
     // every branch). Server side: COACH_NOTIFY_BRANCH_IDS in students-api.
-    const ENABLED_BRANCH_IDS = ['b146c01e-4a37-440e-84e7-4540358a21b9', '0b631805-16b9-4d9e-bbda-d595865cb96d']; // Halyk Arena, Online
+    const ENABLED_BRANCH_IDS = null;
     // Admin read / cleared state: { [status_history_id]: isoTime }, pruned
     // after 8 days.
     const ADMIN_SEEN_KEY = 'cn-admin-seen-v2';
