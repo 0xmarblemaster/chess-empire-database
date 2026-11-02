@@ -2,8 +2,9 @@
  * Coach notifications — bell inbox for AmoCRM roster events (migration 102).
  *
  * students-api writes one coach_notifications row per recipient coach when a
- * NEW student is created (kind new_student) or a frozen / left student is
- * moved back to active (kind reactivated); this script shows them to the signed-in coach: a
+ * NEW student is created (kind new_student), a frozen / left student is
+ * moved back to active (kind reactivated), or a student is frozen (kind
+ * frozen); this script shows them to the signed-in coach: a
  * bell with an unread counter in the mobile header and top-right on desktop,
  * and a panel listing the latest notifications. Admins get no bell.
  *
@@ -66,8 +67,12 @@
             if (n.previous_status === 'frozen') return 'notifications.backFromFreeze';
             if (n.previous_status === 'left') return 'notifications.formerReturned';
         }
+        if (n.kind === 'frozen') return 'notifications.studentFrozen';
         return 'notifications.newStudentFromAmo';
     }
+
+    // Kinds with their own accent (cn-item--<kind>).
+    const KIND_MODIFIERS = ['reactivated', 'frozen'];
 
     const pad = (x) => String(x).padStart(2, '0');
     const dayKey = (d) => `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`;
@@ -93,7 +98,7 @@
         const id = escapeHtml(n.id);
         const name = escapeHtml(n.student_name || '—');
         const title = escapeHtml(tr(titleKey(n)));
-        const mod = n.kind === 'reactivated' ? ' cn-item--reactivated' : '';
+        const mod = KIND_MODIFIERS.includes(n.kind) ? ` cn-item--${n.kind}` : '';
         const ava = `<div class="cn-ava">${escapeHtml(initials(n.student_name))}</div>`;
         if (n.read_at) {
             const meta = [formatDay(n.created_at, now), n.branch_name].filter(Boolean).map(escapeHtml).join(' · ');
@@ -113,7 +118,9 @@
             + '</div>'
             + `<div class="cn-meta">${meta}</div>`
             + '<div class="cn-acts">'
-            + `<button type="button" class="cn-btn cn-btn-primary" data-action="schedule">${escapeHtml(tr('notifications.toSchedule'))}</button>`
+            // Frozen students are not to be scheduled — no «В расписание».
+            + (n.kind === 'frozen' ? ''
+                : `<button type="button" class="cn-btn cn-btn-primary" data-action="schedule">${escapeHtml(tr('notifications.toSchedule'))}</button>`)
             + `<button type="button" class="cn-btn cn-btn-ghost" data-action="card">${escapeHtml(tr('notifications.card'))}</button>`
             + '</div></div></div>';
     }

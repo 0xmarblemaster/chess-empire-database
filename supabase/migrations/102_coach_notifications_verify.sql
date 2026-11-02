@@ -23,12 +23,14 @@ WITH checks AS (
            NOT EXISTS (SELECT 1 FROM pg_constraint
                        WHERE conname = 'coach_notifications_recipient_student_kind_key')
     UNION ALL
-    SELECT 'kind check (new_student, reactivated)',
+    SELECT 'kind check (new_student, reactivated, frozen; no left)',
            EXISTS (SELECT 1 FROM pg_constraint
                    WHERE conrelid = to_regclass('public.coach_notifications')
                      AND contype = 'c'
                      AND pg_get_constraintdef(oid) LIKE '%new_student%'
-                     AND pg_get_constraintdef(oid) LIKE '%reactivated%')
+                     AND pg_get_constraintdef(oid) LIKE '%reactivated%'
+                     AND pg_get_constraintdef(oid) LIKE '%''frozen''%'
+                     AND pg_get_constraintdef(oid) NOT LIKE '%''left''%')
     UNION ALL
     SELECT 'event columns (previous_status, status_history_id NOT NULL)',
            (SELECT count(*) = 2 FROM information_schema.columns

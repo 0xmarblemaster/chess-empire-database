@@ -64,6 +64,9 @@ body.has-coach-bell .header-actions { margin-right: 12rem; }
 .cn-item--reactivated.unread { background: #fffbeb; box-shadow: inset 3px 0 0 #d97706; }
 .cn-item--reactivated.unread .cn-ava { background: #d97706; }
 .cn-item--reactivated.unread .cn-t1 { color: #b45309; }
+.cn-item--frozen.unread { background: #eff6ff; box-shadow: inset 3px 0 0 #3b82f6; }
+.cn-item--frozen.unread .cn-ava { background: #64748b; }
+.cn-item--frozen.unread .cn-t1 { color: #1d4ed8; }
 .cn-body { flex: 1; min-width: 0; }
 .cn-ava {
     flex: none; width: 42px; height: 42px; border-radius: 12px;

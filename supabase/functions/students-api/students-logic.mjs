@@ -571,6 +571,7 @@ export async function createStudent(db, input) {
 
 export const NOTIFICATION_KIND_NEW_STUDENT = 'new_student';
 export const NOTIFICATION_KIND_REACTIVATED = 'reactivated';
+export const NOTIFICATION_KIND_FROZEN = 'frozen';
 // Statuses an API activation counts as a "student returned" from.
 export const REACTIVATION_FROM = ['frozen', 'left'];
 
@@ -578,6 +579,16 @@ export const REACTIVATION_FROM = ['frozen', 'left'];
 // active→active and other transitions never notify.
 export function shouldNotifyReactivation(prevStatus, target) {
   return target === 'active' && REACTIVATION_FROM.includes(prevStatus);
+}
+
+// Notification kind for an API status change, or null when nobody is told:
+// frozen / left → active is a reactivation, any move into frozen is reported
+// as such; no-ops and other transitions never notify.
+export function statusChangeNotificationKind(prevStatus, target) {
+  if (prevStatus === target) return null;
+  if (shouldNotifyReactivation(prevStatus, target)) return NOTIFICATION_KIND_REACTIVATED;
+  if (target === 'frozen') return NOTIFICATION_KIND_FROZEN;
+  return null;
 }
 
 // Who hears about the student: its coach only when one is assigned, else
@@ -608,7 +619,7 @@ export function notificationRows(student, recipientIds, event = {}) {
   }));
 }
 
-// Best-effort fan-out after a status event (new student / reactivation).
+// Best-effort fan-out after a status event (new student / status change).
 // db = { branchCoaches(branchId), insertNotifications(rows) },
 // event = { kind, previous_status, status_history_id }. Never throws: a
 // failure is logged and reported as { sent: 0, error } so the API response is

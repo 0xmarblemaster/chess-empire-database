@@ -10,6 +10,10 @@
 --   * kind 'reactivated' — the API moved a student from 'frozen' or 'left' to
 --     'active' (action=activate, or create matching a frozen student);
 --     previous_status is the status it came back from.
+--   * kind 'frozen' — the API moved an active / left student to 'frozen'
+--     (action=freeze); previous_status is the status it was frozen from.
+--   No-ops (already in the target status), refused changes (3-day manual
+--   guard) and failed updates never notify.
 --
 -- Objects:
 --   * coach_notifications — one row per (recipient coach, status event).
@@ -45,7 +49,7 @@ CREATE TABLE IF NOT EXISTS coach_notifications (
     id                  UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     recipient_coach_id  UUID NOT NULL REFERENCES coaches(id) ON DELETE CASCADE,
     kind                TEXT NOT NULL DEFAULT 'new_student'
-                        CHECK (kind IN ('new_student', 'reactivated')),
+                        CHECK (kind IN ('new_student', 'reactivated', 'frozen')),
     previous_status     TEXT,
     status_history_id   UUID NOT NULL REFERENCES student_status_history(id) ON DELETE CASCADE,
     student_id          UUID NOT NULL REFERENCES students(id) ON DELETE CASCADE,
@@ -61,6 +65,12 @@ CREATE TABLE IF NOT EXISTS coach_notifications (
     CONSTRAINT coach_notifications_recipient_event_key
         UNIQUE (recipient_coach_id, status_history_id)
 );
+
+-- Re-assert the kind CHECK so a table created by an earlier draft of this
+-- migration picks up the full kind list.
+ALTER TABLE coach_notifications DROP CONSTRAINT IF EXISTS coach_notifications_kind_check;
+ALTER TABLE coach_notifications ADD CONSTRAINT coach_notifications_kind_check
+    CHECK (kind IN ('new_student', 'reactivated', 'frozen'));
 
 CREATE INDEX IF NOT EXISTS coach_notifications_inbox_idx
     ON coach_notifications (recipient_coach_id, read_at, created_at DESC);

@@ -65,9 +65,8 @@ import {
   coachList,
   createStudent as createStudentFlow,
   notifyCoaches,
-  shouldNotifyReactivation,
+  statusChangeNotificationKind,
   NOTIFICATION_KIND_NEW_STUDENT,
-  NOTIFICATION_KIND_REACTIVATED,
   validateSurvivalPush,
   parseLeaderboardParams,
   almatyWindowStart,
@@ -292,8 +291,8 @@ function notificationDb(ctx: Ctx) {
 // Core status transition shared by freeze / activate and the create-time
 // reactivation. Enforces the 3-day manual guard, no-ops when already in the
 // target status, writes students.status + a typed status_history row, fires
-// the Chesster poke, and notifies coaches (best-effort) when a frozen / left
-// student comes back to active.
+// the Chesster poke, and notifies coaches (best-effort) of every real change
+// (reactivated / frozen — see statusChangeNotificationKind).
 async function applyStatusChange(
   ctx: Ctx,
   student: ReturnType<typeof shape>,
@@ -334,9 +333,10 @@ async function applyStatusChange(
   if (rErr) throw rErr
 
   const updated = shape(upd)
-  if (shouldNotifyReactivation(prev, target)) {
+  const kind = statusChangeNotificationKind(prev, target)
+  if (kind) {
     await notifyCoaches(notificationDb(ctx), updated, {
-      kind: NOTIFICATION_KIND_REACTIVATED, previous_status: prev, status_history_id: row.id,
+      kind, previous_status: prev, status_history_id: row.id,
     })
   }
 
@@ -915,7 +915,7 @@ const OPENAPI_SPEC = {
     },
     '/?action=freeze': {
       post: {
-        summary: 'Freeze a student. Refused (409) if a manual change is < 3 days old.',
+        summary: 'Freeze a student. Refused (409) if a manual change is < 3 days old. An active / left student moved to frozen also notifies coaches in the dashboard bell ("student frozen"; best-effort, never changes the response): its coach when coach_id is set, otherwise every coach of its branch. Already frozen → no change, no notification.',
         security: [{ ApiKeyAuth: [] }],
         requestBody: { required: true, content: { 'application/json': { schema: {
           type: 'object',

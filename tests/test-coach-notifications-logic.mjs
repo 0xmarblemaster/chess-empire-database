@@ -7,10 +7,12 @@
  *  - notificationRows: snapshot columns + event (kind / previous_status /
  *    status_history_id) from the shaped student.
  *  - shouldNotifyReactivation: only frozen / left → active.
+ *  - statusChangeNotificationKind: reactivated / frozen / null matrix (no
+ *    'left' kind).
  *  - notifyCoaches: fan-out over a mock adapter; failures (branch lookup or
  *    insert) are swallowed and reported, never thrown.
  *  - index.ts (static): new-student fan-out in the insert() path, reactivation
- *    fan-out in applyStatusChange, upsert on (recipient, status_history_id),
+ *    + freeze fan-out in applyStatusChange, upsert on (recipient, status_history_id),
  *    response shapes unchanged, OpenAPI mentions both.
  *
  * Run: node tests/test-coach-notifications-logic.mjs
@@ -23,10 +25,13 @@ import {
   notificationRows,
   notifyCoaches,
   shouldNotifyReactivation,
+  statusChangeNotificationKind,
   NOTIFICATION_KIND_NEW_STUDENT,
   NOTIFICATION_KIND_REACTIVATED,
+  NOTIFICATION_KIND_FROZEN,
   REACTIVATION_FROM,
 } from '../supabase/functions/students-api/students-logic.mjs';
+import * as logic from '../supabase/functions/students-api/students-logic.mjs';
 
 let passed = 0;
 let failed = 0;
@@ -102,7 +107,11 @@ eq(rows, [{
 }], 'one snapshot row per recipient');
 eq(NOTIFICATION_KIND_NEW_STUDENT, 'new_student', 'kind constant');
 eq(NOTIFICATION_KIND_REACTIVATED, 'reactivated', 'reactivated kind constant');
+eq(NOTIFICATION_KIND_FROZEN, 'frozen', 'frozen kind constant');
+assert(!('NOTIFICATION_KIND_LEFT' in logic), 'no left kind constant');
 eq(REACTIVATION_FROM, ['frozen', 'left'], 'reactivation source statuses');
+const fr = notificationRows(s1, [COACH], { kind: NOTIFICATION_KIND_FROZEN, previous_status: 'active', status_history_id: HIST })[0];
+eq([fr.kind, fr.previous_status, fr.status_history_id], ['frozen', 'active', HIST], 'frozen row carries kind / previous_status / status_history_id');
 const re = notificationRows(s1, [COACH], { kind: NOTIFICATION_KIND_REACTIVATED, previous_status: 'frozen', status_history_id: HIST })[0];
 eq([re.kind, re.previous_status, re.status_history_id], ['reactivated', 'frozen', HIST], 'reactivated row carries kind / previous_status / status_history_id');
 eq([re.student_name, re.assigned_coach_name, re.branch_name], ['Aisulu Nurlanova', 'Askhat Serikov', 'Gagarin Park'], 'reactivated row keeps the snapshots');
@@ -115,6 +124,17 @@ for (const [prev, target, want] of [
   ['active', 'frozen', false], ['frozen', 'frozen', false], ['left', 'frozen', false],
 ]) {
   eq(shouldNotifyReactivation(prev, target), want, `${prev} → ${target}`);
+}
+
+console.log('\n=== statusChangeNotificationKind ======================================\n');
+for (const [prev, target, want] of [
+  ['active', 'frozen', 'frozen'], ['left', 'frozen', 'frozen'],
+  ['frozen', 'active', 'reactivated'], ['left', 'active', 'reactivated'],
+  ['active', 'left', null], ['frozen', 'left', null],
+  ['active', 'active', null], ['frozen', 'frozen', null], ['left', 'left', null],
+  [null, 'active', null], [undefined, 'active', null],
+]) {
+  eq(statusChangeNotificationKind(prev, target), want, `${prev} → ${target} ⇒ ${want}`);
 }
 const r2 = notificationRows(student({ student_code: undefined, branch: null }), [COACH, COACH_JUNCTION]);
 eq(r2.map((r) => r.recipient_coach_id), [COACH, COACH_JUNCTION], 'rows follow recipient order');
@@ -201,7 +221,20 @@ const quiet = async (fn) => {
   try { await quiet(() => notifyCoaches(db, s1, { kind: 'reactivated', previous_status: 'frozen', status_history_id: HIST })); } catch { threw = true; }
   assert(!threw, 'reactivation insert failure does not throw');
 }
-assert(errors.length === 4, `each failure logged with console.error (${errors.length})`);
+{
+  const db = mockDb();
+  const r = await notifyCoaches(db, s1, { kind: 'frozen', previous_status: 'active', status_history_id: HIST });
+  eq(r, { sent: 1 }, 'freeze with coach → that coach only');
+  assert(db.calls.insert[0].every((x) => x.kind === 'frozen' && x.previous_status === 'active' && x.status_history_id === HIST),
+    'frozen rows carry the event');
+}
+{
+  const db = mockDb({ failInsert: true });
+  let threw = false;
+  try { await quiet(() => notifyCoaches(db, s1, { kind: 'frozen', previous_status: 'left', status_history_id: HIST })); } catch { threw = true; }
+  assert(!threw, 'frozen insert failure does not throw');
+}
+assert(errors.length === 5, `each failure logged with console.error (${errors.length})`);
 
 console.log('\n=== index.ts wiring (static) ==========================================\n');
 const ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -210,19 +243,22 @@ const insertBlock = INDEX.slice(INDEX.indexOf('async insert(row'), INDEX.indexOf
 const applyBlock = INDEX.slice(INDEX.indexOf('async function applyStatusChange('), INDEX.indexOf('// ─── Handlers'));
 const adapter = INDEX.slice(INDEX.indexOf('function notificationDb('), INDEX.indexOf('async function applyStatusChange('));
 const imports = INDEX.slice(0, INDEX.indexOf("from './students-logic.mjs'"));
-assert(/\bnotifyCoaches,/.test(imports) && /\bshouldNotifyReactivation,/.test(imports), 'notifyCoaches + shouldNotifyReactivation imported');
+assert(/\bnotifyCoaches,/.test(imports) && /\bstatusChangeNotificationKind,/.test(imports), 'notifyCoaches + statusChangeNotificationKind imported');
+assert(!/shouldNotifyReactivation/.test(INDEX), 'index.ts no longer uses the reactivation-only check');
+assert(!/NOTIFICATION_KIND_LEFT|'left' \| |\| 'left'/.test(INDEX), 'no left kind / left target in index.ts');
+assert(/target: 'active' \| 'frozen',/.test(applyBlock), "applyStatusChange target stays 'active' | 'frozen'");
 assert(!/notifyNewStudent/.test(INDEX), 'old notifyNewStudent no longer used');
 eq((INDEX.match(/await notifyCoaches\(/g) || []).length, 2, 'fan-out called in exactly two places');
 assert(/await notifyCoaches\(notificationDb\(ctx\), student, \{\s*kind: NOTIFICATION_KIND_NEW_STUDENT, status_history_id: hist\.id,\s*\}\)/.test(insertBlock),
   'new-student fan-out lives in the insert() path with status_history_id');
 assert(insertBlock.indexOf('student_status_history') < insertBlock.indexOf('notifyCoaches('),
   'new-student fan-out runs after the student + status history writes succeeded');
-assert(/if \(shouldNotifyReactivation\(prev, target\)\) \{\s*await notifyCoaches\(notificationDb\(ctx\), updated, \{\s*kind: NOTIFICATION_KIND_REACTIVATED, previous_status: prev, status_history_id: row\.id,/.test(applyBlock),
-  'applyStatusChange notifies on reactivation with prev + history row id');
-assert(applyBlock.indexOf("from('student_status_history')\n    .insert") < applyBlock.indexOf('shouldNotifyReactivation('),
-  'reactivation fan-out runs after the status update + history insert');
-assert(applyBlock.indexOf('refused: true') < applyBlock.indexOf('shouldNotifyReactivation(')
-  && applyBlock.indexOf('changed: false') < applyBlock.indexOf('shouldNotifyReactivation('),
+assert(/const kind = statusChangeNotificationKind\(prev, target\)\s*if \(kind\) \{\s*await notifyCoaches\(notificationDb\(ctx\), updated, \{\s*kind, previous_status: prev, status_history_id: row\.id,/.test(applyBlock),
+  'applyStatusChange notifies (reactivated or frozen) with kind + prev + history row id — freeze path therefore notifies');
+assert(applyBlock.indexOf("from('student_status_history')\n    .insert") < applyBlock.indexOf('statusChangeNotificationKind('),
+  'status-change fan-out runs after the status update + history insert');
+assert(applyBlock.indexOf('refused: true') < applyBlock.indexOf('statusChangeNotificationKind(')
+  && applyBlock.indexOf('changed: false') < applyBlock.indexOf('statusChangeNotificationKind('),
   'refused / no-op paths return before any notification');
 assert(/const updated = shape\(upd\)/.test(applyBlock), 'reactivation snapshots the UPDATED student');
 assert(/return \{ changed: true, student: updated, status_history_id: row\.id, chesster_poke: poke \}/.test(applyBlock),
@@ -234,6 +270,7 @@ assert(/coach_branches\(branch_id\)/.test(adapter), 'branch coaches include coac
 assert(/return \{ row: student, status_history_id: hist\.id \}/.test(insertBlock), 'insert() still returns { row, status_history_id }');
 assert(/A NEW student \(201 only\) — and a matched frozen or left student reactivated here — also notifies coaches/.test(INDEX),
   'OpenAPI create summary mentions both notifications');
+assert(/Freeze a student\.[^']*notifies coaches in the dashboard bell/.test(INDEX), 'OpenAPI freeze summary mentions the notification');
 assert(/Activate \(unfreeze\) a student\.[^']*notifies coaches in the dashboard bell/.test(INDEX), 'OpenAPI activate summary mentions the notification');
 
 console.log(`\n${passed} passed, ${failed} failed`);

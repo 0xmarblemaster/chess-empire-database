@@ -44,7 +44,14 @@ assert(/id\s+UUID PRIMARY KEY DEFAULT gen_random_uuid\(\)/.test(table), 'uuid pr
 assert(/recipient_coach_id\s+UUID NOT NULL REFERENCES coaches\(id\) ON DELETE CASCADE/.test(table), 'recipient → coaches ON DELETE CASCADE');
 assert(/student_id\s+UUID NOT NULL REFERENCES students\(id\) ON DELETE CASCADE/.test(table), 'student → students ON DELETE CASCADE');
 assert(/kind\s+TEXT NOT NULL DEFAULT 'new_student'/.test(table), "kind default 'new_student'");
-assert(/CHECK \(kind IN \('new_student', 'reactivated'\)\)/.test(table), "kind CHECK (new_student, reactivated)");
+assert(/CHECK \(kind IN \('new_student', 'reactivated', 'frozen'\)\)/.test(table), "kind CHECK (new_student, reactivated, frozen)");
+const kindChecks = [...CODE.matchAll(/CHECK \(kind IN \(([^)]*)\)\)/g)].map((m) => m[1]);
+assert(kindChecks.length === 2 && kindChecks.every((k) => k === "'new_student', 'reactivated', 'frozen'"),
+    'every kind CHECK (table + re-assert) lists exactly the 3 kinds');
+assert(!/'left'/.test(kindChecks.join()) && !/kind 'left'/.test(SQL), "no 'left' notification kind");
+assert(/ALTER TABLE coach_notifications DROP CONSTRAINT IF EXISTS coach_notifications_kind_check;/.test(CODE),
+    'kind CHECK re-asserted idempotently');
+assert(/kind 'frozen'/.test(SQL), 'header documents the frozen kind');
 assert(/previous_status\s+TEXT,/.test(table), 'previous_status TEXT nullable');
 assert(/status_history_id\s+UUID NOT NULL REFERENCES student_status_history\(id\) ON DELETE CASCADE/.test(table),
     'status_history_id → student_status_history ON DELETE CASCADE, NOT NULL');
@@ -103,10 +110,11 @@ console.log('\nVerify script');
 assert(/READ-ONLY/.test(VERIFY), 'verify header says read-only');
 assert(!/\b(INSERT|UPDATE|DELETE|ALTER|CREATE|DROP|GRANT|REVOKE|TRUNCATE)\b/i.test(VCODE.replace(/'[^']*'/g, "''")), 'verify script is SELECT-only (outside string literals)');
 for (const c of ['rls enabled', 'unique (recipient_coach_id, status_history_id)',
-    'old unique (recipient_coach_id, student_id, kind) gone', 'kind check (new_student, reactivated)',
+    'old unique (recipient_coach_id, student_id, kind) gone', 'kind check (new_student, reactivated, frozen; no left)',
     'event columns (previous_status, status_history_id NOT NULL)', 'only SELECT policies (2)', 'no write grants for anon / authenticated', 'security definer helpers']) {
     assert(VERIFY.includes(`'${c}'`), `verify checks ${c}`);
 }
+assert(/LIKE '%''frozen''%'/.test(VERIFY) && /NOT LIKE '%''left''%'/.test(VERIFY), "verify: CHECK has 'frozen', not 'left'");
 
 console.log(`\n${passed} passed, ${failed} failed`);
 process.exit(failed ? 1 : 0);

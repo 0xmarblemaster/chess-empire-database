@@ -7,7 +7,8 @@
  *    viewer's own students, badge count / 99+, «Сегодня» / «Вчера» times.
  *  - Kinds: reactivated cards titled by previous_status (frozen / left) in
  *    en / ru / kk with the cn-item--reactivated modifier; unknown kind falls
- *    back to the new-student title.
+ *    back to the new-student title. Frozen cards («Ученик заморожен») get
+ *    cn-item--frozen and only «Карточка»; there is no 'left' kind.
  *  - i18n: every notifications.* key in en / kk / ru; RU copy = mockup A.
  *  - Wiring: script + stylesheet tags in admin-v2.html, coach-only activation,
  *    mark-read RPC, 60s poll + visibilitychange, no auto-read on open.
@@ -152,8 +153,35 @@ assert(cn.titleKey({ kind: 'reactivated', previous_status: 'frozen' }) === 'noti
 const CSS = read('coach-notifications.css');
 assert(/\.cn-item--reactivated\.unread \{[^}]*background:[^}]*box-shadow: inset 3px 0 0 #d97706/.test(CSS), 'amber accent for unread reactivated');
 
+console.log('\n=== frozen kind =======================================================\n');
+const FROZEN_TITLES = { ru: 'Ученик заморожен · AmoCRM', en: 'Student frozen · AmoCRM', kk: 'Оқушы мұздатылды · AmoCRM' };
+const frozenKindN = { ...base, kind: 'frozen', previous_status: 'active' };
+for (const [lang, title] of Object.entries(FROZEN_TITLES)) {
+    const m = load(lang);
+    assert(m.renderItem(frozenKindN, ME, NOW).includes(`● ${title}`), `${lang}: frozen → «${title}»`);
+    assert(m.renderItem({ ...frozenKindN, previous_status: 'left' }, ME, NOW).includes(`● ${title}`), `${lang}: left → frozen uses the same title`);
+    assert(m.renderItem({ ...frozenKindN, read_at: at(2, 12, 0) }, ME, NOW).includes(`<div class="cn-t1">${title}</div>`), `${lang}: read frozen keeps its title`);
+}
+const frHtml = cn.renderItem(frozenKindN, ME, NOW);
+assert(/class="cn-item unread cn-item--frozen"/.test(frHtml), 'unread frozen item has the cn-item--frozen modifier');
+assert(/class="cn-item read cn-item--frozen"/.test(cn.renderItem({ ...frozenKindN, read_at: at(2, 12, 0) }, ME, NOW)), 'read frozen item keeps the modifier');
+assert(!frHtml.includes('data-action="schedule"') && frHtml.includes('data-action="card">Карточка</button>'),
+    'frozen card: only «Карточка», no «В расписание»');
+assert(frHtml.includes('<span>Тренер</span><span>Вы — Асхат Сериков</span>') && frHtml.includes('<span>Филиал</span><span>Gagarin Park</span>')
+    && frHtml.includes('Сегодня, 11:42 · CE-00812'), 'frozen card keeps coach / branch / time + code rows');
+assert(cn.titleKey({ kind: 'frozen', previous_status: 'active' }) === 'notifications.studentFrozen', 'titleKey frozen');
+const evilFr = cn.renderItem({ ...evil, kind: 'frozen', previous_status: 'active' }, ME, NOW);
+assert(!/<script|<b>|<i>|<u>|"><x/.test(evilFr), 'frozen item escapes every snapshot field');
+assert(/\.cn-item--frozen\.unread \{[^}]*background:[^}]*box-shadow: inset 3px 0 0 #3b82f6/.test(CSS), 'cool blue accent for unread frozen');
+
+console.log('\n=== no left kind ======================================================\n');
+const leftKind = cn.renderItem({ ...base, kind: 'left', previous_status: 'active' }, ME, NOW);
+assert(leftKind.includes('● Новый ученик · из AmoCRM') && !/cn-item--left/.test(leftKind), "kind 'left' is unknown → new-student fallback, no modifier");
+assert(!/cn-item--left/.test(CSS) && !/cn-item--left|'left'\]|kind === 'left'/.test(SRC), 'no left kind in script / CSS');
+assert(['en', 'kk', 'ru'].every((l) => !('notifications.studentLeft' in translations[l])), 'no studentLeft string in en / kk / ru');
+
 console.log('\n=== i18n ==============================================================\n');
-const KEYS = ['title', 'markAllRead', 'newStudentFromAmo', 'backFromFreeze', 'formerReturned', 'coach', 'branch', 'you', 'noCoach', 'today', 'yesterday', 'toSchedule', 'card', 'empty'];
+const KEYS = ['title', 'markAllRead', 'newStudentFromAmo', 'backFromFreeze', 'formerReturned', 'studentFrozen', 'coach', 'branch', 'you', 'noCoach', 'today', 'yesterday', 'toSchedule', 'card', 'empty'];
 for (const k of KEYS) {
     const key = `notifications.${k}`;
     assert(['en', 'kk', 'ru'].every((l) => typeof translations[l][key] === 'string' && translations[l][key]), `${key} in en / kk / ru`);
