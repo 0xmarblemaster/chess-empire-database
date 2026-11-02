@@ -6,11 +6,16 @@
  * moved back to active (kind reactivated), or a student is frozen (kind
  * frozen); this script shows them to the signed-in coach: a
  * bell with an unread counter in the mobile header and top-right on desktop,
- * and a panel listing the latest notifications. Admins get no bell.
+ * and a panel listing the latest notifications.
  *
  *   - Opening the panel never marks anything read; clicking an item or one of
  *     its buttons marks that item read; «Прочитать все» marks all (RPC
  *     mark_coach_notifications_read — the only client write path).
+ *   - Admins get a read-only view of every coach's notifications, one card per
+ *     event (dedupeEvents); their read state lives only in localStorage and
+ *     never touches the RPC (an admin login may share a coach's email).
+ *   - The panel opens by itself when unread notifications newer than the last
+ *     auto-open arrive (shouldAutoOpen, marker in localStorage).
  *   - Polls every 60s and when the tab becomes visible again.
  *   - All text is escaped (escapeHtml) before it reaches innerHTML.
  *
@@ -22,6 +27,7 @@
     'use strict';
 
     const LIMIT = 100;
+    const ADMIN_LIMIT = 500;
     // The bell only lists unread notifications from the last 7 days; read ones
     // drop out at once and older unread ones expire from the list and badge.
     const WINDOW_DAYS = 7;
@@ -29,7 +35,11 @@
     const POLL_MS = 60000;
     // Rollout gate: the bell only shows for coaches of these branches (null =
     // every branch). Server side: COACH_NOTIFY_BRANCH_IDS in students-api.
-    const ENABLED_BRANCH_IDS = ['b146c01e-4a37-440e-84e7-4540358a21b9', '0b631805-16b9-4d9e-bbda-d595865cb96d']; // Halyk Arena, Online
+    const ENABLED_BRANCH_IDS = null;
+    // Admin read state: { [status_history_id]: isoTime }, pruned after 8 days.
+    const ADMIN_SEEN_KEY = 'cn-admin-seen-v1';
+    const SEEN_KEEP_MS = 8 * 24 * 60 * 60 * 1000;
+    const AUTOPEN_KEY = 'cn-autopen-v1:';
 
     function tr(key, params) {
         const fn = typeof t === 'function' ? t : (typeof window !== 'undefined' && window.t);
@@ -61,6 +71,46 @@
     function visibleNotifications(list, now) {
         const since = windowStart(now).getTime();
         return (list || []).filter((n) => !n.read_at && new Date(n.created_at).getTime() >= since);
+    }
+
+    // One event fans out to several coaches (rows share status_history_id):
+    // keep the first (newest) row per event.
+    function dedupeEvents(list) {
+        const seen = new Set();
+        return (list || []).filter((n) => {
+            if (!n.status_history_id) return true;
+            if (seen.has(n.status_history_id)) return false;
+            seen.add(n.status_history_id);
+            return true;
+        });
+    }
+
+    const eventKey = (n) => n.status_history_id || n.id;
+
+    // Admin unread = deduped events of the last 7 days not in seenMap.
+    function adminUnseen(list, seenMap, now) {
+        const since = windowStart(now).getTime();
+        return dedupeEvents(list).filter((n) => new Date(n.created_at).getTime() >= since
+            && !(seenMap && seenMap[eventKey(n)]));
+    }
+
+    function pruneSeen(seenMap, now) {
+        const since = (now ? new Date(now) : new Date()).getTime() - SEEN_KEEP_MS;
+        const out = {};
+        for (const [k, v] of Object.entries(seenMap || {})) {
+            if (new Date(v).getTime() >= since) out[k] = v;
+        }
+        return out;
+    }
+
+    // Open when the newest unread item is newer than the last auto-open.
+    function shouldAutoOpen(visibleUnread, markerIso) {
+        const times = (visibleUnread || []).map((n) => new Date(n.created_at).getTime()).filter((x) => !isNaN(x));
+        if (!times.length) return { open: false, marker: markerIso || null };
+        const newest = Math.max(...times);
+        const marker = markerIso ? new Date(markerIso).getTime() : NaN;
+        if (!isNaN(marker) && newest <= marker) return { open: false, marker: markerIso };
+        return { open: true, marker: new Date(newest).toISOString() };
     }
 
     // True when any of the coach's branches is enabled (null → all).
@@ -163,9 +213,34 @@
 
     const BELL_SVG = '<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/></svg>';
 
-    const state = { coachId: null, list: [], unread: 0, open: false, bells: [], panel: null, backdrop: null, timer: null };
+    const state = {
+        coachId: null, admin: false, raw: [], seen: {}, list: [], unread: 0,
+        open: false, bells: [], panel: null, backdrop: null, timer: null,
+    };
 
     function sb() { return window.supabaseClient; }
+
+    // localStorage may throw (private mode): failure = nothing stored.
+    function storeGet(key) {
+        try { return window.localStorage.getItem(key); } catch (e) { return null; }
+    }
+
+    function storeSet(key, value) {
+        try { window.localStorage.setItem(key, value); } catch (e) { /* ignore */ }
+    }
+
+    function loadSeen() {
+        try {
+            const v = JSON.parse(storeGet(ADMIN_SEEN_KEY) || '{}');
+            return v && typeof v === 'object' && !Array.isArray(v) ? v : {};
+        } catch (e) {
+            return {};
+        }
+    }
+
+    function saveSeen() { storeSet(ADMIN_SEEN_KEY, JSON.stringify(state.seen)); }
+
+    function autoOpenKey() { return AUTOPEN_KEY + (state.coachId || 'admin'); }
 
     function makeBell(className) {
         const btn = document.createElement('button');
@@ -216,10 +291,34 @@
         if (state.open) state.panel.innerHTML = renderPanel(state.list, state.coachId);
     }
 
+    // Admin: the panel rows are the unseen events, shown as unread cards.
+    function applyAdminSeen() {
+        state.list = adminUnseen(state.raw, state.seen).map((n) => ({ ...n, read_at: null }));
+        state.unread = state.list.length;
+    }
+
+    function maybeAutoOpen() {
+        const { open, marker } = shouldAutoOpen(visibleNotifications(state.list), storeGet(autoOpenKey()));
+        if (!open) return;
+        storeSet(autoOpenKey(), marker);
+        if (!state.open) openPanel();
+    }
+
     async function refresh() {
-        if (!state.coachId) return;
+        if (!state.coachId && !state.admin) return;
         try {
             const since = windowStart().toISOString();
+            if (state.admin) {
+                const res = await sb().from('coach_notifications').select('*')
+                    .gte('created_at', since)
+                    .order('created_at', { ascending: false }).limit(ADMIN_LIMIT);
+                if (res.error) throw res.error;
+                state.raw = res.data || [];
+                applyAdminSeen();
+                render();
+                maybeAutoOpen();
+                return;
+            }
             const [list, count] = await Promise.all([
                 sb().from('coach_notifications').select('*')
                     .eq('recipient_coach_id', state.coachId)
@@ -234,12 +333,24 @@
             state.list = list.data || [];
             state.unread = count.count || 0;
             render();
+            maybeAutoOpen();
         } catch (e) {
             console.error('coach notifications: load failed', e);
         }
     }
 
+    // Admin read state is device-local: never the RPC (it would mark the
+    // notifications of a coach who shares the admin's email).
+    function markSeen(ids) {
+        const now = new Date().toISOString();
+        state.list.filter((n) => !ids || ids.includes(n.id)).forEach((n) => { state.seen[eventKey(n)] = now; });
+        saveSeen();
+        applyAdminSeen();
+        render();
+    }
+
     async function markRead(ids) {
+        if (state.admin) return markSeen(ids);
         const now = new Date().toISOString();
         const targets = state.list.filter((n) => !n.read_at && (!ids || ids.includes(n.id)));
         if (!targets.length && ids) return;
@@ -308,17 +419,27 @@
             console.error('coach notifications: role lookup failed', e);
             return;
         }
-        if (!info || !info.coachId) return;
-        const { data: coach, error } = await sb().from('coaches')
-            .select('branch_id, coach_branches(branch_id)').eq('id', info.coachId).maybeSingle();
-        if (error) {
-            console.error('coach notifications: branch lookup failed', error);
+        if (!info) return;
+        if (info.coachId) {
+            if (ENABLED_BRANCH_IDS !== null) {
+                const { data: coach, error } = await sb().from('coaches')
+                    .select('branch_id, coach_branches(branch_id)').eq('id', info.coachId).maybeSingle();
+                if (error) {
+                    console.error('coach notifications: branch lookup failed', error);
+                    return;
+                }
+                const branchIds = [coach && coach.branch_id, ...((coach && coach.coach_branches) || []).map((b) => b.branch_id)]
+                    .filter(Boolean);
+                if (!bellEnabledFor(branchIds, ENABLED_BRANCH_IDS)) return;
+            }
+            state.coachId = info.coachId;
+        } else if (info.isAdmin) {
+            state.admin = true;
+            state.seen = pruneSeen(loadSeen());
+            saveSeen();
+        } else {
             return;
         }
-        const branchIds = [coach && coach.branch_id, ...((coach && coach.coach_branches) || []).map((b) => b.branch_id)]
-            .filter(Boolean);
-        if (!bellEnabledFor(branchIds, ENABLED_BRANCH_IDS)) return;
-        state.coachId = info.coachId;
         mount();
         await refresh();
         state.timer = setInterval(refresh, POLL_MS);
@@ -327,7 +448,7 @@
     const api = {
         escapeHtml, initials, unreadCount, badgeText, coachLabel, titleKey,
         formatDay, formatWhen, renderItem, renderPanel, visibleNotifications, WINDOW_DAYS,
-        bellEnabledFor, ENABLED_BRANCH_IDS,
+        bellEnabledFor, ENABLED_BRANCH_IDS, dedupeEvents, adminUnseen, pruneSeen, shouldAutoOpen,
     };
 
     if (typeof window !== 'undefined' && typeof document !== 'undefined') {

@@ -10,10 +10,13 @@
  *    back to the new-student title. Frozen cards («Ученик заморожен») get
  *    cn-item--frozen and only «Карточка»; there is no 'left' kind.
  *  - i18n: every notifications.* key in en / kk / ru; RU copy = mockup A.
- *  - Rollout gate: bellEnabledFor (Halyk Arena + Online by default) and init()
- *    loads the coach's branches before mounting the bell.
- *  - Wiring: script + stylesheet tags in admin-v2.html, coach-only activation,
- *    mark-read RPC, 60s poll + visibilitychange, no auto-read on open.
+ *  - Rollout gate: bellEnabledFor (null = every branch by default); init()
+ *    skips the branch lookup when ENABLED_BRANCH_IDS is null.
+ *  - Admin bell: dedupeEvents, adminUnseen, pruneSeen; admin mark-read is
+ *    localStorage-only (never the RPC); init() mounts for admins.
+ *  - Auto pop-up: shouldAutoOpen marker logic + refresh wiring.
+ *  - Wiring: script + stylesheet tags in admin-v2.html, mark-read RPC,
+ *    60s poll + visibilitychange, no auto-read on open.
  *
  * Run: node tests/test-coach-notifications-frontend.js
  */
@@ -216,14 +219,16 @@ console.log('\n=== branch rollout gate =========================================
 const HALYK = 'b146c01e-4a37-440e-84e7-4540358a21b9';
 const ONLINE = '0b631805-16b9-4d9e-bbda-d595865cb96d';
 const DEBUT = '99999999-9999-4999-8999-999999999999';
-assert(JSON.stringify(cn.ENABLED_BRANCH_IDS) === JSON.stringify([HALYK, ONLINE]), 'enabled branches = Halyk Arena + Online');
-assert(cn.bellEnabledFor([ONLINE], cn.ENABLED_BRANCH_IDS) === true, 'Online-only coach → bell');
-assert(cn.bellEnabledFor([HALYK], cn.ENABLED_BRANCH_IDS) === true, 'Halyk-only coach → bell');
-assert(cn.bellEnabledFor([ONLINE, HALYK], cn.ENABLED_BRANCH_IDS) === true, 'Halyk + Online coach → bell');
-assert(cn.bellEnabledFor([DEBUT], cn.ENABLED_BRANCH_IDS) === false, 'Debut-only coach → no bell');
-assert(cn.bellEnabledFor([DEBUT], null) === true, 'null enabled → every coach');
-assert(cn.bellEnabledFor([], cn.ENABLED_BRANCH_IDS) === false, 'coach with no branches → no bell');
+const LIST = [HALYK, ONLINE];
+assert(cn.ENABLED_BRANCH_IDS === null, 'ENABLED_BRANCH_IDS === null (every branch)');
+assert(cn.bellEnabledFor([DEBUT], cn.ENABLED_BRANCH_IDS) === true, 'Debut-only coach → bell');
+assert(cn.bellEnabledFor([], cn.ENABLED_BRANCH_IDS) === true, 'coach with no branches → bell');
+assert(cn.bellEnabledFor([ONLINE], LIST) === true, 'list kept working: Online coach under [Halyk, Online] → bell');
+assert(cn.bellEnabledFor([DEBUT], LIST) === false, 'list kept working: Debut coach under [Halyk, Online] → no bell');
+assert(cn.bellEnabledFor([], LIST) === false, 'list kept working: no branches → no bell');
 const initFn = SRC.slice(SRC.indexOf('async function init()'), SRC.indexOf('const api = {'));
+assert(/if \(ENABLED_BRANCH_IDS !== null\) \{[\s\S]*from\('coaches'\)[\s\S]*\}\s*state\.coachId = info\.coachId;/.test(initFn),
+    'branch lookup skipped entirely when ENABLED_BRANCH_IDS === null');
 assert(/from\('coaches'\)\s*\.select\('branch_id, coach_branches\(branch_id\)'\)\.eq\('id', info\.coachId\)\.maybeSingle\(\)/.test(initFn),
     "init loads the coach's branch_id + coach_branches");
 assert(/if \(error\) \{[^}]*console\.error[^}]*return;/.test(initFn), 'branch lookup error → log and no bell');
@@ -231,13 +236,58 @@ assert(/if \(!bellEnabledFor\(branchIds, ENABLED_BRANCH_IDS\)\) return;/.test(in
 assert(initFn.indexOf('bellEnabledFor(') < initFn.indexOf('mount()')
     && initFn.indexOf('bellEnabledFor(') < initFn.indexOf('setInterval('), 'gate runs before mount() and polling');
 
+console.log('\n=== admin bell ========================================================\n');
+const H1 = 'h1', H2 = 'h2';
+const ev = (id, hist, d, h, extra = {}) => ({ ...base, id, status_history_id: hist, created_at: at(d, h, 0), ...extra });
+const fan = [ev('a1', H1, 2, 12), ev('a2', H1, 2, 12, { read_at: at(2, 13, 0) }), ev('b1', H2, 2, 10), ev('x1', null, 2, 9), ev('x2', null, 2, 8)];
+assert(JSON.stringify(cn.dedupeEvents(fan).map((n) => n.id)) === JSON.stringify(['a1', 'b1', 'x1', 'x2']),
+    'dedupeEvents keeps the first row per status_history_id, rows without one kept');
+assert(cn.dedupeEvents([]).length === 0 && cn.dedupeEvents(null).length === 0, 'dedupeEvents empty / null');
+const old = ev('o1', 'h-old', 25, 10);
+old.created_at = new Date(2026, 9, 25, 10).toISOString();
+const unseen = cn.adminUnseen([...fan, old], {}, NOW).map((n) => n.id);
+assert(JSON.stringify(unseen) === JSON.stringify(['a1', 'b1', 'x1', 'x2']), 'adminUnseen dedupes and drops > 7 days');
+assert(!cn.adminUnseen(fan, { [H1]: at(2, 14, 0) }, NOW).some((n) => n.status_history_id === H1), 'adminUnseen hides seen events');
+assert(cn.adminUnseen(fan, { [H1]: at(2, 14, 0) }, NOW).length === 3, 'other events still unseen');
+assert(cn.adminUnseen([ev('r1', H2, 2, 12, { read_at: at(2, 13, 0) })], {}, NOW).length === 1, 'coach read_at does not hide it from the admin');
+const pruned = cn.pruneSeen({ fresh: at(1, 10, 0), edge: new Date(NOW.getTime() - 8 * 864e5).toISOString(), stale: new Date(2026, 9, 20).toISOString() }, NOW);
+assert('fresh' in pruned && 'edge' in pruned && !('stale' in pruned), 'pruneSeen drops entries older than 8 days');
+assert(JSON.stringify(cn.pruneSeen(null, NOW)) === '{}', 'pruneSeen(null) → {}');
+assert(/const ADMIN_SEEN_KEY = 'cn-admin-seen-v1';/.test(SRC), 'admin seen key cn-admin-seen-v1');
+assert(/\.select\('\*'\)\s*\.gte\('created_at', since\)\s*\.order\('created_at', \{ ascending: false \}\)\.limit\(ADMIN_LIMIT\)/.test(SRC)
+    && /const ADMIN_LIMIT = 500;/.test(SRC), 'admin query: all rows of 7 days, newest first, limit 500, no read_at filter');
+const markSeenFn = SRC.slice(SRC.indexOf('function markSeen('), SRC.indexOf('async function markRead('));
+assert(markSeenFn.length > 0 && !/rpc|mark_coach_notifications_read|\.update\(/.test(markSeenFn), 'admin mark-read never calls the RPC');
+assert(/saveSeen\(\)/.test(markSeenFn), 'admin mark-read writes localStorage');
+const markReadFn = SRC.slice(SRC.indexOf('async function markRead('), SRC.indexOf('function toggle()'));
+assert(/^\s*if \(state\.admin\) return markSeen\(ids\);/m.test(markReadFn)
+    && markReadFn.indexOf('state.admin') < markReadFn.indexOf('.rpc('), 'markRead diverts admins before the RPC');
+assert(!/if \(!info \|\| !info\.coachId\) return;/.test(initFn), 'init() no longer returns early for admins');
+assert(/else if \(info\.isAdmin\) \{\s*state\.admin = true;/.test(initFn) && initFn.indexOf('state.admin = true') < initFn.indexOf('mount()'),
+    'admins mount the bell');
+assert(/try \{ return window\.localStorage\.getItem\(key\); \} catch/.test(SRC) && /try \{ window\.localStorage\.setItem\(key, value\); \} catch/.test(SRC),
+    'localStorage wrapped in try/catch');
+
+console.log('\n=== auto pop-up =======================================================\n');
+const u = [ev('a', H1, 2, 12), ev('b', H2, 2, 10)];
+assert(JSON.stringify(cn.shouldAutoOpen([], at(1, 0, 0))) === JSON.stringify({ open: false, marker: at(1, 0, 0) }), 'no unread → no open');
+assert(cn.shouldAutoOpen([], null).open === false, 'no unread, no marker → no open');
+assert(JSON.stringify(cn.shouldAutoOpen(u, at(2, 11, 0))) === JSON.stringify({ open: true, marker: at(2, 12, 0) }), 'newer than marker → open, marker = newest');
+assert(cn.shouldAutoOpen(u, at(2, 12, 0)).open === false, 'equal to marker → no open');
+assert(cn.shouldAutoOpen(u, at(2, 13, 0)).open === false, 'older than marker → no open');
+assert(JSON.stringify(cn.shouldAutoOpen(u, null)) === JSON.stringify({ open: true, marker: at(2, 12, 0) }), 'null marker → open');
+assert(/const AUTOPEN_KEY = 'cn-autopen-v1:';/.test(SRC) && /AUTOPEN_KEY \+ \(state\.coachId \|\| 'admin'\)/.test(SRC), 'marker key per coach / admin');
+const autoFn = SRC.slice(SRC.indexOf('function maybeAutoOpen()'), SRC.indexOf('async function refresh()'));
+assert(/storeSet\(autoOpenKey\(\), marker\);/.test(autoFn) && /if \(!state\.open\) openPanel\(\);/.test(autoFn), 'auto-open stores marker and uses openPanel()');
+const refreshFn = SRC.slice(SRC.indexOf('async function refresh()'), SRC.indexOf('function markSeen('));
+assert((refreshFn.match(/maybeAutoOpen\(\);/g) || []).length === 2, 'auto-open checked after admin and coach refresh');
+
 console.log('\n=== wiring ============================================================\n');
 const tagIdx = HTML.search(/<script src="coach-notifications\.js(\?v=\d+)?"><\/script>/);
 assert(tagIdx !== -1, 'script tag in admin-v2.html');
 assert(tagIdx > HTML.indexOf('<script src="auth-helpers.js'), 'loaded after auth-helpers.js');
 assert(/<link rel="stylesheet" href="coach-notifications\.css(\?v=\d+)?">/.test(HTML), 'stylesheet linked');
 assert(fs.existsSync(path.join(ROOT, 'coach-notifications.css')), 'stylesheet exists');
-assert(/if \(!info \|\| !info\.coachId\) return;/.test(SRC), 'activates only for a coach (getRoleInfo coachId)');
 assert(/\.mobile-header-actions/.test(SRC), 'bell in the mobile header actions');
 assert(/rpc\('mark_coach_notifications_read', \{ ids: ids \|\| null \}\)/.test(SRC), 'marks read through the RPC');
 assert(!/from\('coach_notifications'\)[^;]*\.(update|insert|delete|upsert)\(/.test(SRC), 'no direct table writes');
