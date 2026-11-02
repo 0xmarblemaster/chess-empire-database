@@ -112,8 +112,21 @@ const panel = cn.renderPanel(list, ME, NOW);
 assert(panel.includes('<h3>Уведомления</h3>'), 'panel title');
 assert(panel.includes('data-action="read-all">Прочитать все</button>'), '«Прочитать все» when unread exist');
 assert(!cn.renderPanel([list[2]], ME, NOW).includes('read-all'), 'no «Прочитать все» when all read');
-assert(cn.renderPanel([], ME, NOW).includes('Пока нет уведомлений'), 'empty state');
-assert((panel.match(/class="cn-item /g) || []).length === 3, 'one item per notification');
+assert(cn.renderPanel([], ME, NOW).includes('Нет новых уведомлений'), 'empty state');
+assert((panel.match(/class="cn-item /g) || []).length === 2, 'panel lists unread only (read item hidden)');
+assert(!/class="cn-item read/.test(panel), 'no read items in the panel');
+assert(cn.renderPanel([list[2]], ME, NOW).includes('Нет новых уведомлений'), 'all read → empty state');
+
+console.log('\n=== 7-day window ======================================================\n');
+assert(cn.WINDOW_DAYS === 7, 'window is 7 days');
+const day6 = { ...base, id: 'w6', created_at: new Date(2026, 9, 27, 15, 30).toISOString() };
+const day8 = { ...base, id: 'w8', created_at: new Date(2026, 9, 25, 15, 0).toISOString() };
+const vis = cn.visibleNotifications([base, day6, day8, list[2]], NOW).map((n) => n.id);
+assert(vis.includes(base.id) && vis.includes('w6'), 'unread within 7 days visible');
+assert(!vis.includes('w8'), 'unread older than 7 days hidden');
+assert(!vis.includes('n3'), 'read hidden');
+assert(cn.renderPanel([day8], ME, NOW).includes('Нет новых уведомлений'), 'only-old-unread → empty state');
+assert(!cn.renderPanel([day8], ME, NOW).includes('read-all'), 'no «Прочитать все» for hidden old items');
 
 const en = load('en');
 assert(en.renderItem(base, ME, NOW).includes('You — Асхат Сериков'), 'EN prefix «You — »');
@@ -209,7 +222,8 @@ assert(/rpc\('mark_coach_notifications_read', \{ ids: ids \|\| null \}\)/.test(S
 assert(!/from\('coach_notifications'\)[^;]*\.(update|insert|delete|upsert)\(/.test(SRC), 'no direct table writes');
 assert(/const POLL_MS = 60000;/.test(SRC) && /setInterval\(refresh, POLL_MS\)/.test(SRC), 'polls every 60s');
 assert(/visibilitychange/.test(SRC), 'refreshes on visibilitychange');
-assert(/const LIMIT = 30;/.test(SRC) && /\.limit\(LIMIT\)/.test(SRC), 'latest 30 notifications');
+assert((SRC.match(/\.is\('read_at', null\)\.gte\('created_at', since\)/g) || []).length === 2, 'list + badge queries: unread & last 7 days');
+assert(/const LIMIT = 100;/.test(SRC) && /\.limit\(LIMIT\)/.test(SRC), 'up to 100 unread notifications');
 const openFn = SRC.slice(SRC.indexOf('function openPanel()'), SRC.indexOf('function close()'));
 assert(openFn.length > 0 && !/markRead/.test(openFn), 'opening the panel does not mark read');
 assert(/navigateToAttendanceStudent\(studentId\)/.test(SRC) && /viewStudent\(n\.student_id\)/.test(SRC),

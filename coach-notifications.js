@@ -21,7 +21,11 @@
 (function () {
     'use strict';
 
-    const LIMIT = 30;
+    const LIMIT = 100;
+    // The bell only lists unread notifications from the last 7 days; read ones
+    // drop out at once and older unread ones expire from the list and badge.
+    const WINDOW_DAYS = 7;
+    const WINDOW_MS = WINDOW_DAYS * 24 * 60 * 60 * 1000;
     const POLL_MS = 60000;
 
     function tr(key, params) {
@@ -45,6 +49,15 @@
 
     function unreadCount(list) {
         return (list || []).filter((n) => !n.read_at).length;
+    }
+
+    function windowStart(now) {
+        return new Date((now ? new Date(now) : new Date()).getTime() - WINDOW_MS);
+    }
+
+    function visibleNotifications(list, now) {
+        const since = windowStart(now).getTime();
+        return (list || []).filter((n) => !n.read_at && new Date(n.created_at).getTime() >= since);
     }
 
     function badgeText(count) {
@@ -126,10 +139,11 @@
     }
 
     function renderPanel(list, viewerCoachId, now) {
-        const items = (list || []).length
-            ? list.map((n) => renderItem(n, viewerCoachId, now)).join('')
+        const shown = visibleNotifications(list, now);
+        const items = shown.length
+            ? shown.map((n) => renderItem(n, viewerCoachId, now)).join('')
             : `<div class="cn-empty">${escapeHtml(tr('notifications.empty'))}</div>`;
-        const markAll = unreadCount(list)
+        const markAll = shown.length
             ? `<button type="button" class="cn-mark-all" data-action="read-all">${escapeHtml(tr('notifications.markAllRead'))}</button>`
             : '';
         return `<div class="cn-ph"><h3>${escapeHtml(tr('notifications.title'))}</h3>${markAll}</div>`
@@ -196,12 +210,15 @@
     async function refresh() {
         if (!state.coachId) return;
         try {
+            const since = windowStart().toISOString();
             const [list, count] = await Promise.all([
                 sb().from('coach_notifications').select('*')
                     .eq('recipient_coach_id', state.coachId)
+                    .is('read_at', null).gte('created_at', since)
                     .order('created_at', { ascending: false }).limit(LIMIT),
                 sb().from('coach_notifications').select('id', { count: 'exact', head: true })
-                    .eq('recipient_coach_id', state.coachId).is('read_at', null),
+                    .eq('recipient_coach_id', state.coachId)
+                    .is('read_at', null).gte('created_at', since),
             ]);
             if (list.error) throw list.error;
             if (count.error) throw count.error;
@@ -291,7 +308,7 @@
 
     const api = {
         escapeHtml, initials, unreadCount, badgeText, coachLabel, titleKey,
-        formatDay, formatWhen, renderItem, renderPanel,
+        formatDay, formatWhen, renderItem, renderPanel, visibleNotifications, WINDOW_DAYS,
     };
 
     if (typeof window !== 'undefined' && typeof document !== 'undefined') {

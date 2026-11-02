@@ -33,7 +33,7 @@ const translations = {
         "notifications.yesterday": "Yesterday",
         "notifications.toSchedule": "Add to schedule",
         "notifications.card": "Profile",
-        "notifications.empty": "No notifications yet",
+        "notifications.empty": "No new notifications",
         // Common
         "common.brand": "Chess Empire",
         "common.brand.full": "Chess Empire - Student Database",
@@ -1298,7 +1298,7 @@ const translations = {
         "notifications.yesterday": "Кеше",
         "notifications.toSchedule": "Кестеге қосу",
         "notifications.card": "Карточка",
-        "notifications.empty": "Әзірге хабарландыру жоқ",
+        "notifications.empty": "Жаңа хабарландыру жоқ",
         "common.brand": "Chess Empire",
         "common.brand.full": "Chess Empire - Оқушылар базасы",
         "common.login": "Кіру",
@@ -2509,7 +2509,7 @@ const translations = {
         "notifications.yesterday": "Вчера",
         "notifications.toSchedule": "В расписание",
         "notifications.card": "Карточка",
-        "notifications.empty": "Пока нет уведомлений",
+        "notifications.empty": "Нет новых уведомлений",
         // Common
         "common.brand": "Шахматная Империя",
         "common.brand.full": "Шахматная Империя — база учеников",
