@@ -10,7 +10,7 @@
  *    back to the new-student title. Frozen cards («Ученик заморожен») get
  *    cn-item--frozen and only «Карточка»; there is no 'left' kind.
  *  - i18n: every notifications.* key in en / kk / ru; RU copy = mockup A.
- *  - Rollout gate: bellEnabledFor (Halyk Arena only by default) and init()
+ *  - Rollout gate: bellEnabledFor (Halyk Arena + Online by default) and init()
  *    loads the coach's branches before mounting the bell.
  *  - Wiring: script + stylesheet tags in admin-v2.html, coach-only activation,
  *    mark-read RPC, 60s poll + visibilitychange, no auto-read on open.
@@ -214,9 +214,10 @@ for (const [k, v] of Object.entries(RU)) {
 
 console.log('\n=== branch rollout gate ================================================\n');
 const HALYK = 'b146c01e-4a37-440e-84e7-4540358a21b9';
-const ONLINE = '33333333-3333-4333-8333-333333333333';
+const ONLINE = '0b631805-16b9-4d9e-bbda-d595865cb96d';
 const DEBUT = '99999999-9999-4999-8999-999999999999';
-assert(JSON.stringify(cn.ENABLED_BRANCH_IDS) === JSON.stringify([HALYK]), 'enabled branches = Halyk Arena only');
+assert(JSON.stringify(cn.ENABLED_BRANCH_IDS) === JSON.stringify([HALYK, ONLINE]), 'enabled branches = Halyk Arena + Online');
+assert(cn.bellEnabledFor([ONLINE], cn.ENABLED_BRANCH_IDS) === true, 'Online-only coach → bell');
 assert(cn.bellEnabledFor([HALYK], cn.ENABLED_BRANCH_IDS) === true, 'Halyk-only coach → bell');
 assert(cn.bellEnabledFor([ONLINE, HALYK], cn.ENABLED_BRANCH_IDS) === true, 'Halyk + Online coach → bell');
 assert(cn.bellEnabledFor([DEBUT], cn.ENABLED_BRANCH_IDS) === false, 'Debut-only coach → no bell');

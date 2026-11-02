@@ -12,7 +12,7 @@
  *  - notifyCoaches: fan-out over a mock adapter; failures (branch lookup or
  *    insert) are swallowed and reported, never thrown.
  *  - Rollout gate: parseNotifyBranches (COACH_NOTIFY_BRANCH_IDS),
- *    notificationsEnabledFor, notifyCoaches opts.branches (Halyk Arena only
+ *    notificationsEnabledFor, notifyCoaches opts.branches (Halyk Arena + Online
  *    by default; gated branches never touch the db).
  *  - index.ts (static): new-student fan-out in the insert() path, reactivation
  *    + freeze fan-out in applyStatusChange, upsert on (recipient, status_history_id),
@@ -244,12 +244,14 @@ assert(errors.length === 5, `each failure logged with console.error (${errors.le
 
 console.log('\n=== branch rollout gate =============================================\n');
 const HALYK = 'b146c01e-4a37-440e-84e7-4540358a21b9';
+const ONLINE = '0b631805-16b9-4d9e-bbda-d595865cb96d';
+const DEFAULT = [HALYK, ONLINE];
 const DEBUT = '99999999-9999-4999-8999-999999999999';
-eq(DEFAULT_NOTIFY_BRANCH_IDS, [HALYK], 'default allow-list = Halyk Arena only');
-eq(parseNotifyBranches(undefined), [HALYK], 'unset → Halyk default');
-eq(parseNotifyBranches(null), [HALYK], 'null → Halyk default');
-eq(parseNotifyBranches('   '), [HALYK], 'blank → Halyk default');
-eq(parseNotifyBranches(''), [HALYK], 'empty → Halyk default');
+eq(DEFAULT_NOTIFY_BRANCH_IDS, DEFAULT, 'default allow-list = Halyk Arena + Online');
+eq(parseNotifyBranches(undefined), DEFAULT, 'unset → Halyk + Online default');
+eq(parseNotifyBranches(null), DEFAULT, 'null → Halyk + Online default');
+eq(parseNotifyBranches('   '), DEFAULT, 'blank → Halyk + Online default');
+eq(parseNotifyBranches(''), DEFAULT, 'empty → Halyk + Online default');
 eq(parseNotifyBranches('*'), null, "'*' → null (all branches)");
 eq(parseNotifyBranches(` ${HALYK} , ${DEBUT},, `), [HALYK, DEBUT], 'list trimmed, empties dropped');
 eq(parseNotifyBranches('off'), [], "'off' → nobody");
@@ -257,6 +259,8 @@ eq(parseNotifyBranches('none'), [], "'none' → nobody");
 assert(notificationsEnabledFor(DEBUT, null), 'null allow-list → every branch enabled');
 assert(notificationsEnabledFor(HALYK, [HALYK]), 'Halyk enabled under [Halyk]');
 assert(!notificationsEnabledFor(DEBUT, [HALYK]), 'Debut disabled under [Halyk]');
+assert(notificationsEnabledFor(ONLINE, DEFAULT), 'Online enabled under default');
+assert(!notificationsEnabledFor(DEBUT, DEFAULT), 'Debut disabled under default');
 assert(!notificationsEnabledFor(HALYK, []), 'nobody enabled under []');
 {
   const db = mockDb();
