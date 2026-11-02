@@ -10,6 +10,8 @@
  *    back to the new-student title. Frozen cards («Ученик заморожен») get
  *    cn-item--frozen and only «Карточка»; there is no 'left' kind.
  *  - i18n: every notifications.* key in en / kk / ru; RU copy = mockup A.
+ *  - Rollout gate: bellEnabledFor (Halyk Arena only by default) and init()
+ *    loads the coach's branches before mounting the bell.
  *  - Wiring: script + stylesheet tags in admin-v2.html, coach-only activation,
  *    mark-read RPC, 60s poll + visibilitychange, no auto-read on open.
  *
@@ -209,6 +211,24 @@ const RU = {
 for (const [k, v] of Object.entries(RU)) {
     assert(translations.ru[`notifications.${k}`] === v, `ru notifications.${k} = «${v}» (mockup)`);
 }
+
+console.log('\n=== branch rollout gate ================================================\n');
+const HALYK = 'b146c01e-4a37-440e-84e7-4540358a21b9';
+const ONLINE = '33333333-3333-4333-8333-333333333333';
+const DEBUT = '99999999-9999-4999-8999-999999999999';
+assert(JSON.stringify(cn.ENABLED_BRANCH_IDS) === JSON.stringify([HALYK]), 'enabled branches = Halyk Arena only');
+assert(cn.bellEnabledFor([HALYK], cn.ENABLED_BRANCH_IDS) === true, 'Halyk-only coach → bell');
+assert(cn.bellEnabledFor([ONLINE, HALYK], cn.ENABLED_BRANCH_IDS) === true, 'Halyk + Online coach → bell');
+assert(cn.bellEnabledFor([DEBUT], cn.ENABLED_BRANCH_IDS) === false, 'Debut-only coach → no bell');
+assert(cn.bellEnabledFor([DEBUT], null) === true, 'null enabled → every coach');
+assert(cn.bellEnabledFor([], cn.ENABLED_BRANCH_IDS) === false, 'coach with no branches → no bell');
+const initFn = SRC.slice(SRC.indexOf('async function init()'), SRC.indexOf('const api = {'));
+assert(/from\('coaches'\)\s*\.select\('branch_id, coach_branches\(branch_id\)'\)\.eq\('id', info\.coachId\)\.maybeSingle\(\)/.test(initFn),
+    "init loads the coach's branch_id + coach_branches");
+assert(/if \(error\) \{[^}]*console\.error[^}]*return;/.test(initFn), 'branch lookup error → log and no bell');
+assert(/if \(!bellEnabledFor\(branchIds, ENABLED_BRANCH_IDS\)\) return;/.test(initFn), 'disabled branch → return before mount');
+assert(initFn.indexOf('bellEnabledFor(') < initFn.indexOf('mount()')
+    && initFn.indexOf('bellEnabledFor(') < initFn.indexOf('setInterval('), 'gate runs before mount() and polling');
 
 console.log('\n=== wiring ============================================================\n');
 const tagIdx = HTML.search(/<script src="coach-notifications\.js(\?v=\d+)?"><\/script>/);

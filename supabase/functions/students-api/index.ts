@@ -65,6 +65,7 @@ import {
   coachList,
   createStudent as createStudentFlow,
   notifyCoaches,
+  parseNotifyBranches,
   statusChangeNotificationKind,
   NOTIFICATION_KIND_NEW_STUDENT,
   validateSurvivalPush,
@@ -270,6 +271,10 @@ async function resolveStudent(
   return { error: 'invalid_input' }
 }
 
+// Branches whose students notify coaches (rollout gate; default Halyk Arena,
+// '*' = all, 'off' = none) — see parseNotifyBranches.
+const NOTIFY_BRANCHES = parseNotifyBranches(Deno.env.get('COACH_NOTIFY_BRANCH_IDS'))
+
 // coach_notifications adapter for notifyCoaches (students-logic.mjs).
 function notificationDb(ctx: Ctx) {
   return {
@@ -337,7 +342,7 @@ async function applyStatusChange(
   if (kind) {
     await notifyCoaches(notificationDb(ctx), updated, {
       kind, previous_status: prev, status_history_id: row.id,
-    })
+    }, { branches: NOTIFY_BRANCHES })
   }
 
   const poke = await pokeChesster(student.id, target)
@@ -411,7 +416,7 @@ async function createStudent(ctx: Ctx): Promise<Response> {
       const student = shape(inserted)
       await notifyCoaches(notificationDb(ctx), student, {
         kind: NOTIFICATION_KIND_NEW_STUDENT, status_history_id: hist.id,
-      })
+      }, { branches: NOTIFY_BRANCHES })
       return { row: student, status_history_id: hist.id }
     },
     activate: (student: ReturnType<typeof shape>) => applyStatusChange(ctx, student, 'active'),

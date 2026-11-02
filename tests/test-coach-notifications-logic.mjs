@@ -11,6 +11,9 @@
  *    'left' kind).
  *  - notifyCoaches: fan-out over a mock adapter; failures (branch lookup or
  *    insert) are swallowed and reported, never thrown.
+ *  - Rollout gate: parseNotifyBranches (COACH_NOTIFY_BRANCH_IDS),
+ *    notificationsEnabledFor, notifyCoaches opts.branches (Halyk Arena only
+ *    by default; gated branches never touch the db).
  *  - index.ts (static): new-student fan-out in the insert() path, reactivation
  *    + freeze fan-out in applyStatusChange, upsert on (recipient, status_history_id),
  *    response shapes unchanged, OpenAPI mentions both.
@@ -30,6 +33,9 @@ import {
   NOTIFICATION_KIND_REACTIVATED,
   NOTIFICATION_KIND_FROZEN,
   REACTIVATION_FROM,
+  DEFAULT_NOTIFY_BRANCH_IDS,
+  parseNotifyBranches,
+  notificationsEnabledFor,
 } from '../supabase/functions/students-api/students-logic.mjs';
 import * as logic from '../supabase/functions/students-api/students-logic.mjs';
 
@@ -236,6 +242,46 @@ const quiet = async (fn) => {
 }
 assert(errors.length === 5, `each failure logged with console.error (${errors.length})`);
 
+console.log('\n=== branch rollout gate =============================================\n');
+const HALYK = 'b146c01e-4a37-440e-84e7-4540358a21b9';
+const DEBUT = '99999999-9999-4999-8999-999999999999';
+eq(DEFAULT_NOTIFY_BRANCH_IDS, [HALYK], 'default allow-list = Halyk Arena only');
+eq(parseNotifyBranches(undefined), [HALYK], 'unset → Halyk default');
+eq(parseNotifyBranches(null), [HALYK], 'null → Halyk default');
+eq(parseNotifyBranches('   '), [HALYK], 'blank → Halyk default');
+eq(parseNotifyBranches(''), [HALYK], 'empty → Halyk default');
+eq(parseNotifyBranches('*'), null, "'*' → null (all branches)");
+eq(parseNotifyBranches(` ${HALYK} , ${DEBUT},, `), [HALYK, DEBUT], 'list trimmed, empties dropped');
+eq(parseNotifyBranches('off'), [], "'off' → nobody");
+eq(parseNotifyBranches('none'), [], "'none' → nobody");
+assert(notificationsEnabledFor(DEBUT, null), 'null allow-list → every branch enabled');
+assert(notificationsEnabledFor(HALYK, [HALYK]), 'Halyk enabled under [Halyk]');
+assert(!notificationsEnabledFor(DEBUT, [HALYK]), 'Debut disabled under [Halyk]');
+assert(!notificationsEnabledFor(HALYK, []), 'nobody enabled under []');
+{
+  const db = mockDb();
+  const r = await notifyCoaches(db, { ...s1, branch_id: HALYK }, {}, { branches: [HALYK] });
+  eq(r, { sent: 1 }, 'Halyk student under [Halyk] → sends');
+}
+{
+  let touched = false;
+  const db = new Proxy({}, { get() { touched = true; return async () => []; } });
+  const r = await notifyCoaches(db, student({ branch_id: DEBUT }), {}, { branches: [HALYK] });
+  eq(r, { sent: 0, skipped: 'branch_disabled' }, 'Debut student under [Halyk] → 0 sent, branch_disabled');
+  assert(!touched, 'gated student → db adapter never touched');
+}
+{
+  const db = mockDb();
+  const r = await notifyCoaches(db, { ...s1, branch_id: DEBUT }, {}, { branches: null });
+  eq(r, { sent: 1 }, "Debut student under null ('*') → sends");
+}
+{
+  const db = mockDb();
+  const r = await notifyCoaches(db, { ...s1, branch_id: HALYK }, {}, { branches: [] });
+  eq(r, { sent: 0, skipped: 'branch_disabled' }, "[] ('off') → nobody notified");
+  eq(db.calls.insert.length, 0, "[] ('off') → no insert");
+}
+
 console.log('\n=== index.ts wiring (static) ==========================================\n');
 const ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), '..');
 const INDEX = fs.readFileSync(path.join(ROOT, 'supabase/functions/students-api/index.ts'), 'utf8');
@@ -249,12 +295,19 @@ assert(!/NOTIFICATION_KIND_LEFT|'left' \| |\| 'left'/.test(INDEX), 'no left kind
 assert(/target: 'active' \| 'frozen',/.test(applyBlock), "applyStatusChange target stays 'active' | 'frozen'");
 assert(!/notifyNewStudent/.test(INDEX), 'old notifyNewStudent no longer used');
 eq((INDEX.match(/await notifyCoaches\(/g) || []).length, 2, 'fan-out called in exactly two places');
-assert(/await notifyCoaches\(notificationDb\(ctx\), student, \{\s*kind: NOTIFICATION_KIND_NEW_STUDENT, status_history_id: hist\.id,\s*\}\)/.test(insertBlock),
+assert(/await notifyCoaches\(notificationDb\(ctx\), student, \{\s*kind: NOTIFICATION_KIND_NEW_STUDENT, status_history_id: hist\.id,\s*\}, \{ branches: NOTIFY_BRANCHES \}\)/.test(insertBlock),
   'new-student fan-out lives in the insert() path with status_history_id');
 assert(insertBlock.indexOf('student_status_history') < insertBlock.indexOf('notifyCoaches('),
   'new-student fan-out runs after the student + status history writes succeeded');
 assert(/const kind = statusChangeNotificationKind\(prev, target\)\s*if \(kind\) \{\s*await notifyCoaches\(notificationDb\(ctx\), updated, \{\s*kind, previous_status: prev, status_history_id: row\.id,/.test(applyBlock),
   'applyStatusChange notifies (reactivated or frozen) with kind + prev + history row id — freeze path therefore notifies');
+const notifyCalls = INDEX.split('await notifyCoaches(').slice(1).map((c) => c.slice(0, c.indexOf(')\n') + 1));
+assert(notifyCalls.length > 0 && notifyCalls.every((c) => /\}, \{ branches: NOTIFY_BRANCHES \}\)/.test(c)),
+  'every notifyCoaches( call passes { branches: NOTIFY_BRANCHES }');
+eq((INDEX.match(/notifyCoaches\(/g) || []).length, (INDEX.match(/\{ branches: NOTIFY_BRANCHES \}/g) || []).length,
+  'notifyCoaches( calls == branches: NOTIFY_BRANCHES args');
+assert(/^const NOTIFY_BRANCHES = parseNotifyBranches\(Deno\.env\.get\('COACH_NOTIFY_BRANCH_IDS'\)\)$/m.test(INDEX)
+  && /\bparseNotifyBranches,/.test(imports), 'NOTIFY_BRANCHES computed once at module load from COACH_NOTIFY_BRANCH_IDS');
 assert(applyBlock.indexOf("from('student_status_history')\n    .insert") < applyBlock.indexOf('statusChangeNotificationKind('),
   'status-change fan-out runs after the status update + history insert');
 assert(applyBlock.indexOf('refused: true') < applyBlock.indexOf('statusChangeNotificationKind(')

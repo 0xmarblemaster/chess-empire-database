@@ -619,12 +619,35 @@ export function notificationRows(student, recipientIds, event = {}) {
   }));
 }
 
+// Rollout gate: branches whose students trigger coach notifications. Halyk
+// Arena only for now; widen via the COACH_NOTIFY_BRANCH_IDS env var.
+export const DEFAULT_NOTIFY_BRANCH_IDS = ['b146c01e-4a37-440e-84e7-4540358a21b9'];
+
+// COACH_NOTIFY_BRANCH_IDS → allow-list: unset / blank → the default, '*' →
+// null (every branch), else comma-separated ids ('off' / 'none' → nobody).
+export function parseNotifyBranches(envValue) {
+  if (envValue == null || String(envValue).trim() === '') return DEFAULT_NOTIFY_BRANCH_IDS;
+  const v = String(envValue).trim();
+  if (v === '*') return null;
+  if (v === 'off' || v === 'none') return [];
+  return v.split(',').map((s) => s.trim()).filter(Boolean);
+}
+
+// allow === null means every branch.
+export function notificationsEnabledFor(branchId, allow) {
+  return allow === null || allow.includes(branchId);
+}
+
 // Best-effort fan-out after a status event (new student / status change).
 // db = { branchCoaches(branchId), insertNotifications(rows) },
-// event = { kind, previous_status, status_history_id }. Never throws: a
-// failure is logged and reported as { sent: 0, error } so the API response is
-// never affected.
-export async function notifyCoaches(db, student, event = {}) {
+// event = { kind, previous_status, status_history_id }, opts.branches = the
+// parseNotifyBranches allow-list (gated on the student's branch; undefined →
+// no gate). Never throws: a failure is logged and reported as
+// { sent: 0, error } so the API response is never affected.
+export async function notifyCoaches(db, student, event = {}, opts = {}) {
+  if (opts.branches !== undefined && !notificationsEnabledFor(student.branch_id, opts.branches)) {
+    return { sent: 0, skipped: 'branch_disabled' };
+  }
   try {
     const coaches = student.coach_id ? [] : await db.branchCoaches(student.branch_id);
     const rows = notificationRows(student, notificationRecipients(student, coaches), event);

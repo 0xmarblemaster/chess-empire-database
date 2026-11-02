@@ -27,6 +27,9 @@
     const WINDOW_DAYS = 7;
     const WINDOW_MS = WINDOW_DAYS * 24 * 60 * 60 * 1000;
     const POLL_MS = 60000;
+    // Rollout gate: the bell only shows for coaches of these branches (null =
+    // every branch). Server side: COACH_NOTIFY_BRANCH_IDS in students-api.
+    const ENABLED_BRANCH_IDS = ['b146c01e-4a37-440e-84e7-4540358a21b9']; // Halyk Arena
 
     function tr(key, params) {
         const fn = typeof t === 'function' ? t : (typeof window !== 'undefined' && window.t);
@@ -58,6 +61,12 @@
     function visibleNotifications(list, now) {
         const since = windowStart(now).getTime();
         return (list || []).filter((n) => !n.read_at && new Date(n.created_at).getTime() >= since);
+    }
+
+    // True when any of the coach's branches is enabled (null → all).
+    function bellEnabledFor(coachBranchIds, enabled) {
+        if (enabled === null) return true;
+        return (coachBranchIds || []).some((id) => enabled.includes(id));
     }
 
     function badgeText(count) {
@@ -300,6 +309,15 @@
             return;
         }
         if (!info || !info.coachId) return;
+        const { data: coach, error } = await sb().from('coaches')
+            .select('branch_id, coach_branches(branch_id)').eq('id', info.coachId).maybeSingle();
+        if (error) {
+            console.error('coach notifications: branch lookup failed', error);
+            return;
+        }
+        const branchIds = [coach && coach.branch_id, ...((coach && coach.coach_branches) || []).map((b) => b.branch_id)]
+            .filter(Boolean);
+        if (!bellEnabledFor(branchIds, ENABLED_BRANCH_IDS)) return;
         state.coachId = info.coachId;
         mount();
         await refresh();
@@ -309,6 +327,7 @@
     const api = {
         escapeHtml, initials, unreadCount, badgeText, coachLabel, titleKey,
         formatDay, formatWhen, renderItem, renderPanel, visibleNotifications, WINDOW_DAYS,
+        bellEnabledFor, ENABLED_BRANCH_IDS,
     };
 
     if (typeof window !== 'undefined' && typeof document !== 'undefined') {
