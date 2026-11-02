@@ -246,11 +246,11 @@ console.log('\n=== branch rollout gate =========================================
 const HALYK = 'b146c01e-4a37-440e-84e7-4540358a21b9';
 const ONLINE = '0b631805-16b9-4d9e-bbda-d595865cb96d';
 const DEBUT = '99999999-9999-4999-8999-999999999999';
-assert(DEFAULT_NOTIFY_BRANCH_IDS === null, 'default allow-list = null (every branch)');
-assert(parseNotifyBranches(undefined) === null, 'unset → null (every branch)');
-assert(parseNotifyBranches(null) === null, 'null → null (every branch)');
-assert(parseNotifyBranches('   ') === null, 'blank → null (every branch)');
-assert(parseNotifyBranches('') === null, 'empty → null (every branch)');
+eq(DEFAULT_NOTIFY_BRANCH_IDS, [HALYK, ONLINE], 'default allow-list = [Halyk, Online]');
+eq(parseNotifyBranches(undefined), [HALYK, ONLINE], 'unset → default');
+eq(parseNotifyBranches(null), [HALYK, ONLINE], 'null → default');
+eq(parseNotifyBranches('   '), [HALYK, ONLINE], 'blank → default');
+eq(parseNotifyBranches(''), [HALYK, ONLINE], 'empty → default');
 eq(parseNotifyBranches('*'), null, "'*' → null (all branches)");
 eq(parseNotifyBranches(` ${HALYK} , ${DEBUT},, `), [HALYK, DEBUT], 'list trimmed, empties dropped');
 eq(parseNotifyBranches('off'), [], "'off' → nobody");
@@ -259,7 +259,8 @@ assert(notificationsEnabledFor(DEBUT, null), 'null allow-list → every branch e
 assert(notificationsEnabledFor(HALYK, [HALYK]), 'Halyk enabled under [Halyk]');
 assert(!notificationsEnabledFor(DEBUT, [HALYK]), 'Debut disabled under [Halyk]');
 assert(notificationsEnabledFor(ONLINE, [HALYK, ONLINE]), 'Online enabled under [Halyk, Online]');
-assert(notificationsEnabledFor(DEBUT, DEFAULT_NOTIFY_BRANCH_IDS), 'Debut enabled under default');
+assert(!notificationsEnabledFor(DEBUT, DEFAULT_NOTIFY_BRANCH_IDS), 'Debut disabled under default');
+assert(notificationsEnabledFor(HALYK, DEFAULT_NOTIFY_BRANCH_IDS), 'Halyk enabled under default');
 assert(!notificationsEnabledFor(HALYK, []), 'nobody enabled under []');
 {
   const db = mockDb();
@@ -281,7 +282,7 @@ assert(!notificationsEnabledFor(HALYK, []), 'nobody enabled under []');
 {
   const db = mockDb();
   const r = await notifyCoaches(db, { ...s1, branch_id: DEBUT }, {}, { branches: parseNotifyBranches(undefined) });
-  eq(r, { sent: 1 }, 'Debut student under the default allow-list → sends');
+  eq(r, { sent: 0, skipped: 'branch_disabled' }, 'Debut student under the default allow-list → skipped');
 }
 {
   const db = mockDb();

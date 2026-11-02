@@ -620,8 +620,11 @@ export function notificationRows(student, recipientIds, event = {}) {
 }
 
 // Rollout gate: branches whose students trigger coach notifications. null =
-// every branch; narrow again via the COACH_NOTIFY_BRANCH_IDS env var.
-export const DEFAULT_NOTIFY_BRANCH_IDS = null;
+// every branch; override via the COACH_NOTIFY_BRANCH_IDS env var ('*' = all).
+export const DEFAULT_NOTIFY_BRANCH_IDS = [
+  'b146c01e-4a37-440e-84e7-4540358a21b9', // Halyk Arena
+  '0b631805-16b9-4d9e-bbda-d595865cb96d', // Online (Aleksandr Olegovich)
+];
 
 // COACH_NOTIFY_BRANCH_IDS → allow-list: unset / blank → the default, '*' →
 // null (every branch), else comma-separated ids ('off' / 'none' → nobody).

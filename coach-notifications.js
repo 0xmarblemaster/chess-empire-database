@@ -35,7 +35,7 @@
     const POLL_MS = 60000;
     // Rollout gate: the bell only shows for coaches of these branches (null =
     // every branch). Server side: COACH_NOTIFY_BRANCH_IDS in students-api.
-    const ENABLED_BRANCH_IDS = null;
+    const ENABLED_BRANCH_IDS = ['b146c01e-4a37-440e-84e7-4540358a21b9', '0b631805-16b9-4d9e-bbda-d595865cb96d']; // Halyk Arena, Online
     // Admin read state: { [status_history_id]: isoTime }, pruned after 8 days.
     const ADMIN_SEEN_KEY = 'cn-admin-seen-v1';
     const SEEN_KEEP_MS = 8 * 24 * 60 * 60 * 1000;
@@ -309,9 +309,10 @@
         try {
             const since = windowStart().toISOString();
             if (state.admin) {
-                const res = await sb().from('coach_notifications').select('*')
-                    .gte('created_at', since)
-                    .order('created_at', { ascending: false }).limit(ADMIN_LIMIT);
+                let q = sb().from('coach_notifications').select('*').gte('created_at', since);
+                // Admins only see events from rolled-out branches.
+                if (ENABLED_BRANCH_IDS !== null) q = q.in('branch_id', ENABLED_BRANCH_IDS);
+                const res = await q.order('created_at', { ascending: false }).limit(ADMIN_LIMIT);
                 if (res.error) throw res.error;
                 state.raw = res.data || [];
                 applyAdminSeen();

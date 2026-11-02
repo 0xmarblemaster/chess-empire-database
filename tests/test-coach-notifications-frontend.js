@@ -220,9 +220,15 @@ const HALYK = 'b146c01e-4a37-440e-84e7-4540358a21b9';
 const ONLINE = '0b631805-16b9-4d9e-bbda-d595865cb96d';
 const DEBUT = '99999999-9999-4999-8999-999999999999';
 const LIST = [HALYK, ONLINE];
-assert(cn.ENABLED_BRANCH_IDS === null, 'ENABLED_BRANCH_IDS === null (every branch)');
-assert(cn.bellEnabledFor([DEBUT], cn.ENABLED_BRANCH_IDS) === true, 'Debut-only coach → bell');
-assert(cn.bellEnabledFor([], cn.ENABLED_BRANCH_IDS) === true, 'coach with no branches → bell');
+assert(JSON.stringify(cn.ENABLED_BRANCH_IDS) === JSON.stringify(LIST), 'ENABLED_BRANCH_IDS = [Halyk, Online]');
+assert(cn.bellEnabledFor([HALYK], cn.ENABLED_BRANCH_IDS) === true, 'Halyk coach → bell');
+assert(cn.bellEnabledFor([DEBUT], cn.ENABLED_BRANCH_IDS) === false, 'Debut-only coach → no bell');
+assert(cn.bellEnabledFor([], cn.ENABLED_BRANCH_IDS) === false, 'coach with no branches → no bell');
+{
+    const refreshFn = SRC.slice(SRC.indexOf('async function refresh()'), SRC.indexOf('async function init()'));
+    assert(/if \(ENABLED_BRANCH_IDS !== null\) q = q\.in\('branch_id', ENABLED_BRANCH_IDS\);/.test(refreshFn),
+        'admin fetch filtered to enabled branches');
+}
 assert(cn.bellEnabledFor([ONLINE], LIST) === true, 'list kept working: Online coach under [Halyk, Online] → bell');
 assert(cn.bellEnabledFor([DEBUT], LIST) === false, 'list kept working: Debut coach under [Halyk, Online] → no bell');
 assert(cn.bellEnabledFor([], LIST) === false, 'list kept working: no branches → no bell');
@@ -254,8 +260,9 @@ const pruned = cn.pruneSeen({ fresh: at(1, 10, 0), edge: new Date(NOW.getTime() 
 assert('fresh' in pruned && 'edge' in pruned && !('stale' in pruned), 'pruneSeen drops entries older than 8 days');
 assert(JSON.stringify(cn.pruneSeen(null, NOW)) === '{}', 'pruneSeen(null) → {}');
 assert(/const ADMIN_SEEN_KEY = 'cn-admin-seen-v1';/.test(SRC), 'admin seen key cn-admin-seen-v1');
-assert(/\.select\('\*'\)\s*\.gte\('created_at', since\)\s*\.order\('created_at', \{ ascending: false \}\)\.limit\(ADMIN_LIMIT\)/.test(SRC)
-    && /const ADMIN_LIMIT = 500;/.test(SRC), 'admin query: all rows of 7 days, newest first, limit 500, no read_at filter');
+assert(/\.select\('\*'\)\.gte\('created_at', since\);/.test(SRC)
+    && /q\.order\('created_at', \{ ascending: false \}\)\.limit\(ADMIN_LIMIT\)/.test(SRC)
+    && /const ADMIN_LIMIT = 500;/.test(SRC), 'admin query: rows of 7 days, newest first, limit 500, no read_at filter');
 const markSeenFn = SRC.slice(SRC.indexOf('function markSeen('), SRC.indexOf('async function markRead('));
 assert(markSeenFn.length > 0 && !/rpc|mark_coach_notifications_read|\.update\(/.test(markSeenFn), 'admin mark-read never calls the RPC');
 assert(/saveSeen\(\)/.test(markSeenFn), 'admin mark-read writes localStorage');
