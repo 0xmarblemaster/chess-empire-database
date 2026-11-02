@@ -61,6 +61,9 @@ body.has-coach-bell .header-actions { margin-right: 12rem; }
 .cn-item { display: flex; gap: 12px; padding: 16px; border-bottom: 1px solid #e2e8f0; cursor: pointer; }
 .cn-item:last-child { border-bottom: none; }
 .cn-item.unread { background: #f0fdfa; box-shadow: inset 3px 0 0 #0d9488; }
+.cn-item--reactivated.unread { background: #fffbeb; box-shadow: inset 3px 0 0 #d97706; }
+.cn-item--reactivated.unread .cn-ava { background: #d97706; }
+.cn-item--reactivated.unread .cn-t1 { color: #b45309; }
 .cn-body { flex: 1; min-width: 0; }
 .cn-ava {
     flex: none; width: 42px; height: 42px; border-radius: 12px;

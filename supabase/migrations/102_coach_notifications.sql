@@ -2,20 +2,28 @@
 --
 -- CONTEXT
 -- -------
--- When AmoCRM creates a NEW student through supabase/functions/students-api
--- (action=create, the insert path — never an existing match), coaches see it
--- in a bell inbox on the dashboard (coach-notifications.js, admin-v2.html).
+-- Coaches see AmoCRM-driven roster events in a bell inbox on the dashboard
+-- (coach-notifications.js, admin-v2.html), written by
+-- supabase/functions/students-api:
+--   * kind 'new_student' — action=create inserted a NEW student (the insert
+--     path, never an existing match); previous_status is NULL.
+--   * kind 'reactivated' — the API moved a student from 'frozen' or 'left' to
+--     'active' (action=activate, or create matching a frozen student);
+--     previous_status is the status it came back from.
 --
 -- Objects:
---   * coach_notifications — one row per (recipient coach, student, kind).
+--   * coach_notifications — one row per (recipient coach, status event).
 --     Recipients (decided in students-logic.mjs notificationRecipients):
 --       student has coach_id → that coach only;
 --       no coach_id          → every coach of the branch (coaches.branch_id or
 --                              a coach_branches row).
 --     Admins get no rows in this phase. student_name / student_code /
---     assigned_coach_* / branch_* are SNAPSHOTS taken at create time, so the
---     inbox reads the same after a rename. The unique key makes a replayed
---     fan-out a no-op (the edge function upserts with ignoreDuplicates).
+--     assigned_coach_* / branch_* are SNAPSHOTS taken at event time, so the
+--     inbox reads the same after a rename. status_history_id is the
+--     student_status_history row of the event; the unique key
+--     (recipient_coach_id, status_history_id) makes a replayed fan-out a no-op
+--     (the edge function upserts with ignoreDuplicates) while a student frozen
+--     → active twice notifies twice.
 --   * coach_notifications_my_coach_ids() — coaches whose email matches the
 --     JWT email case-insensitively (the same resolution as auth-helpers.js
 --     getRoleInfo; coaches.email is lowercased by 048).
@@ -36,7 +44,10 @@ BEGIN;
 CREATE TABLE IF NOT EXISTS coach_notifications (
     id                  UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     recipient_coach_id  UUID NOT NULL REFERENCES coaches(id) ON DELETE CASCADE,
-    kind                TEXT NOT NULL DEFAULT 'new_student',
+    kind                TEXT NOT NULL DEFAULT 'new_student'
+                        CHECK (kind IN ('new_student', 'reactivated')),
+    previous_status     TEXT,
+    status_history_id   UUID NOT NULL REFERENCES student_status_history(id) ON DELETE CASCADE,
     student_id          UUID NOT NULL REFERENCES students(id) ON DELETE CASCADE,
     student_name        TEXT,
     student_code        TEXT,
@@ -47,8 +58,8 @@ CREATE TABLE IF NOT EXISTS coach_notifications (
     source              TEXT NOT NULL DEFAULT 'amocrm',
     created_at          TIMESTAMPTZ NOT NULL DEFAULT now(),
     read_at             TIMESTAMPTZ,
-    CONSTRAINT coach_notifications_recipient_student_kind_key
-        UNIQUE (recipient_coach_id, student_id, kind)
+    CONSTRAINT coach_notifications_recipient_event_key
+        UNIQUE (recipient_coach_id, status_history_id)
 );
 
 CREATE INDEX IF NOT EXISTS coach_notifications_inbox_idx

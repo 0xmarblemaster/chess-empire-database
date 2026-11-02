@@ -1,8 +1,9 @@
 /**
- * Coach notifications — bell inbox for AmoCRM-created students (migration 102).
+ * Coach notifications — bell inbox for AmoCRM roster events (migration 102).
  *
  * students-api writes one coach_notifications row per recipient coach when a
- * NEW student is created; this script shows them to the signed-in coach: a
+ * NEW student is created (kind new_student) or a frozen / left student is
+ * moved back to active (kind reactivated); this script shows them to the signed-in coach: a
  * bell with an unread counter in the mobile header and top-right on desktop,
  * and a panel listing the latest notifications. Admins get no bell.
  *
@@ -59,6 +60,15 @@
         return n.assigned_coach_name;
     }
 
+    // Card title per kind; unknown kinds read as a new student.
+    function titleKey(n) {
+        if (n.kind === 'reactivated') {
+            if (n.previous_status === 'frozen') return 'notifications.backFromFreeze';
+            if (n.previous_status === 'left') return 'notifications.formerReturned';
+        }
+        return 'notifications.newStudentFromAmo';
+    }
+
     const pad = (x) => String(x).padStart(2, '0');
     const dayKey = (d) => `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`;
 
@@ -82,18 +92,20 @@
     function renderItem(n, viewerCoachId, now) {
         const id = escapeHtml(n.id);
         const name = escapeHtml(n.student_name || '—');
+        const title = escapeHtml(tr(titleKey(n)));
+        const mod = n.kind === 'reactivated' ? ' cn-item--reactivated' : '';
         const ava = `<div class="cn-ava">${escapeHtml(initials(n.student_name))}</div>`;
         if (n.read_at) {
             const meta = [formatDay(n.created_at, now), n.branch_name].filter(Boolean).map(escapeHtml).join(' · ');
-            return `<div class="cn-item read" data-id="${id}" data-action="open">${ava}<div class="cn-body">`
-                + `<div class="cn-t1">${escapeHtml(tr('notifications.newStudentFromAmo'))}</div>`
+            return `<div class="cn-item read${mod}" data-id="${id}" data-action="open">${ava}<div class="cn-body">`
+                + `<div class="cn-t1">${title}</div>`
                 + `<div class="cn-name">${name}</div>`
                 + `<div class="cn-meta cn-meta-read">${meta}</div>`
                 + '</div></div>';
         }
         const meta = [formatWhen(n.created_at, now), n.student_code].filter(Boolean).map(escapeHtml).join(' · ');
-        return `<div class="cn-item unread" data-id="${id}" data-action="read">${ava}<div class="cn-body">`
-            + `<div class="cn-t1">● ${escapeHtml(tr('notifications.newStudentFromAmo'))}</div>`
+        return `<div class="cn-item unread${mod}" data-id="${id}" data-action="read">${ava}<div class="cn-body">`
+            + `<div class="cn-t1">● ${title}</div>`
             + `<div class="cn-name">${name}</div>`
             + '<div class="cn-rows">'
             + `<div class="cn-r"><span>${escapeHtml(tr('notifications.coach'))}</span><span>${escapeHtml(coachLabel(n, viewerCoachId))}</span></div>`
@@ -271,7 +283,7 @@
     }
 
     const api = {
-        escapeHtml, initials, unreadCount, badgeText, coachLabel,
+        escapeHtml, initials, unreadCount, badgeText, coachLabel, titleKey,
         formatDay, formatWhen, renderItem, renderPanel,
     };
 

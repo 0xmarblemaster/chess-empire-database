@@ -567,11 +567,20 @@ export async function createStudent(db, input) {
   return { status: 201, body: { ok: true, existing: false, student: r.row, status_history_id: r.status_history_id } };
 }
 
-// ─── Coach notifications (new student, migration 102) ───────────────────────
+// ─── Coach notifications (migration 102) ────────────────────────────────────
 
 export const NOTIFICATION_KIND_NEW_STUDENT = 'new_student';
+export const NOTIFICATION_KIND_REACTIVATED = 'reactivated';
+// Statuses an API activation counts as a "student returned" from.
+export const REACTIVATION_FROM = ['frozen', 'left'];
 
-// Who hears about a NEW student: its coach only when one is assigned, else
+// True only for an API move back to 'active' from frozen / left — freeze,
+// active→active and other transitions never notify.
+export function shouldNotifyReactivation(prevStatus, target) {
+  return target === 'active' && REACTIVATION_FROM.includes(prevStatus);
+}
+
+// Who hears about the student: its coach only when one is assigned, else
 // every coach of its branch (coaches.branch_id ∪ coach_branches, via
 // coachList). Deduped; admins are never recipients.
 export function notificationRecipients(student, branchCoachRows = []) {
@@ -579,12 +588,15 @@ export function notificationRecipients(student, branchCoachRows = []) {
   return [...new Set(coachList(branchCoachRows, student.branch_id).map((c) => c.id))];
 }
 
-// One coach_notifications row per recipient. Names / code are snapshots so the
-// inbox still reads right after the student, coach or branch is renamed.
-export function notificationRows(student, recipientIds) {
+// One coach_notifications row per recipient for one status event. Names / code
+// are snapshots so the inbox still reads right after the student, coach or
+// branch is renamed.
+export function notificationRows(student, recipientIds, event = {}) {
   return recipientIds.map((recipient) => ({
     recipient_coach_id: recipient,
-    kind: NOTIFICATION_KIND_NEW_STUDENT,
+    kind: event.kind || NOTIFICATION_KIND_NEW_STUDENT,
+    previous_status: event.previous_status ?? null,
+    status_history_id: event.status_history_id ?? null,
     student_id: student.id,
     student_name: student.name || null,
     student_code: student.student_code ?? null,
@@ -596,13 +608,15 @@ export function notificationRows(student, recipientIds) {
   }));
 }
 
-// Best-effort fan-out after a NEW student insert. db = { branchCoaches(branchId),
-// insertNotifications(rows) }. Never throws: a failure is logged and reported
-// as { sent: 0, error } so the create response is never affected.
-export async function notifyNewStudent(db, student) {
+// Best-effort fan-out after a status event (new student / reactivation).
+// db = { branchCoaches(branchId), insertNotifications(rows) },
+// event = { kind, previous_status, status_history_id }. Never throws: a
+// failure is logged and reported as { sent: 0, error } so the API response is
+// never affected.
+export async function notifyCoaches(db, student, event = {}) {
   try {
     const coaches = student.coach_id ? [] : await db.branchCoaches(student.branch_id);
-    const rows = notificationRows(student, notificationRecipients(student, coaches));
+    const rows = notificationRows(student, notificationRecipients(student, coaches), event);
     if (rows.length) await db.insertNotifications(rows);
     return { sent: rows.length };
   } catch (e) {

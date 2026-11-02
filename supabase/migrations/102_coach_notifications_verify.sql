@@ -1,6 +1,7 @@
 -- Migration 102 verification — READ-ONLY (SELECTs only, safe to run anytime).
 --
--- Checks the coach_notifications contract: table + unique key + inbox index,
+-- Checks the coach_notifications contract: table + kind CHECK + event columns +
+-- unique key (recipient_coach_id, status_history_id) + inbox index,
 -- RLS enabled, exactly the two SELECT policies (no client INSERT / UPDATE /
 -- DELETE policy), no write grants for anon / authenticated, and the three
 -- SECURITY DEFINER helpers. Every row of the final query must have ok = true.
@@ -13,10 +14,27 @@ WITH checks AS (
            COALESCE((SELECT relrowsecurity FROM pg_class
                      WHERE oid = to_regclass('public.coach_notifications')), false)
     UNION ALL
-    SELECT 'unique (recipient_coach_id, student_id, kind)',
+    SELECT 'unique (recipient_coach_id, status_history_id)',
            EXISTS (SELECT 1 FROM pg_constraint
-                   WHERE conname = 'coach_notifications_recipient_student_kind_key'
+                   WHERE conname = 'coach_notifications_recipient_event_key'
                      AND contype = 'u')
+    UNION ALL
+    SELECT 'old unique (recipient_coach_id, student_id, kind) gone',
+           NOT EXISTS (SELECT 1 FROM pg_constraint
+                       WHERE conname = 'coach_notifications_recipient_student_kind_key')
+    UNION ALL
+    SELECT 'kind check (new_student, reactivated)',
+           EXISTS (SELECT 1 FROM pg_constraint
+                   WHERE conrelid = to_regclass('public.coach_notifications')
+                     AND contype = 'c'
+                     AND pg_get_constraintdef(oid) LIKE '%new_student%'
+                     AND pg_get_constraintdef(oid) LIKE '%reactivated%')
+    UNION ALL
+    SELECT 'event columns (previous_status, status_history_id NOT NULL)',
+           (SELECT count(*) = 2 FROM information_schema.columns
+            WHERE table_name = 'coach_notifications'
+              AND ((column_name = 'previous_status' AND is_nullable = 'YES')
+                OR (column_name = 'status_history_id' AND is_nullable = 'NO')))
     UNION ALL
     SELECT 'inbox index',
            to_regclass('public.coach_notifications_inbox_idx') IS NOT NULL
@@ -44,7 +62,7 @@ WITH checks AS (
 SELECT check_name, ok FROM checks;
 
 -- Recent fan-out (latest 20 rows) for a manual eyeball.
-SELECT created_at, recipient_coach_id, student_code, student_name,
+SELECT created_at, kind, previous_status, recipient_coach_id, student_code, student_name,
        assigned_coach_name, branch_name, read_at
 FROM coach_notifications
 ORDER BY created_at DESC

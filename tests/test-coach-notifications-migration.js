@@ -2,8 +2,9 @@
  * Migration 102 (coach notifications) contract test.
  * Run: node tests/test-coach-notifications-migration.js
  *
- * Content-based: table shape (FKs with ON DELETE CASCADE, defaults, snapshot
- * columns), unique key + inbox index, RLS enabled with SELECT-only policies
+ * Content-based: table shape (FKs with ON DELETE CASCADE, defaults, kind
+ * CHECK, event + snapshot columns), unique key per (recipient, status event) +
+ * inbox index, RLS enabled with SELECT-only policies
  * (own rows via the coach-email helper, all rows for admins), no client
  * INSERT / UPDATE / DELETE, the SECURITY DEFINER mark-read RPC, idempotency,
  * and a SELECT-only verify script.
@@ -33,6 +34,7 @@ function fnBody(name) {
 
 console.log('\nHeader + transaction');
 assert(/^-- Migration 102: coach "new student" notifications/.test(SQL), 'header comment');
+assert(/kind 'reactivated'/.test(SQL) && /\(recipient_coach_id, status_history_id\)/.test(SQL), 'header documents reactivation + event key');
 assert(/^\s*BEGIN;/m.test(CODE) && /COMMIT;\s*$/.test(CODE), 'wrapped in a transaction');
 
 console.log('\nTable');
@@ -42,13 +44,20 @@ assert(/id\s+UUID PRIMARY KEY DEFAULT gen_random_uuid\(\)/.test(table), 'uuid pr
 assert(/recipient_coach_id\s+UUID NOT NULL REFERENCES coaches\(id\) ON DELETE CASCADE/.test(table), 'recipient → coaches ON DELETE CASCADE');
 assert(/student_id\s+UUID NOT NULL REFERENCES students\(id\) ON DELETE CASCADE/.test(table), 'student → students ON DELETE CASCADE');
 assert(/kind\s+TEXT NOT NULL DEFAULT 'new_student'/.test(table), "kind default 'new_student'");
+assert(/CHECK \(kind IN \('new_student', 'reactivated'\)\)/.test(table), "kind CHECK (new_student, reactivated)");
+assert(/previous_status\s+TEXT,/.test(table), 'previous_status TEXT nullable');
+assert(/status_history_id\s+UUID NOT NULL REFERENCES student_status_history\(id\) ON DELETE CASCADE/.test(table),
+    'status_history_id → student_status_history ON DELETE CASCADE, NOT NULL');
 assert(/source\s+TEXT NOT NULL DEFAULT 'amocrm'/.test(table), "source default 'amocrm'");
 assert(/created_at\s+TIMESTAMPTZ NOT NULL DEFAULT now\(\)/.test(table), 'created_at default now()');
 assert(/read_at\s+TIMESTAMPTZ,/.test(table), 'read_at nullable');
 for (const col of ['student_name', 'student_code', 'assigned_coach_id', 'assigned_coach_name', 'branch_id', 'branch_name']) {
     assert(new RegExp(`\\b${col}\\s+(TEXT|UUID)\\b`).test(table), `snapshot column ${col}`);
 }
-assert(/UNIQUE \(recipient_coach_id, student_id, kind\)/.test(table), 'unique (recipient_coach_id, student_id, kind)');
+assert(/CONSTRAINT coach_notifications_recipient_event_key\s+UNIQUE \(recipient_coach_id, status_history_id\)/.test(table),
+    'unique (recipient_coach_id, status_history_id)');
+assert(!/UNIQUE \(recipient_coach_id, student_id, kind\)/.test(CODE) && !/recipient_student_kind_key/.test(CODE),
+    'old unique (recipient_coach_id, student_id, kind) gone');
 assert(/CREATE INDEX IF NOT EXISTS coach_notifications_inbox_idx\s+ON coach_notifications \(recipient_coach_id, read_at, created_at DESC\)/.test(CODE),
     'inbox index (recipient_coach_id, read_at, created_at desc)');
 
@@ -93,7 +102,9 @@ assert(!/\bINSERT\s+INTO\b/i.test(CODE) && !/\bDELETE\s+FROM\b/i.test(CODE), 'mi
 console.log('\nVerify script');
 assert(/READ-ONLY/.test(VERIFY), 'verify header says read-only');
 assert(!/\b(INSERT|UPDATE|DELETE|ALTER|CREATE|DROP|GRANT|REVOKE|TRUNCATE)\b/i.test(VCODE.replace(/'[^']*'/g, "''")), 'verify script is SELECT-only (outside string literals)');
-for (const c of ['rls enabled', 'unique (recipient_coach_id, student_id, kind)', 'only SELECT policies (2)', 'no write grants for anon / authenticated', 'security definer helpers']) {
+for (const c of ['rls enabled', 'unique (recipient_coach_id, status_history_id)',
+    'old unique (recipient_coach_id, student_id, kind) gone', 'kind check (new_student, reactivated)',
+    'event columns (previous_status, status_history_id NOT NULL)', 'only SELECT policies (2)', 'no write grants for anon / authenticated', 'security definer helpers']) {
     assert(VERIFY.includes(`'${c}'`), `verify checks ${c}`);
 }
 

@@ -64,7 +64,10 @@ import {
   parseCoachesParams,
   coachList,
   createStudent as createStudentFlow,
-  notifyNewStudent,
+  notifyCoaches,
+  shouldNotifyReactivation,
+  NOTIFICATION_KIND_NEW_STUDENT,
+  NOTIFICATION_KIND_REACTIVATED,
   validateSurvivalPush,
   parseLeaderboardParams,
   almatyWindowStart,
@@ -268,10 +271,29 @@ async function resolveStudent(
   return { error: 'invalid_input' }
 }
 
+// coach_notifications adapter for notifyCoaches (students-logic.mjs).
+function notificationDb(ctx: Ctx) {
+  return {
+    async branchCoaches(_branchId: string) {
+      // Every coach; notificationRecipients keeps the branch's (branch_id ∪ coach_branches).
+      const { data, error } = await ctx.supabase
+        .from('coaches').select('id, first_name, last_name, branch_id, coach_branches(branch_id)')
+      if (error) throw error
+      return data || []
+    },
+    async insertNotifications(rows: Record<string, unknown>[]) {
+      const { error } = await ctx.supabase.from('coach_notifications')
+        .upsert(rows, { onConflict: 'recipient_coach_id,status_history_id', ignoreDuplicates: true })
+      if (error) throw error
+    },
+  }
+}
+
 // Core status transition shared by freeze / activate and the create-time
 // reactivation. Enforces the 3-day manual guard, no-ops when already in the
-// target status, writes students.status + a typed status_history row, and fires
-// the Chesster poke.
+// target status, writes students.status + a typed status_history row, fires
+// the Chesster poke, and notifies coaches (best-effort) when a frozen / left
+// student comes back to active.
 async function applyStatusChange(
   ctx: Ctx,
   student: ReturnType<typeof shape>,
@@ -311,8 +333,15 @@ async function applyStatusChange(
     .select('id').single()
   if (rErr) throw rErr
 
+  const updated = shape(upd)
+  if (shouldNotifyReactivation(prev, target)) {
+    await notifyCoaches(notificationDb(ctx), updated, {
+      kind: NOTIFICATION_KIND_REACTIVATED, previous_status: prev, status_history_id: row.id,
+    })
+  }
+
   const poke = await pokeChesster(student.id, target)
-  return { changed: true, student: shape(upd), status_history_id: row.id, chesster_poke: poke }
+  return { changed: true, student: updated, status_history_id: row.id, chesster_poke: poke }
 }
 
 // ─── Handlers ───────────────────────────────────────────────────────────────
@@ -380,20 +409,9 @@ async function createStudent(ctx: Ctx): Promise<Response> {
         .select('id').single()
       if (rErr) throw rErr
       const student = shape(inserted)
-      await notifyNewStudent({
-        async branchCoaches(_branchId: string) {
-          // Every coach; notificationRecipients keeps the branch's (branch_id ∪ coach_branches).
-          const { data, error } = await ctx.supabase
-            .from('coaches').select('id, first_name, last_name, branch_id, coach_branches(branch_id)')
-          if (error) throw error
-          return data || []
-        },
-        async insertNotifications(rows: Record<string, unknown>[]) {
-          const { error } = await ctx.supabase.from('coach_notifications')
-            .upsert(rows, { onConflict: 'recipient_coach_id,student_id,kind', ignoreDuplicates: true })
-          if (error) throw error
-        },
-      }, student)
+      await notifyCoaches(notificationDb(ctx), student, {
+        kind: NOTIFICATION_KIND_NEW_STUDENT, status_history_id: hist.id,
+      })
       return { row: student, status_history_id: hist.id }
     },
     activate: (student: ReturnType<typeof shape>) => applyStatusChange(ctx, student, 'active'),
@@ -839,7 +857,7 @@ const OPENAPI_SPEC = {
   paths: {
     '/?action=create': {
       post: {
-        summary: 'Create-or-activate a student. Identity is amocrm_customer_id (Buyer ID), checked first: an id that already belongs to a student returns that student (replays are idempotent). Otherwise every student with the same phone is compared by normalized full name (trim, collapsed spaces, case-insensitive, ё=е): exactly one match → that student (the Buyer ID is linked if it has none); several → 409 ambiguous for manual review; none → a NEW student with the same phone. A matched frozen student is reactivated. A NEW student (201 only) also notifies coaches in the dashboard bell (best-effort, never changes the response): its coach when coach_id is set, otherwise every coach of branch_id. Phone is optional when amocrm_customer_id is given (stored as null — never a placeholder). Nothing is written on any 4xx.',
+        summary: 'Create-or-activate a student. Identity is amocrm_customer_id (Buyer ID), checked first: an id that already belongs to a student returns that student (replays are idempotent). Otherwise every student with the same phone is compared by normalized full name (trim, collapsed spaces, case-insensitive, ё=е): exactly one match → that student (the Buyer ID is linked if it has none); several → 409 ambiguous for manual review; none → a NEW student with the same phone. A matched frozen student is reactivated. A NEW student (201 only) — and a matched frozen student reactivated here — also notifies coaches in the dashboard bell (best-effort, never changes the response): its coach when coach_id is set, otherwise every coach of branch_id. Phone is optional when amocrm_customer_id is given (stored as null — never a placeholder). Nothing is written on any 4xx.',
         security: [{ ApiKeyAuth: [] }],
         requestBody: { required: true, content: { 'application/json': { schema: {
           type: 'object', required: ['full_name', 'branch_id'],
@@ -909,7 +927,7 @@ const OPENAPI_SPEC = {
     },
     '/?action=activate': {
       post: {
-        summary: 'Activate (unfreeze) a student. Refused (409) if a manual change is < 3 days old.',
+        summary: 'Activate (unfreeze) a student. Refused (409) if a manual change is < 3 days old. A frozen / left student moved to active also notifies coaches in the dashboard bell ("student returned"; best-effort, never changes the response): its coach when coach_id is set, otherwise every coach of its branch. Already active → no change, no notification.',
         security: [{ ApiKeyAuth: [] }],
         requestBody: { required: true, content: { 'application/json': { schema: {
           type: 'object',

@@ -5,6 +5,9 @@
  *    escaping of every snapshot field, unread vs read styling (teal unread
  *    item with both buttons; read item collapsed), «Вы — » prefix only for the
  *    viewer's own students, badge count / 99+, «Сегодня» / «Вчера» times.
+ *  - Kinds: reactivated cards titled by previous_status (frozen / left) in
+ *    en / ru / kk with the cn-item--reactivated modifier; unknown kind falls
+ *    back to the new-student title.
  *  - i18n: every notifications.* key in en / kk / ru; RU copy = mockup A.
  *  - Wiring: script + stylesheet tags in admin-v2.html, coach-only activation,
  *    mark-read RPC, 60s poll + visibilitychange, no auto-read on open.
@@ -116,8 +119,41 @@ assert(en.renderItem(base, ME, NOW).includes('You — Асхат Сериков'
 const kk = load('kk');
 assert(kk.renderItem(base, ME, NOW).includes('Сіз — Асхат Сериков'), 'KK prefix «Сіз — »');
 
+console.log('\n=== reactivated kind ==================================================\n');
+const TITLES = {
+    ru: ['Ученик вернулся из заморозки · AmoCRM', 'Выбывший ученик вернулся · AmoCRM', 'Новый ученик · из AmoCRM'],
+    en: ['Student back from freeze · AmoCRM', 'Former student returned · AmoCRM', 'New student · from AmoCRM'],
+    kk: ['Оқушы мұздатудан оралды · AmoCRM', 'Кеткен оқушы қайта оралды · AmoCRM', 'Жаңа оқушы · AmoCRM-нен'],
+};
+const frozenN = { ...base, kind: 'reactivated', previous_status: 'frozen' };
+const leftN = { ...base, kind: 'reactivated', previous_status: 'left' };
+for (const [lang, [frozenT, leftT, newT]] of Object.entries(TITLES)) {
+    const m = load(lang);
+    assert(m.renderItem(frozenN, ME, NOW).includes(`● ${frozenT}`), `${lang}: frozen → «${frozenT}»`);
+    assert(m.renderItem(leftN, ME, NOW).includes(`● ${leftT}`), `${lang}: left → «${leftT}»`);
+    assert(m.renderItem({ ...frozenN, read_at: at(2, 12, 0) }, ME, NOW).includes(`<div class="cn-t1">${frozenT}</div>`), `${lang}: read reactivated keeps its title`);
+    assert(m.renderItem({ ...base, kind: 'mystery' }, ME, NOW).includes(`● ${newT}`), `${lang}: unknown kind → new-student title`);
+    assert(m.renderItem({ ...base, kind: 'reactivated', previous_status: null }, ME, NOW).includes(`● ${newT}`), `${lang}: reactivated without previous_status → new-student title`);
+}
+const reHtml = cn.renderItem(frozenN, ME, NOW);
+assert(/class="cn-item unread cn-item--reactivated"/.test(reHtml), 'unread reactivated item has the modifier class');
+assert(reHtml.includes('<span>Тренер</span><span>Вы — Асхат Сериков</span>') && reHtml.includes('<span>Филиал</span><span>Gagarin Park</span>'),
+    'reactivated card keeps coach + branch rows');
+assert(reHtml.includes('data-action="schedule">') && reHtml.includes('data-action="card">'), 'reactivated card keeps both buttons');
+assert(reHtml.includes('Сегодня, 11:42 · CE-00812'), 'reactivated card keeps time + student_code');
+assert(!/cn-item--reactivated/.test(unread), 'new-student item has no modifier');
+assert(/class="cn-item read cn-item--reactivated"/.test(cn.renderItem({ ...leftN, read_at: at(2, 12, 0) }, ME, NOW)), 'read reactivated item keeps the modifier');
+const evilRe = cn.renderItem({ ...evil, kind: 'reactivated', previous_status: 'left' }, ME, NOW);
+assert(!/<script|<b>|<i>|<u>|"><x/.test(evilRe), 'reactivated item escapes every snapshot field');
+assert(!cn.renderItem({ ...base, kind: '"><script>', previous_status: '<b>' }, ME, NOW).includes('<script'), 'hostile kind / previous_status never rendered');
+assert(cn.titleKey({ kind: 'reactivated', previous_status: 'frozen' }) === 'notifications.backFromFreeze'
+    && cn.titleKey({ kind: 'reactivated', previous_status: 'left' }) === 'notifications.formerReturned'
+    && cn.titleKey({ kind: 'new_student' }) === 'notifications.newStudentFromAmo', 'titleKey per kind');
+const CSS = read('coach-notifications.css');
+assert(/\.cn-item--reactivated\.unread \{[^}]*background:[^}]*box-shadow: inset 3px 0 0 #d97706/.test(CSS), 'amber accent for unread reactivated');
+
 console.log('\n=== i18n ==============================================================\n');
-const KEYS = ['title', 'markAllRead', 'newStudentFromAmo', 'coach', 'branch', 'you', 'noCoach', 'today', 'yesterday', 'toSchedule', 'card', 'empty'];
+const KEYS = ['title', 'markAllRead', 'newStudentFromAmo', 'backFromFreeze', 'formerReturned', 'coach', 'branch', 'you', 'noCoach', 'today', 'yesterday', 'toSchedule', 'card', 'empty'];
 for (const k of KEYS) {
     const key = `notifications.${k}`;
     assert(['en', 'kk', 'ru'].every((l) => typeof translations[l][key] === 'string' && translations[l][key]), `${key} in en / kk / ru`);
