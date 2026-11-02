@@ -567,6 +567,50 @@ export async function createStudent(db, input) {
   return { status: 201, body: { ok: true, existing: false, student: r.row, status_history_id: r.status_history_id } };
 }
 
+// ─── Coach notifications (new student, migration 102) ───────────────────────
+
+export const NOTIFICATION_KIND_NEW_STUDENT = 'new_student';
+
+// Who hears about a NEW student: its coach only when one is assigned, else
+// every coach of its branch (coaches.branch_id ∪ coach_branches, via
+// coachList). Deduped; admins are never recipients.
+export function notificationRecipients(student, branchCoachRows = []) {
+  if (student.coach_id) return [student.coach_id];
+  return [...new Set(coachList(branchCoachRows, student.branch_id).map((c) => c.id))];
+}
+
+// One coach_notifications row per recipient. Names / code are snapshots so the
+// inbox still reads right after the student, coach or branch is renamed.
+export function notificationRows(student, recipientIds) {
+  return recipientIds.map((recipient) => ({
+    recipient_coach_id: recipient,
+    kind: NOTIFICATION_KIND_NEW_STUDENT,
+    student_id: student.id,
+    student_name: student.name || null,
+    student_code: student.student_code ?? null,
+    assigned_coach_id: student.coach_id ?? null,
+    assigned_coach_name: student.coach ?? null,
+    branch_id: student.branch_id ?? null,
+    branch_name: student.branch ?? null,
+    source: 'amocrm',
+  }));
+}
+
+// Best-effort fan-out after a NEW student insert. db = { branchCoaches(branchId),
+// insertNotifications(rows) }. Never throws: a failure is logged and reported
+// as { sent: 0, error } so the create response is never affected.
+export async function notifyNewStudent(db, student) {
+  try {
+    const coaches = student.coach_id ? [] : await db.branchCoaches(student.branch_id);
+    const rows = notificationRows(student, notificationRecipients(student, coaches));
+    if (rows.length) await db.insertNotifications(rows);
+    return { sent: rows.length };
+  } catch (e) {
+    console.error('coach notifications failed for student', student && student.id, e);
+    return { sent: 0, error: String((e && e.message) || e) };
+  }
+}
+
 // ─── Puzzle Rush (survival) ─────────────────────────────────────────────────
 
 // Upper bound for a pushed Puzzle Rush Survival score — anything above is

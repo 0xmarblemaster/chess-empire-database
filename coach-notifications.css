@@ -1,0 +1,96 @@
+/* Coach notifications bell + panel (coach-notifications.js, mockup A). */
+.cn-bell { position: relative; }
+.cn-bell-desktop {
+    position: fixed;
+    top: 1rem;
+    right: 8.25rem; /* left of the fixed .language-dropdown */
+    z-index: 120;
+    width: 40px;
+    height: 40px;
+    border-radius: 10px;
+    display: grid;
+    place-items: center;
+    background: #f8fafc;
+    border: 1px solid #e2e8f0;
+    color: #334155;
+    cursor: pointer;
+}
+.cn-bell-desktop:hover { background: #f0fdfa; color: #0f766e; }
+body.has-coach-bell .header-actions { margin-right: 12rem; }
+.cn-badge {
+    position: absolute;
+    top: -4px;
+    right: -4px;
+    min-width: 18px;
+    height: 18px;
+    border-radius: 9px;
+    background: #ef4444;
+    color: #fff;
+    font-size: 11px;
+    font-weight: 700;
+    line-height: 14px;
+    text-align: center;
+    padding: 0 5px;
+    border: 2px solid #fff;
+}
+.cn-badge[hidden] { display: none; }
+
+.cn-backdrop { position: fixed; inset: 0; z-index: 130; background: transparent; }
+.cn-backdrop[hidden], .cn-panel[hidden] { display: none; }
+.cn-panel {
+    position: fixed;
+    top: 4rem;
+    right: 1.5rem;
+    z-index: 131;
+    width: 400px;
+    max-height: calc(100vh - 6rem);
+    display: flex;
+    flex-direction: column;
+    background: #fff;
+    border-radius: 16px;
+    box-shadow: 0 20px 40px -12px rgba(15, 23, 42, .35);
+    overflow: hidden;
+    font-family: 'Inter', -apple-system, sans-serif;
+    color: #0f172a;
+}
+.cn-ph { display: flex; justify-content: space-between; align-items: center; padding: 14px 16px; border-bottom: 1px solid #e2e8f0; }
+.cn-ph h3 { font-family: 'Outfit', sans-serif; font-size: 17px; font-weight: 700; margin: 0; }
+.cn-mark-all { background: none; border: none; padding: 0; font-size: 12px; font-weight: 600; color: #0d9488; cursor: pointer; }
+.cn-list { overflow-y: auto; }
+.cn-empty { padding: 24px 16px; text-align: center; font-size: 13px; color: #64748b; }
+.cn-item { display: flex; gap: 12px; padding: 16px; border-bottom: 1px solid #e2e8f0; cursor: pointer; }
+.cn-item:last-child { border-bottom: none; }
+.cn-item.unread { background: #f0fdfa; box-shadow: inset 3px 0 0 #0d9488; }
+.cn-body { flex: 1; min-width: 0; }
+.cn-ava {
+    flex: none; width: 42px; height: 42px; border-radius: 12px;
+    background: #0d9488; color: #fff; display: grid; place-items: center;
+    font-family: 'Outfit', sans-serif; font-weight: 700;
+}
+.cn-item.read .cn-ava { background: #e2e8f0; color: #475569; }
+.cn-t1 { font-size: 12px; color: #0f766e; font-weight: 600; margin-bottom: 2px; }
+.cn-item.read .cn-t1 { color: #64748b; }
+.cn-name { font-family: 'Outfit', sans-serif; font-size: 18px; font-weight: 700; line-height: 1.2; overflow-wrap: anywhere; }
+.cn-item.read .cn-name { font-size: 15px; }
+.cn-rows { margin: 10px 0 12px; display: grid; gap: 6px; }
+.cn-r { display: flex; font-size: 13px; }
+.cn-r span:first-child { flex: none; width: 70px; color: #64748b; }
+.cn-r span:last-child { font-weight: 600; color: #1e293b; min-width: 0; overflow-wrap: anywhere; }
+.cn-meta { font-size: 11px; color: #64748b; }
+.cn-meta-read { margin-top: 4px; }
+.cn-acts { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 8px; margin-top: 12px; }
+.cn-btn {
+    height: 36px; border-radius: 10px; font-size: 13px; font-weight: 600;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    border: 1px solid transparent; cursor: pointer;
+}
+.cn-btn-primary { background: #0d9488; color: #fff; }
+.cn-btn-primary:hover { background: #0f766e; }
+.cn-btn-ghost { background: #fff; color: #1e293b; border-color: #e2e8f0; }
+
+@media (max-width: 768px) {
+    .cn-bell-desktop { display: none; }
+    body.has-coach-bell .header-actions { margin-right: 0; }
+    .cn-backdrop { background: rgba(15, 23, 42, .35); }
+    .cn-panel { top: 76px; left: 12px; right: 12px; width: auto; max-height: calc(100vh - 160px); }
+}

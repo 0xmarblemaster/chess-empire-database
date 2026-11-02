@@ -18,6 +18,19 @@ const statusDictionary = {
 
 const translations = {
     en: {
+        // Coach notifications (coach-notifications.js)
+        "notifications.title": "Notifications",
+        "notifications.markAllRead": "Mark all read",
+        "notifications.newStudentFromAmo": "New student · from AmoCRM",
+        "notifications.coach": "Coach",
+        "notifications.branch": "Branch",
+        "notifications.you": "You — {{name}}",
+        "notifications.noCoach": "Not assigned",
+        "notifications.today": "Today",
+        "notifications.yesterday": "Yesterday",
+        "notifications.toSchedule": "Add to schedule",
+        "notifications.card": "Profile",
+        "notifications.empty": "No notifications yet",
         // Common
         "common.brand": "Chess Empire",
         "common.brand.full": "Chess Empire - Student Database",
@@ -1267,6 +1280,19 @@ const translations = {
         "admin.tournaments.invalid_rating": "Rating must be 0 to 3500."
     },
     kk: {
+        // Coach notifications (coach-notifications.js)
+        "notifications.title": "Хабарландырулар",
+        "notifications.markAllRead": "Барлығын оқылды деу",
+        "notifications.newStudentFromAmo": "Жаңа оқушы · AmoCRM-нен",
+        "notifications.coach": "Жаттықтырушы",
+        "notifications.branch": "Филиал",
+        "notifications.you": "Сіз — {{name}}",
+        "notifications.noCoach": "Тағайындалмаған",
+        "notifications.today": "Бүгін",
+        "notifications.yesterday": "Кеше",
+        "notifications.toSchedule": "Кестеге қосу",
+        "notifications.card": "Карточка",
+        "notifications.empty": "Әзірге хабарландыру жоқ",
         "common.brand": "Chess Empire",
         "common.brand.full": "Chess Empire - Оқушылар базасы",
         "common.login": "Кіру",
@@ -2462,6 +2488,19 @@ const translations = {
         "admin.tournaments.invalid_rating": "Рейтинг 0 мен 3500 аралығында болуы керек."
     },
     ru: {
+        // Coach notifications (coach-notifications.js)
+        "notifications.title": "Уведомления",
+        "notifications.markAllRead": "Прочитать все",
+        "notifications.newStudentFromAmo": "Новый ученик · из AmoCRM",
+        "notifications.coach": "Тренер",
+        "notifications.branch": "Филиал",
+        "notifications.you": "Вы — {{name}}",
+        "notifications.noCoach": "Не назначен",
+        "notifications.today": "Сегодня",
+        "notifications.yesterday": "Вчера",
+        "notifications.toSchedule": "В расписание",
+        "notifications.card": "Карточка",
+        "notifications.empty": "Пока нет уведомлений",
         // Common
         "common.brand": "Шахматная Империя",
         "common.brand.full": "Шахматная Империя — база учеников",

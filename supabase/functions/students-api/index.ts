@@ -64,6 +64,7 @@ import {
   parseCoachesParams,
   coachList,
   createStudent as createStudentFlow,
+  notifyNewStudent,
   validateSurvivalPush,
   parseLeaderboardParams,
   almatyWindowStart,
@@ -378,7 +379,22 @@ async function createStudent(ctx: Ctx): Promise<Response> {
         .insert([{ student_id: inserted.id, old_status: null, new_status: 'active', changed_by_type: 'api', source: 'students-api' }])
         .select('id').single()
       if (rErr) throw rErr
-      return { row: shape(inserted), status_history_id: hist.id }
+      const student = shape(inserted)
+      await notifyNewStudent({
+        async branchCoaches(_branchId: string) {
+          // Every coach; notificationRecipients keeps the branch's (branch_id ∪ coach_branches).
+          const { data, error } = await ctx.supabase
+            .from('coaches').select('id, first_name, last_name, branch_id, coach_branches(branch_id)')
+          if (error) throw error
+          return data || []
+        },
+        async insertNotifications(rows: Record<string, unknown>[]) {
+          const { error } = await ctx.supabase.from('coach_notifications')
+            .upsert(rows, { onConflict: 'recipient_coach_id,student_id,kind', ignoreDuplicates: true })
+          if (error) throw error
+        },
+      }, student)
+      return { row: student, status_history_id: hist.id }
     },
     activate: (student: ReturnType<typeof shape>) => applyStatusChange(ctx, student, 'active'),
   }, v.value)
@@ -823,7 +839,7 @@ const OPENAPI_SPEC = {
   paths: {
     '/?action=create': {
       post: {
-        summary: 'Create-or-activate a student. Identity is amocrm_customer_id (Buyer ID), checked first: an id that already belongs to a student returns that student (replays are idempotent). Otherwise every student with the same phone is compared by normalized full name (trim, collapsed spaces, case-insensitive, ё=е): exactly one match → that student (the Buyer ID is linked if it has none); several → 409 ambiguous for manual review; none → a NEW student with the same phone. A matched frozen student is reactivated. Phone is optional when amocrm_customer_id is given (stored as null — never a placeholder). Nothing is written on any 4xx.',
+        summary: 'Create-or-activate a student. Identity is amocrm_customer_id (Buyer ID), checked first: an id that already belongs to a student returns that student (replays are idempotent). Otherwise every student with the same phone is compared by normalized full name (trim, collapsed spaces, case-insensitive, ё=е): exactly one match → that student (the Buyer ID is linked if it has none); several → 409 ambiguous for manual review; none → a NEW student with the same phone. A matched frozen student is reactivated. A NEW student (201 only) also notifies coaches in the dashboard bell (best-effort, never changes the response): its coach when coach_id is set, otherwise every coach of branch_id. Phone is optional when amocrm_customer_id is given (stored as null — never a placeholder). Nothing is written on any 4xx.',
         security: [{ ApiKeyAuth: [] }],
         requestBody: { required: true, content: { 'application/json': { schema: {
           type: 'object', required: ['full_name', 'branch_id'],
