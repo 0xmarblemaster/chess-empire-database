@@ -495,7 +495,7 @@ export function validateCreate(body) {
 // students sharing the phone, matched by normalized full name: one match → that
 // student (linking the Buyer ID when it has none; a different id → 409), several
 // → 409 ambiguous with candidates, none → (3) a NEW student with the same phone.
-// Nothing is written on any 4xx. A frozen match is reactivated (3-day guard
+// Nothing is written on any 4xx. A frozen or left match is reactivated (3-day guard
 // applies inside db.activate). coach_id is only applied to a NEW student — an
 // existing match never gets its coach written or overwritten (coaches win over
 // automation). Returns { status, body }.
@@ -506,7 +506,7 @@ export async function createStudent(db, input) {
     body: { ok: false, reason: 'amocrm_customer_id_conflict', ...(ownerId ? { conflict_student_id: ownerId } : {}) },
   });
   const existing = async (student, extra) => {
-    if (student.status !== 'frozen') return { status: 200, body: { ok: true, existing: true, ...extra, student } };
+    if (!REACTIVATION_FROM.includes(student.status)) return { status: 200, body: { ok: true, existing: true, ...extra, student } };
     const r = await db.activate(student);
     if (r.refused) return { status: 200, body: { ok: true, existing: true, ...extra, reactivated: false, reason: r.reason, student } };
     return {

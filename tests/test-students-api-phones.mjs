@@ -323,6 +323,56 @@ const snapshot = (db) => JSON.stringify([...db.table.values()]);
   eq([r.status, r.body.reactivated, r.body.reason], [200, false, 'manual_change_recent'], 'frozen owner + manual guard → reactivated:false');
 }
 
+console.log('\n=== createStudent reactivates a matched LEFT student =================\n');
+{
+  // Left Buyer-ID owner → active, reactivated:true.
+  const db = createDb([{ id: 'own', first_name: 'A', last_name: 'B', amocrm_customer_id: 1414, status: 'left' }]);
+  const r = await create(db, { full_name: 'A B', branch_id: BRANCH, amocrm_customer_id: 1414 });
+  eq([r.status, r.body.existing, r.body.matched_by, r.body.reactivated], [200, true, 'amocrm_customer_id', true], 'left owner by Buyer ID → reactivated:true');
+  eq([db.table.get('own').status, r.body.student.status], ['active', 'active'], 'left owner → status active');
+  assert(r.body.status_history_id && r.body.chesster_poke, 'left owner → status_history_id + chesster_poke in response');
+}
+
+{
+  // Left phone + name match → reactivated, Buyer ID linked.
+  const db = createDb([{ id: 'ali', first_name: 'Ali', last_name: 'Sadykov', parent_phone: SHARED, status: 'left' }]);
+  const r = await create(db, { full_name: 'Ali Sadykov', phone: SHARED, branch_id: BRANCH, amocrm_customer_id: 1515 });
+  eq([r.status, r.body.matched_by, r.body.linked, r.body.reactivated], [200, 'phone_name', true, true], 'left phone+name match → linked + reactivated');
+  eq([db.table.get('ali').status, db.table.get('ali').amocrm_customer_id], ['active', 1515], 'left match → active with Buyer ID');
+}
+
+{
+  // Left owner + 3-day manual guard → stays left, reason reported.
+  const db = createDb([{ id: 'own', first_name: 'A', last_name: 'B', amocrm_customer_id: 1616, status: 'left' }], { activateRefused: true });
+  const r = await create(db, { full_name: 'A B', branch_id: BRANCH, amocrm_customer_id: 1616 });
+  eq([r.status, r.body.reactivated, r.body.reason], [200, false, 'manual_change_recent'], 'left owner + manual guard → reactivated:false');
+  eq(db.table.get('own').status, 'left', 'left owner + manual guard → stays left');
+}
+
+{
+  // Active match → unchanged, no reactivated key, no activate call.
+  const db = createDb([{ id: 'own', first_name: 'A', last_name: 'B', amocrm_customer_id: 1717 }]);
+  const r = await create(db, { full_name: 'A B', branch_id: BRANCH, amocrm_customer_id: 1717 });
+  eq([r.status, r.body.existing, 'reactivated' in r.body], [200, true, false], 'active match → existing, no reactivated key');
+  eq(writes(db).length, 0, 'active match → no writes');
+}
+
+{
+  // A LEFT sibling sharing the phone (different name) is never touched.
+  const db = createDb([{ id: 'ali', first_name: 'Ali', last_name: 'Sadykov', parent_phone: SHARED, status: 'left' }]);
+  const r = await create(db, { full_name: 'Dana Sadykova', phone: SHARED, branch_id: BRANCH, amocrm_customer_id: 1818 });
+  eq(r.status, 201, 'left sibling, different name → 201 new student');
+  eq([db.table.get('ali').status, db.table.get('ali').amocrm_customer_id], ['left', null], 'left sibling not reactivated or linked');
+  eq(db.calls.filter((c) => c[0] === 'activate').length, 0, 'left sibling → no activation');
+}
+
+{
+  const INDEX = fs.readFileSync(path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../supabase/functions/students-api/index.ts'), 'utf8');
+  assert(/A matched frozen or left student is reactivated\./.test(INDEX), 'OpenAPI create summary: frozen or left reactivated');
+  assert(/reactivated true\/false when it was frozen or left/.test(INDEX), 'OpenAPI create 200 description: frozen or left');
+  assert(/A matched student that is frozen or left is reactivated\./.test(INDEX), 'index.ts header comment: frozen or left');
+}
+
 {
   // +44 never matches a +7 number with the same last 10 digits.
   const db = createDb([{ id: 'kz', first_name: 'Ali', last_name: 'Sadykov', parent_phone: '+77400123456' }]);

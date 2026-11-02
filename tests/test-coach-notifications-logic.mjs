@@ -232,7 +232,7 @@ assert(/from\('coach_notifications'\)\s*\.upsert\(rows, \{ onConflict: 'recipien
 assert(!/recipient_coach_id,student_id,kind/.test(INDEX), 'old onConflict key gone');
 assert(/coach_branches\(branch_id\)/.test(adapter), 'branch coaches include coach_branches');
 assert(/return \{ row: student, status_history_id: hist\.id \}/.test(insertBlock), 'insert() still returns { row, status_history_id }');
-assert(/A NEW student \(201 only\) — and a matched frozen student reactivated here — also notifies coaches/.test(INDEX),
+assert(/A NEW student \(201 only\) — and a matched frozen or left student reactivated here — also notifies coaches/.test(INDEX),
   'OpenAPI create summary mentions both notifications');
 assert(/Activate \(unfreeze\) a student\.[^']*notifies coaches in the dashboard bell/.test(INDEX), 'OpenAPI activate summary mentions the notification');
 

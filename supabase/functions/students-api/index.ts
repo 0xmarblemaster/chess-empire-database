@@ -17,7 +17,7 @@
 //    first). Phones are NOT unique — siblings share a parent's phone — so a
 //    phone hit only counts when the normalized full name matches too (one match
 //    → that student, several → 409 ambiguous, none → a new student with the
-//    same phone). A matched student that is frozen is reactivated.
+//    same phone). A matched student that is frozen or left is reactivated.
 //  - create may set coach_id, but ONLY on a brand-new student (the coach must
 //    belong to the branch); an existing match never has its coach written.
 //  - Phones are E.164 (+<country code><number>, libphonenumber-validated);
@@ -857,7 +857,7 @@ const OPENAPI_SPEC = {
   paths: {
     '/?action=create': {
       post: {
-        summary: 'Create-or-activate a student. Identity is amocrm_customer_id (Buyer ID), checked first: an id that already belongs to a student returns that student (replays are idempotent). Otherwise every student with the same phone is compared by normalized full name (trim, collapsed spaces, case-insensitive, ё=е): exactly one match → that student (the Buyer ID is linked if it has none); several → 409 ambiguous for manual review; none → a NEW student with the same phone. A matched frozen student is reactivated. A NEW student (201 only) — and a matched frozen student reactivated here — also notifies coaches in the dashboard bell (best-effort, never changes the response): its coach when coach_id is set, otherwise every coach of branch_id. Phone is optional when amocrm_customer_id is given (stored as null — never a placeholder). Nothing is written on any 4xx.',
+        summary: 'Create-or-activate a student. Identity is amocrm_customer_id (Buyer ID), checked first: an id that already belongs to a student returns that student (replays are idempotent). Otherwise every student with the same phone is compared by normalized full name (trim, collapsed spaces, case-insensitive, ё=е): exactly one match → that student (the Buyer ID is linked if it has none); several → 409 ambiguous for manual review; none → a NEW student with the same phone. A matched frozen or left student is reactivated. A NEW student (201 only) — and a matched frozen or left student reactivated here — also notifies coaches in the dashboard bell (best-effort, never changes the response): its coach when coach_id is set, otherwise every coach of branch_id. Phone is optional when amocrm_customer_id is given (stored as null — never a placeholder). Nothing is written on any 4xx.',
         security: [{ ApiKeyAuth: [] }],
         requestBody: { required: true, content: { 'application/json': { schema: {
           type: 'object', required: ['full_name', 'branch_id'],
@@ -878,7 +878,7 @@ const OPENAPI_SPEC = {
         } } } },
         responses: {
           '200': {
-            description: 'Existing student (existing:true, matched_by amocrm_customer_id | phone_name; linked:true when the Buyer ID was written onto it; reactivated true/false when it was frozen). Read back by UUID or amocrm_customer_id with action=find.',
+            description: 'Existing student (existing:true, matched_by amocrm_customer_id | phone_name; linked:true when the Buyer ID was written onto it; reactivated true/false when it was frozen or left). Read back by UUID or amocrm_customer_id with action=find.',
             content: { 'application/json': { examples: {
               replay_same_buyer_id: { value: { ok: true, existing: true, matched_by: 'amocrm_customer_id', student: { id: '00000000-0000-4000-8000-00000000000b', student_code: 'CE-00453', name: 'Aru Sadykova', status: 'active', amocrm_customer_id: 1002, phone: '+77001234567' } } },
               phone_and_name_match: { value: { ok: true, existing: true, matched_by: 'phone_name', linked: true, student: { id: '00000000-0000-4000-8000-00000000000a', student_code: 'CE-00452', name: 'Ali Sadykov', status: 'active', amocrm_customer_id: 1001, phone: '+77001234567' } } },
