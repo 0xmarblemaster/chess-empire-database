@@ -8,14 +8,20 @@
  * bell with an unread counter in the mobile header and top-right on desktop,
  * and a panel listing the latest notifications.
  *
- *   - Opening the panel never marks anything read; clicking an item or one of
- *     its buttons marks that item read; «Прочитать все» marks all (RPC
- *     mark_coach_notifications_read — the only client write path).
+ *   - The panel has two tabs: «Непрочитанные» (default, every time it opens)
+ *     and «Прочитанные». Opening never marks anything read; clicking an unread
+ *     item or one of its buttons marks that item read (it moves to the Read
+ *     tab). «Очистить» on Unread marks the shown items read (RPC
+ *     mark_coach_notifications_read); on Read it hides the shown items from the
+ *     bell (RPC clear_coach_notifications, migration 104 — stamps cleared_at).
+ *     Nothing is ever deleted: every row stays in the database.
  *   - Admins get a read-only view of every coach's notifications, one card per
- *     event (dedupeEvents); their read state lives only in localStorage and
- *     never touches the RPC (an admin login may share a coach's email).
- *   - The panel opens by itself when unread notifications newer than the last
- *     auto-open arrive (shouldAutoOpen, marker in localStorage).
+ *     event (dedupeEvents); their read / cleared state lives only in
+ *     localStorage and never touches an RPC (an admin login may share a
+ *     coach's email).
+ *   - The panel opens by itself (on the Unread tab) when unread notifications
+ *     newer than the last auto-open arrive (shouldAutoOpen, marker in
+ *     localStorage).
  *   - Polls every 60s and when the tab becomes visible again.
  *   - All text is escaped (escapeHtml) before it reaches innerHTML.
  *
@@ -26,20 +32,22 @@
 (function () {
     'use strict';
 
-    const LIMIT = 100;
+    const LIMIT = 200;
     const ADMIN_LIMIT = 500;
-    // The bell only lists unread notifications from the last 7 days; read ones
-    // drop out at once and older unread ones expire from the list and badge.
+    // The bell only lists notifications from the last 7 days; older ones expire
+    // from both tabs and the badge.
     const WINDOW_DAYS = 7;
     const WINDOW_MS = WINDOW_DAYS * 24 * 60 * 60 * 1000;
     const POLL_MS = 60000;
     // Rollout gate: the bell only shows for coaches of these branches (null =
     // every branch). Server side: COACH_NOTIFY_BRANCH_IDS in students-api.
     const ENABLED_BRANCH_IDS = ['b146c01e-4a37-440e-84e7-4540358a21b9', '0b631805-16b9-4d9e-bbda-d595865cb96d']; // Halyk Arena, Online
-    // Admin read state: { [status_history_id]: isoTime }, pruned after 8 days.
-    const ADMIN_SEEN_KEY = 'cn-admin-seen-v1';
+    // Admin read / cleared state: { [status_history_id]: isoTime }, pruned
+    // after 8 days.
+    const ADMIN_SEEN_KEY = 'cn-admin-seen-v2';
+    const ADMIN_CLEARED_KEY = 'cn-admin-cleared-v1';
     const SEEN_KEEP_MS = 8 * 24 * 60 * 60 * 1000;
-    const AUTOPEN_KEY = 'cn-autopen-v1:';
+    const AUTOPEN_KEY = 'cn-autopen-v2:';
 
     function tr(key, params) {
         const fn = typeof t === 'function' ? t : (typeof window !== 'undefined' && window.t);
@@ -68,9 +76,17 @@
         return new Date((now ? new Date(now) : new Date()).getTime() - WINDOW_MS);
     }
 
-    function visibleNotifications(list, now) {
-        const since = windowStart(now).getTime();
-        return (list || []).filter((n) => !n.read_at && new Date(n.created_at).getTime() >= since);
+    function inWindow(n, now) {
+        return new Date(n.created_at).getTime() >= windowStart(now).getTime();
+    }
+
+    function unreadNotifications(list, now) {
+        return (list || []).filter((n) => !n.read_at && inWindow(n, now));
+    }
+
+    function readNotifications(list, now) {
+        return (list || []).filter((n) => n.read_at && !n.cleared_at && inWindow(n, now))
+            .sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
     }
 
     // One event fans out to several coaches (rows share status_history_id):
@@ -87,11 +103,12 @@
 
     const eventKey = (n) => n.status_history_id || n.id;
 
-    // Admin unread = deduped events of the last 7 days not in seenMap.
-    function adminUnseen(list, seenMap, now) {
-        const since = windowStart(now).getTime();
-        return dedupeEvents(list).filter((n) => new Date(n.created_at).getTime() >= since
-            && !(seenMap && seenMap[eventKey(n)]));
+    // Admin rows: deduped events of the last 7 days not in clearedMap, with
+    // read_at = the device-local seen time (null = unread).
+    function adminView(list, seenMap, clearedMap, now) {
+        return dedupeEvents(list)
+            .filter((n) => inWindow(n, now) && !(clearedMap && clearedMap[eventKey(n)]))
+            .map((n) => ({ ...n, read_at: (seenMap && seenMap[eventKey(n)]) || null, cleared_at: null }));
     }
 
     function pruneSeen(seenMap, now) {
@@ -197,15 +214,27 @@
             + '</div></div></div>';
     }
 
-    function renderPanel(list, viewerCoachId, now) {
-        const shown = visibleNotifications(list, now);
+    function renderTab(tab, active, label) {
+        return `<button type="button" class="cn-tab${tab === active ? ' cn-tab-active' : ''}" data-action="tab" data-tab="${tab}">${label}</button>`;
+    }
+
+    function renderPanel(list, viewerCoachId, now, tab) {
+        const active = tab === 'read' ? 'read' : 'unread';
+        const unread = unreadNotifications(list, now);
+        const shown = active === 'read' ? readNotifications(list, now) : unread;
+        const emptyKey = active === 'read' ? 'notifications.emptyRead' : 'notifications.empty';
         const items = shown.length
             ? shown.map((n) => renderItem(n, viewerCoachId, now)).join('')
-            : `<div class="cn-empty">${escapeHtml(tr('notifications.empty'))}</div>`;
-        const markAll = shown.length
-            ? `<button type="button" class="cn-mark-all" data-action="read-all">${escapeHtml(tr('notifications.markAllRead'))}</button>`
+            : `<div class="cn-empty">${escapeHtml(tr(emptyKey))}</div>`;
+        const clear = shown.length
+            ? `<button type="button" class="cn-clear" data-action="clear">${escapeHtml(tr('notifications.clear'))}</button>`
             : '';
-        return `<div class="cn-ph"><h3>${escapeHtml(tr('notifications.title'))}</h3>${markAll}</div>`
+        const count = unread.length ? ` <span class="cn-tab-count">${unread.length}</span>` : '';
+        return `<div class="cn-ph"><h3>${escapeHtml(tr('notifications.title'))}</h3>${clear}</div>`
+            + '<div class="cn-tabs">'
+            + renderTab('unread', active, escapeHtml(tr('notifications.tabUnread')) + count)
+            + renderTab('read', active, escapeHtml(tr('notifications.tabRead')))
+            + '</div>'
             + `<div class="cn-list">${items}</div>`;
     }
 
@@ -214,8 +243,8 @@
     const BELL_SVG = '<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/></svg>';
 
     const state = {
-        coachId: null, admin: false, raw: [], seen: {}, list: [], unread: 0,
-        open: false, bells: [], panel: null, backdrop: null, timer: null,
+        coachId: null, admin: false, raw: [], seen: {}, cleared: {}, list: [], unread: 0,
+        tab: 'unread', open: false, bells: [], panel: null, backdrop: null, timer: null,
     };
 
     function sb() { return window.supabaseClient; }
@@ -229,9 +258,9 @@
         try { window.localStorage.setItem(key, value); } catch (e) { /* ignore */ }
     }
 
-    function loadSeen() {
+    function loadMap(key) {
         try {
-            const v = JSON.parse(storeGet(ADMIN_SEEN_KEY) || '{}');
+            const v = JSON.parse(storeGet(key) || '{}');
             return v && typeof v === 'object' && !Array.isArray(v) ? v : {};
         } catch (e) {
             return {};
@@ -239,6 +268,8 @@
     }
 
     function saveSeen() { storeSet(ADMIN_SEEN_KEY, JSON.stringify(state.seen)); }
+
+    function saveCleared() { storeSet(ADMIN_CLEARED_KEY, JSON.stringify(state.cleared)); }
 
     function autoOpenKey() { return AUTOPEN_KEY + (state.coachId || 'admin'); }
 
@@ -288,17 +319,16 @@
             badge.hidden = !text;
             b.setAttribute('aria-label', tr('notifications.title'));
         }
-        if (state.open) state.panel.innerHTML = renderPanel(state.list, state.coachId);
+        if (state.open) state.panel.innerHTML = renderPanel(state.list, state.coachId, undefined, state.tab);
     }
 
-    // Admin: the panel rows are the unseen events, shown as unread cards.
-    function applyAdminSeen() {
-        state.list = adminUnseen(state.raw, state.seen).map((n) => ({ ...n, read_at: null }));
-        state.unread = state.list.length;
+    function applyAdminState() {
+        state.list = adminView(state.raw, state.seen, state.cleared);
+        state.unread = unreadNotifications(state.list).length;
     }
 
     function maybeAutoOpen() {
-        const { open, marker } = shouldAutoOpen(visibleNotifications(state.list), storeGet(autoOpenKey()));
+        const { open, marker } = shouldAutoOpen(unreadNotifications(state.list), storeGet(autoOpenKey()));
         if (!open) return;
         storeSet(autoOpenKey(), marker);
         if (!state.open) openPanel();
@@ -315,7 +345,7 @@
                 const res = await q.order('created_at', { ascending: false }).limit(ADMIN_LIMIT);
                 if (res.error) throw res.error;
                 state.raw = res.data || [];
-                applyAdminSeen();
+                applyAdminState();
                 render();
                 maybeAutoOpen();
                 return;
@@ -323,7 +353,7 @@
             const [list, count] = await Promise.all([
                 sb().from('coach_notifications').select('*')
                     .eq('recipient_coach_id', state.coachId)
-                    .is('read_at', null).gte('created_at', since)
+                    .is('cleared_at', null).gte('created_at', since)
                     .order('created_at', { ascending: false }).limit(LIMIT),
                 sb().from('coach_notifications').select('id', { count: 'exact', head: true })
                     .eq('recipient_coach_id', state.coachId)
@@ -340,35 +370,64 @@
         }
     }
 
-    // Admin read state is device-local: never the RPC (it would mark the
-    // notifications of a coach who shares the admin's email).
+    // Admin read / cleared state is device-local: never an RPC (it would
+    // change the notifications of a coach who shares the admin's email).
     function markSeen(ids) {
         const now = new Date().toISOString();
-        state.list.filter((n) => !ids || ids.includes(n.id)).forEach((n) => { state.seen[eventKey(n)] = now; });
+        state.list.filter((n) => ids.includes(n.id)).forEach((n) => { state.seen[eventKey(n)] = now; });
         saveSeen();
-        applyAdminSeen();
+        applyAdminState();
+        render();
+    }
+
+    function markCleared(ids) {
+        const now = new Date().toISOString();
+        state.list.filter((n) => ids.includes(n.id)).forEach((n) => { state.cleared[eventKey(n)] = now; });
+        saveCleared();
+        applyAdminState();
         render();
     }
 
     async function markRead(ids) {
         if (state.admin) return markSeen(ids);
         const now = new Date().toISOString();
-        const targets = state.list.filter((n) => !n.read_at && (!ids || ids.includes(n.id)));
-        if (!targets.length && ids) return;
+        const targets = state.list.filter((n) => !n.read_at && ids.includes(n.id));
+        if (!targets.length) return;
         targets.forEach((n) => { n.read_at = now; });
-        state.unread = ids ? Math.max(0, state.unread - targets.length) : 0;
+        state.unread = Math.max(0, state.unread - targets.length);
         render();
-        const { error } = await sb().rpc('mark_coach_notifications_read', { ids: ids || null });
+        const { error } = await sb().rpc('mark_coach_notifications_read', { ids });
         if (error) {
             console.error('coach notifications: mark read failed', error);
             refresh();
         }
     }
 
+    // Hides read rows from the bell (cleared_at); the rows are never deleted.
+    async function clearRead(ids) {
+        if (state.admin) return markCleared(ids);
+        const now = new Date().toISOString();
+        const targets = state.list.filter((n) => n.read_at && !n.cleared_at && ids.includes(n.id));
+        if (!targets.length) return;
+        targets.forEach((n) => { n.cleared_at = now; });
+        render();
+        const { error } = await sb().rpc('clear_coach_notifications', { ids });
+        if (error) {
+            console.error('coach notifications: clear failed', error);
+            refresh();
+        }
+    }
+
+    function clearTab() {
+        if (state.tab === 'read') return clearRead(readNotifications(state.list).map((n) => n.id));
+        return markRead(unreadNotifications(state.list).map((n) => n.id));
+    }
+
     function toggle() { state.open ? close() : openPanel(); }
 
     function openPanel() {
         state.open = true;
+        state.tab = 'unread';
         state.panel.hidden = false;
         state.backdrop.hidden = false;
         render();
@@ -398,7 +457,11 @@
         const actionEl = e.target.closest('[data-action]');
         if (!actionEl) return;
         const action = actionEl.getAttribute('data-action');
-        if (action === 'read-all') return markRead(null);
+        if (action === 'tab') {
+            state.tab = actionEl.getAttribute('data-tab') === 'read' ? 'read' : 'unread';
+            return render();
+        }
+        if (action === 'clear') return clearTab();
         const item = actionEl.closest('.cn-item');
         const n = item && state.list.find((x) => x.id === item.getAttribute('data-id'));
         if (!n) return;
@@ -436,8 +499,10 @@
             state.coachId = info.coachId;
         } else if (info.isAdmin) {
             state.admin = true;
-            state.seen = pruneSeen(loadSeen());
+            state.seen = pruneSeen(loadMap(ADMIN_SEEN_KEY));
+            state.cleared = pruneSeen(loadMap(ADMIN_CLEARED_KEY));
             saveSeen();
+            saveCleared();
         } else {
             return;
         }
@@ -448,8 +513,10 @@
 
     const api = {
         escapeHtml, initials, unreadCount, badgeText, coachLabel, titleKey,
-        formatDay, formatWhen, renderItem, renderPanel, visibleNotifications, WINDOW_DAYS,
-        bellEnabledFor, ENABLED_BRANCH_IDS, dedupeEvents, adminUnseen, pruneSeen, shouldAutoOpen,
+        formatDay, formatWhen, renderItem, renderPanel, unreadNotifications, readNotifications,
+        visibleNotifications: unreadNotifications, WINDOW_DAYS,
+        bellEnabledFor, ENABLED_BRANCH_IDS, dedupeEvents, adminView, pruneSeen, shouldAutoOpen,
+        ADMIN_SEEN_KEY, ADMIN_CLEARED_KEY, AUTOPEN_KEY,
     };
 
     if (typeof window !== 'undefined' && typeof document !== 'undefined') {

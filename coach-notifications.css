@@ -53,9 +53,24 @@ body.has-coach-bell .header-actions { margin-right: 12rem; }
     font-family: 'Inter', -apple-system, sans-serif;
     color: #0f172a;
 }
-.cn-ph { display: flex; justify-content: space-between; align-items: center; padding: 14px 16px; border-bottom: 1px solid #e2e8f0; }
+.cn-ph { display: flex; justify-content: space-between; align-items: center; padding: 10px 16px; }
 .cn-ph h3 { font-family: 'Outfit', sans-serif; font-size: 17px; font-weight: 700; margin: 0; }
-.cn-mark-all { background: none; border: none; padding: 0; font-size: 12px; font-weight: 600; color: #0d9488; cursor: pointer; }
+.cn-clear { background: none; border: none; padding: 0 4px; min-height: 40px; font-size: 12px; font-weight: 600; color: #0d9488; cursor: pointer; }
+.cn-clear:hover { color: #0f766e; }
+.cn-tabs { display: flex; gap: 4px; padding: 0 12px; border-bottom: 1px solid #e2e8f0; }
+.cn-tab {
+    flex: 1; min-height: 40px; padding: 0 8px;
+    background: none; border: none; border-bottom: 2px solid transparent; margin-bottom: -1px;
+    font-size: 13px; font-weight: 600; color: #64748b; cursor: pointer;
+    display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+}
+.cn-tab:hover { color: #334155; }
+.cn-tab-active { color: #0f766e; border-bottom-color: #0d9488; }
+.cn-tab-count {
+    min-width: 18px; height: 18px; padding: 0 5px; border-radius: 9px;
+    background: #e2e8f0; color: #475569; font-size: 11px; font-weight: 700; line-height: 18px;
+}
+.cn-tab-active .cn-tab-count { background: #ccfbf1; color: #0f766e; }
 .cn-list { overflow-y: auto; }
 .cn-empty { padding: 24px 16px; text-align: center; font-size: 13px; color: #64748b; }
 .cn-item { display: flex; gap: 12px; padding: 16px; border-bottom: 1px solid #e2e8f0; cursor: pointer; }

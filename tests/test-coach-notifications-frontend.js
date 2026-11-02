@@ -12,8 +12,9 @@
  *  - i18n: every notifications.* key in en / kk / ru; RU copy = mockup A.
  *  - Rollout gate: bellEnabledFor (null = every branch by default); init()
  *    skips the branch lookup when ENABLED_BRANCH_IDS is null.
- *  - Admin bell: dedupeEvents, adminUnseen, pruneSeen; admin mark-read is
+ *  - Admin bell: dedupeEvents, adminView, pruneSeen; admin mark-read is
  *    localStorage-only (never the RPC); init() mounts for admins.
+ *  - Unread / Read tabs + «Очистить»: tests/test-coach-notifications-tabs.js.
  *  - Auto pop-up: shouldAutoOpen marker logic + refresh wiring.
  *  - Wiring: script + stylesheet tags in admin-v2.html, mark-read RPC,
  *    60s poll + visibilitychange, no auto-read on open.
@@ -115,11 +116,12 @@ assert(cn.unreadCount(list) === 2, 'unreadCount counts read_at null');
 assert(cn.badgeText(0) === '' && cn.badgeText(2) === '2' && cn.badgeText(100) === '99+', 'badge text: hidden / n / 99+');
 const panel = cn.renderPanel(list, ME, NOW);
 assert(panel.includes('<h3>Уведомления</h3>'), 'panel title');
-assert(panel.includes('data-action="read-all">Прочитать все</button>'), '«Прочитать все» when unread exist');
-assert(!cn.renderPanel([list[2]], ME, NOW).includes('read-all'), 'no «Прочитать все» when all read');
+assert(panel.includes('data-action="clear">Очистить</button>'), '«Очистить» when unread exist');
+assert(!panel.includes('read-all') && !panel.includes('Прочитать все'), 'no «Прочитать все» any more');
+assert(!cn.renderPanel([list[2]], ME, NOW).includes('data-action="clear"'), 'no «Очистить» on an empty Unread tab');
 assert(cn.renderPanel([], ME, NOW).includes('Нет новых уведомлений'), 'empty state');
-assert((panel.match(/class="cn-item /g) || []).length === 2, 'panel lists unread only (read item hidden)');
-assert(!/class="cn-item read/.test(panel), 'no read items in the panel');
+assert((panel.match(/class="cn-item /g) || []).length === 2, 'default (Unread) tab lists unread only');
+assert(!/class="cn-item read/.test(panel), 'no read items on the Unread tab');
 assert(cn.renderPanel([list[2]], ME, NOW).includes('Нет новых уведомлений'), 'all read → empty state');
 
 console.log('\n=== 7-day window ======================================================\n');
@@ -131,7 +133,7 @@ assert(vis.includes(base.id) && vis.includes('w6'), 'unread within 7 days visibl
 assert(!vis.includes('w8'), 'unread older than 7 days hidden');
 assert(!vis.includes('n3'), 'read hidden');
 assert(cn.renderPanel([day8], ME, NOW).includes('Нет новых уведомлений'), 'only-old-unread → empty state');
-assert(!cn.renderPanel([day8], ME, NOW).includes('read-all'), 'no «Прочитать все» for hidden old items');
+assert(!cn.renderPanel([day8], ME, NOW).includes('data-action="clear"'), 'no «Очистить» for hidden old items');
 
 const en = load('en');
 assert(en.renderItem(base, ME, NOW).includes('You — Асхат Сериков'), 'EN prefix «You — »');
@@ -199,7 +201,7 @@ assert(!/cn-item--left/.test(CSS) && !/cn-item--left|'left'\]|kind === 'left'/.t
 assert(['en', 'kk', 'ru'].every((l) => !('notifications.studentLeft' in translations[l])), 'no studentLeft string in en / kk / ru');
 
 console.log('\n=== i18n ==============================================================\n');
-const KEYS = ['title', 'markAllRead', 'newStudentFromAmo', 'backFromFreeze', 'formerReturned', 'studentFrozen', 'coach', 'branch', 'you', 'noCoach', 'today', 'yesterday', 'toSchedule', 'card', 'empty'];
+const KEYS = ['title', 'markAllRead', 'tabUnread', 'tabRead', 'clear', 'emptyRead', 'newStudentFromAmo', 'backFromFreeze', 'formerReturned', 'studentFrozen', 'coach', 'branch', 'you', 'noCoach', 'today', 'yesterday', 'toSchedule', 'card', 'empty'];
 for (const k of KEYS) {
     const key = `notifications.${k}`;
     assert(['en', 'kk', 'ru'].every((l) => typeof translations[l][key] === 'string' && translations[l][key]), `${key} in en / kk / ru`);
@@ -251,15 +253,17 @@ assert(JSON.stringify(cn.dedupeEvents(fan).map((n) => n.id)) === JSON.stringify(
 assert(cn.dedupeEvents([]).length === 0 && cn.dedupeEvents(null).length === 0, 'dedupeEvents empty / null');
 const old = ev('o1', 'h-old', 25, 10);
 old.created_at = new Date(2026, 9, 25, 10).toISOString();
-const unseen = cn.adminUnseen([...fan, old], {}, NOW).map((n) => n.id);
-assert(JSON.stringify(unseen) === JSON.stringify(['a1', 'b1', 'x1', 'x2']), 'adminUnseen dedupes and drops > 7 days');
-assert(!cn.adminUnseen(fan, { [H1]: at(2, 14, 0) }, NOW).some((n) => n.status_history_id === H1), 'adminUnseen hides seen events');
-assert(cn.adminUnseen(fan, { [H1]: at(2, 14, 0) }, NOW).length === 3, 'other events still unseen');
-assert(cn.adminUnseen([ev('r1', H2, 2, 12, { read_at: at(2, 13, 0) })], {}, NOW).length === 1, 'coach read_at does not hide it from the admin');
+const unseen = cn.unreadNotifications(cn.adminView([...fan, old], {}, {}, NOW), NOW).map((n) => n.id);
+assert(JSON.stringify(unseen) === JSON.stringify(['a1', 'b1', 'x1', 'x2']), 'adminView dedupes and drops > 7 days');
+const seenView = cn.adminView(fan, { [H1]: at(2, 14, 0) }, {}, NOW);
+assert(!cn.unreadNotifications(seenView, NOW).some((n) => n.status_history_id === H1), 'seen events are not unread');
+assert(cn.unreadNotifications(seenView, NOW).length === 3, 'other events still unseen');
+assert(cn.unreadNotifications(cn.adminView([ev('r1', H2, 2, 12, { read_at: at(2, 13, 0) })], {}, {}, NOW), NOW).length === 1,
+    'coach read_at does not hide it from the admin');
 const pruned = cn.pruneSeen({ fresh: at(1, 10, 0), edge: new Date(NOW.getTime() - 8 * 864e5).toISOString(), stale: new Date(2026, 9, 20).toISOString() }, NOW);
 assert('fresh' in pruned && 'edge' in pruned && !('stale' in pruned), 'pruneSeen drops entries older than 8 days');
 assert(JSON.stringify(cn.pruneSeen(null, NOW)) === '{}', 'pruneSeen(null) → {}');
-assert(/const ADMIN_SEEN_KEY = 'cn-admin-seen-v1';/.test(SRC), 'admin seen key cn-admin-seen-v1');
+assert(/const ADMIN_SEEN_KEY = 'cn-admin-seen-v2';/.test(SRC), 'admin seen key cn-admin-seen-v2');
 assert(/\.select\('\*'\)\.gte\('created_at', since\);/.test(SRC)
     && /q\.order\('created_at', \{ ascending: false \}\)\.limit\(ADMIN_LIMIT\)/.test(SRC)
     && /const ADMIN_LIMIT = 500;/.test(SRC), 'admin query: rows of 7 days, newest first, limit 500, no read_at filter');
@@ -283,10 +287,12 @@ assert(JSON.stringify(cn.shouldAutoOpen(u, at(2, 11, 0))) === JSON.stringify({ o
 assert(cn.shouldAutoOpen(u, at(2, 12, 0)).open === false, 'equal to marker → no open');
 assert(cn.shouldAutoOpen(u, at(2, 13, 0)).open === false, 'older than marker → no open');
 assert(JSON.stringify(cn.shouldAutoOpen(u, null)) === JSON.stringify({ open: true, marker: at(2, 12, 0) }), 'null marker → open');
-assert(/const AUTOPEN_KEY = 'cn-autopen-v1:';/.test(SRC) && /AUTOPEN_KEY \+ \(state\.coachId \|\| 'admin'\)/.test(SRC), 'marker key per coach / admin');
+assert(/const AUTOPEN_KEY = 'cn-autopen-v2:';/.test(SRC) && /AUTOPEN_KEY \+ \(state\.coachId \|\| 'admin'\)/.test(SRC), 'marker key per coach / admin');
 const autoFn = SRC.slice(SRC.indexOf('function maybeAutoOpen()'), SRC.indexOf('async function refresh()'));
 assert(/storeSet\(autoOpenKey\(\), marker\);/.test(autoFn) && /if \(!state\.open\) openPanel\(\);/.test(autoFn), 'auto-open stores marker and uses openPanel()');
 const refreshFn = SRC.slice(SRC.indexOf('async function refresh()'), SRC.indexOf('function markSeen('));
+assert(/if \(!state\.open\) openPanel\(\);/.test(autoFn) && /function openPanel\(\) \{\s*state\.open = true;\s*state\.tab = 'unread';/.test(SRC),
+    'auto-open lands on the Unread tab');
 assert((refreshFn.match(/maybeAutoOpen\(\);/g) || []).length === 2, 'auto-open checked after admin and coach refresh');
 
 console.log('\n=== wiring ============================================================\n');
@@ -296,12 +302,13 @@ assert(tagIdx > HTML.indexOf('<script src="auth-helpers.js'), 'loaded after auth
 assert(/<link rel="stylesheet" href="coach-notifications\.css(\?v=\d+)?">/.test(HTML), 'stylesheet linked');
 assert(fs.existsSync(path.join(ROOT, 'coach-notifications.css')), 'stylesheet exists');
 assert(/\.mobile-header-actions/.test(SRC), 'bell in the mobile header actions');
-assert(/rpc\('mark_coach_notifications_read', \{ ids: ids \|\| null \}\)/.test(SRC), 'marks read through the RPC');
+assert(/rpc\('mark_coach_notifications_read', \{ ids \}\)/.test(SRC), 'marks read through the RPC');
 assert(!/from\('coach_notifications'\)[^;]*\.(update|insert|delete|upsert)\(/.test(SRC), 'no direct table writes');
 assert(/const POLL_MS = 60000;/.test(SRC) && /setInterval\(refresh, POLL_MS\)/.test(SRC), 'polls every 60s');
 assert(/visibilitychange/.test(SRC), 'refreshes on visibilitychange');
-assert((SRC.match(/\.is\('read_at', null\)\.gte\('created_at', since\)/g) || []).length === 2, 'list + badge queries: unread & last 7 days');
-assert(/const LIMIT = 100;/.test(SRC) && /\.limit\(LIMIT\)/.test(SRC), 'up to 100 unread notifications');
+assert((SRC.match(/\.is\('read_at', null\)\.gte\('created_at', since\)/g) || []).length === 1, 'badge query: unread & last 7 days');
+assert((SRC.match(/\.is\('cleared_at', null\)\.gte\('created_at', since\)/g) || []).length === 1, 'list query: not cleared & last 7 days (read + unread)');
+assert(/const LIMIT = 200;/.test(SRC) && /\.limit\(LIMIT\)/.test(SRC), 'up to 200 notifications');
 const openFn = SRC.slice(SRC.indexOf('function openPanel()'), SRC.indexOf('function close()'));
 assert(openFn.length > 0 && !/markRead/.test(openFn), 'opening the panel does not mark read');
 assert(/navigateToAttendanceStudent\(studentId\)/.test(SRC) && /viewStudent\(n\.student_id\)/.test(SRC),
