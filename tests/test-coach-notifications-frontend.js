@@ -12,6 +12,7 @@
  *  - i18n: every notifications.* key in en / kk / ru; RU copy = mockup A.
  *  - Rollout gate: bellEnabledFor (null = every branch by default); init()
  *    skips the branch lookup when ENABLED_BRANCH_IDS is null.
+ *  - Admin who is also a coach: adminAsCoach → coach-mode bell (own rows only).
  *  - Admin bell: dedupeEvents, adminView, pruneSeen; admin mark-read is
  *    localStorage-only (never the RPC); init() mounts for admins.
  *  - Unread / Read tabs + «Очистить»: tests/test-coach-notifications-tabs.js.
@@ -314,5 +315,47 @@ assert(openFn.length > 0 && !/markRead/.test(openFn), 'opening the panel does no
 assert(/navigateToAttendanceStudent\(studentId\)/.test(SRC) && /viewStudent\(n\.student_id\)/.test(SRC),
     '«В расписание» → attendance, «Карточка» → student profile');
 
-console.log(`\n${passed} passed, ${failed} failed`);
-process.exit(failed ? 1 : 0);
+console.log('\n=== admin who is also a coach =========================================\n');
+// Fake client: records the coaches lookup, answers with `coachRow` / `err`.
+function fakeClient(coachRow, err) {
+    const calls = [];
+    const q = {
+        select(c) { calls.push(['select', c]); return q; },
+        ilike(c, v) { calls.push(['ilike', c, v]); return q; },
+        maybeSingle() { return Promise.resolve({ data: coachRow, error: err || null }); },
+    };
+    return { calls, from(t) { calls.push(['from', t]); return q; } };
+}
+(async () => {
+    const ALEKS = 'de188ac1-0000-4000-8000-000000000000';
+    const admin = { isAdmin: true, coachId: null, email: '0xmarblemaster@gmail.com' };
+
+    let c = fakeClient({ id: ALEKS });
+    let r = await cn.adminAsCoach(c, admin);
+    assert(r.isAdmin === false && r.coachId === ALEKS, 'admin with a coach row → coach mode for that coach');
+    assert(JSON.stringify(c.calls) === JSON.stringify([['from', 'coaches'], ['select', 'id'], ['ilike', 'email', admin.email]]),
+        'coach looked up by email (ilike)');
+    assert(admin.isAdmin === true && admin.coachId === null, 'input info not mutated');
+
+    c = fakeClient(null);
+    r = await cn.adminAsCoach(c, admin);
+    assert(r.isAdmin === true && r.coachId === null, 'admin without a coach row → all-branches admin view');
+
+    c = fakeClient(null);
+    const coach = { isAdmin: false, coachId: OTHER, email: 'x@y.kz' };
+    assert(await cn.adminAsCoach(c, coach) === coach && c.calls.length === 0, 'plain coach → unchanged, no query');
+    assert(await cn.adminAsCoach(c, null) === null && c.calls.length === 0, 'no info → unchanged');
+    assert(await cn.adminAsCoach(c, { isAdmin: true, coachId: null, email: null }) !== undefined && c.calls.length === 0,
+        'admin without email → no query');
+
+    let threw = false;
+    try { await cn.adminAsCoach(fakeClient(null, { message: 'boom' }), admin); } catch (e) { threw = true; }
+    assert(threw, 'lookup error is surfaced (init logs it, no bell)');
+
+    assert(/info = await adminAsCoach\(sb\(\), await window\.authHelpers\.getRoleInfo\(sb\(\)\)\);/.test(initFn)
+        && initFn.indexOf('adminAsCoach(') < initFn.indexOf('if (info.coachId)'),
+        'init() resolves admin→coach before choosing the bell mode');
+
+    console.log(`\n${passed} passed, ${failed} failed`);
+    process.exit(failed ? 1 : 0);
+})();

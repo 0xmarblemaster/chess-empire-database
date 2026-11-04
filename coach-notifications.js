@@ -15,10 +15,11 @@
  *     mark_coach_notifications_read); on Read it hides the shown items from the
  *     bell (RPC clear_coach_notifications, migration 104 — stamps cleared_at).
  *     Nothing is ever deleted: every row stays in the database.
- *   - Admins get a read-only view of every coach's notifications, one card per
- *     event (dedupeEvents); their read / cleared state lives only in
- *     localStorage and never touches an RPC (an admin login may share a
- *     coach's email).
+ *   - An admin whose email is also a coach's gets that coach's bell
+ *     (adminAsCoach): only their own notifications, read state via the RPCs.
+ *   - Other admins get a read-only view of every coach's notifications, one
+ *     card per event (dedupeEvents); their read / cleared state lives only in
+ *     localStorage and never touches an RPC.
  *   - The panel opens by itself (on the Unread tab) when unread notifications
  *     newer than the last auto-open arrive (shouldAutoOpen, marker in
  *     localStorage).
@@ -474,11 +475,22 @@
         }
     }
 
+    // An admin whose email is also a coach's gets that coach's bell (own
+    // notifications, read state on the server) instead of the every-branch
+    // admin view. getRoleInfo stops at the admin role, so look the coach up here.
+    async function adminAsCoach(client, info) {
+        if (!info || !info.isAdmin || info.coachId || !info.email) return info;
+        const { data: coach, error } = await client.from('coaches')
+            .select('id').ilike('email', info.email).maybeSingle();
+        if (error) throw error;
+        return coach && coach.id ? Object.assign({}, info, { isAdmin: false, coachId: coach.id }) : info;
+    }
+
     async function init() {
         if (!sb() || !window.authHelpers) return;
         let info;
         try {
-            info = await window.authHelpers.getRoleInfo(sb());
+            info = await adminAsCoach(sb(), await window.authHelpers.getRoleInfo(sb()));
         } catch (e) {
             console.error('coach notifications: role lookup failed', e);
             return;
@@ -515,7 +527,7 @@
         escapeHtml, initials, unreadCount, badgeText, coachLabel, titleKey,
         formatDay, formatWhen, renderItem, renderPanel, unreadNotifications, readNotifications,
         visibleNotifications: unreadNotifications, WINDOW_DAYS,
-        bellEnabledFor, ENABLED_BRANCH_IDS, dedupeEvents, adminView, pruneSeen, shouldAutoOpen,
+        bellEnabledFor, ENABLED_BRANCH_IDS, dedupeEvents, adminView, pruneSeen, shouldAutoOpen, adminAsCoach,
         ADMIN_SEEN_KEY, ADMIN_CLEARED_KEY, AUTOPEN_KEY,
     };
 
