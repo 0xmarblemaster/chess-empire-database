@@ -34,6 +34,10 @@ function updateStudentAgeDisplay() {
 
 // Open student modal for creating new student
 function addNewStudent() {
+    if (window.supabaseAuth?.getCurrentUserRole()?.role !== 'admin') {
+        showToast(t('students.createAdminOnly'), 'error');
+        return;
+    }
     document.getElementById('studentModalTitle').textContent = 'Add New Student';
     document.getElementById('studentForm').reset();
     document.getElementById('studentId').value = '';

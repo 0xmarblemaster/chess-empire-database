@@ -246,7 +246,7 @@ async function createStudent(studentData) {
         }
     } catch (error) {
         console.error('Error creating student:', error);
-        return { success: false, error: error.message };
+        return { success: false, error: error.message, code: error.code };
     }
 }
 

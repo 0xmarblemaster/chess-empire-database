@@ -94,9 +94,22 @@ function updateResultCount(count = null) {
     });
 }
 
+// Only admins may create students (RLS migration 105). Coaches with
+// can_edit_students keep edit/delete. API keys create via students-api.
+function canCreateStudents() {
+    return window.supabaseAuth?.getCurrentUserRole()?.role === 'admin';
+}
+
 // Update menu visibility based on user permissions
 function updateMenuVisibility() {
     const userRole = window.supabaseAuth?.getCurrentUserRole();
+
+    // "Add Student" buttons (sidebar header + mobile nav) are hidden in the
+    // markup and only revealed for admins.
+    const addStudentBtn = document.getElementById('addStudentBtn');
+    const mobileAddStudentBtn = document.getElementById('mobileAddStudentBtn');
+    if (addStudentBtn) addStudentBtn.style.display = canCreateStudents() ? '' : 'none';
+    if (mobileAddStudentBtn) mobileAddStudentBtn.style.display = canCreateStudents() ? '' : 'none';
 
     if (!userRole) {
         console.warn('No user role found, hiding all management menus');
@@ -2187,6 +2200,10 @@ function loadCoachCharts(coachStudents) {
 
 // Open Add Student Modal
 function addNewStudent() {
+    if (!canCreateStudents()) {
+        showToast(t('students.createAdminOnly'), 'error');
+        return;
+    }
     const modal = document.getElementById('addStudentModal');
     modal.classList.add('active');
 
@@ -2529,11 +2546,13 @@ async function submitAddStudent(event) {
                 populateFilterDropdowns();
             }
         } else {
-            throw new Error(result.error || 'Failed to create student');
+            const err = new Error(result.error || 'Failed to create student');
+            err.code = result.code;
+            throw err;
         }
     } catch (error) {
         console.error('❌ Error adding student:', error);
-        showToast(error.message || 'Failed to add student', 'error');
+        showToast(error.code === '42501' ? t('students.createAdminOnly') : (error.message || 'Failed to add student'), 'error');
     } finally {
         addStudentInFlight = false;
         if (submitButton) submitButton.disabled = false;
@@ -3386,7 +3405,9 @@ function processMatchedRows(rows, opts) {
             }
             options += `<option value="" disabled>─────</option>`;
             options += `<option value="__skip__">${t('admin.uploads.skipRow')}</option>`;
-            options += `<option value="__new__">${t('admin.uploads.createNewStudent')}</option>`;
+            if (canCreateStudents()) {
+                options += `<option value="__new__">${t('admin.uploads.createNewStudent')}</option>`;
+            }
             const colspan = columns.length;
             const datasetRow = isTournament
                 ? `data-row-rank="${row.rank ?? ''}" data-row-score="${row.score ?? ''}" data-row-games="${row.games_played ?? ''}" data-row-delta="${row.rating_delta ?? 0}" data-row-rating-before="${row.rating_before ?? ''}" data-row-avg-opp="${row.avg_opp_rating ?? ''}"`
@@ -3566,6 +3587,10 @@ function onNewStudentBranchChange(branchSel, rowIndex) {
 // __pendingStudent-flagged entry into csvParsedData so the commit step inserts
 // the student first, then the rating row.
 function confirmNewStudentRow(btn, rowIndex) {
+    if (!canCreateStudents()) {
+        showToast(t('students.createAdminOnly'), 'error');
+        return;
+    }
     const form = btn.closest('.new-student-form') || document.getElementById(`new-student-form-${rowIndex}`);
     if (!form) return;
     const firstName = form.querySelector('.new-student-firstname').value.trim();
@@ -3683,6 +3708,11 @@ function resolveAmbiguousRow(selectEl) {
     }
 
     if (value === '__new__') {
+        if (!canCreateStudents()) {
+            showToast(t('students.createAdminOnly'), 'error');
+            selectEl.value = '';
+            return;
+        }
         if (formEl) {
             formEl.innerHTML = renderNewStudentFormHtml(rowIndex, selectEl.dataset.rowName);
             formEl.style.display = 'block';
@@ -4868,6 +4898,13 @@ async function importCSVRatings() {
     if (!csvParsedData || csvParsedData.length === 0) {
         showToast(t('admin.ratings.noValidData'), 'error');
         return;
+    }
+    // Non-admins cannot create students: drop any pending new-student rows so
+    // the commit paths never call addStudent() (they are skipped instead).
+    if (!canCreateStudents() && csvParsedData.some(item => item.__pendingStudent)) {
+        csvParsedData = csvParsedData.filter(item => !item.__pendingStudent);
+        showToast(t('students.createAdminOnly'), 'warning');
+        if (csvParsedData.length === 0) return;
     }
     if (csvImportKind && csvImportKind !== 'rating') {
         return commitTournamentUpload(csvImportKind);
