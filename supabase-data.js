@@ -2968,21 +2968,33 @@ const supabaseData = {
 
             if (error || !data) return resolved; // fail open (table missing etc.)
 
+            // Physical indexes are only unique per coach, not per branch+schedule
+            // (Gagarin: coach A sat_sun idx 1 and coach B sat_sun idx 1 are
+            // different slots). So when BOTH the row and the exclusion carry a
+            // logical id, compare logical ids only — an index match there is a
+            // cross-coach collision, not the same slot. The index fallback is
+            // kept for legacy rows/exclusions with no logical id.
             const excludedByLogical = new Set();
-            const excludedByIndex = new Set();
+            const excludedByIndex = new Set();          // any exclusion, by index
+            const excludedByIndexLegacy = new Set();    // exclusions with no logical id
             for (const e of data) {
+                const idxKey = `${e.student_id}|idx:${e.time_slot_index}`;
                 if (e.logical_slot_id) {
                     excludedByLogical.add(`${e.student_id}|${e.logical_slot_id}`);
+                } else {
+                    excludedByIndexLegacy.add(idxKey);
                 }
-                excludedByIndex.add(`${e.student_id}|idx:${e.time_slot_index}`);
+                excludedByIndex.add(idxKey);
             }
 
             return resolved.filter(r => {
-                if (r.logicalSlotId &&
-                    excludedByLogical.has(`${r.studentId}|${r.logicalSlotId}`)) {
-                    return false;
+                const idxKey = `${r.studentId}|idx:${r.timeSlotIndex}`;
+                if (r.logicalSlotId) {
+                    if (excludedByLogical.has(`${r.studentId}|${r.logicalSlotId}`)) return false;
+                    if (excludedByIndexLegacy.has(idxKey)) return false;
+                    return true;
                 }
-                if (excludedByIndex.has(`${r.studentId}|idx:${r.timeSlotIndex}`)) {
+                if (excludedByIndex.has(idxKey)) {
                     return false;
                 }
                 return true;

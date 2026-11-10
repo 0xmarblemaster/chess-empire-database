@@ -142,7 +142,7 @@ assert(/\.from\('student_slot_exclusions'\)/.test(applyBody) && /\.eq\('active',
     '_applySlotExclusions reads only ACTIVE exclusions');
 assert(/if \(error \|\| !data\) return resolved;/.test(applyBody),
     '_applySlotExclusions fails open (returns input) when the table is absent');
-assert(/excludedByLogical\.has/.test(applyBody) && /excludedByIndex\.has/.test(applyBody),
+assert(/excludedByLogical\.has/.test(applyBody) && /excludedByIndex\.has/.test(applyBody) && /excludedByIndexLegacy\.has/.test(applyBody),
     '_applySlotExclusions excludes by logical id OR physical index');
 
 const addExclBody = methodBody(SDATA_SRC, 'addStudentSlotExclusion');
@@ -255,14 +255,41 @@ function visibleSlots(rows, branch_id, schedule_type, monthEnd, exclusions = [])
     // Exclusion filter (migration 086) — the FINAL step.
     const exLogical = new Set();
     const exIndex = new Set();
+    const exIndexLegacy = new Set();
     for (const e of exclusions.filter(e => e.active !== false)) {
+        const idxKey = `${e.student_id}|idx:${e.time_slot_index}`;
         if (e.logical_slot_id) exLogical.add(`${e.student_id}|${e.logical_slot_id}`);
-        exIndex.add(`${e.student_id}|idx:${e.time_slot_index}`);
+        else exIndexLegacy.add(idxKey);
+        exIndex.add(idxKey);
     }
-    out = out.filter(r =>
-        !(r.logicalSlotId && exLogical.has(`${r.studentId}|${r.logicalSlotId}`)) &&
-        !exIndex.has(`${r.studentId}|idx:${r.timeSlotIndex}`));
+    out = out.filter(r => {
+        const idxKey = `${r.studentId}|idx:${r.timeSlotIndex}`;
+        if (r.logicalSlotId) {
+            return !exLogical.has(`${r.studentId}|${r.logicalSlotId}`) && !exIndexLegacy.has(idxKey);
+        }
+        return !exIndex.has(idxKey);
+    });
     return out;
+}
+
+// --- THE ALINUR CASE (CE-00073, 2026-11-10): exclusion for coach B's sat_sun
+//     idx 1 (logical LB1) must NOT hide the student from coach A's sat_sun
+//     idx 1 (logical LA1) — same physical index, different slot.
+{
+    const rows = [
+        { id: aid(), student_id: 'S', branch_id: 'B', schedule_type: 'sat_sun',
+          time_slot_index: 1, effective_from: '1970-01-01', hidden: false, logical_slot_id: 'LA1' },
+    ];
+    const exclusions = [{ student_id: 'S', branch_id: 'B', schedule_type: 'sat_sun',
+        time_slot_index: 1, logical_slot_id: 'LB1', active: true }];
+    assert(visibleSlots(rows, 'B', 'sat_sun', '2026-11-30', exclusions).some(a => a.studentId === 'S'),
+        'Alinur case: cross-coach index collision does not hide the student');
+    const exclSame = [{ ...exclusions[0], logical_slot_id: 'LA1' }];
+    assert(!visibleSlots(rows, 'B', 'sat_sun', '2026-11-30', exclSame).some(a => a.studentId === 'S'),
+        'Alinur case: an exclusion for the SAME logical slot still hides');
+    const exclLegacy = [{ ...exclusions[0], logical_slot_id: null }];
+    assert(!visibleSlots(rows, 'B', 'sat_sun', '2026-11-30', exclLegacy).some(a => a.studentId === 'S'),
+        'Alinur case: a legacy (no logical id) exclusion still hides by index');
 }
 
 // --- modern-row delete: student in a single modern slot, deleted cleanly.
