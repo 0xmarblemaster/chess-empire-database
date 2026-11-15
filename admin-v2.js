@@ -4681,7 +4681,11 @@ async function previewTournamentFile(file, kind) {
         }));
 
         if (rows.length === 0) {
-            showToast(t('admin.ratings.csvEmpty'), 'error');
+            // Surface the parser's reason instead of a generic "file is empty".
+            const reasons = validation.warnings.slice();
+            if (parsed.results.length > 0) reasons.push('All players have 0 games played');
+            const detail = reasons.length ? `: ${reasons.join('; ')}` : '';
+            showToast(t('admin.ratings.csvParseError') + detail, 'error');
             return;
         }
 

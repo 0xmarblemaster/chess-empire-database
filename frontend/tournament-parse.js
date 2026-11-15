@@ -25,6 +25,9 @@
         razryad_4: 10,
         razryad_3: 9,
     });
+    // First-column header variants: Swiss-Manager uses "Ном.", our
+    // tunx-to-excel export uses "Место". Compared after stripping trailing dots.
+    const RANK_HEADER_KEYS = Object.freeze(['ном', '№', 'no', 'место', 'мест', 'rk']);
     const RATED_MIN_ROUNDS = 1;
     const RATED_MAX_ROUNDS = 20;
 
@@ -69,6 +72,18 @@
             if (m >= 1 && m <= 12 && d >= 1 && d <= 31) return `${y}-${pad2(m)}-${pad2(d)}`;
         }
 
+        // Year-less day/month, e.g. "Лига_C_14.11_..." or "..._14_11_...".
+        // Dot form allows 1-2 digit parts; underscore form needs 2+2 digits
+        // so things like "round_1_2" aren't read as dates.
+        // Must not be glued to letters, so "v1.2" isn't read as a date.
+        const dm = name.match(/(?<![\p{L}\p{N}])(?<!\d\.)(\d{1,2})\.(\d{1,2})(?!\d)(?!\.\d)/u)
+            || name.match(/(?<![\p{L}\p{N}])(?<!\d_)(\d{2})_(\d{2})(?!\d)(?!_\d)/u);
+        if (dm) {
+            const d = parseInt(dm[1], 10);
+            const m = parseInt(dm[2], 10);
+            if (m >= 1 && m <= 12 && d >= 1 && d <= 31) return `${fallbackYear}-${pad2(m)}-${pad2(d)}`;
+        }
+
         const lower = name.toLowerCase();
         const monthRe = /(\d{1,2})\s+([а-яё]+)(?:\s+(\d{4}))?/i;
         const mm = lower.match(monthRe);
@@ -103,10 +118,11 @@
     }
     function parseSignedInteger(raw) {
         if (raw === undefined || raw === null) return 0;
-        const s = String(raw).trim();
+        const s = String(raw).trim().replace(',', '.');
         if (s === '' || s === '0') return 0;
-        const n = parseInt(s, 10);
-        return Number.isFinite(n) ? n : 0;
+        // Round half away from zero: tunx exports carry decimals (55.6, -16.5).
+        const n = parseFloat(s);
+        return Number.isFinite(n) ? Math.sign(n) * Math.round(Math.abs(n)) : 0;
     }
 
     function splitRow(line) {
@@ -213,21 +229,26 @@
         let headerIdx = -1;
         let cols = null;
         for (let i = 0; i < lines.length; i++) {
-            if (lines[i].indexOf('Ном.') !== -1 && lines[i].indexOf('Имя') !== -1) {
+            const rowCols = splitRow(lines[i]);
+            const keys = rowCols.map(c => c.replace(/[.\s]+$/, '').toLowerCase());
+            const hasRankCol = (lines[i].indexOf('Ном.') !== -1)
+                || keys.some(k => RANK_HEADER_KEYS.includes(k));
+            const hasNameCol = (lines[i].indexOf('Имя') !== -1) || keys.includes('name');
+            if (hasRankCol && hasNameCol) {
                 headerIdx = i;
-                cols = splitRow(lines[i]);
+                cols = rowCols;
                 break;
             }
         }
         if (headerIdx === -1 || !cols) {
-            warnings.push('Participant table header (Ном./Имя) not found');
+            warnings.push('Participant table header (Ном./Место + Имя) not found');
             return out;
         }
 
         const colIdx = {};
         cols.forEach((c, i) => {
             const key = c.replace(/[.\s]+$/, '').toLowerCase();
-            if (key === 'ном' || key === '№' || key === 'no') colIdx.rank = i;
+            if (RANK_HEADER_KEYS.includes(key)) colIdx.rank = i;
             else if (key === 'имя' || key === 'name')        colIdx.name = i;
             else if (key === 'рейт' || key === 'rating')     colIdx.rating = i;
             else if (key.startsWith('оцен.очки') || key.startsWith('оцен очки') || key === 'очки' || key.startsWith('очки')) colIdx.score = i;
