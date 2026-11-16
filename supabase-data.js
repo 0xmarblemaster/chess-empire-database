@@ -82,6 +82,32 @@ function mapStudentScheduleTimes(slots, timeSlotRows, coachId) {
 }
 window.mapStudentScheduleTimes = mapStudentScheduleTimes;
 
+// Bulk twin of supabaseData._applySlotExclusions: same rules (logical-id match
+// when both sides carry one, legacy index exclusions always apply, index match
+// for slots with no logical id) but keyed per branch|schedule|student because
+// `resolved` (from resolveStudentScheduleSlots) spans every group at once.
+function filterExcludedSlots(resolved, exclusionRows) {
+    const excludedByLogical = new Set();
+    const excludedByIndex = new Set();
+    const excludedByIndexLegacy = new Set();
+    for (const e of exclusionRows || []) {
+        const scope = `${e.branch_id}|${e.schedule_type}|${e.student_id}`;
+        const idxKey = `${scope}|idx:${e.time_slot_index}`;
+        if (e.logical_slot_id) excludedByLogical.add(`${scope}|${e.logical_slot_id}`);
+        else excludedByIndexLegacy.add(idxKey);
+        excludedByIndex.add(idxKey);
+    }
+    return (resolved || []).filter(r => {
+        const scope = `${r.branchId}|${r.scheduleType}|${r.studentId}`;
+        const idxKey = `${scope}|idx:${r.timeSlotIndex}`;
+        if (r.logicalSlotId) {
+            return !excludedByLogical.has(`${scope}|${r.logicalSlotId}`) && !excludedByIndexLegacy.has(idxKey);
+        }
+        return !excludedByIndex.has(idxKey);
+    });
+}
+window.filterExcludedSlots = filterExcludedSlots;
+
 const supabaseData = {
     /**
      * STUDENTS
@@ -3064,6 +3090,112 @@ const supabaseData = {
             return mapStudentScheduleTimes(perGroup.flat(), timeSlotsRes.data, studentRes?.data?.coach_id || null);
         } catch (e) {
             return [];
+        }
+    },
+
+    /**
+     * Admin students table «Рейтинг» column: latest rating per student from the
+     * student_current_ratings view. Paged (PostgREST caps at 1000 rows). Never
+     * throws — on error returns what was collected so far.
+     * @returns {Promise<Map<string, {rating, ratingDate, leagueTier}>>}
+     */
+    async getStudentTableRatings() {
+        const PAGE = 1000;
+        const HARD_CEILING = 50;
+        const out = new Map();
+        try {
+            for (let page = 0; page < HARD_CEILING; page++) {
+                const from = page * PAGE;
+                const { data, error } = await window.supabaseClient
+                    .from('student_current_ratings')
+                    .select('student_id, rating, rating_date, league_tier')
+                    .order('student_id', { ascending: true })
+                    .range(from, from + PAGE - 1);
+                if (error) {
+                    console.warn('getStudentTableRatings:', error);
+                    break;
+                }
+                if (!data || data.length === 0) break;
+                for (const r of data) {
+                    if (r.rating == null || r.rating <= 0) continue;
+                    out.set(r.student_id, { rating: r.rating, ratingDate: r.rating_date, leagueTier: r.league_tier });
+                }
+                if (data.length < PAGE) break;
+            }
+        } catch (e) {
+            console.warn('getStudentTableRatings:', e);
+        }
+        return out;
+    },
+
+    // Fetch every page of a query built by makeQuery(); throws on error.
+    async _fetchAllPages(makeQuery) {
+        const PAGE = 1000;
+        const HARD_CEILING = 50;
+        const rows = [];
+        for (let page = 0; page < HARD_CEILING; page++) {
+            const from = page * PAGE;
+            const { data, error } = await makeQuery().range(from, from + PAGE - 1);
+            if (error) throw error;
+            if (!data || data.length === 0) break;
+            rows.push(...data);
+            if (data.length < PAGE) break;
+        }
+        return rows;
+    },
+
+    /**
+     * Admin students table «Расписание» column: bulk getStudentSchedule for the
+     * CURRENT month. Never throws — assignment/time_slots errors return an empty
+     * Map; an exclusions error fails open (no exclusions).
+     * @param {Array<{id, coachId}>} students
+     * @returns {Promise<Map<string, Array<{scheduleType, startTime, endTime, logicalSlotId}>>>}
+     */
+    async getAllStudentSchedules(students) {
+        const out = new Map();
+        try {
+            const d = new Date();
+            const lastDay = new Date(d.getFullYear(), d.getMonth() + 1, 0).getDate();
+            const monthEnd = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`;
+
+            const [assignRows, timeSlotRows, exclusionRows] = await Promise.all([
+                this._fetchAllPages(() => window.supabaseClient
+                    .from('student_time_slot_assignments')
+                    .select('id, student_id, branch_id, schedule_type, time_slot_index, effective_from, hidden, logical_slot_id, updated_at')
+                    .lte('effective_from', monthEnd)
+                    .order('effective_from', { ascending: false })
+                    .order('updated_at', { ascending: false })
+                    .order('id', { ascending: true })),
+                this._fetchAllPages(() => window.supabaseClient
+                    .from('time_slots')
+                    .select('branch_id, coach_id, schedule_type, slot_index, start_time, end_time, effective_from, deleted_at, logical_slot_id')
+                    .lte('effective_from', monthEnd)
+                    .order('effective_from', { ascending: false })
+                    .order('id', { ascending: true })),
+                this._fetchAllPages(() => window.supabaseClient
+                    .from('student_slot_exclusions')
+                    .select('student_id, branch_id, schedule_type, logical_slot_id, time_slot_index')
+                    .eq('active', true)
+                    .order('id', { ascending: true }))
+                    .catch(() => [])
+            ]);
+
+            const rowsByStudent = new Map();
+            for (const r of assignRows) {
+                if (!rowsByStudent.has(r.student_id)) rowsByStudent.set(r.student_id, []);
+                rowsByStudent.get(r.student_id).push(r);
+            }
+            for (const s of students || []) {
+                const rows = rowsByStudent.get(s.id);
+                if (!rows) continue;
+                const slots = filterExcludedSlots(resolveStudentScheduleSlots(rows), exclusionRows);
+                const times = mapStudentScheduleTimes(slots, timeSlotRows, s.coachId || null);
+                if (times.length) out.set(s.id, times);
+            }
+            return out;
+        } catch (e) {
+            console.warn('getAllStudentSchedules:', e);
+            return new Map();
         }
     },
 

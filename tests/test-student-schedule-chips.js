@@ -202,14 +202,20 @@ assertEqual(mapTimes([slot({ timeSlotIndex: 9 })], [ts({ slot_index: 0, start_ti
     // -----------------------------------------------------------------------
     console.log('\n=== renderScheduleChips ==============================================\n');
     const TRANSLATIONS = vm.runInNewContext(`(${I18N_SRC.slice(I18N_SRC.indexOf('const translations = {') + 'const translations = '.length, I18N_SRC.indexOf('\n};', I18N_SRC.indexOf('const translations = {')) + 2)})`);
-    const constsStart = STUDENT_SRC.indexOf('const SCHEDULE_CHIP_DAYS');
-    const consts = STUDENT_SRC.slice(constsStart, STUDENT_SRC.indexOf('function formatScheduleTime', constsStart));
-    const renderSrc = [consts, ...['escapeHtmlSafe', 'formatScheduleTime', 'renderScheduleChips'].map(n => extractFunction(STUDENT_SRC, n))].join('\n\n');
+    const CONSTANTS_SRC = read('constants.js');
+    const constsStart = CONSTANTS_SRC.indexOf('const SCHEDULE_CHIP_DAYS');
+    const consts = CONSTANTS_SRC.slice(constsStart, CONSTANTS_SRC.indexOf('function formatScheduleTime', constsStart));
+    const renderSrc = [consts,
+        ...['formatScheduleTime', 'sortScheduleChips'].map(n => extractFunction(CONSTANTS_SRC, n)),
+        ...['escapeHtmlSafe', 'renderScheduleChips'].map(n => extractFunction(STUDENT_SRC, n))].join('\n\n');
     const rctx = vm.createContext({ lang: 'en', t: (k) => TRANSLATIONS[rctx.lang][k] });
     vm.runInContext(renderSrc, rctx);
     const render = (schedules, lang = 'en') => { rctx.lang = lang; return rctx.renderScheduleChips(schedules); };
 
     assert(/window\.renderScheduleChips = renderScheduleChips/.test(STUDENT_SRC), 'renderScheduleChips exported on window');
+    assert(!/const SCHEDULE_CHIP_DAYS|function formatScheduleTime/.test(STUDENT_SRC), 'chip helpers shared via constants.js, not redeclared in student.js');
+    const html_ = read('student.html');
+    assert(html_.indexOf('src="constants.js') > 0 && html_.indexOf('src="constants.js') < html_.indexOf('src="student.js'), 'student.html loads constants.js before student.js');
     assertEqual(render([]), '', 'empty → ""');
     assertEqual(render(null), '', 'null → ""');
     assertEqual(render([{ scheduleType: 'unknown', startTime: '10:00:00', endTime: '11:00:00' }]), '', 'unknown schedule type → ""');

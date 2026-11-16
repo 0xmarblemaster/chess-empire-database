@@ -16,6 +16,11 @@ async function initializeData() {
     } else {
         loadDataFromStorage();
     }
+
+    // admin-v2 students table: ratings + schedules load in the background
+    if (typeof window.loadStudentTableExtras === 'function') {
+        window.loadStudentTableExtras();
+    }
 }
 
 // Load data from Supabase and update global variables

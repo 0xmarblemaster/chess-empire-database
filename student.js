@@ -447,30 +447,10 @@ function renderStudentCode(student) {
 
 // Lesson schedule chips under the league badges: one "[Вт · Чт] ⏱ 16:30–17:30"
 // pill per slot the student attends. Empty schedule renders nothing.
-const SCHEDULE_CHIP_DAYS = {
-    mon_wed: ['mon', 'wed'],
-    mon_wed_fri: ['mon', 'wed', 'fri'],
-    tue_thu: ['tue', 'thu'],
-    wed_fri: ['wed', 'fri'],
-    sat_sun: ['sat', 'sun']
-};
-const SCHEDULE_CHIP_ORDER = ['mon_wed', 'mon_wed_fri', 'tue_thu', 'wed_fri', 'sat_sun'];
-
-function formatScheduleTime(time) {
-    const m = /^(\d{1,2}:\d{2})/.exec(String(time || ''));
-    return m ? m[1] : '';
-}
-
+// SCHEDULE_CHIP_DAYS / formatScheduleTime / sortScheduleChips live in constants.js.
 function renderScheduleChips(schedules) {
-    const chips = (schedules || []).filter(s => SCHEDULE_CHIP_DAYS[s.scheduleType] && formatScheduleTime(s.startTime));
+    const chips = sortScheduleChips(schedules);
     if (chips.length === 0) return '';
-    const minutes = (time) => {
-        const [h, m] = formatScheduleTime(time).split(':');
-        return parseInt(h, 10) * 60 + parseInt(m, 10);
-    };
-    chips.sort((a, b) =>
-        SCHEDULE_CHIP_ORDER.indexOf(a.scheduleType) - SCHEDULE_CHIP_ORDER.indexOf(b.scheduleType)
-        || minutes(a.startTime) - minutes(b.startTime));
     const title = escapeHtmlSafe(t('student.schedule.title') || 'Lesson schedule');
     const html = chips.map(s => {
         const days = SCHEDULE_CHIP_DAYS[s.scheduleType]

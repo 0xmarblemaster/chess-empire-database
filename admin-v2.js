@@ -5,6 +5,13 @@ const STUDENTS_PER_PAGE = 50;
 let currentStudentPage = 1;
 let totalStudentPages = 1;
 
+// Students table «Рейтинг» / «Расписание» columns, loaded after the table first
+// renders (null = still loading).
+let studentRatingMap = null;     // Map<studentId, {rating, ratingDate, leagueTier}>
+let studentScheduleMap = null;   // Map<studentId, [{scheduleType, startTime, endTime}]>
+let studentRatingSort = 'none';  // 'none' -> 'desc' -> 'asc' -> 'none'
+let studentTableExtrasToken = 0;
+
 // Calculate age from date of birth
 function calculateAge(dateOfBirth) {
     if (!dateOfBirth) return null;
@@ -308,6 +315,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         populateBranchDropdown();
         populateCoachDropdown();
         loadStudents();
+        loadStudentTableExtras();
     }
 
     // Fire-and-forget: warm the time slots cache once auth/role is resolved.
@@ -513,10 +521,89 @@ function getFilteredStudents(ignoreAmocrm = false) {
     });
 }
 
+// Fetch ratings + schedules for the students table in the background, then
+// re-render. Re-run after every students reload; a newer run wins.
+async function loadStudentTableExtras() {
+    const token = ++studentTableExtrasToken;
+    let ratings = new Map();
+    let schedules = new Map();
+    if (window.supabaseData) {
+        const list = (window.students || []).map(s => ({ id: s.id, coachId: s.coachId }));
+        [ratings, schedules] = await Promise.all([
+            window.supabaseData.getStudentTableRatings(),
+            window.supabaseData.getAllStudentSchedules(list)
+        ]);
+    }
+    if (token !== studentTableExtrasToken) return;
+    studentRatingMap = ratings;
+    studentScheduleMap = schedules;
+    loadStudents();
+}
+window.loadStudentTableExtras = loadStudentTableExtras;
+
+function renderStudentAgeCell(age) {
+    return age === null || age === undefined ? '<span class="st-muted">—</span>' : escapeHtml(age);
+}
+
+const STUDENT_LEAGUE_KEYS = { gold: 'leagues.leagueA', silver: 'leagues.leagueB', bronze: 'leagues.leagueC' };
+
+function renderStudentRatingCell(studentId) {
+    if (!studentRatingMap) return '<span class="st-muted">…</span>';
+    const entry = studentRatingMap.get(studentId);
+    if (!entry) return '<span class="st-muted">—</span>';
+    const leagueKey = STUDENT_LEAGUE_KEYS[entry.leagueTier];
+    const league = leagueKey
+        ? `<span class="st-league ${entry.leagueTier}">${escapeHtml(t(leagueKey))}</span>`
+        : '';
+    return `<div class="st-rating"><b>${escapeHtml(entry.rating)}</b>${league}</div>`;
+}
+
+function renderStudentScheduleCell(studentId) {
+    if (!studentScheduleMap) return '<span class="st-muted">…</span>';
+    const chips = sortScheduleChips(studentScheduleMap.get(studentId));
+    if (chips.length === 0) return `<span class="st-muted">${escapeHtml(t('admin.table.scheduleNone'))}</span>`;
+    return `<div class="st-sched">${chips.map(s => {
+        const days = SCHEDULE_CHIP_DAYS[s.scheduleType].map(d => t(`student.schedule.days.${d}`)).join(' · ');
+        const end = formatScheduleTime(s.endTime);
+        const range = end ? `${formatScheduleTime(s.startTime)}–${end}` : formatScheduleTime(s.startTime);
+        return `<span class="st-chip"><span class="st-chip-days">${escapeHtml(days)}</span><span class="st-chip-time">${escapeHtml(range)}</span></span>`;
+    }).join('')}</div>`;
+}
+
+// Stable sort by rating; unrated students always go last.
+function sortStudentsByRating(list, direction, ratingMap) {
+    if (direction !== 'desc' && direction !== 'asc') return list;
+    const sign = direction === 'desc' ? -1 : 1;
+    const ratingOf = (s) => (ratingMap && ratingMap.get(s.id) ? ratingMap.get(s.id).rating : null);
+    return [...list].sort((a, b) => {
+        const ra = ratingOf(a);
+        const rb = ratingOf(b);
+        if (ra === null || rb === null) return (ra === null) - (rb === null);
+        return sign * (ra - rb);
+    });
+}
+
+const RATING_SORT_NEXT = { none: 'desc', desc: 'asc', asc: 'none' };
+const RATING_SORT_ICONS = { none: 'arrow-down-up', desc: 'arrow-down', asc: 'arrow-up' };
+const RATING_SORT_ARIA = { none: 'none', desc: 'descending', asc: 'ascending' };
+
+function toggleStudentRatingSort() {
+    studentRatingSort = RATING_SORT_NEXT[studentRatingSort];
+    currentStudentPage = 1;
+    const header = document.getElementById('ratingSortHeader');
+    const icon = document.getElementById('ratingSortIcon');
+    if (header) header.setAttribute('aria-sort', RATING_SORT_ARIA[studentRatingSort]);
+    if (icon) {
+        icon.innerHTML = `<i data-lucide="${RATING_SORT_ICONS[studentRatingSort]}"></i>`;
+        if (typeof lucide !== 'undefined') lucide.createIcons({ nodes: [icon] });
+    }
+    loadStudents();
+}
+
 // Load and display students in table
 function loadStudents() {
     const tbody = document.getElementById('studentTableBody');
-    const filteredStudents = getFilteredStudents();
+    const filteredStudents = sortStudentsByRating(getFilteredStudents(), studentRatingSort, studentRatingMap);
 
     // Calculate pagination
     totalStudentPages = Math.ceil(filteredStudents.length / STUDENTS_PER_PAGE);
@@ -529,7 +616,7 @@ function loadStudents() {
     if (filteredStudents.length === 0) {
         tbody.innerHTML = `
             <tr>
-                <td colspan="9" style="text-align: center; padding: 3rem; color: #94a3b8;">
+                <td colspan="11" style="text-align: center; padding: 3rem; color: #94a3b8;">
                     <i data-lucide="users" style="width: 48px; height: 48px; margin-bottom: 1rem;"></i>
                     <div style="font-size: 1.125rem; font-weight: 600; margin-bottom: 0.5rem;">${t('admin.empty.table')}</div>
                     <div style="font-size: 0.875rem;">${t('admin.empty.hint')}</div>
@@ -564,7 +651,7 @@ function loadStudents() {
         }).map((rowStart, index) => {
             const student = paginatedStudents[index];
             return rowStart + `
-                <td>${student.age}</td>
+                <td>${renderStudentAgeCell(student.age)}</td>
                 <td>
                     <a href="branch.html?branch=${encodeURIComponent(student.branch)}"
                        style="color: #d97706; text-decoration: none; font-weight: 500;"
@@ -574,6 +661,8 @@ function loadStudents() {
                     </a>
                 </td>
                 <td>${student.coach}</td>
+                <td>${renderStudentRatingCell(student.id)}</td>
+                <td>${renderStudentScheduleCell(student.id)}</td>
                 <td><span class="level-badge">${t('admin.studentCard.level', { level: student.currentLevel })}</span></td>
                 <td>${translateRazryad(student.razryad || 'None')}</td>
                 <td><span class="status-badge ${student.status}">${translateStatus(student.status)}</span></td>
@@ -704,7 +793,7 @@ function renderMobileStudentCards(students) {
                     ${mobileAvatarHTML}
                     <div class="mobile-card-info">
                         <div class="mobile-card-name clickable" onclick="viewStudent('${student.id}')" style="cursor: pointer; color: #d97706;" onmouseover="this.style.textDecoration='underline'" onmouseout="this.style.textDecoration='none'">${student.firstName} ${student.lastName}</div>
-                        <div class="mobile-card-meta">${student.studentCode ? `${student.studentCode} • ` : ''}${student.age} ${t('common.years')} • ${student.coach}</div>
+                        <div class="mobile-card-meta">${student.studentCode ? `${student.studentCode} • ` : ''}${student.age === null || student.age === undefined ? '' : `${escapeHtml(student.age)} ${t('common.years')} • `}${student.coach}</div>
                     </div>
                     <span class="mobile-card-status ${student.status}">${translateStatus(student.status)}</span>
                 </div>
@@ -725,6 +814,14 @@ function renderMobileStudentCards(students) {
                     <div class="mobile-card-detail">
                         <div class="mobile-card-detail-label">${t('admin.modals.edit.currentLesson')}</div>
                         <div class="mobile-card-detail-value">${student.currentLesson || '-'}</div>
+                    </div>
+                    <div class="mobile-card-detail">
+                        <div class="mobile-card-detail-label">${t('admin.table.rating')}</div>
+                        <div class="mobile-card-detail-value">${renderStudentRatingCell(student.id)}</div>
+                    </div>
+                    <div class="mobile-card-detail mobile-card-detail-full">
+                        <div class="mobile-card-detail-label">${t('admin.table.schedule')}</div>
+                        <div class="mobile-card-detail-value">${renderStudentScheduleCell(student.id)}</div>
                     </div>
                 </div>
                 
@@ -751,6 +848,17 @@ function renderMobileStudentCards(students) {
 
 // Setup event listeners
 function setupEventListeners() {
+    const ratingSortHeader = document.getElementById('ratingSortHeader');
+    if (ratingSortHeader) {
+        ratingSortHeader.addEventListener('click', toggleStudentRatingSort);
+        ratingSortHeader.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter' || e.key === ' ') {
+                e.preventDefault();
+                toggleStudentRatingSort();
+            }
+        });
+    }
+
     // Filter change listeners
     document.getElementById('statusFilter').addEventListener('change', (e) => {
         currentFilters.status = e.target.value;

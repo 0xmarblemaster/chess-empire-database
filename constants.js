@@ -382,6 +382,37 @@ function getPercentileLabel(percentile) {
 }
 
 // ============================================
+// LESSON SCHEDULE CHIPS (student profile + admin students table)
+// ============================================
+const SCHEDULE_CHIP_DAYS = {
+    mon_wed: ['mon', 'wed'],
+    mon_wed_fri: ['mon', 'wed', 'fri'],
+    tue_thu: ['tue', 'thu'],
+    wed_fri: ['wed', 'fri'],
+    sat_sun: ['sat', 'sun']
+};
+const SCHEDULE_CHIP_ORDER = ['mon_wed', 'mon_wed_fri', 'tue_thu', 'wed_fri', 'sat_sun'];
+
+// "16:30:00" -> "16:30" ("9:00" stays "9:00"); anything else -> "".
+function formatScheduleTime(time) {
+    const m = /^(\d{1,2}:\d{2})/.exec(String(time || ''));
+    return m ? m[1] : '';
+}
+
+// Known schedule types with a start time, ordered by weekday then start time.
+function sortScheduleChips(schedules) {
+    const minutes = (time) => {
+        const [h, m] = formatScheduleTime(time).split(':');
+        return parseInt(h, 10) * 60 + parseInt(m, 10);
+    };
+    return (schedules || [])
+        .filter(s => SCHEDULE_CHIP_DAYS[s.scheduleType] && formatScheduleTime(s.startTime))
+        .sort((a, b) =>
+            SCHEDULE_CHIP_ORDER.indexOf(a.scheduleType) - SCHEDULE_CHIP_ORDER.indexOf(b.scheduleType)
+            || minutes(a.startTime) - minutes(b.startTime));
+}
+
+// ============================================
 // EXPORT TO GLOBAL SCOPE
 // ============================================
 window.CHESS_BOTS = CHESS_BOTS;
@@ -407,3 +438,7 @@ window.getTierColors = getTierColors;
 window.getRazryadConfig = getRazryadConfig;
 window.getHighestTier = getHighestTier;
 window.getPercentileLabel = getPercentileLabel;
+window.SCHEDULE_CHIP_DAYS = SCHEDULE_CHIP_DAYS;
+window.SCHEDULE_CHIP_ORDER = SCHEDULE_CHIP_ORDER;
+window.formatScheduleTime = formatScheduleTime;
+window.sortScheduleChips = sortScheduleChips;

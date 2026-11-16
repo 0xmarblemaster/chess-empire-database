@@ -13,10 +13,10 @@
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=Outfit:wght@600;700;800&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/clear-sans-webfont@1.0.1/css/clear-sans.min.css" />
     <script src="https://unpkg.com/lucide@latest"></script>
-    <link rel="stylesheet" href="admin-styles.css?v=1782212685">
+    <link rel="stylesheet" href="admin-styles.css?v=1794300000">
     <link rel="stylesheet" href="modal-styles.css">
     <link rel="stylesheet" href="coach-notifications.css?v=1793800000">
-    <script src="i18n.js?v=1794100000"></script>
+    <script src="i18n.js?v=1794300000"></script>
 </head>
 <body>
     <!-- Mobile Menu Toggle -->
@@ -340,6 +340,10 @@
                                 <th data-i18n="admin.table.age"></th>
                                 <th data-i18n="admin.table.branch"></th>
                                 <th data-i18n="admin.table.coach"></th>
+                                <th id="ratingSortHeader" class="sortable-th" data-i18n-title="admin.table.sortByRating" aria-sort="none" tabindex="0">
+                                    <span class="sortable-th-label"><span data-i18n="admin.table.rating"></span><span id="ratingSortIcon" class="sortable-th-icon"><i data-lucide="arrow-down-up"></i></span></span>
+                                </th>
+                                <th data-i18n="admin.table.schedule"></th>
                                 <th data-i18n="admin.table.level"></th>
                                 <th data-i18n="admin.table.razryad"></th>
                                 <th data-i18n="admin.table.status"></th>
@@ -3133,9 +3137,9 @@
     <script src="auth-helpers.js?v=1779360000"></script>
     <script src="coach-notifications.js?v=1793990000"></script>
     <script src="attendance-role-lock.js?v=1779360000"></script>
-    <script src="supabase-data.js?v=1792000000"></script>
+    <script src="supabase-data.js?v=1794300000"></script>
     <script src="supabase-data-tournaments.js?v=1779360000"></script>
-    <script src="constants.js?v=1779360000"></script>
+    <script src="constants.js?v=1794300000"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script src="coach-kpi-role-lock.js"></script>
     <script src="frontend/student-match.js"></script>
@@ -3144,10 +3148,10 @@
     <!-- SheetJS for Excel parsing/export -->
     <script src="https://cdn.sheetjs.com/xlsx-0.20.0/package/dist/xlsx.full.min.js"></script>
     <script src="data.js?v=1779360000"></script>
-    <script src="crud.js?v=1794100000"></script>
+    <script src="crud.js?v=1794300000"></script>
     <script src="crud-handlers.js?v=1794100000"></script>
     <script src="crud-management.js?v=1779360000"></script>
-    <script src="admin-v2.js?v=1794200000"></script>
+    <script src="admin-v2.js?v=1794300000"></script>
     <script>
         // DEBUG: Check DOM values after 3 seconds
         setTimeout(() => {
