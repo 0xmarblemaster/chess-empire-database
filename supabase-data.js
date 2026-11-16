@@ -18,6 +18,70 @@ function studentCodeMatches(code, query) {
 }
 window.studentCodeMatches = studentCodeMatches;
 
+// Student profile schedule chips: resolve ONE student's assignment rows into
+// visible slots, per (branch_id, schedule_type) group. Same rules as
+// getTimeSlotAssignments: a latest -1 row hides the whole group, dedupe by
+// logical_slot_id || idx:<index> keeping the latest, skip hidden=true.
+// `rows` must be ordered effective_from DESC, updated_at DESC.
+function resolveStudentScheduleSlots(rows) {
+    const groupSeen = new Set();
+    const groupHidden = new Set();
+    const seen = new Set();
+    const slots = [];
+    for (const d of rows || []) {
+        const group = `${d.branch_id}|${d.schedule_type}`;
+        if (!groupSeen.has(group)) {
+            groupSeen.add(group);
+            if (d.time_slot_index === -1) groupHidden.add(group);
+        }
+        if (groupHidden.has(group) || d.time_slot_index < 0) continue;
+        const key = `${group}|${d.logical_slot_id || `idx:${d.time_slot_index}`}`;
+        if (seen.has(key)) continue;
+        seen.add(key);
+        if (d.hidden === true) continue;
+        slots.push({
+            studentId: d.student_id,
+            branchId: d.branch_id,
+            scheduleType: d.schedule_type,
+            timeSlotIndex: d.time_slot_index,
+            logicalSlotId: d.logical_slot_id || null
+        });
+    }
+    return slots;
+}
+window.resolveStudentScheduleSlots = resolveStudentScheduleSlots;
+
+// Map resolved slots to start/end times from time_slots rows (all versions with
+// effective_from <= month end). Latest version wins and a tombstoned latest
+// version (deleted_at) means the slot is gone. Match by logical_slot_id first
+// (students placed in another coach's slot), else by the student's coach +
+// branch + schedule + slot_index.
+function mapStudentScheduleTimes(slots, timeSlotRows, coachId) {
+    const ordered = [...(timeSlotRows || [])].sort((a, b) =>
+        String(b.effective_from).localeCompare(String(a.effective_from)));
+    const byLogical = new Map();
+    const byIndex = new Map();
+    for (const row of ordered) {
+        if (row.logical_slot_id && !byLogical.has(row.logical_slot_id)) byLogical.set(row.logical_slot_id, row);
+        const idxKey = `${row.branch_id}|${row.coach_id}|${row.schedule_type}|${row.slot_index}`;
+        if (!byIndex.has(idxKey)) byIndex.set(idxKey, row);
+    }
+    const out = [];
+    for (const slot of slots) {
+        const row = (slot.logicalSlotId && byLogical.get(slot.logicalSlotId))
+            || byIndex.get(`${slot.branchId}|${coachId}|${slot.scheduleType}|${slot.timeSlotIndex}`);
+        if (!row || row.deleted_at) continue;
+        out.push({
+            scheduleType: slot.scheduleType,
+            startTime: row.start_time,
+            endTime: row.end_time,
+            logicalSlotId: slot.logicalSlotId
+        });
+    }
+    return out;
+}
+window.mapStudentScheduleTimes = mapStudentScheduleTimes;
+
 const supabaseData = {
     /**
      * STUDENTS
@@ -2946,6 +3010,60 @@ const supabaseData = {
         } catch (e) {
             // Table might not exist - return empty silently
             return { assignments: [], hiddenStudentIds: [] };
+        }
+    },
+
+    /**
+     * Lesson schedule for the student profile card, CURRENT month.
+     * Read-only. Never throws — any error returns [] so the profile still renders.
+     * @param {string} studentId
+     * @param {string} [coachId] - student's coach (skips a lookup when known)
+     * @returns {Promise<Array<{scheduleType, startTime, endTime, logicalSlotId}>>}
+     */
+    async getStudentSchedule(studentId, coachId) {
+        try {
+            const d = new Date();
+            const lastDay = new Date(d.getFullYear(), d.getMonth() + 1, 0).getDate();
+            const monthEnd = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`;
+
+            const [assignRes, studentRes] = await Promise.all([
+                window.supabaseClient
+                    .from('student_time_slot_assignments')
+                    .select('student_id, branch_id, schedule_type, time_slot_index, effective_from, hidden, logical_slot_id')
+                    .eq('student_id', studentId)
+                    .lte('effective_from', monthEnd)
+                    .order('effective_from', { ascending: false })
+                    .order('updated_at', { ascending: false }),
+                coachId !== undefined
+                    ? Promise.resolve({ data: { coach_id: coachId } })
+                    : window.supabaseClient.from('students').select('coach_id').eq('id', studentId).single()
+            ]);
+            if (assignRes.error || !assignRes.data) return [];
+
+            const slots = resolveStudentScheduleSlots(assignRes.data);
+            if (slots.length === 0) return [];
+
+            const groups = [...new Set(slots.map(s => `${s.branchId}|${s.scheduleType}`))];
+            const branchIds = [...new Set(slots.map(s => s.branchId))];
+            const [timeSlotsRes, ...perGroup] = await Promise.all([
+                window.supabaseClient
+                    .from('time_slots')
+                    .select('branch_id, coach_id, schedule_type, slot_index, start_time, end_time, effective_from, deleted_at, logical_slot_id')
+                    .in('branch_id', branchIds)
+                    .lte('effective_from', monthEnd)
+                    .order('effective_from', { ascending: false }),
+                ...groups.map(g => {
+                    const [branchId, scheduleType] = g.split('|');
+                    return this._applySlotExclusions(
+                        slots.filter(s => s.branchId === branchId && s.scheduleType === scheduleType),
+                        branchId, scheduleType);
+                })
+            ]);
+            if (timeSlotsRes.error || !timeSlotsRes.data) return [];
+
+            return mapStudentScheduleTimes(perGroup.flat(), timeSlotsRes.data, studentRes?.data?.coach_id || null);
+        } catch (e) {
+            return [];
         }
     },
 

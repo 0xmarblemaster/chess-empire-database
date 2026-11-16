@@ -133,19 +133,21 @@ async function loadStudentProfileData(studentId) {
         // Try to use the comprehensive getStudentFullProfile function (already uses Promise.all)
         if (typeof window.supabaseData.getStudentFullProfile === 'function') {
             // Load full profile and puzzle rankings in parallel
-            const [fullProfile, puzzleRankings] = await Promise.all([
+            const [fullProfile, puzzleRankings, schedule] = await Promise.all([
                 window.supabaseData.getStudentFullProfile(studentId),
                 typeof window.supabaseData.getStudentPuzzleRankings === 'function'
                     ? window.supabaseData.getStudentPuzzleRankings(studentId)
-                    : Promise.resolve(null)
+                    : Promise.resolve(null),
+                loadStudentSchedule(studentId)
             ]);
             studentProfileData = fullProfile;
             if (puzzleRankings) {
                 studentProfileData.puzzleRankings = puzzleRankings;
             }
+            studentProfileData.schedule = schedule;
         } else {
             // Fallback: load all pieces IN PARALLEL for speed
-            const [currentRating, botProgressData, survivalData, rankings, achievements, puzzleRankings] = await Promise.all([
+            const [currentRating, botProgressData, survivalData, rankings, achievements, puzzleRankings, schedule] = await Promise.all([
                 typeof window.supabaseData.getCurrentRating === 'function'
                     ? window.supabaseData.getCurrentRating(studentId) : Promise.resolve(null),
                 typeof window.supabaseData.getStudentBotProgress === 'function'
@@ -157,7 +159,8 @@ async function loadStudentProfileData(studentId) {
                 typeof window.supabaseData.getStudentAchievements === 'function'
                     ? window.supabaseData.getStudentAchievements(studentId) : Promise.resolve([]),
                 typeof window.supabaseData.getStudentPuzzleRankings === 'function'
-                    ? window.supabaseData.getStudentPuzzleRankings(studentId) : Promise.resolve(null)
+                    ? window.supabaseData.getStudentPuzzleRankings(studentId) : Promise.resolve(null),
+                loadStudentSchedule(studentId)
             ]);
 
             studentProfileData = {
@@ -171,7 +174,8 @@ async function loadStudentProfileData(studentId) {
                 survival: { best: survivalData ? { score: survivalData.bestScore || 0, achievedAt: survivalData.achievedAt } : null, scores: [] },
                 rankings: rankings || { branch: null, school: null, survival: null },
                 achievements: achievements || [],
-                puzzleRankings: puzzleRankings
+                puzzleRankings: puzzleRankings,
+                schedule
             };
         }
 
@@ -180,6 +184,12 @@ async function loadStudentProfileData(studentId) {
         console.error('Error loading student profile data:', error);
         return null;
     }
+}
+
+// Lesson schedule chips data; never rejects so the profile always renders.
+function loadStudentSchedule(studentId) {
+    if (typeof window.supabaseData.getStudentSchedule !== 'function') return Promise.resolve([]);
+    return window.supabaseData.getStudentSchedule(studentId, window.currentStudent?.coachId).catch(() => []);
 }
 
 // Get league info from rating
@@ -434,6 +444,45 @@ function renderStudentCode(student) {
     if (!code) return '';
     return `<div class="student-code-badge" title="${escapeHtmlSafe(t('studentCode.title') || 'Permanent Student ID')}">${escapeHtmlSafe(t('studentCode.label') || 'ID')}: <span class="student-code-value">${escapeHtmlSafe(code)}</span></div>`;
 }
+
+// Lesson schedule chips under the league badges: one "[Вт · Чт] ⏱ 16:30–17:30"
+// pill per slot the student attends. Empty schedule renders nothing.
+const SCHEDULE_CHIP_DAYS = {
+    mon_wed: ['mon', 'wed'],
+    mon_wed_fri: ['mon', 'wed', 'fri'],
+    tue_thu: ['tue', 'thu'],
+    wed_fri: ['wed', 'fri'],
+    sat_sun: ['sat', 'sun']
+};
+const SCHEDULE_CHIP_ORDER = ['mon_wed', 'mon_wed_fri', 'tue_thu', 'wed_fri', 'sat_sun'];
+
+function formatScheduleTime(time) {
+    const m = /^(\d{1,2}:\d{2})/.exec(String(time || ''));
+    return m ? m[1] : '';
+}
+
+function renderScheduleChips(schedules) {
+    const chips = (schedules || []).filter(s => SCHEDULE_CHIP_DAYS[s.scheduleType] && formatScheduleTime(s.startTime));
+    if (chips.length === 0) return '';
+    const minutes = (time) => {
+        const [h, m] = formatScheduleTime(time).split(':');
+        return parseInt(h, 10) * 60 + parseInt(m, 10);
+    };
+    chips.sort((a, b) =>
+        SCHEDULE_CHIP_ORDER.indexOf(a.scheduleType) - SCHEDULE_CHIP_ORDER.indexOf(b.scheduleType)
+        || minutes(a.startTime) - minutes(b.startTime));
+    const title = escapeHtmlSafe(t('student.schedule.title') || 'Lesson schedule');
+    const html = chips.map(s => {
+        const days = SCHEDULE_CHIP_DAYS[s.scheduleType]
+            .map(d => t(`student.schedule.days.${d}`) || d)
+            .join(' · ');
+        const end = formatScheduleTime(s.endTime);
+        const range = end ? `${formatScheduleTime(s.startTime)}–${end}` : formatScheduleTime(s.startTime);
+        return `<span class="schedule-chip"><span class="schedule-chip-days">${escapeHtmlSafe(days)}</span><i data-lucide="clock" style="width: 14px; height: 14px;"></i><span class="schedule-chip-time">${escapeHtmlSafe(range)}</span></span>`;
+    }).join('');
+    return `<div class="schedule-row" role="group" aria-label="${title}" title="${title}">${html}</div>`;
+}
+window.renderScheduleChips = renderScheduleChips;
 
 // Render the amoCRM customer ID banner (staff-only, next to the Chesster banner).
 // Only null/undefined/'' read as "not linked"; any other value is shown in full.
@@ -1297,6 +1346,7 @@ async function renderProfile() {
                     ${tournamentLeagueBadgeHTML}
                     ${rankBadgesHTML}
                 </div>
+                ${renderScheduleChips(studentProfileData?.schedule)}
             </div>
             ${editButtonHTML}
             ${deleteButtonHTML}

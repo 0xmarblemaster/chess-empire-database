@@ -970,6 +970,39 @@ body {
     margin-top: 0.75rem;
 }
 
+.schedule-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    margin-top: 0.5rem;
+}
+
+.schedule-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.4rem 0.8rem 0.4rem 0.45rem;
+    border-radius: 9999px;
+    background: #fdf2f4;
+    border: 1px solid #f3d0d8;
+    color: #5F192B;
+    font-size: 0.875rem;
+    font-weight: 600;
+}
+
+.schedule-chip-days {
+    background: #5F192B;
+    color: #fff;
+    border-radius: 9999px;
+    padding: 0.15rem 0.55rem;
+    font-size: 0.75rem;
+    letter-spacing: 0.02em;
+}
+
+.schedule-chip-time {
+    font-variant-numeric: tabular-nums;
+}
+
 .league-badge,
 .rank-badge {
     display: inline-flex;
@@ -2466,7 +2499,8 @@ body {
         gap: 0.5rem;
     }
 
-    .badge-row {
+    .badge-row,
+    .schedule-row {
         justify-content: center;
         width: 100%;
     }
