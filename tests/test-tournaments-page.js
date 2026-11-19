@@ -5,7 +5,7 @@
  *   1. register_for_tournament RPC capacity + status logic, simulated by
  *      executing the SQL function body in JS against an in-memory store.
  *   2. Branch exclusion list — `tournaments.js` must filter out
- *      "НИШ" (NiS) and "Zhandosova" client-side.
+ *      "НИШ" (NiS) client-side and keep "Zhandosova" (it hosts tournaments).
  *   3. i18n keys exist in en/ru/kk for every tournaments.* key shipped on
  *      the public page.
  *   4. tournaments.html wires the page scripts in the right order and
@@ -139,8 +139,8 @@ assert(/EXCLUDED_BRANCHES\s*=\s*\[/.test(JS),
     'tournaments.js declares EXCLUDED_BRANCHES list');
 assert(/'НИШ'/.test(JS),
     'EXCLUDED_BRANCHES includes the DB name "НИШ" (i.e. NiS)');
-assert(/'Zhandosova'/.test(JS),
-    'EXCLUDED_BRANCHES includes "Zhandosova"');
+assert(!/EXCLUDED_BRANCHES\s*=\s*\[[^\]]*'Zhandosova'/.test(JS),
+    'EXCLUDED_BRANCHES does not include "Zhandosova"');
 
 // Exercise the filter against a realistic branch list.
 const allBranches = [
@@ -152,11 +152,11 @@ const allBranches = [
     { id: '6', name: 'НИШ' },
     { id: '7', name: 'Zhandosova' },
 ];
-const excluded = ['НИШ', 'Zhandosova'];
+const excluded = ['НИШ'];
 const visible = allBranches.filter(b => !excluded.includes(b.name));
-assertEqual(visible.length, 5, 'after filtering, 5 branches remain');
+assertEqual(visible.length, 6, 'after filtering, 6 branches remain');
 assert(!visible.some(b => b.name === 'НИШ'), 'НИШ is filtered out');
-assert(!visible.some(b => b.name === 'Zhandosova'), 'Zhandosova is filtered out');
+assert(visible.some(b => b.name === 'Zhandosova'), 'Zhandosova is retained');
 assert(visible.some(b => b.name === 'Halyk Arena'), 'Halyk Arena is retained');
 
 // ---------------------------------------------------------------------------

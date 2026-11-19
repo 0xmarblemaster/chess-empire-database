@@ -1,7 +1,7 @@
 /**
  * Public tournament schedule page.
  *
- *  - Lists branches (excluding НИШ and Zhandosova) with upcoming-tournament counts.
+ *  - Lists branches (excluding EXCLUDED_BRANCHES) with upcoming-tournament counts.
  *  - Branch click → expand to show upcoming tournaments (sorted by date).
  *  - Tournament click → detail panel with capacity meter, full-name roster,
  *    and a Register button.
@@ -17,7 +17,7 @@
 // "Online" is a virtual branch (branches.is_online) with no physical venue, so
 // its always-empty venue card is hidden here; online students still register
 // to physical tournaments normally (participation is student-keyed).
-const EXCLUDED_BRANCHES = ['НИШ', 'Zhandosova', 'Online'];
+const EXCLUDED_BRANCHES = ['НИШ', 'Online'];
 
 // Fallback polling interval (ms) when Realtime cannot connect.
 const POLL_INTERVAL_MS = 15000;

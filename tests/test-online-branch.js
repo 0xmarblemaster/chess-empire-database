@@ -114,7 +114,7 @@ assert(/\$\{branch\.is_online \? '—' : \(branch\.email \|\| ''\)\}/.test(CRUD_
 console.log('\n=== tournaments venue-card exclusion =================================\n');
 
 const TJS = fs.readFileSync(path.join(ROOT, 'tournaments.js'), 'utf8');
-assert(/const EXCLUDED_BRANCHES = \['НИШ', 'Zhandosova', 'Online'\];/.test(TJS),
+assert(/const EXCLUDED_BRANCHES = \['НИШ', 'Online'\];/.test(TJS),
     "tournaments.js EXCLUDED_BRANCHES includes 'Online'");
 
 const TAPI = fs.readFileSync(path.join(ROOT, 'supabase/functions/tournaments-api/index.ts'), 'utf8');
