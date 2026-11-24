@@ -1200,10 +1200,15 @@ function displayAppAccessUsers(users) {
                             ${createAppAccessPermissionToggle(user, 'can_manage_coaches')}
                             ${createAppAccessPermissionToggle(user, 'can_manage_ratings')}
                             ${createAppAccessPermissionToggle(user, 'can_manage_tournaments')}
+                            ${createAppAccessPermissionToggle(user, 'can_manage_articles')}
                             ${createAppAccessPermissionToggle(user, 'can_manage_data')}
                             ${createAppAccessPermissionToggle(user, 'can_manage_attendance')}
                         </div>`
-                    : `<p class="app-access-admin-hint">${adminHint}</p>`
+                    // Admins have everything except articles, which is granted per user.
+                    : `<p class="app-access-admin-hint">${adminHint}</p>
+                       <div class="app-access-permission-grid">
+                            ${createAppAccessPermissionToggle(user, 'can_manage_articles')}
+                        </div>`
                 }
             </div>
         `;
@@ -1270,6 +1275,7 @@ function getAppAccessPermissionLabel(permissionKey) {
         can_manage_coaches: 'access.permissions.manageCoaches',
         can_manage_ratings: 'access.permissions.manageRatings',
         can_manage_tournaments: 'access.permissions.manageTournaments',
+        can_manage_articles: 'access.permissions.manageArticles',
         can_manage_data: 'access.permissions.manageData',
         can_manage_attendance: 'access.permissions.manageAttendance'
     };
@@ -1285,6 +1291,7 @@ function getAppAccessPermissionLabel(permissionKey) {
         can_manage_coaches: 'Manage Coaches',
         can_manage_ratings: 'Ratings Management',
         can_manage_tournaments: 'Tournament Management',
+        can_manage_articles: 'Article Management',
         can_manage_data: 'Data Management',
         can_manage_attendance: 'Attendance'
     };
@@ -1294,7 +1301,7 @@ function getAppAccessPermissionLabel(permissionKey) {
 
 function createAppAccessPermissionToggle(user, permission) {
     const isChecked = user[permission] ? 'checked' : '';
-    const disabled = user.role === 'admin' ? 'disabled' : '';
+    const disabled = user.role === 'admin' && permission !== 'can_manage_articles' ? 'disabled' : '';
     const label = getAppAccessPermissionLabel(permission);
 
     return `

@@ -176,8 +176,13 @@ function updateMenuVisibility() {
         if (menuDataManagement) menuDataManagement.style.display = 'flex';
         if (menuAttendance) menuAttendance.style.display = 'flex';
         if (menuTournamentsAdmin) menuTournamentsAdmin.style.display = 'flex';
-        if (menuArticles) menuArticles.style.display = 'flex';
         if (managementSectionTitle) managementSectionTitle.style.display = 'block';
+
+        // Articles are granted per user, admins included
+        if (userRole.can_manage_articles === true) {
+            if (menuArticles) menuArticles.style.display = 'flex';
+            if (moreMenuArticles) moreMenuArticles.style.display = 'flex';
+        }
 
         // Mirror onto mobile More-menu twins
         if (moreMenuRatings) moreMenuRatings.style.display = 'flex';
@@ -186,7 +191,6 @@ function updateMenuVisibility() {
         if (moreMenuManageBranches) moreMenuManageBranches.style.display = 'flex';
         if (moreMenuDataManagement) moreMenuDataManagement.style.display = 'flex';
         if (moreMenuTournamentsAdmin) moreMenuTournamentsAdmin.style.display = 'flex';
-        if (moreMenuArticles) moreMenuArticles.style.display = 'flex';
 
         // Analytics - Grant access to specific admin emails
         const userEmail = sessionStorage.getItem('userEmail');
@@ -285,6 +289,15 @@ function updateMenuVisibility() {
             hasAnyManagementAccess = true;
         }
         if (moreMenuTournamentsAdmin) moreMenuTournamentsAdmin.style.display = 'flex';
+    }
+
+    // Articles management
+    if (userRole.can_manage_articles === true) {
+        if (menuArticles) {
+            menuArticles.style.display = 'flex';
+            hasAnyManagementAccess = true;
+        }
+        if (moreMenuArticles) moreMenuArticles.style.display = 'flex';
     }
 
     // Coach Performance counts toward Management section title visibility

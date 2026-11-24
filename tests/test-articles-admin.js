@@ -2,17 +2,21 @@
  * Tests for the Articles ("Статьи") section in admin-v2.
  *
  * Coverage:
- *  (a) admin-v2.html — sidebar + More-menu entries (hidden, admin-only), the
+ *  (a) admin-v2.html — sidebar + More-menu entries (hidden by default), the
  *      #articlesAdminSection, the editor modal and the articles-admin.js tag.
- *  (b) admin-v2.js — menu items flipped only in the admin branch of
- *      updateMenuVisibility; hash routing, mobile showSection, More highlight
- *      and mobile title wiring for 'articlesAdmin'.
+ *  (b) admin-v2.js — menu items shown only for user_roles.can_manage_articles;
+ *      hash routing, mobile showSection, More highlight and mobile title
+ *      wiring for 'articlesAdmin'.
  *  (c) vercel.json — same-origin rewrites to www.chessempire.kz/api/articles.
  *  (d) i18n.js — every admin.articles.* key used exists in en, ru and kk.
  *  (e) articles-admin.js — one API base constant; no supabase-js writes.
- *  (f) Functional (vm sandbox) — admin gate, Bearer token on every call,
- *      publish PATCH, delete needs confirm, editor POST/PATCH + inline API
- *      errors, cover upload, key create (shown once) and revoke.
+ *  (f) Functional (vm sandbox) — can_manage_articles gate, Bearer token on
+ *      every call, publish PATCH, delete needs confirm, editor POST/PATCH +
+ *      inline API errors, cover upload, key create (shown once) and revoke.
+ *  (g) can_manage_articles permission (stub DB): updateMenuVisibility and the
+ *      #articlesAdmin hash for admin/coach with and without the flag, the
+ *      admin-only API-keys tab, and the App Access grid toggle persisting
+ *      user_roles.can_manage_articles. Migration 106 contents.
  *
  * Run: node tests/test-articles-admin.js
  */
@@ -72,11 +76,12 @@ assert(HTML.indexOf('<script src="articles-admin.js') > HTML.indexOf('<script sr
 // ---------------------------------------------------------------------------
 console.log('\n=== (b) admin-v2.js wiring ==========================================\n');
 
-const adminBranch = JS.slice(JS.indexOf("if (userRole.role === 'admin') {"), JS.indexOf('// For non-admins, show based on specific permissions'));
-assert(/menuArticles\.style\.display = 'flex'/.test(adminBranch), 'admin branch shows #menuArticles');
-assert(/moreMenuArticles\.style\.display = 'flex'/.test(adminBranch), 'admin branch shows #moreMenuArticles');
-const nonAdmin = JS.slice(JS.indexOf('// For non-admins, show based on specific permissions'), JS.indexOf('// Initialize dashboard'));
-assert(!/menuArticles|moreMenuArticles/.test(nonAdmin), 'no permission flag shows the articles menu to non-admins');
+const menuFn = JS.slice(JS.indexOf('function updateMenuVisibility()'), JS.indexOf('// Initialize dashboard'));
+const articleShows = menuFn.match(/[^\n]*Articles\.style\.display = 'flex'[^\n]*/g) || [];
+assert(articleShows.length === 4, 'articles menu is shown in exactly 4 places (sidebar + More, admin + non-admin)');
+const flagBlocks = menuFn.match(/if \(userRole\.can_manage_articles === true\) \{[\s\S]*?\n    ?\}/g) || [];
+assert(flagBlocks.length === 2 && flagBlocks.every(b => /menuArticles/.test(b) && /moreMenuArticles/.test(b)),
+    'both branches show the articles menu only under userRole.can_manage_articles === true');
 assert(/case 'articlesAdmin':\s*showArticlesManagement\(false\)/.test(JS), 'hash routing restores #articlesAdmin');
 assert(/section === 'articlesAdmin'\)\s*\{\s*if \(typeof showArticlesManagement === 'function'\)/.test(JS), 'mobile showSection handles articlesAdmin');
 const moreSubs = JS.match(/const\s+moreSubSections\s*=\s*\[[^\]]+\]/g) || [];
@@ -145,7 +150,9 @@ const ARTICLE = {
     updated_at: '2026-11-20T10:00:00Z'
 };
 
-function sandbox({ role = 'admin', confirmResult = true, token = 'tok-123', respond } = {}) {
+const ADMIN_WITH_FLAG = { role: 'admin', can_manage_articles: true };
+
+function sandbox({ userRole = ADMIN_WITH_FLAG, confirmResult = true, token = 'tok-123', respond } = {}) {
     const els = {};
     const calls = [];
     const toasts = [];
@@ -156,11 +163,12 @@ function sandbox({ role = 'admin', confirmResult = true, token = 'tok-123', resp
         URLSearchParams, FormData: class { constructor() { this.parts = []; } append(k, v) { this.parts.push([k, v]); } },
         document: {
             getElementById: id => (els[id] ||= makeEl(id)),
-            querySelectorAll: () => [], querySelector: () => null,
+            querySelectorAll: () => [],
+            querySelector: sel => (sel === '[data-articles-admin-tab="keys"]' ? (els.articlesKeysTabBtn ||= makeEl('articlesKeysTabBtn')) : null),
             addEventListener() {}, execCommand() {}, queryCommandValue: () => ''
         },
         window: {
-            supabaseAuth: { getCurrentUserRole: () => (role ? { role } : null) },
+            supabaseAuth: { getCurrentUserRole: () => userRole },
             supabaseClient: { auth: { getSession: async () => ({ data: { session: token ? { access_token: token } : null } }) } },
             prompt: () => null
         },
@@ -193,13 +201,14 @@ const listResponder = extra => (url, init) => {
 (async () => {
     // Gate
     {
-        const s = sandbox({ role: 'coach' });
+        const s = sandbox({ userRole: { role: 'coach' } });
         await s.ctx.showArticlesManagement();
-        assert(s.sections.length === 0 && s.calls.length === 0, 'non-admin: section not opened, no API call');
-        assert(s.toasts.some(x => x.msg === 'admin.articles.accessDenied' && x.type === 'error'), 'non-admin: access-denied toast');
-        const n = sandbox({ role: null });
+        assert(!s.sections.some(x => x[0] === 'articlesAdmin') && s.calls.length === 0, 'no flag: section not opened, no API call');
+        assert(s.toasts.some(x => x.msg === 'admin.articles.accessDenied' && x.type === 'error'), 'no flag: access-denied toast');
+        assert(s.sections.some(x => x[0] === 'students'), 'no flag: redirected to students');
+        const n = sandbox({ userRole: null });
         await n.ctx.showArticlesManagement();
-        assert(n.sections.length === 0, 'no role: section not opened');
+        assert(!n.sections.some(x => x[0] === 'articlesAdmin'), 'no role: section not opened');
     }
 
     // Open + list
@@ -351,6 +360,138 @@ const listResponder = extra => (url, init) => {
         await s.ctx.revokeArticleKey('k1');
         assert(s.confirms.length === 1, 'revoke asks for confirmation');
         assert(s.calls.some(c => c.method === 'DELETE' && c.url === '/api/articles/keys/k1'), 'revoke → DELETE /api/articles/keys/:id');
+    }
+
+    // -----------------------------------------------------------------------
+    console.log('\n=== (g) can_manage_articles permission ==============================\n');
+
+    // updateMenuVisibility() from admin-v2.js, run against a stub DOM.
+    const MENU_SRC = JS.slice(JS.indexOf('// Only admins may create students'), JS.indexOf('// Initialize dashboard'));
+    function menusFor(userRole) {
+        const els = {};
+        const ctx = {
+            console: { log() {}, warn() {} },
+            document: { getElementById: id => (els[id] ||= makeEl(id)) },
+            window: { supabaseAuth: { getCurrentUserRole: () => userRole } },
+            sessionStorage: { getItem: () => null }
+        };
+        vm.createContext(ctx);
+        vm.runInContext(MENU_SRC + '\nupdateMenuVisibility();', ctx);
+        return {
+            sidebar: els.menuArticles?.style.display === 'flex',
+            more: els.moreMenuArticles?.style.display === 'flex',
+            mgmtTitle: els.managementSectionTitle?.style.display
+        };
+    }
+    // Opening #articlesAdmin directly: the hash router calls showArticlesManagement(false).
+    async function openHash(userRole) {
+        const s = sandbox({ userRole, respond: listResponder() });
+        await s.ctx.showArticlesManagement(false);
+        return s;
+    }
+
+    // (a) admin with the flag
+    {
+        const m = menusFor({ role: 'admin', can_manage_articles: true });
+        assert(m.sidebar && m.more, 'admin + flag: sidebar and More-menu «Статьи» shown');
+        const s = await openHash({ role: 'admin', can_manage_articles: true });
+        assert(s.sections.some(x => x[0] === 'articlesAdmin' && x[1] === false), 'admin + flag: #articlesAdmin opens');
+        assert(s.els.articlesKeysTabBtn.style.display === '', 'admin + flag: API-keys tab visible');
+        await s.ctx.switchArticlesAdminTab('keys');
+        assert(s.calls.some(c => c.url === '/api/articles/keys'), 'admin + flag: keys tab loads keys');
+    }
+    // (b) admin without the flag
+    {
+        const m = menusFor({ role: 'admin', can_manage_articles: false });
+        assert(!m.sidebar && !m.more, 'admin without flag: no «Статьи» menu');
+        assert(!menusFor({ role: 'admin' }).sidebar, 'admin with flag missing (pre-106 row): no «Статьи» menu');
+        const s = await openHash({ role: 'admin', can_manage_articles: false });
+        assert(!s.sections.some(x => x[0] === 'articlesAdmin') && s.calls.length === 0, 'admin without flag: #articlesAdmin denied, no API call');
+        assert(s.toasts.some(x => x.msg === 'admin.articles.accessDenied'), 'admin without flag: access-denied toast');
+        assert(s.sections.some(x => x[0] === 'students'), 'admin without flag: redirected to students');
+    }
+    // (c) coach with the flag
+    {
+        const m = menusFor({ role: 'coach', can_manage_articles: true });
+        assert(m.sidebar && m.more, 'coach + flag: sidebar and More-menu «Статьи» shown');
+        assert(m.mgmtTitle === 'block', 'coach + flag: counts toward the Management section title');
+        const s = await openHash({ role: 'coach', can_manage_articles: true });
+        assert(s.sections.some(x => x[0] === 'articlesAdmin'), 'coach + flag: #articlesAdmin opens');
+        assert(s.els.articlesAdminTableBody.innerHTML.includes('age-to-start'), 'coach + flag: article list renders');
+        assert(s.els.articlesKeysTabBtn.style.display === 'none', 'coach + flag: API-keys tab hidden');
+        const before = s.calls.length;
+        await s.ctx.switchArticlesAdminTab('keys');
+        assert(!s.calls.slice(before).some(c => c.url.startsWith('/api/articles/keys')), 'coach + flag: forcing the keys tab never calls the keys API');
+        assert(s.els.articlesAdminTabKeys.style.display === 'none', 'coach + flag: keys panel stays hidden');
+    }
+    // (d) coach without the flag
+    {
+        const m = menusFor({ role: 'coach', can_manage_articles: false });
+        assert(!m.sidebar && !m.more, 'coach without flag: no «Статьи» menu');
+        assert(m.mgmtTitle === 'none', 'coach without flag (no other perms): Management title hidden');
+        const s = await openHash({ role: 'coach', can_manage_articles: false });
+        assert(!s.sections.some(x => x[0] === 'articlesAdmin') && s.calls.length === 0, 'coach without flag: #articlesAdmin denied, no API call');
+        assert(s.toasts.some(x => x.msg === 'admin.articles.accessDenied'), 'coach without flag: access-denied toast');
+    }
+    // (e) App Access grid toggle (crud-management.js) against a stub user_roles table
+    {
+        const CRUD = fs.readFileSync(path.join(ROOT, 'crud-management.js'), 'utf8');
+        const GRID_SRC = CRUD.slice(CRUD.indexOf('function displayAppAccessUsers(users)'), CRUD.indexOf('async function deleteAppAccessUser'));
+        const userRolesTable = [
+            { user_id: 'u-coach', role: 'coach', can_manage_articles: false },
+            { user_id: 'u-admin', role: 'admin', can_manage_articles: false }
+        ];
+        const messages = [];
+        const container = { innerHTML: '', querySelectorAll: () => [] };
+        const ctx = {
+            console,
+            document: { getElementById: id => (id === 'appAccessUsersList' ? container : null) },
+            lucide: { createIcons() {} },
+            showAppAccessMessage: (type, msg) => messages.push(type),
+            window: {
+                supabaseAuth: { isAdmin: () => true },
+                supabaseClient: {
+                    from: table => ({
+                        update: patch => ({
+                            eq: async (col, val) => {
+                                userRolesTable.filter(r => table === 'user_roles' && r[col] === val).forEach(r => Object.assign(r, patch));
+                                return { error: null };
+                            }
+                        })
+                    })
+                }
+            }
+        };
+        vm.createContext(ctx);
+        vm.runInContext(GRID_SRC, ctx);
+        ctx.displayAppAccessUsers(userRolesTable.map(r => ({ ...r, email: `${r.user_id}@x.kz` })));
+        const html = container.innerHTML;
+        const toggleRe = uid => new RegExp(`<input type="checkbox"[^>]*\\s(disabled\\s+)?data-user-id="${uid}"\\s+data-permission="can_manage_articles"`);
+        assert(toggleRe('u-coach').test(html), 'App Access grid renders the can_manage_articles toggle for a coach');
+        const adminToggle = html.match(toggleRe('u-admin'));
+        assert(adminToggle && !adminToggle[1], 'admin card renders an enabled can_manage_articles toggle');
+        assert(html.includes('Article Management'), 'toggle label falls back to "Article Management"');
+
+        for (const [uid, value] of [['u-coach', true], ['u-admin', true], ['u-coach', false]]) {
+            await ctx.handleAppAccessPermissionChange({ target: { dataset: { userId: uid, permission: 'can_manage_articles' }, checked: value } });
+            assert(userRolesTable.find(r => r.user_id === uid).can_manage_articles === value,
+                `flipping the toggle persists user_roles.can_manage_articles = ${value} for ${uid}`);
+        }
+        assert(messages.every(m => m === 'success'), 'toggle saves report success');
+    }
+    // i18n + migration 106
+    {
+        for (const [lang, label] of [['en', 'Article Management'], ['ru', 'Управление статьями'], ['kk', 'Мақалаларды басқару']]) {
+            assert(blocks[lang].includes(`"access.permissions.manageArticles": "${label}"`), `${lang}: access.permissions.manageArticles = "${label}"`);
+        }
+        const sql = fs.readFileSync(path.join(ROOT, 'supabase/migrations/106_articles_permission.sql'), 'utf8');
+        assert(/ADD COLUMN IF NOT EXISTS can_manage_articles BOOLEAN NOT NULL DEFAULT false/i.test(sql), '106 adds can_manage_articles NOT NULL DEFAULT false');
+        assert(/DROP FUNCTION IF EXISTS get_user_roles_with_emails\(\)/.test(sql) && /can_manage_articles BOOLEAN,/.test(sql)
+            && /COALESCE\(ur\.can_manage_articles, FALSE\) AS can_manage_articles/.test(sql), '106 recreates get_user_roles_with_emails with can_manage_articles');
+        assert(/SECURITY DEFINER/.test(sql) && /GRANT EXECUTE ON FUNCTION get_user_roles_with_emails\(\) TO authenticated/.test(sql), '106 keeps SECURITY DEFINER and the authenticated grant');
+        assert(/UPDATE user_roles\s+SET can_manage_articles = true\s+WHERE role = 'admin'/.test(sql), '106 backfills admins');
+        assert(!/CREATE\s+(OR REPLACE\s+)?TRIGGER/i.test(sql), '106 adds no auto-grant trigger');
+        assert(fs.existsSync(path.join(ROOT, 'supabase/migrations/106_articles_permission_verify.sql')), '106 verify script exists');
     }
 
     console.log(`\n${passed} passed, ${failed} failed`);

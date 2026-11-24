@@ -1,5 +1,5 @@
 // ============================================================
-// Articles Management (admin only) — the public chessempire.kz/articles pages.
+// Articles Management (user_roles.can_manage_articles) — the public chessempire.kz/articles pages.
 // Every read/write goes through the site's /api/articles API (proxied same-origin
 // by vercel.json): it sanitizes the HTML and refreshes the public pages, so the
 // dashboard never touches the articles table directly.
@@ -79,12 +79,23 @@ function articleSiteUrl(slug, lang) {
 // Section + tabs
 // ---------------------------------------------------------------------------
 
+function canManageArticles() {
+    return window.supabaseAuth?.getCurrentUserRole()?.can_manage_articles === true;
+}
+
+// API keys bypass per-user revocation of can_manage_articles, so only admins manage them.
+function canManageArticleKeys() {
+    return canManageArticles() && window.supabaseAuth.getCurrentUserRole().role === 'admin';
+}
+
 async function showArticlesManagement(updateHash = true) {
-    const userRole = window.supabaseAuth?.getCurrentUserRole();
-    if (userRole?.role !== 'admin') {
+    if (!canManageArticles()) {
         _articlesToast(_at('admin.articles.accessDenied'), 'error');
+        switchToSection('students');
         return;
     }
+    const keysTabBtn = document.querySelector('[data-articles-admin-tab="keys"]');
+    if (keysTabBtn) keysTabBtn.style.display = canManageArticleKeys() ? '' : 'none';
     switchToSection('articlesAdmin', updateHash);
     document.querySelectorAll('.nav-item').forEach(item => item.classList.remove('active'));
     const navItem = document.getElementById('menuArticles');
@@ -94,12 +105,12 @@ async function showArticlesManagement(updateHash = true) {
 window.showArticlesManagement = showArticlesManagement;
 
 async function switchArticlesAdminTab(tab) {
-    const isKeys = tab === 'keys';
+    const isKeys = tab === 'keys' && canManageArticleKeys();
     document.getElementById('articlesAdminTabArticles').style.display = isKeys ? 'none' : '';
     document.getElementById('articlesAdminTabKeys').style.display = isKeys ? '' : 'none';
     document.getElementById('articlesAdminNewBtn').style.display = isKeys ? 'none' : '';
     document.querySelectorAll('[data-articles-admin-tab]').forEach(btn => {
-        const active = btn.getAttribute('data-articles-admin-tab') === tab;
+        const active = btn.getAttribute('data-articles-admin-tab') === (isKeys ? 'keys' : 'articles');
         btn.classList.toggle('is-active', active);
         btn.setAttribute('aria-selected', active ? 'true' : 'false');
     });
