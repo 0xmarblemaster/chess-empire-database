@@ -614,24 +614,44 @@ No 404 for unknown student — empty data, `trend:null`.
 ⚠️ 404 behavior is inconsistent by action: `profile`/`ranking` 404; `ratings`/`achievements`/`progress_ranking` return 200 with empty/null data.
 
 ### 6.8 `analytics-tournaments`
-Two data generations in one function: legacy (`tournaments`/`tournament_participants`: `list`, `detail`, `student_history`, `branch_leaderboard`) and Phase-2 KPI (`tournaments_uploads`/`tournament_results`: `coach_leaderboard`, `coach_kpi_summary`, `school_kpi_summary`, `school_student_drilldown`). **Counts between the two families will not agree — that's by design.**
+One data source for results: `tournament_results` ⋈ `tournaments_uploads` (one upload = one played tournament; `kind` ∈ `league_b`/`league_c`/`razryad_3`/`razryad_4` ↔ `league` param `B`/`C`/`R3`/`R4`). `tournaments` is the public **schedule / registration** table (`list`, `detail`); scheduled tournaments are not linked to result uploads.
 
 ⚠️ **Unique quirk: 500 errors here carry an `error` OBJECT** (`{message, name/code, …}`), not a string. Handle both shapes.
 
 **Window validation** (KPI actions): `window_start` & `window_end` both **required**, `YYYY-MM-DD`, start ≤ end. Failures → 400 with a specific message. `window_end` is inclusive through end-of-day UTC.
 
-**`action=list` (default)** — params: `limit` (50, **capped 200**), `offset`, `league`, `branch_id`, `date_from`, `date_to`. Ordered `tournament_date` desc.
-⚠️ **`branch_id` pagination trap:** filtering happens client-side AFTER pagination — `count` reflects the unfiltered total and a page may be empty while later pages have matches. Never treat an empty page as end-of-data when using `branch_id`.
+**`action=list` (default)** — scheduled tournaments. Params: `limit` (50, **capped 200**), `offset`, `league`, `branch_id` (`tournaments.branch_id`, server-side — `count` is exact), `date_from`, `date_to`. Ordered `tournament_date` desc.
 
-**`action=detail`** — `tournament_id` required → 400; unknown → 404. Returns `{tournament, participants[]}`; participants ordered by `place` asc with `student_name` falling back to `raw_name`.
+**`action=detail`** — `tournament_id` required → 400; unknown → 404. Returns `{tournament, registrations[], registrations_count}`; each registration `{id, student_id, student_code, name, branch_id, registered_at, source}` (guests: `student_id:null`, `name` = display/player name). Contact details are never returned.
 
-**`action=student_history`** — `student_id` required. Rows + aggregates:
+**`action=student_history`** — `student_id` or `student_code` required. Every result row (all kinds), newest first, + aggregates:
 ```json
-{"data":{"tournaments":[…],"aggregates":{"total":8,"ytd":3,"best_place":1,"avg_place":4,
- "total_rating_gained":120,"last_date":"2026-05-01"}},"count":8}
+{"data":{"tournaments":[{"id":"…","place":2,"rating_before":430,"rating_after":445,"rating_delta":15,
+  "tournament_id":"<upload id>","tournament_name":"League B (2026-11-22)","league":"B","kind":"league_b",
+  "tournament_date":"2026-11-22","score":3.5,"games_played":5,"earned_razryad":null}],
+ "aggregates":{"total":13,"ytd":13,"best_place":1,"avg_place":4,"total_rating_gained":120,"last_date":"2026-11-22"}},"count":13}
 ```
+`rating_after` = `rating_before + rating_delta` (null if either is null).
 
-**`action=branch_leaderboard`** — `branch_id` + `league` **required**; `days` (default 90). Active students only; zero-place students excluded. Sorted `avg_place` asc.
+**`action=branch_leaderboard`** — `branch_id` + `league` **required**; `league` ∈ `B`/`C`/`R3`/`R4`, anything else → 400. `days` (default 90). Active branch students only; entries with `games_played ≥ 1`. Sorted `avg_place` asc.
+
+**`action=student_roster`** — weekly roster snapshot, read-only. Params: `status` (`active` default, `frozen`, `left`, `all`), `limit` (100, max 200), `offset`, `after_id` (keyset uuid; **wins over `offset`**). Ordered by `students.id`. Bad `limit`/`offset`/`after_id`/`status` → `400 {"success":false,"error":"invalid <field>"}`.
+```json
+{"success":true,"data":{"as_of":"2026-11-24T09:00:00.000Z","status":"active","total":812,"limit":200,"offset":0,
+ "after_id":null,"next_after_id":"<uuid or null>",
+ "rules":{"admitted":"current_level >= 2","league_a":"rating > 800","league_b":"rating >= 450 and <= 800","league_c":"rating < 450",
+   "step2_date_available_since":"2026-02-05","last_30d_window":"tournament_date >= as_of date - 30 days (UTC)"},
+ "students":[{"student_id":"…","student_code":"CE-00959","full_name":"…","branch_id":"…","branch_name":"…",
+   "trainer_id":"…","trainer_name":"…","status":"active","current_level":3,"admitted_to_tournaments":true,
+   "step2_date":"2026-03-01","step2_date_known":true,"current_rating":512,"current_rating_date":"2026-11-22",
+   "current_league":"B","razryad":"4th","amocrm_customer_id":"31234567",
+   "tournaments_total":13,"tournaments_last_30d":3,"last_tournament_date":"2026-11-22"}]}}
+```
+- `total` = exact count for the status filter; page until `next_after_id` is `null` (it's the last id of a full page).
+- `step2_date`: UTC date of the earliest `audit_log` `current_level` change with old < 2 and new ≥ 2 (jumps like 1→3 count). Audit rows exist only since 2026-02-05, so `step2_date_known:false` means admitted but promoted earlier / created at step ≥ 2.
+- `current_league` uses the canonical rule (A > 800, B ≥ 450, else C) — ⚠️ not the `league` column of `student_current_ratings`. `null` without a rating.
+- Tournament counts = distinct uploads the student has a result in (all kinds, including `games_played=0` rows).
+- No phone / email fields.
 
 **`action=coach_leaderboard`** — window required; `branch_id`, `league` (`B`/`C`/`R3`/`R4`; ⚠️ other values silently ignored, no error) optional. Composite score weights: participation 0.30, rating_delta 0.25, top3 0.20, promotion 0.15, razryad 0.10. "Active students" = status active AND `current_level >= 2`. Returns per-coach rows with `composite_score` (0–100), sub-metrics, and the weights object.
 

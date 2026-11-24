@@ -250,7 +250,7 @@ curl -H "x-api-key: <CHESS_EMPIRE_API_KEY — see supabase secrets>" \
 
 `profile.student` includes `student_code`; `ranking` / `progress_ranking` return
 `student_id` + `student_code`. `analytics-tournaments` likewise adds
-`student_code` to `detail` participants, `branch_leaderboard`,
+`student_code` to `detail` registrations, `branch_leaderboard`, `student_roster`,
 `coach_kpi_summary` students and every `school_student_drilldown` row, and
 `student_history` accepts `student_code`.
 
@@ -393,6 +393,56 @@ curl -H "Authorization: Bearer $CE_SERVICE_KEY" -H "apikey: $CE_SERVICE_KEY" \
 CE_SERVICE_KEY=… CE_SUPABASE_URL=https://papgcizhfkngubwofjuo.supabase.co \
   python3 scripts/coach_report.py --period month --out /tmp/coach-reports
 # → {"xlsx": "/tmp/coach-reports/coach-report-month-2026-10-01.xlsx", "summary": "…-summary.txt"}
+```
+
+---
+
+## 8b. Analytics - Tournaments (`analytics-tournaments`)
+
+**Endpoint:** `GET /analytics-tournaments`. Read-only. All tournament
+*results* come from `tournament_results` ⋈ `tournaments_uploads` (one upload =
+one played tournament, `kind` ∈ `league_b` `league_c` `razryad_3` `razryad_4`).
+`tournaments` is the public schedule / registration table — scheduled
+tournaments are not linked to result uploads.
+
+| action | Params | Returns |
+|--------|--------|---------|
+| `list` (default) | `limit` (50, max 200), `offset`, `league`, `branch_id` (`tournaments.branch_id`, filtered server-side so `count` is exact), `date_from`, `date_to` | scheduled tournaments, `tournament_date` desc |
+| `detail` | `tournament_id` | `{tournament, registrations:[{id, student_id, student_code, name, branch_id, registered_at, source}], registrations_count}` — guests have `student_id: null`; contact details are never returned |
+| `student_history` | `student_id` or `student_code` | every result row, newest first: `{id, place, rating_before, rating_after, rating_delta, tournament_id (upload id), tournament_name ("League B (2026-11-22)"), league (B/C/R3/R4), kind, tournament_date, score, games_played, earned_razryad}` + `aggregates` |
+| `branch_leaderboard` | `branch_id`, `league` (`B` `C` `R3` `R4`, anything else → 400), `days` (90) | active branch students ranked by avg place (entries with `games_played ≥ 1`) |
+| `student_roster` | `status` (`active` default, `frozen`, `left`, `all`), `limit` (100, max 200), `offset`, `after_id` (keyset; wins over `offset`) | weekly roster snapshot (below) |
+| `coach_leaderboard` / `coach_kpi_summary` / `school_kpi_summary` / `school_student_drilldown` | `window_start`, `window_end` + filters | Coach KPI dashboard (see `docs/AI_AGENT_API_MANUAL.md` §6.8) |
+
+**`student_roster`** — ordered by `students.id`; bad `limit`/`offset`/`after_id`/`status`
+→ `400 {"success":false,"error":"invalid <field>"}`. Response
+`data: {as_of, status, total, limit, offset, after_id, next_after_id, rules, students}`
+(`next_after_id` = last id of a full page, else `null`). Per student:
+
+| Field | Description |
+|-------|-------------|
+| student_id / student_code / full_name | Identity |
+| branch_id / branch_name, trainer_id / trainer_name | Branch and coach |
+| status / current_level | Student status and step (Ступень) |
+| admitted_to_tournaments | `current_level >= 2` |
+| step2_date / step2_date_known | UTC date of the earliest `audit_log` current_level change crossing into step ≥ 2 (old < 2, new ≥ 2). Audit exists only since 2026-02-05: `step2_date_known=false` when admitted but no such row |
+| current_rating / current_rating_date / current_league | From `student_current_ratings`; league A > 800, B 450–800, C < 450 (migration 038); `null` without a rating |
+| razryad | `students.razryad` |
+| amocrm_customer_id | string or `null` |
+| tournaments_total / tournaments_last_30d / last_tournament_date | Distinct uploads in `tournament_results` (all kinds); 30-day window = `tournament_date >= as_of date − 30 days` (UTC) |
+
+No phone or email fields are returned.
+
+```bash
+# Weekly roster, page by keyset
+curl -H "x-api-key: <CHESS_EMPIRE_READONLY_KEY — see supabase secrets>" \
+  "https://papgcizhfkngubwofjuo.supabase.co/functions/v1/analytics-tournaments?action=student_roster&limit=200"
+curl -H "x-api-key: <CHESS_EMPIRE_READONLY_KEY — see supabase secrets>" \
+  "https://papgcizhfkngubwofjuo.supabase.co/functions/v1/analytics-tournaments?action=student_roster&limit=200&after_id=<next_after_id>"
+
+# One student's results
+curl -H "x-api-key: <CHESS_EMPIRE_READONLY_KEY — see supabase secrets>" \
+  "https://papgcizhfkngubwofjuo.supabase.co/functions/v1/analytics-tournaments?action=student_history&student_code=CE-00959"
 ```
 
 ---

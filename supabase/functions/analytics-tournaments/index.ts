@@ -1,6 +1,14 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts"
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 import { resolveStudentParam, studentCodeLookup } from '../students-api/students-logic.mjs'
+import {
+  calcLeagueFromRating, chunk, fetchAll, LEAGUE_KINDS, tournamentName, studentHistory, branchLeaderboard,
+  registrationRow, ROSTER_RULES, parseStudentRosterParams, nextAfterId, step2Dates, tournamentStats,
+  studentRosterRow, nameMap,
+} from './roster-logic.mjs'
+
+// League thresholds — mirror migration 038 calc_league_from_rating().
+export { calcLeagueFromRating }
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -39,14 +47,6 @@ function json(data: unknown, status = 200) {
   return new Response(JSON.stringify(data), { status, headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
 }
 
-// League thresholds — mirror migration 038 calc_league_from_rating().
-export function calcLeagueFromRating(rating: number | null | undefined): string | null {
-  if (rating == null || !Number.isFinite(rating)) return null
-  if (rating > 800) return 'A'
-  if (rating >= 450) return 'B'
-  return 'C'
-}
-
 function clamp(n: number, lo: number, hi: number): number {
   return Math.max(lo, Math.min(hi, n))
 }
@@ -83,7 +83,7 @@ export function normalizeRazryad(newRazryads: number, activeStudents: number): n
 export interface CompositeInput {
   active_students_count: number
   participants_count: number
-  total_results: number       // total tournament_participants rows in window
+  total_results: number       // total result rows in window
   top3_count: number
   avg_rating_delta: number    // mean of rating_delta across all results in window
   promotions_count: number
@@ -180,6 +180,7 @@ serve(async (req) => {
 
       let q = supabase.from('tournaments').select('*', { count: 'exact' })
       if (league) q = q.eq('league', league)
+      if (branchId) q = q.eq('branch_id', branchId)
       if (dateFrom) q = q.gte('tournament_date', dateFrom)
       if (dateTo) q = q.lte('tournament_date', dateTo)
       q = q.order('tournament_date', { ascending: false }).range(offset, offset + limit - 1)
@@ -187,24 +188,7 @@ serve(async (req) => {
       const { data, error, count } = await q
       if (error) throw error
 
-      let tournaments = data || []
-
-      // Optional branch filter — keeps only tournaments where at least one
-      // participant belongs to that branch. Done client-side since tournaments
-      // table itself has no branch_id column.
-      if (branchId && tournaments.length > 0) {
-        const ids = tournaments.map((t: any) => t.id)
-        const { data: parts, error: pErr } = await supabase
-          .from('tournament_participants')
-          .select('tournament_id, student:students(branch_id)')
-          .in('tournament_id', ids)
-        if (pErr) throw pErr
-        const branchTournamentIds = new Set(
-          (parts || []).filter((row: any) => row.student?.branch_id === branchId).map((row: any) => row.tournament_id)
-        )
-        tournaments = tournaments.filter((t: any) => branchTournamentIds.has(t.id))
-      }
-
+      const tournaments = data || []
       return json({ success: true, data: tournaments, count: count || tournaments.length, limit, offset })
     }
 
@@ -217,29 +201,22 @@ serve(async (req) => {
       if (tErr) throw tErr
       if (!tournament) return json({ success: false, error: 'Tournament not found' }, 404)
 
-      const { data: participants, error: pErr } = await supabase
-        .from('tournament_participants')
-        .select('id, place, rating_before, rating_after, rating_delta, raw_name, student:students(id, student_code, first_name, last_name, branch_id)')
+      // Scheduled tournaments are not linked to result uploads — the detail
+      // view lists registrations (the guest contact column is never selected).
+      const registrations = await fetchAll((from, to) => supabase
+        .from('tournament_registrations')
+        .select('id, student_id, registered_at, player_name, display_name, source, student:students(student_code, first_name, last_name, branch_id)')
         .eq('tournament_id', tournamentId)
-        .order('place', { ascending: true })
-      if (pErr) throw pErr
+        .order('registered_at', { ascending: true })
+        .order('id', { ascending: true })
+        .range(from, to))
 
       return json({
         success: true,
         data: {
           tournament,
-          participants: (participants || []).map((p: any) => ({
-            id: p.id,
-            place: p.place,
-            rating_before: p.rating_before,
-            rating_after: p.rating_after,
-            rating_delta: p.rating_delta,
-            raw_name: p.raw_name,
-            student_id: p.student?.id || null,
-            student_code: p.student?.student_code || null,
-            student_name: p.student ? `${p.student.first_name} ${p.student.last_name}` : p.raw_name,
-            branch_id: p.student?.branch_id || null,
-          })),
+          registrations: registrations.map(registrationRow),
+          registrations_count: registrations.length,
         },
       })
     }
@@ -250,41 +227,15 @@ serve(async (req) => {
       const studentId = ref.id
       if (!studentId) return json({ success: false, error: 'student_id or student_code required' }, 400)
 
-      const { data, error } = await supabase
-        .from('tournament_participants')
-        .select('id, place, rating_before, rating_after, rating_delta, tournament:tournaments(id, name, league, tournament_date)')
+      const results = await fetchAll((from, to) => supabase
+        .from('tournament_results')
+        .select('id, upload_id, rank, score, games_played, rating_before, rating_delta, earned_razryad, upload:tournaments_uploads(id, kind, tournament_date)')
         .eq('student_id', studentId)
-      if (error) throw error
+        .order('id', { ascending: true })
+        .range(from, to))
 
-      const rows = (data || [])
-        .filter((r: any) => r.tournament)
-        .map((r: any) => ({
-          id: r.id,
-          place: r.place,
-          rating_before: r.rating_before,
-          rating_after: r.rating_after,
-          rating_delta: r.rating_delta,
-          tournament_id: r.tournament.id,
-          tournament_name: r.tournament.name,
-          league: r.tournament.league,
-          tournament_date: r.tournament.tournament_date,
-        }))
-        .sort((a, b) => (b.tournament_date || '').localeCompare(a.tournament_date || ''))
-
-      const places = rows.map(r => r.place).filter((n): n is number => Number.isFinite(n))
-      const deltas = rows.map(r => r.rating_delta).filter((n): n is number => Number.isFinite(n))
-      const year = new Date().getFullYear()
-
-      const aggregates = {
-        total: rows.length,
-        ytd: rows.filter(r => String(r.tournament_date || '').startsWith(`${year}-`)).length,
-        best_place: places.length ? Math.min(...places) : null,
-        avg_place: places.length ? Math.round(places.reduce((a, b) => a + b, 0) / places.length) : null,
-        total_rating_gained: deltas.reduce((a, b) => a + b, 0),
-        last_date: rows[0]?.tournament_date || null,
-      }
-
-      return json({ success: true, data: { tournaments: rows, aggregates }, count: rows.length })
+      const history = studentHistory(results, new Date().getFullYear())
+      return json({ success: true, data: history, count: history.tournaments.length })
     }
 
     if (action === 'branch_leaderboard') {
@@ -293,45 +244,112 @@ serve(async (req) => {
       if (!branchId) return json({ success: false, error: 'branch_id required' }, 400)
       if (!league) return json({ success: false, error: 'league required' }, 400)
 
+      const kind = (LEAGUE_KINDS as Record<string, string>)[league]
+      if (!kind) return json({ success: false, error: `invalid league (one of: ${Object.keys(LEAGUE_KINDS).join(', ')})` }, 400)
+
       const days = parseInt(p('days') || '90')
       const since = new Date(Date.now() - days * 86400000).toISOString().split('T')[0]
 
-      const { data, error } = await supabase
-        .from('tournament_participants')
-        .select('student_id, place, rating_delta, tournament:tournaments!inner(id, league, tournament_date), student:students!inner(id, student_code, first_name, last_name, branch_id, status)')
-        .eq('student.branch_id', branchId)
-        .eq('student.status', 'active')
-        .eq('tournament.league', league)
-        .gte('tournament.tournament_date', since)
-      if (error) throw error
+      const [students, uploads] = await Promise.all([
+        fetchAll((from, to) => supabase
+          .from('students').select('id, student_code, first_name, last_name')
+          .eq('branch_id', branchId).eq('status', 'active')
+          .order('id', { ascending: true }).range(from, to)),
+        fetchAll((from, to) => supabase
+          .from('tournaments_uploads').select('id')
+          .eq('kind', kind).gte('tournament_date', since)
+          .order('id', { ascending: true }).range(from, to)),
+      ])
+      const studentsById: Record<string, any> = Object.fromEntries(students.map((s: any) => [s.id, s]))
 
-      type LbSlot = { studentId: string; studentCode: string; firstName: string; lastName: string; places: number[]; deltas: number[] }
-      const byStudent = new Map<string, LbSlot>()
-      for (const row of data || []) {
-        const r: any = row
-        if (!r.student || !r.tournament) continue
-        const id = r.student.id
-        const slot: LbSlot = byStudent.get(id) || { studentId: id, studentCode: r.student.student_code, firstName: r.student.first_name, lastName: r.student.last_name, places: [], deltas: [] }
-        if (Number.isFinite(r.place)) slot.places.push(r.place)
-        if (Number.isFinite(r.rating_delta)) slot.deltas.push(r.rating_delta)
-        byStudent.set(id, slot)
+      const results: any[] = []
+      for (const ids of chunk(uploads.map((u: any) => u.id))) {
+        results.push(...await fetchAll((from, to) => supabase
+          .from('tournament_results').select('student_id, rank, games_played, rating_delta')
+          .in('upload_id', ids)
+          .order('id', { ascending: true }).range(from, to)))
       }
 
-      const leaderboard = [...byStudent.values()]
-        .filter(s => s.places.length > 0)
-        .map(s => ({
-          student_id: s.studentId,
-          student_code: s.studentCode,
-          first_name: s.firstName,
-          last_name: s.lastName,
-          tournaments_played: s.places.length,
-          avg_place: Math.round((s.places.reduce((a, b) => a + b, 0) / s.places.length) * 100) / 100,
-          best_place: Math.min(...s.places),
-          total_rating_gained: s.deltas.reduce((a, b) => a + b, 0),
-        }))
-        .sort((a, b) => a.avg_place - b.avg_place)
-
+      const leaderboard = branchLeaderboard(results, studentsById)
       return json({ success: true, data: leaderboard, count: leaderboard.length, league, branch_id: branchId, days })
+    }
+
+    if (action === 'student_roster') {
+      // Weekly roster snapshot: one row per student (ordered by id) with
+      // tournament admission, step-2 date, current rating/league and
+      // tournament counts from tournament_results (distinct uploads).
+      const parsed = parseStudentRosterParams({ status: p('status'), limit: p('limit'), offset: p('offset'), after_id: p('after_id') })
+      if (!parsed.value) return json({ success: false, error: `invalid ${parsed.field}` }, 400)
+      const rp = parsed.value
+      const asOf = new Date().toISOString()
+
+      let pageQuery = supabase.from('students')
+        .select('id, student_code, first_name, last_name, branch_id, coach_id, razryad, status, current_level, amocrm_customer_id')
+        .order('id', { ascending: true })
+      let countQuery = supabase.from('students').select('id', { count: 'exact', head: true })
+      if (rp.status !== 'all') {
+        pageQuery = pageQuery.eq('status', rp.status)
+        countQuery = countQuery.eq('status', rp.status)
+      }
+      pageQuery = rp.after_id
+        ? pageQuery.gt('id', rp.after_id).limit(rp.limit)
+        : pageQuery.range(rp.offset, rp.offset + rp.limit - 1)
+
+      const [page, counted, coaches, branches, uploads] = await Promise.all([
+        pageQuery,
+        countQuery,
+        fetchAll((from, to) => supabase.from('coaches').select('id, first_name, last_name').order('id', { ascending: true }).range(from, to)),
+        fetchAll((from, to) => supabase.from('branches').select('id, name').order('id', { ascending: true }).range(from, to)),
+        fetchAll((from, to) => supabase.from('tournaments_uploads').select('id, tournament_date').order('id', { ascending: true }).range(from, to)),
+      ])
+      if (page.error) throw page.error
+      if (counted.error) throw counted.error
+      const students = page.data || []
+      const ids = students.map((s: any) => s.id)
+
+      const ratingRows: any[] = []
+      const auditRows: any[] = []
+      const resultRows: any[] = []
+      if (ids.length > 0) {
+        // ids ≤ ROSTER_MAX_LIMIT (200) → one .in() per table, paged by range.
+        await Promise.all([
+          fetchAll((from, to) => supabase.from('student_current_ratings')
+            .select('student_id, rating, rating_date').in('student_id', ids)
+            .order('student_id', { ascending: true }).range(from, to)).then((r) => ratingRows.push(...r)),
+          fetchAll((from, to) => supabase.from('audit_log')
+            .select('entity_id, old_value, new_value, changed_at')
+            .eq('entity_type', 'students').eq('field_name', 'current_level').eq('action', 'UPDATE')
+            .in('entity_id', ids)
+            .order('id', { ascending: true }).range(from, to)).then((r) => auditRows.push(...r)),
+          fetchAll((from, to) => supabase.from('tournament_results')
+            .select('student_id, upload_id').in('student_id', ids)
+            .order('id', { ascending: true }).range(from, to)).then((r) => resultRows.push(...r)),
+        ])
+      }
+
+      const uploadDates = Object.fromEntries(uploads.map((u: any) => [u.id, u.tournament_date]))
+      const lookups = {
+        branchNames: Object.fromEntries(branches.map((b: any) => [b.id, b.name])),
+        coachNames: nameMap(coaches),
+        ratings: Object.fromEntries(ratingRows.map((r: any) => [r.student_id, r])),
+        step2: step2Dates(auditRows),
+        stats: tournamentStats(resultRows, uploadDates, asOf),
+      }
+
+      return json({
+        success: true,
+        data: {
+          as_of: asOf,
+          status: rp.status,
+          total: counted.count ?? 0,
+          limit: rp.limit,
+          offset: rp.offset,
+          after_id: rp.after_id,
+          next_after_id: nextAfterId(students, rp.limit),
+          rules: ROSTER_RULES,
+          students: students.map((s: any) => studentRosterRow(s, lookups)),
+        },
+      })
     }
 
     if (action === 'coach_leaderboard') {
@@ -613,7 +631,7 @@ serve(async (req) => {
 
       // Per-coach Phase 2 read: pull uploads in window, then the coach's
       // students' results joined to those uploads. Mirrors coach_leaderboard
-      // and replaces the legacy tournament_participants source (which the
+      // and replaces the legacy participants table (which the
       // upload flow never populates).
       const { data: uploadsInWindow, error: upErr } = await supabase
         .from('tournaments_uploads')
@@ -757,7 +775,7 @@ serve(async (req) => {
     if (action === 'school_kpi_summary') {
       // Phase 2 (COACH_KPI_PHASE2_SPEC.md §7): read from tournaments_uploads +
       // tournament_results, matching the source the coach_leaderboard action
-      // already uses. The legacy tournament_participants / tournaments path
+      // already uses. The legacy participants / tournaments path
       // was retired with migrations 036/037/038.
       const windowStart = p('window_start')
       const windowEnd = p('window_end')
@@ -1026,18 +1044,6 @@ serve(async (req) => {
         drillUploadsList.filter((u: any) => u.kind === 'razryad_3' || u.kind === 'razryad_4').map((u: any) => u.id)
       )
 
-      const KIND_LABELS: Record<string, string> = {
-        league_b: 'League B',
-        league_c: 'League C',
-        razryad_3: '3rd Razryad Qualifier',
-        razryad_4: '4th Razryad Qualifier',
-      }
-      const tournamentName = (upload: any) => {
-        if (!upload) return null
-        const label = KIND_LABELS[upload.kind] || upload.kind
-        return `${label} (${upload.tournament_date})`
-      }
-
       let drillResults: any[] = []
       if (drillUploadIds.length > 0) {
         const { data: rs, error: rsErr } = await supabase
@@ -1284,7 +1290,7 @@ serve(async (req) => {
       }
     }
 
-    return json({ success: false, error: 'Invalid action. Use: list, detail, student_history, branch_leaderboard, coach_leaderboard, coach_kpi_summary, school_kpi_summary, school_student_drilldown' }, 400)
+    return json({ success: false, error: 'Invalid action. Use: list, detail, student_history, branch_leaderboard, student_roster, coach_leaderboard, coach_kpi_summary, school_kpi_summary, school_student_drilldown' }, 400)
   } catch (error) {
     // PostgREST/supabase-js errors are plain objects with { message, code, details, hint }
     // — not Error instances — so `error.message` and String(error) lose everything.
