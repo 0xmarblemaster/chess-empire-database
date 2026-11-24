@@ -124,6 +124,7 @@ assert(/import\s+\{\s*serve\s*\}\s+from\s+"https:\/\/deno\.land\/std/.test(FN),
     'imports Deno serve');
 assert(/createClient/.test(FN), 'imports supabase createClient');
 assert(/CHESS_EMPIRE_API_KEY/.test(FN), 'reads CHESS_EMPIRE_API_KEY env var');
+assert(/API_KEYS = \[[^\]]*CHESS_EMPIRE_READONLY_KEY/.test(FN), 'write gate also accepts CHESS_EMPIRE_READONLY_KEY (external agent key)');
 assert(/SUPABASE_SERVICE_ROLE_KEY/.test(FN), 'reads SUPABASE_SERVICE_ROLE_KEY env var');
 assert(/Access-Control-Allow-Origin/.test(FN), 'sets CORS allow-origin');
 assert(/Access-Control-Allow-Methods/.test(FN), 'sets CORS allow-methods');

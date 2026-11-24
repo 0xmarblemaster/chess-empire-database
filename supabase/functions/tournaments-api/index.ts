@@ -17,7 +17,9 @@ const corsHeaders = {
   'Access-Control-Allow-Methods': 'GET, POST, DELETE, OPTIONS',
 }
 
-const API_KEYS = [Deno.env.get('CHESS_EMPIRE_API_KEY') ?? ''].filter((k) => k !== '')
+// CHESS_EMPIRE_READONLY_KEY holds the external agent's full-access key (ce-wr-…62df);
+// it gets tournament writes too.
+const API_KEYS = [Deno.env.get('CHESS_EMPIRE_API_KEY') ?? '', Deno.env.get('CHESS_EMPIRE_READONLY_KEY') ?? ''].filter((k) => k !== '')
 const SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
 const CE_SECRET_KEY = Deno.env.get('CE_SECRET_KEY') ?? ''
 const DB_KEY = CE_SECRET_KEY || SERVICE_ROLE_KEY
