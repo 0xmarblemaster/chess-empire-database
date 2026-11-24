@@ -139,6 +139,10 @@
                     <i data-lucide="trophy" style="width: 20px; height: 20px;"></i>
                     <span data-i18n="admin.tournaments.title">Tournament Management</span>
                 </div>
+                <div class="nav-item" id="menuArticles" onclick="showArticlesManagement()" style="display: none;">
+                    <i data-lucide="newspaper" style="width: 20px; height: 20px;"></i>
+                    <span data-i18n="admin.articles.title">Статьи</span>
+                </div>
                 <div class="nav-item" id="menuAppAccess" onclick="showAppAccessManagement()" style="display: none;">
                     <i data-lucide="shield-check" style="width: 20px; height: 20px;"></i>
                     <span data-i18n="access.sidebar.appAccess">App Access</span>
@@ -981,6 +985,92 @@
             </div>
             <!-- End Tournament Management Section -->
 
+            <!-- Articles Management Section (admin only) -->
+            <div id="articlesAdminSection" class="content-section">
+                <div class="header">
+                    <h1 class="header-title" data-i18n="admin.articles.title">Статьи</h1>
+                    <div class="header-actions" style="display:flex; gap:0.75rem; align-items:center; flex-wrap:wrap;">
+                        <div class="kpi-view-switcher" role="tablist" aria-label="Articles admin view">
+                            <button type="button" class="kpi-view-btn is-active" data-articles-admin-tab="articles" role="tab" aria-selected="true" onclick="switchArticlesAdminTab('articles')" data-i18n="admin.articles.tabArticles">Статьи</button>
+                            <button type="button" class="kpi-view-btn" data-articles-admin-tab="keys" role="tab" aria-selected="false" onclick="switchArticlesAdminTab('keys')" data-i18n="admin.articles.tabKeys">API-ключи</button>
+                        </div>
+                        <button class="btn btn-primary" id="articlesAdminNewBtn" onclick="openArticleEditor()">
+                            <i data-lucide="plus" style="width: 18px; height: 18px;"></i>
+                            <span data-i18n="admin.articles.newButton">Новая статья</span>
+                        </button>
+                    </div>
+                </div>
+
+                <div id="articlesAdminTabArticles">
+                    <div class="articles-filters">
+                        <input type="search" id="articlesAdminSearch" class="form-input" oninput="renderArticlesAdminList()" data-i18n-placeholder="admin.articles.searchPlaceholder" placeholder="Поиск по названию или slug">
+                        <select id="articlesAdminStatusFilter" class="form-input" onchange="renderArticlesAdminList()">
+                            <option value="" data-i18n="admin.articles.filter.all">Все</option>
+                            <option value="published" data-i18n="admin.articles.status.published">Опубликована</option>
+                            <option value="draft" data-i18n="admin.articles.status.draft">Черновик</option>
+                        </select>
+                    </div>
+                    <div class="table-container articles-table">
+                        <div class="table-wrapper">
+                            <table>
+                                <thead>
+                                    <tr>
+                                        <th data-i18n="admin.articles.col.title">Заголовок (RU)</th>
+                                        <th data-i18n="admin.articles.col.topic">Тема</th>
+                                        <th data-i18n="admin.articles.col.status">Статус</th>
+                                        <th data-i18n="admin.articles.col.featured">Избранная</th>
+                                        <th data-i18n="admin.articles.col.updated">Обновлена</th>
+                                        <th data-i18n="admin.articles.col.actions">Действия</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="articlesAdminTableBody">
+                                    <tr><td colspan="6" style="text-align: center; padding: 2rem; color: #94a3b8;" data-i18n="admin.articles.loading">Загрузка…</td></tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                    <div class="articles-cards" id="articlesAdminCards"></div>
+                </div>
+
+                <div id="articlesAdminTabKeys" style="display: none;">
+                    <p class="articles-keys-hint" data-i18n="admin.articles.keys.hint">Ключи позволяют скриптам и интеграциям управлять статьями через /api/articles (Authorization: Bearer cea_…). Ключ показывается один раз — сразу после создания.</p>
+                    <form class="articles-key-form" onsubmit="createArticleKey(); return false;">
+                        <div class="form-group" style="flex:1; margin:0;">
+                            <label class="form-label" for="articleKeyName" data-i18n="admin.articles.keys.name">Название ключа</label>
+                            <input type="text" id="articleKeyName" class="form-input" maxlength="80" data-i18n-placeholder="admin.articles.keys.namePlaceholder" placeholder="например, Контент-бот">
+                            <p class="article-field-error" id="articleKeyNameError"></p>
+                        </div>
+                        <button type="submit" class="btn btn-primary" data-i18n="admin.articles.keys.create">Создать ключ</button>
+                    </form>
+                    <div class="articles-new-key" id="articleNewKeyBox" role="alert" style="display: none;">
+                        <p><span data-i18n="admin.articles.keys.showOnce">Скопируйте ключ сейчас — он больше не будет показан:</span> <strong id="articleNewKeyName"></strong></p>
+                        <div class="articles-new-key-row">
+                            <code id="articleNewKeyValue"></code>
+                            <button type="button" class="btn btn-secondary" onclick="copyArticleNewKey()" data-i18n="admin.articles.keys.copy">Копировать</button>
+                            <button type="button" class="btn btn-secondary" onclick="hideArticleNewKey()" data-i18n="admin.articles.keys.done">Готово</button>
+                        </div>
+                    </div>
+                    <div class="table-container">
+                        <div class="table-wrapper">
+                            <table>
+                                <thead>
+                                    <tr>
+                                        <th data-i18n="admin.articles.keys.col.name">Название</th>
+                                        <th data-i18n="admin.articles.keys.col.prefix">Префикс</th>
+                                        <th data-i18n="admin.articles.keys.col.created">Создан</th>
+                                        <th data-i18n="admin.articles.keys.col.lastUsed">Использован</th>
+                                        <th data-i18n="admin.articles.keys.col.revoked">Отозван</th>
+                                        <th data-i18n="admin.articles.col.actions">Действия</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="articleKeysTableBody"></tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <!-- End Articles Management Section -->
+
             <!-- Attendance Management Section -->
             <div id="attendanceSection" class="content-section">
                 <!-- Header -->
@@ -1660,6 +1750,15 @@
                                 <i data-lucide="trophy"></i>
                             </div>
                             <span data-i18n="admin.tournaments.title">Tournament Management</span>
+                        </div>
+                        <i data-lucide="chevron-right" class="more-menu-chevron"></i>
+                    </button>
+                    <button class="more-menu-item" id="moreMenuArticles" style="display:none" onclick="showMobileSection('articlesAdmin', event)">
+                        <div class="more-menu-item-left">
+                            <div class="more-menu-icon" style="background:#eef2ff;color:#4f46e5;">
+                                <i data-lucide="newspaper"></i>
+                            </div>
+                            <span data-i18n="admin.articles.title">Статьи</span>
                         </div>
                         <i data-lucide="chevron-right" class="more-menu-chevron"></i>
                     </button>
@@ -2549,6 +2648,128 @@
     </div>
 
     <!-- Tournament Create/Edit Modal -->
+    <!-- Article Create/Edit Modal -->
+    <div id="articleEditorModal" class="modal">
+        <div class="modal-overlay" onclick="closeArticleEditor()"></div>
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2 class="modal-title" id="articleEditorTitle" data-i18n="admin.articles.newTitle">Новая статья</h2>
+                <button class="modal-close" onclick="closeArticleEditor()">
+                    <i data-lucide="x" style="width: 24px; height: 24px;"></i>
+                </button>
+            </div>
+
+            <form id="articleEditorForm" class="modal-body" onsubmit="saveArticle(); return false;" novalidate>
+                <p class="article-field-error" data-article-error="_" style="display:none;"></p>
+                <div class="form-section">
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label class="form-label" for="articleSlug" data-i18n="admin.articles.form.slug">Slug (адрес)</label>
+                            <input type="text" id="articleSlug" class="form-input" maxlength="80" placeholder="age-to-start">
+                            <p class="article-field-error" data-article-error="slug" style="display:none;"></p>
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label" for="articleTopic" data-i18n="admin.articles.form.topic">Тема</label>
+                            <select id="articleTopic" class="form-input">
+                                <option value="parents" data-i18n="admin.articles.topic.parents">Родителям</option>
+                                <option value="beginners" data-i18n="admin.articles.topic.beginners">Начинающим</option>
+                                <option value="tournaments" data-i18n="admin.articles.topic.tournaments">Турниры</option>
+                            </select>
+                            <p class="article-field-error" data-article-error="topic" style="display:none;"></p>
+                        </div>
+                    </div>
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label class="form-label" for="articleStatus" data-i18n="admin.articles.form.status">Статус</label>
+                            <select id="articleStatus" class="form-input">
+                                <option value="draft" data-i18n="admin.articles.status.draft">Черновик</option>
+                                <option value="published" data-i18n="admin.articles.status.published">Опубликована</option>
+                            </select>
+                            <p class="article-field-error" data-article-error="status" style="display:none;"></p>
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label" for="articleReadMinutes" data-i18n="admin.articles.form.readMinutes">Время чтения (мин)</label>
+                            <input type="number" id="articleReadMinutes" class="form-input" min="1" max="120" data-i18n-placeholder="admin.articles.form.readMinutesAuto" placeholder="авто">
+                            <p class="article-field-error" data-article-error="read_minutes" style="display:none;"></p>
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label" for="articleSortOrder" data-i18n="admin.articles.form.sortOrder">Порядок</label>
+                            <input type="number" id="articleSortOrder" class="form-input" value="0">
+                            <p class="article-field-error" data-article-error="sort_order" style="display:none;"></p>
+                        </div>
+                    </div>
+                    <label class="article-checkbox">
+                        <input type="checkbox" id="articleFeatured">
+                        <span data-i18n="admin.articles.form.featured">Избранная (большая карточка вверху /articles)</span>
+                    </label>
+                    <p class="article-field-error" data-article-error="featured" style="display:none;"></p>
+
+                    <div class="form-group">
+                        <span class="form-label" data-i18n="admin.articles.form.cover">Обложка</span>
+                        <div class="article-cover">
+                            <img id="articleCoverPreview" alt="" style="display:none;">
+                            <div id="articleCoverPlaceholder" class="article-cover-placeholder" aria-hidden="true">♝</div>
+                            <div class="article-cover-actions">
+                                <label class="btn btn-secondary" for="articleCoverFile" data-i18n="admin.articles.form.coverChoose">Выбрать файл</label>
+                                <input type="file" id="articleCoverFile" accept="image/jpeg,image/png,image/webp" style="display:none;" onchange="uploadArticleCover(this)">
+                                <button type="button" class="btn btn-secondary" id="articleCoverRemove" onclick="removeArticleCover()" data-i18n="admin.articles.form.coverRemove">Убрать</button>
+                                <span id="articleCoverStatus" class="article-cover-status"></span>
+                            </div>
+                        </div>
+                        <input type="text" id="articleCoverUrl" class="form-input" oninput="onArticleCoverUrlInput()" data-i18n-placeholder="admin.articles.form.coverUrl" placeholder="…или вставьте https:// ссылку на изображение">
+                        <p class="article-field-error" data-article-error="cover_url" style="display:none;"></p>
+                    </div>
+                </div>
+
+                <div class="form-section">
+                    <div class="kpi-view-switcher article-lang-tabs" role="tablist" aria-label="Language">
+                        <button type="button" class="kpi-view-btn is-active" data-article-lang-tab="ru" role="tab" aria-selected="true" onclick="switchArticleEditorLang('ru')">RU</button>
+                        <button type="button" class="kpi-view-btn" data-article-lang-tab="en" role="tab" aria-selected="false" onclick="switchArticleEditorLang('en')">EN</button>
+                        <button type="button" class="kpi-view-btn" data-article-lang-tab="kk" role="tab" aria-selected="false" onclick="switchArticleEditorLang('kk')">KZ</button>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label" for="articleLangTitle"><span><span data-i18n="admin.articles.form.title">Заголовок</span> (<span data-article-lang-label>RU</span>)</span></label>
+                        <input type="text" id="articleLangTitle" class="form-input" maxlength="200">
+                        <p class="article-field-error" data-article-error="lang_title" style="display:none;"></p>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label" for="articleLangTeaser"><span><span data-i18n="admin.articles.form.teaser">Анонс</span> (<span data-article-lang-label>RU</span>)</span></label>
+                        <textarea id="articleLangTeaser" class="form-input" rows="2" maxlength="400"></textarea>
+                        <p class="article-field-error" data-article-error="lang_teaser" style="display:none;"></p>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label" for="articleLangAuthor"><span><span data-i18n="admin.articles.form.author">Автор</span> (<span data-article-lang-label>RU</span>)</span></label>
+                        <input type="text" id="articleLangAuthor" class="form-input" maxlength="120">
+                        <p class="article-field-error" data-article-error="lang_author" style="display:none;"></p>
+                    </div>
+                    <div class="form-group">
+                        <span class="form-label"><span><span data-i18n="admin.articles.form.body">Текст</span> (<span data-article-lang-label>RU</span>)</span></span>
+                        <div class="article-toolbar" role="toolbar">
+                            <button type="button" onmousedown="event.preventDefault()" onclick="articleFormat('bold')" data-i18n-title="admin.articles.toolbar.bold" title="Bold"><b>B</b></button>
+                            <button type="button" onmousedown="event.preventDefault()" onclick="articleFormat('italic')" data-i18n-title="admin.articles.toolbar.italic" title="Italic"><i>I</i></button>
+                            <button type="button" onmousedown="event.preventDefault()" onclick="articleFormat('h2')" data-i18n-title="admin.articles.toolbar.h2" title="Heading">H2</button>
+                            <button type="button" onmousedown="event.preventDefault()" onclick="articleFormat('h3')" data-i18n-title="admin.articles.toolbar.h3" title="Subheading">H3</button>
+                            <button type="button" onmousedown="event.preventDefault()" onclick="articleFormat('insertUnorderedList')" data-i18n-title="admin.articles.toolbar.ul" title="Bulleted list">• —</button>
+                            <button type="button" onmousedown="event.preventDefault()" onclick="articleFormat('insertOrderedList')" data-i18n-title="admin.articles.toolbar.ol" title="Numbered list">1. —</button>
+                            <button type="button" onmousedown="event.preventDefault()" onclick="articleFormat('link')" data-i18n-title="admin.articles.toolbar.link" title="Link">🔗</button>
+                        </div>
+                        <div id="articleLangBody" class="article-body-editor" contenteditable="true" role="textbox" aria-multiline="true"></div>
+                        <p class="article-field-error" data-article-error="lang_body" style="display:none;"></p>
+                    </div>
+                </div>
+            </form>
+
+            <div class="modal-footer">
+                <a id="articleSiteLink" class="btn btn-secondary" target="_blank" rel="noopener" style="display:none;">
+                    <i data-lucide="external-link" style="width: 16px; height: 16px;"></i>
+                    <span data-i18n="admin.articles.openOnSite">Открыть на сайте</span>
+                </a>
+                <button type="button" class="btn btn-secondary" onclick="closeArticleEditor()" data-i18n="admin.articles.cancel">Отмена</button>
+                <button type="submit" form="articleEditorForm" class="btn btn-primary" id="articleSaveBtn" data-i18n="admin.articles.save">Сохранить</button>
+            </div>
+        </div>
+    </div>
+
     <div id="tournamentAdminModal" class="modal">
         <div class="modal-overlay" onclick="closeTournamentAdminModal()"></div>
         <div class="modal-content">
@@ -3152,6 +3373,7 @@
     <script src="crud-handlers.js?v=1794100000"></script>
     <script src="crud-management.js?v=1779360000"></script>
     <script src="admin-v2.js?v=1794300000"></script>
+    <script src="articles-admin.js?v=1795000000"></script>
     <script>
         // DEBUG: Check DOM values after 3 seconds
         setTimeout(() => {

@@ -164,6 +164,8 @@ function updateMenuVisibility() {
     const moreMenuSessions = document.getElementById('moreMenuSessions');
     const menuTournamentsAdmin = document.getElementById('menuTournamentsAdmin');
     const moreMenuTournamentsAdmin = document.getElementById('moreMenuTournamentsAdmin');
+    const menuArticles = document.getElementById('menuArticles');
+    const moreMenuArticles = document.getElementById('moreMenuArticles');
 
     // Admins see everything
     if (userRole.role === 'admin') {
@@ -174,6 +176,7 @@ function updateMenuVisibility() {
         if (menuDataManagement) menuDataManagement.style.display = 'flex';
         if (menuAttendance) menuAttendance.style.display = 'flex';
         if (menuTournamentsAdmin) menuTournamentsAdmin.style.display = 'flex';
+        if (menuArticles) menuArticles.style.display = 'flex';
         if (managementSectionTitle) managementSectionTitle.style.display = 'block';
 
         // Mirror onto mobile More-menu twins
@@ -183,6 +186,7 @@ function updateMenuVisibility() {
         if (moreMenuManageBranches) moreMenuManageBranches.style.display = 'flex';
         if (moreMenuDataManagement) moreMenuDataManagement.style.display = 'flex';
         if (moreMenuTournamentsAdmin) moreMenuTournamentsAdmin.style.display = 'flex';
+        if (moreMenuArticles) moreMenuArticles.style.display = 'flex';
 
         // Analytics - Grant access to specific admin emails
         const userEmail = sessionStorage.getItem('userEmail');
@@ -386,6 +390,9 @@ function navigateToSection(sectionName) {
             break;
         case 'tournamentsAdmin':
             showTournamentManagement(false);
+            break;
+        case 'articlesAdmin':
+            showArticlesManagement(false);
             break;
         default:
             // Default to students section
@@ -1040,6 +1047,10 @@ function showSection(section) {
         if (typeof showTournamentManagement === 'function') {
             showTournamentManagement();
         }
+    } else if (section === 'articlesAdmin') {
+        if (typeof showArticlesManagement === 'function') {
+            showArticlesManagement();
+        }
     }
 
     // Update mobile bottom nav active state
@@ -1303,7 +1314,7 @@ function refreshCoachesListView() {
 
 // Update mobile bottom navigation active state
 function updateMobileBottomNav(activeSection) {
-    const moreSubSections = ['userActivity', 'statusHistory', 'sessions', 'ratings', 'coachActivity', 'coachKpi', 'moreMenu', 'appAccess', 'manageCoaches', 'manageBranches', 'dataManagement', 'tournamentsAdmin'];
+    const moreSubSections = ['userActivity', 'statusHistory', 'sessions', 'ratings', 'coachActivity', 'coachKpi', 'moreMenu', 'appAccess', 'manageCoaches', 'manageBranches', 'dataManagement', 'tournamentsAdmin', 'articlesAdmin'];
     const effectiveSection = moreSubSections.includes(activeSection) ? 'settings' : activeSection;
     
     const mobileNavItems = document.querySelectorAll('.mobile-nav-item');
@@ -3186,7 +3197,8 @@ const mobileSectionTitles = {
     manageCoaches: 'admin.sidebar.manageCoaches',
     manageBranches: 'admin.sidebar.manageBranches',
     dataManagement: 'admin.sidebar.dataManagement',
-    tournamentsAdmin: 'admin.tournaments.title'
+    tournamentsAdmin: 'admin.tournaments.title',
+    articlesAdmin: 'admin.articles.title'
 };
 
 // Show mobile section (called from bottom nav)
@@ -3227,7 +3239,7 @@ function showMobileSection(section, event) {
     showSection(section);
 
     // For sub-sections of More, keep More tab highlighted
-    const moreSubSections = ['userActivity', 'statusHistory', 'sessions', 'ratings', 'coachActivity', 'coachKpi', 'moreMenu', 'settings', 'appAccess', 'manageCoaches', 'manageBranches', 'dataManagement', 'tournamentsAdmin'];
+    const moreSubSections = ['userActivity', 'statusHistory', 'sessions', 'ratings', 'coachActivity', 'coachKpi', 'moreMenu', 'settings', 'appAccess', 'manageCoaches', 'manageBranches', 'dataManagement', 'tournamentsAdmin', 'articlesAdmin'];
     if (moreSubSections.includes(section)) {
         const moreBtn = document.querySelector('.mobile-nav-item[data-section="settings"]');
         if (moreBtn) {

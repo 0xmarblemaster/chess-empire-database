@@ -6134,6 +6134,22 @@ tr[data-student-id] {
         padding: 0 16px 16px;
     }
 
+    /* Articles Management — same as Tournament Management: re-expose the section
+       header (tabs + New article), swap the articles table for cards, and let
+       the narrow keys table scroll sideways. */
+    #articlesAdminSection .header { display: flex; flex-direction: column; align-items: stretch; gap: .75rem; padding: 16px 20px 0; margin-bottom: 0; }
+    #articlesAdminSection .header-title { display: none; }
+    #articlesAdminSection .header-actions { flex-direction: column; align-items: stretch; gap: .75rem; margin-right: 0; width: 100%; }
+    #articlesAdminSection .header-actions .btn,
+    #articlesAdminSection .header-actions .kpi-view-switcher { width: 100%; justify-content: center; }
+    #articlesAdminTabArticles, #articlesAdminTabKeys { padding: 1rem 16px; }
+    #articlesAdminSection .articles-table { display: none; }
+    #articlesAdminSection .articles-cards { display: block; }
+    #articlesAdminSection .article-card .action-buttons { flex-direction: row; }
+    #articlesAdminTabKeys .table-wrapper { display: block; overflow-x: auto; -webkit-overflow-scrolling: touch; }
+    #articlesAdminTabKeys table { min-width: 560px; }
+    #articlesAdminSection .articles-filters { grid-template-columns: 1fr; }
+
     /* Summary stat strip */
     .tm-stats {
         display: flex;
@@ -6439,3 +6455,43 @@ tr[data-student-id] {
 .sortable-th-icon { display: inline-flex; }
 .sortable-th-icon svg { width: 13px; height: 13px; }
 .mobile-card-detail-full { grid-column: 1 / -1; }
+
+/* ---------- Articles Management (#articlesAdminSection + #articleEditorModal) ---------- */
+.articles-filters { display: grid; grid-template-columns: 1fr auto; gap: .75rem; margin-bottom: 1rem; }
+.articles-cards { display: none; }
+.article-status-badge { display: inline-flex; padding: .25rem .75rem; border-radius: 9999px; font-size: .75rem; font-weight: 600; white-space: nowrap; }
+.article-status-badge.is-published { background: #d1fae5; color: #065f46; }
+.article-status-badge.is-draft { background: #f1f5f9; color: #475569; }
+.article-card { background: #fff; border: 1px solid #e2e8f0; border-radius: 1rem; padding: 1rem; margin-bottom: .75rem; }
+.article-card-head { display: flex; justify-content: space-between; align-items: flex-start; gap: .5rem; }
+.article-card-title { font-weight: 600; color: #0f172a; }
+.article-card-meta { font-size: .75rem; color: #64748b; margin: .25rem 0 .75rem; }
+.articles-empty { text-align: center; padding: 1.5rem; color: #94a3b8; }
+.articles-keys-hint { font-size: .875rem; color: #475569; margin-bottom: 1rem; max-width: 48rem; }
+.articles-key-form { display: flex; gap: .75rem; align-items: flex-end; flex-wrap: wrap; background: #fff; border: 1px solid #e2e8f0; border-radius: 1rem; padding: 1rem; margin-bottom: 1rem; }
+.articles-new-key { border: 1px solid #fcd34d; background: #fffbeb; color: #78350f; border-radius: 1rem; padding: 1rem; margin-bottom: 1rem; font-size: .875rem; }
+.articles-new-key-row { display: flex; gap: .5rem; flex-wrap: wrap; margin-top: .5rem; }
+.articles-new-key-row code { flex: 1; min-width: 12rem; background: #fff; border: 1px solid #fde68a; border-radius: .5rem; padding: .5rem .75rem; font-family: monospace; word-break: break-all; user-select: all; color: #0f172a; }
+.article-field-error { color: #dc2626; font-size: .75rem; margin-top: .25rem; }
+.article-checkbox { display: flex; align-items: center; gap: .5rem; font-size: .875rem; font-weight: 500; color: #334155; margin: .5rem 0 1rem; }
+.article-checkbox input { width: 1.125rem; height: 1.125rem; }
+.article-cover { display: flex; align-items: center; gap: 1rem; flex-wrap: wrap; margin-bottom: .5rem; }
+.article-cover img, .article-cover-placeholder { width: 9rem; height: 6rem; border-radius: .5rem; object-fit: cover; }
+.article-cover-placeholder { display: flex; align-items: center; justify-content: center; background: #f1f5f9; color: #94a3b8; font-size: 2rem; }
+.article-cover-actions { display: flex; gap: .5rem; align-items: center; flex-wrap: wrap; }
+.article-cover-status { font-size: .8125rem; color: #64748b; }
+.article-lang-tabs { margin-bottom: 1rem; }
+.article-lang-tabs .kpi-view-btn.has-error::after { content: ' ●'; color: #dc2626; }
+.article-toolbar { display: flex; flex-wrap: wrap; gap: .25rem; border: 1px solid #e2e8f0; border-bottom: 0; border-radius: .5rem .5rem 0 0; background: #f8fafc; padding: .375rem; }
+.article-toolbar button { min-width: 2.25rem; height: 2.25rem; padding: 0 .5rem; border-radius: .375rem; font-size: .8125rem; color: #334155; }
+.article-toolbar button:hover { background: #e2e8f0; }
+.article-body-editor { min-height: 16rem; max-height: 50vh; overflow-y: auto; border: 1px solid #e2e8f0; border-radius: 0 0 .5rem .5rem; padding: .75rem 1rem; font-size: .9375rem; line-height: 1.6; color: #0f172a; background: #fff; }
+.article-body-editor:focus { outline: 2px solid #6366f1; outline-offset: -1px; }
+.article-body-editor h2 { font-size: 1.375rem; font-weight: 700; margin: 1rem 0 .5rem; }
+.article-body-editor h3 { font-size: 1.125rem; font-weight: 600; margin: .75rem 0 .5rem; }
+.article-body-editor p { margin: 0 0 .75rem; }
+.article-body-editor ul { list-style: disc; padding-left: 1.5rem; margin-bottom: .75rem; }
+.article-body-editor ol { list-style: decimal; padding-left: 1.5rem; margin-bottom: .75rem; }
+.article-body-editor a { color: #4f46e5; text-decoration: underline; }
+#articleEditorModal .modal-footer { flex-wrap: wrap; }
+#articleSiteLink { margin-right: auto; display: inline-flex; align-items: center; gap: .375rem; }
