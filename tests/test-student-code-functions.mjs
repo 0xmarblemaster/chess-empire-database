@@ -98,8 +98,10 @@ assert(/select\('attendance_date, student_id, students\(student_code\), status/.
 
 console.log('\n=== analytics-tournaments =============================================\n');
 const tr = SRC['analytics-tournaments'];
-assert(/student_code: p\.student\?\.student_code \|\| null/.test(tr), 'detail participants carry student_code');
-assert(/student_code: s\.studentCode/.test(tr), 'branch_leaderboard rows carry student_code');
+// detail / branch_leaderboard row shaping moved into roster-logic.mjs (2026-11-24).
+const trLogic = fs.readFileSync(path.join(ROOT, 'supabase', 'functions', 'analytics-tournaments', 'roster-logic.mjs'), 'utf8');
+assert(/student_code: s\?\.student_code \?\? null/.test(trLogic.slice(trLogic.indexOf('export function registrationRow'))), 'detail registrations carry student_code');
+assert(/student_code: s\.student_code,/.test(trLogic.slice(trLogic.indexOf('export function branchLeaderboard'))), 'branch_leaderboard rows carry student_code');
 assert(/student_code: \(s as any\)\.student_code/.test(tr), 'coach_kpi_summary per-student rows carry student_code');
 const drill = tr.slice(tr.indexOf("metric === 'active_players'"));
 const drillRows = drill.match(/student_id: (slot|r|e)\.student_id,\s*student_code: s\.student_code \|\| null,/g) || [];
