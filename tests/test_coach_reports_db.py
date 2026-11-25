@@ -195,7 +195,7 @@ def setup_db(psycopg2, port, dbname):
     conn.autocommit = True
     cur = conn.cursor()
     cur.execute(STUB_SCHEMA)
-    cur.execute(extract_fn(os.path.join(MIG, '039_tournament_results.sql'), 'razryad_rank'))
+    cur.execute(extract_fn(os.path.join(ROOT, 'migrations', '039_tournament_results.sql'), 'razryad_rank'))
     mig = open(os.path.join(MIG, '101_coach_reports.sql')).read()
     cur.execute(mig)
     cur.execute(mig)
