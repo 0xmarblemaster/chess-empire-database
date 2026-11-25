@@ -108,6 +108,29 @@ function filterExcludedSlots(resolved, exclusionRows) {
 }
 window.filterExcludedSlots = filterExcludedSlots;
 
+// students column lists. Migration 107 revokes anon SELECT on the private
+// (staff-only) columns, so any logged-out query naming one of them — or using
+// `*` — fails with 42501. Public pages must select STUDENT_PUBLIC_COLUMNS.
+const STUDENT_PUBLIC_COLUMNS = 'id, first_name, last_name, age, date_of_birth, gender, photo_url, '
+    + 'branch_id, coach_id, razryad, status, current_level, current_lesson, total_lessons, '
+    + 'created_at, updated_at, chesster_registered_at, student_code';
+const STUDENT_STAFF_COLUMNS = STUDENT_PUBLIC_COLUMNS
+    + ', parent_name, parent_phone, parent_email, chesster_email, amocrm_customer_id';
+window.STUDENT_PUBLIC_COLUMNS = STUDENT_PUBLIC_COLUMNS;
+window.STUDENT_STAFF_COLUMNS = STUDENT_STAFF_COLUMNS;
+
+// Staff columns only with a real Supabase Auth session (sessionStorage
+// userRole is UI-only); any error falls back to the public list.
+async function studentColumnsForSession() {
+    try {
+        const { data } = await window.supabaseClient.auth.getSession();
+        return data && data.session ? STUDENT_STAFF_COLUMNS : STUDENT_PUBLIC_COLUMNS;
+    } catch (_e) {
+        return STUDENT_PUBLIC_COLUMNS;
+    }
+}
+window.studentColumnsForSession = studentColumnsForSession;
+
 const supabaseData = {
     /**
      * STUDENTS
@@ -120,6 +143,7 @@ const supabaseData = {
     async getStudents() {
         const PAGE = 1000;
         const HARD_CEILING = 50;          // refuse to loop more than 50 * 1000 = 50k rows
+        const columns = await studentColumnsForSession();
         const rows = [];
         for (let page = 0; page < HARD_CEILING; page++) {
             const from = page * PAGE;
@@ -127,10 +151,7 @@ const supabaseData = {
             const { data, error } = await window.supabaseClient
                 .from('students')
                 .select(`
-                    id, student_code, first_name, last_name, age, date_of_birth, gender,
-                    photo_url, branch_id, coach_id, razryad, status,
-                    current_level, current_lesson, total_lessons,
-                    parent_name, parent_phone, parent_email, amocrm_customer_id,
+                    ${columns},
                     branch:branches(id, name, location),
                     coach:coaches(id, first_name, last_name)
                 `)
@@ -164,19 +185,20 @@ const supabaseData = {
             currentLevel: student.current_level,
             currentLesson: student.current_lesson,
             totalLessons: student.total_lessons,
-            parentName: student.parent_name,
-            parentPhone: student.parent_phone,
-            parentEmail: student.parent_email,
+            parentName: student.parent_name ?? null,
+            parentPhone: student.parent_phone ?? null,
+            parentEmail: student.parent_email ?? null,
             amocrmCustomerId: student.amocrm_customer_id ?? null
         }));
     },
 
     // Get student by ID
     async getStudentById(id) {
+        const columns = await studentColumnsForSession();
         const { data, error } = await window.supabaseClient
             .from('students')
             .select(`
-                *,
+                ${columns},
                 branch:branches(id, name, location),
                 coach:coaches(id, first_name, last_name)
             `)
@@ -205,9 +227,9 @@ const supabaseData = {
             currentLevel: data.current_level,
             currentLesson: data.current_lesson,
             totalLessons: data.total_lessons,
-            parentName: data.parent_name,
-            parentPhone: data.parent_phone,
-            parentEmail: data.parent_email,
+            parentName: data.parent_name ?? null,
+            parentPhone: data.parent_phone ?? null,
+            parentEmail: data.parent_email ?? null,
             // Chesster app registration timestamp (migration 088) + the email the
             // student registered with (migration 089). Either may be undefined if
             // the column has not been applied yet — the student card treats a
@@ -1022,10 +1044,11 @@ const supabaseData = {
      */
 
     async searchStudents(query) {
+        const columns = await studentColumnsForSession();
         const { data, error } = await window.supabaseClient
             .from('students')
             .select(`
-                *,
+                ${columns},
                 branch:branches(name),
                 coach:coaches(first_name, last_name)
             `)

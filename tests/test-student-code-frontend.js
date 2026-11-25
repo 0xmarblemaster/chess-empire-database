@@ -157,8 +157,11 @@ assert(match(null, '00452') === false && match(undefined, '1') === false, 'missi
         const lists = [
             ...[...src.matchAll(/\.from\('students'\)\s*\.select\((`[^`]*`|'[^']*')/g)].map((m) => m[1]),
             ...[...src.matchAll(/student:students\(([^)]*)\)/g)].map((m) => m[0]),
-        ].filter((s) => /first_name/.test(s) && !/^[`']\s*\*/.test(s.trim()));
+        ].filter((s) => /first_name/.test(s) && !/^[`']\s*(\*|\$\{columns\})/.test(s.trim()));
         assert(lists.length > 0, `${file}: has explicit students lists`);
+        if (file === 'supabase-data.js') {
+            assert(/\bstudent_code\b/.test(window.STUDENT_PUBLIC_COLUMNS), 'STUDENT_PUBLIC_COLUMNS (session-helper lists) includes student_code');
+        }
         lists.forEach((s) => assert(/student_code/.test(s), `${file}: ${s.replace(/\s+/g, ' ').slice(0, 80)}`));
     }
 

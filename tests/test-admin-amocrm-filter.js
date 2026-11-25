@@ -158,7 +158,10 @@ console.log('\nsupabase-data.js getStudents');
 {
     const fn = DATA_SRC.slice(DATA_SRC.indexOf('async getStudents()'), DATA_SRC.indexOf('async getStudentById('));
     const select = fn.match(/\.select\(`([\s\S]*?)`\)/)[1];
-    assert(/\bamocrm_customer_id\b/.test(select), 'select includes amocrm_customer_id');
+    assert(/\$\{columns\}/.test(select) && /const columns = await studentColumnsForSession\(\)/.test(fn),
+        'select uses studentColumnsForSession() (staff session gets amocrm_customer_id)');
+    const staff = DATA_SRC.match(/const STUDENT_STAFF_COLUMNS = STUDENT_PUBLIC_COLUMNS\s*\+\s*'([^']*)'/);
+    assert(staff && /\bamocrm_customer_id\b/.test(staff[1]), 'STUDENT_STAFF_COLUMNS includes amocrm_customer_id');
     assert(fn.includes('amocrmCustomerId: student.amocrm_customer_id ?? null'), 'mapping sets amocrmCustomerId');
 }
 

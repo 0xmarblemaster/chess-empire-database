@@ -448,11 +448,12 @@ body {
     color: #ef4444;
 }
 
-/* Staff-only reference row: Chesster status + amoCRM ID side by side. */
+/* Staff-only reference row: Chesster status + amoCRM ID + parent phone. The
+   phone tile gets a little extra width so its three buttons fit. */
 .overview-mobile-grid .staff-reference-row {
     grid-column: 1 / -1;
     display: grid;
-    grid-template-columns: 1fr 1fr;
+    grid-template-columns: 1fr 1fr 1.25fr;
     gap: 1.5rem;
 }
 
@@ -509,6 +510,91 @@ body {
     border-radius: 0.5rem;
     padding: 0.25rem 0.6rem;
     cursor: pointer;
+}
+
+/* Parent phone tile: linked = amoCRM blue family, empty = amoCRM "not linked". */
+.parent-phone-banner.parent-phone--linked {
+    background: linear-gradient(135deg, #eff6ff 0%, #dbeafe 100%);
+    border-color: #3b82f6;
+}
+
+.parent-phone-banner.parent-phone--linked .chesster-status-label {
+    color: #1d4ed8;
+}
+
+.parent-phone-banner.parent-phone--linked .chesster-status-value {
+    color: #1e3a8a;
+}
+
+.parent-phone-banner.parent-phone--empty {
+    background: linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%);
+    border-color: #cbd5e1;
+}
+
+.parent-phone-banner.parent-phone--empty .chesster-status-label {
+    color: #64748b;
+}
+
+.parent-phone-banner.parent-phone--empty .chesster-status-value {
+    color: #94a3b8;
+}
+
+.parent-phone-value {
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+}
+
+.parent-phone-actions {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.parent-phone-btn {
+    display: inline-flex;
+    align-items: center;
+    font-size: 0.875rem;
+    font-weight: 600;
+    color: #fff;
+    border-radius: 0.5rem;
+    padding: 0.4rem 0.85rem;
+    text-decoration: none;
+}
+
+.parent-phone-call {
+    background: #1d4ed8;
+}
+
+.parent-phone-whatsapp {
+    background: #25d366;
+}
+
+.parent-phone-copy {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    color: #1d4ed8;
+    background: #fff;
+    border: 1px solid #bfdbfe;
+    border-radius: 0.5rem;
+    padding: 0.4rem 0.55rem;
+    cursor: pointer;
+}
+
+.parent-phone-copy.is-copied {
+    color: #047857;
+    border-color: #10b981;
+}
+
+@media (max-width: 1024px) {
+    .overview-mobile-grid .staff-reference-row {
+        grid-template-columns: 1fr 1fr;
+    }
+
+    .overview-mobile-grid .staff-reference-row .parent-phone-banner {
+        grid-column: 1 / -1;
+    }
 }
 
 @media (max-width: 768px) {

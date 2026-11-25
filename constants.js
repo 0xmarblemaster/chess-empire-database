@@ -413,6 +413,21 @@ function sortScheduleChips(schedules) {
 }
 
 // ============================================
+// PARENT PHONE (staff-only tile on the student profile)
+// ============================================
+// "+77012345678" -> "+7 701 234 56 78"; anything else is returned unchanged; null -> "".
+function formatPhoneDisplay(phone) {
+    const s = phone == null ? '' : String(phone);
+    const m = /^\+7(\d{3})(\d{3})(\d{2})(\d{2})$/.exec(s);
+    return m ? `+7 ${m[1]} ${m[2]} ${m[3]} ${m[4]}` : s;
+}
+
+// Digits only: "+7 (701) 234-56-78" -> "77012345678"; null -> "".
+function phoneDigits(phone) {
+    return phone == null ? '' : String(phone).replace(/\D/g, '');
+}
+
+// ============================================
 // EXPORT TO GLOBAL SCOPE
 // ============================================
 window.CHESS_BOTS = CHESS_BOTS;
@@ -442,3 +457,5 @@ window.SCHEDULE_CHIP_DAYS = SCHEDULE_CHIP_DAYS;
 window.SCHEDULE_CHIP_ORDER = SCHEDULE_CHIP_ORDER;
 window.formatScheduleTime = formatScheduleTime;
 window.sortScheduleChips = sortScheduleChips;
+window.formatPhoneDisplay = formatPhoneDisplay;
+window.phoneDigits = phoneDigits;

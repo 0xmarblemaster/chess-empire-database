@@ -57,8 +57,13 @@ const ctx = vm.createContext({
         removeItem: (k) => { delete storage[k]; }
     }
 });
-const FNS = ['isLoggedIn', 'escapeHtmlSafe', 'renderChessterStatusBox', 'renderAmocrmIdBox', 'renderStaffReferenceRow'];
-vm.runInContext(FNS.map((n) => extractFunction(STUDENT_SRC, n)).join('\n\n'), ctx);
+const FNS = ['isLoggedIn', 'escapeHtmlSafe', 'renderChessterStatusBox', 'renderAmocrmIdBox', 'renderParentPhoneBox', 'renderStaffReferenceRow'];
+// Phone helpers used by renderParentPhoneBox live in constants.js.
+const CONSTANTS_SRC = fs.readFileSync(path.join(ROOT, 'constants.js'), 'utf8');
+vm.runInContext([
+    ...['formatPhoneDisplay', 'phoneDigits'].map((n) => extractFunction(CONSTANTS_SRC, n)),
+    ...FNS.map((n) => extractFunction(STUDENT_SRC, n)),
+].join('\n\n'), ctx);
 // Same guarded expression the overview template uses.
 const renderGuarded = (student) => vm.runInContext(
     `isLoggedIn() ? renderStaffReferenceRow(student) : ''`,
@@ -90,7 +95,7 @@ assert(!evil.includes('<script>') && evil.includes('&quot;&gt;&lt;script&gt;'), 
 
 console.log('\n=== staff reference row visibility ===================================\n');
 
-const student = { chessterRegisteredAt: '2026-01-01T00:00:00Z', chessterEmail: 'parent@example.com', amocrmCustomerId: 882213 };
+const student = { chessterRegisteredAt: '2026-01-01T00:00:00Z', chessterEmail: 'parent@example.com', amocrmCustomerId: 882213, parentPhone: '+77012345678' };
 
 storage.userRole = JSON.stringify({ role: 'coach' });
 const loggedIn = renderGuarded(student);
@@ -101,8 +106,9 @@ assert(loggedIn.includes('parent@example.com'), 'logged in: Chesster email shown
 delete storage.userRole;
 const loggedOut = renderGuarded(student);
 assert(loggedOut === '', 'logged out: guarded expression yields empty string');
-assert(!loggedOut.includes('Chesster App') && !loggedOut.includes('amoCRM ID') && !loggedOut.includes('parent@example.com'),
-    'logged out: no Chesster, amoCRM or email markup');
+assert(!loggedOut.includes('Chesster App') && !loggedOut.includes('amoCRM ID') && !loggedOut.includes('parent@example.com')
+    && !loggedOut.includes('7012345678'),
+    'logged out: no Chesster, amoCRM, email or phone markup');
 
 console.log('\n=== source contracts =================================================\n');
 
@@ -111,14 +117,15 @@ const rowFn = extractFunction(STUDENT_SRC, 'renderStaffReferenceRow');
 assert(STUDENT_SRC.split('${renderChessterStatusBox(').length - 1 === 1 && rowFn.includes('renderChessterStatusBox(student)'),
     'renderChessterStatusBox is only called from renderStaffReferenceRow (never unguarded)');
 assert((STUDENT_SRC.match(/chessterEmail/g) || []).length === 2, 'chessterEmail is only read inside renderChessterStatusBox');
-assert(/closest\('\.amocrm-copy'\)/.test(STUDENT_SRC) && /navigator\.clipboard\.writeText\(button\.dataset\.amocrmId\)/.test(STUDENT_SRC),
+assert(/closest\('\.amocrm-copy, \.parent-phone-copy'\)/.test(STUDENT_SRC) && /: button\.dataset\.amocrmId;/.test(STUDENT_SRC)
+    && /navigator\.clipboard\.writeText\(value\)/.test(STUDENT_SRC),
     'copy uses a delegated listener reading the data attribute');
 
 const DATA_SRC = fs.readFileSync(path.join(ROOT, 'supabase-data.js'), 'utf8');
 assert(DATA_SRC.includes('amocrmCustomerId: data.amocrm_customer_id ?? null'), 'supabase-data.js maps amocrmCustomerId with ??');
 
 const CSS = fs.readFileSync(path.join(ROOT, 'student-styles.css'), 'utf8');
-assert(/\.overview-mobile-grid \.staff-reference-row\s*\{[^}]*grid-template-columns: 1fr 1fr/.test(CSS), 'desktop: two equal columns');
+assert(/\.overview-mobile-grid \.staff-reference-row\s*\{[^}]*grid-template-columns: 1fr 1fr 1\.25fr/.test(CSS), 'desktop: three columns (phone tile slightly wider)');
 assert(/@media \(max-width: 768px\)\s*\{\s*\.overview-mobile-grid \.staff-reference-row\s*\{[^}]*grid-template-columns: 1fr;[^}]*order: 0/.test(CSS),
     'mobile: one column, order 0');
 assert(/\.amocrm-status-banner\.amocrm-status--linked\s*\{[^}]*#3b82f6/.test(CSS), 'linked banner is blue');

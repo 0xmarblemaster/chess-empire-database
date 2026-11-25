@@ -361,6 +361,11 @@
     const SUPABASE_URL = window.supabaseConfig.url;
     const SUPABASE_KEY = window.supabaseConfig.anonKey;
     const sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+    // Public page (no supabase-data.js): same list as STUDENT_PUBLIC_COLUMNS there.
+    // anon has no SELECT on parent_* / chesster_email / amocrm_customer_id (migration 107).
+    const STUDENT_PUBLIC_COLUMNS = 'id, first_name, last_name, age, date_of_birth, gender, photo_url, '
+        + 'branch_id, coach_id, razryad, status, current_level, current_lesson, total_lessons, '
+        + 'created_at, updated_at, chesster_registered_at, student_code';
 
     const MONTHS_RU = ['Январь','Февраль','Март','Апрель','Май','Июнь','Июль','Август','Сентябрь','Октябрь','Ноябрь','Декабрь'];
 
@@ -569,7 +574,7 @@
         try {
             // Parallel fetch
             const [studentRes, attendanceRes, ratingsRes, botsRes, puzzlesRes, bestPuzzleAllTimeRes, bestBotAllTimeRes, tournamentsRes] = await Promise.all([
-                sb.from('students').select('*, branches(name), coaches(first_name, last_name)').eq('id', studentId).single(),
+                sb.from('students').select(`${STUDENT_PUBLIC_COLUMNS}, branches(name), coaches(first_name, last_name)`).eq('id', studentId).single(),
                 sb.from('attendance').select('*').eq('student_id', studentId).gte('attendance_date', monthStart).lt('attendance_date', monthEnd).order('attendance_date'),
                 sb.from('student_ratings').select('*').eq('student_id', studentId).gte('rating_date', monthStart).lt('rating_date', monthEnd).order('rating_date'),
                 sb.from('bot_battles').select('*').eq('student_id', studentId).gte('defeated_at', monthStart).lt('defeated_at', monthEnd),

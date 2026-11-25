@@ -498,23 +498,89 @@ function renderAmocrmIdBox(student) {
     `;
 }
 
-// Staff-only reference row: Chesster status + amoCRM ID side by side.
-// Callers must gate this behind isLoggedIn() so public profiles get no markup.
-function renderStaffReferenceRow(student) {
-    return `<div class="staff-reference-row mobile-order-0">${renderChessterStatusBox(student)}${renderAmocrmIdBox(student)}</div>`;
+// Render the parent phone tile (staff-only, synced from amoCRM into
+// students.parent_phone). Call / WhatsApp / copy buttons only when the value
+// has at least 7 digits; otherwise the raw text is shown on its own.
+// formatPhoneDisplay / phoneDigits live in constants.js.
+function renderParentPhoneBox(student) {
+    const phone = student && student.parentPhone ? String(student.parentPhone) : '';
+    if (!phone) {
+        return `
+        <div class="chesster-status-banner parent-phone-banner parent-phone--empty">
+            <div class="info-label chesster-status-label">
+                <i data-lucide="phone" style="width: 14px; height: 14px;"></i>
+                ${escapeHtmlSafe(t('amocrm.phoneLabel') || 'Parent phone')}
+            </div>
+            <div class="chesster-status-main">
+                <div class="info-value chesster-status-value">
+                    <i data-lucide="phone-off" style="width: 18px; height: 18px;"></i>
+                    <span>${escapeHtmlSafe(t('amocrm.noPhone') || 'No phone')}</span>
+                </div>
+            </div>
+        </div>
+    `;
+    }
+
+    const digits = phoneDigits(phone);
+    const copyLabel = escapeHtmlSafe(t('amocrm.copy') || 'Copy');
+    const buttons = digits.length >= 7
+        ? `<div class="parent-phone-actions">
+                    <a class="parent-phone-btn parent-phone-call" href="tel:+${digits}">${escapeHtmlSafe(t('amocrm.call') || 'Call')}</a>
+                    <a class="parent-phone-btn parent-phone-whatsapp" href="https://wa.me/${digits}" target="_blank" rel="noopener noreferrer">${escapeHtmlSafe(t('amocrm.whatsapp') || 'WhatsApp')}</a>
+                    <button type="button" class="parent-phone-copy" data-phone="${escapeHtmlSafe(phone)}" title="${copyLabel}" aria-label="${copyLabel}">
+                        <i data-lucide="copy" style="width: 14px; height: 14px;"></i>
+                    </button>
+                </div>`
+        : '';
+
+    return `
+        <div class="chesster-status-banner parent-phone-banner parent-phone--linked">
+            <div class="info-label chesster-status-label">
+                <i data-lucide="phone" style="width: 14px; height: 14px;"></i>
+                ${escapeHtmlSafe(t('amocrm.phoneLabel') || 'Parent phone')}
+            </div>
+            <div class="chesster-status-main">
+                <div class="info-value chesster-status-value">
+                    <span class="parent-phone-value">${escapeHtmlSafe(formatPhoneDisplay(phone))}</span>
+                </div>
+                ${buttons}
+            </div>
+        </div>
+    `;
 }
 
-// Delegated click handler for the amoCRM ID copy button (value comes from the
-// data attribute, never interpolated into inline JS).
+// Staff-only reference row: Chesster status + amoCRM ID + parent phone.
+// Callers must gate this behind isLoggedIn() so public profiles get no markup.
+function renderStaffReferenceRow(student) {
+    return `<div class="staff-reference-row mobile-order-0">${renderChessterStatusBox(student)}${renderAmocrmIdBox(student)}${renderParentPhoneBox(student)}</div>`;
+}
+
+// Delegated click handler for the amoCRM ID and parent phone copy buttons
+// (value comes from the data attribute, never interpolated into inline JS).
 document.addEventListener('click', (event) => {
-    const button = event.target.closest && event.target.closest('.amocrm-copy');
+    const button = event.target.closest && event.target.closest('.amocrm-copy, .parent-phone-copy');
     if (!button || !navigator.clipboard) return;
-    const label = button.querySelector('span');
-    navigator.clipboard.writeText(button.dataset.amocrmId).then(() => {
+    const isPhone = button.classList.contains('parent-phone-copy');
+    const value = isPhone ? button.dataset.phone : button.dataset.amocrmId;
+    navigator.clipboard.writeText(value).then(() => {
+        const copied = t('amocrm.copied') || 'Copied';
+        const copy = t('amocrm.copy') || 'Copy';
+        if (isPhone) {
+            button.title = copied;
+            button.setAttribute('aria-label', copied);
+            button.classList.add('is-copied');
+            setTimeout(() => {
+                button.title = copy;
+                button.setAttribute('aria-label', copy);
+                button.classList.remove('is-copied');
+            }, 1500);
+            return;
+        }
+        const label = button.querySelector('span');
         if (!label) return;
-        label.textContent = t('amocrm.copied') || 'Copied';
-        setTimeout(() => { label.textContent = t('amocrm.copy') || 'Copy'; }, 1500);
-    }).catch((error) => console.error('Failed to copy amoCRM ID:', error));
+        label.textContent = copied;
+        setTimeout(() => { label.textContent = copy; }, 1500);
+    }).catch((error) => console.error('Failed to copy:', error));
 });
 
 // Render puzzle score rank info boxes for the survival/puzzle tab
@@ -1361,7 +1427,7 @@ async function renderProfile() {
         <!-- Tab Content -->
         <div class="tab-content active" id="tab-overview">
             <div class="overview-mobile-grid">
-                <!-- Mobile order: 0. Staff-only Chesster status + amoCRM ID -->
+                <!-- Mobile order: 0. Staff-only Chesster status + amoCRM ID + parent phone -->
                 ${isLoggedIn() ? renderStaffReferenceRow(student) : ''}
 
                 <!-- Mobile order: 1. Branch rank, 2. School rank -->
