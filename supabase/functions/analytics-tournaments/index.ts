@@ -284,7 +284,7 @@ serve(async (req) => {
       const asOf = new Date().toISOString()
 
       let pageQuery = supabase.from('students')
-        .select('id, student_code, first_name, last_name, branch_id, coach_id, razryad, status, current_level, amocrm_customer_id')
+        .select('id, student_code, first_name, last_name, branch_id, coach_id, razryad, status, current_level, amocrm_customer_id, created_at')
         .order('id', { ascending: true })
       let countQuery = supabase.from('students').select('id', { count: 'exact', head: true })
       if (rp.status !== 'all') {

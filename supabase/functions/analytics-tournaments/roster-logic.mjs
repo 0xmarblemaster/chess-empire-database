@@ -256,6 +256,7 @@ export function studentRosterRow(s, { branchNames = {}, coachNames = {}, ratings
     current_league: calcLeagueFromRating(ratingValue),
     razryad: s.razryad ?? null,
     amocrm_customer_id: s.amocrm_customer_id != null ? String(s.amocrm_customer_id) : null,
+    student_created_at: s.created_at ?? null,
     tournaments_total: st ? st.total : 0,
     tournaments_last_30d: st ? st.last_30d : 0,
     last_tournament_date: st ? st.last_date : null,

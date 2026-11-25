@@ -91,7 +91,7 @@ async function run() {
     console.log('\n=== studentRosterRow ===================================================\n');
     const student = {
         id: 'S1', student_code: 'CE-00959', first_name: 'Айсулу', last_name: 'Ким', branch_id: 'B1', coach_id: 'C1',
-        razryad: '4th', status: 'active', current_level: 3, amocrm_customer_id: 31234567, parent_phone: '+77001234567',
+        razryad: '4th', status: 'active', current_level: 3, amocrm_customer_id: 31234567, created_at: '2025-11-05T18:05:25.940Z', parent_phone: '+77001234567',
     };
     const lookups = {
         branchNames: { B1: 'Халык' },
@@ -104,7 +104,7 @@ async function run() {
     assertEqual(Object.keys(row), [
         'student_id', 'student_code', 'full_name', 'branch_id', 'branch_name', 'trainer_id', 'trainer_name', 'status',
         'current_level', 'admitted_to_tournaments', 'step2_date', 'step2_date_known', 'current_rating', 'current_rating_date',
-        'current_league', 'razryad', 'amocrm_customer_id', 'tournaments_total', 'tournaments_last_30d', 'last_tournament_date',
+        'current_league', 'razryad', 'amocrm_customer_id', 'student_created_at', 'tournaments_total', 'tournaments_last_30d', 'last_tournament_date',
     ], 'row has exactly the documented keys (no phone/email)');
     assertEqual(row.full_name, 'Айсулу Ким', 'full_name');
     assertEqual([row.branch_name, row.trainer_name], ['Халык', 'Иван Петров'], 'branch + trainer names resolved');
@@ -112,6 +112,7 @@ async function run() {
     assertEqual([row.step2_date, row.step2_date_known], ['2026-03-01', true], 'step2 date known');
     assertEqual([row.current_rating, row.current_rating_date, row.current_league], [513, '2026-11-22', 'B'], 'rating rounded to int, league B');
     assertEqual(row.amocrm_customer_id, '31234567', 'amocrm id as string');
+    assertEqual(row.student_created_at, '2025-11-05T18:05:25.940Z', 'student_created_at = students.created_at');
     assertEqual([row.tournaments_total, row.tournaments_last_30d, row.last_tournament_date], [13, 3, '2026-11-22'], 'tournament counts');
 
     const bare = L.studentRosterRow({ id: 'S9', first_name: 'A', last_name: '', status: 'frozen', current_level: 2, amocrm_customer_id: null });
@@ -119,6 +120,7 @@ async function run() {
     assertEqual([bare.current_rating, bare.current_rating_date, bare.current_league], [null, null, null], 'no rating → nulls');
     assertEqual([bare.tournaments_total, bare.tournaments_last_30d, bare.last_tournament_date], [0, 0, null], 'no tournaments → 0/0/null');
     assertEqual([bare.amocrm_customer_id, bare.branch_name, bare.trainer_name], [null, null, null], 'missing lookups → null');
+    assertEqual(bare.student_created_at, null, 'no created_at → null');
     const intro = L.studentRosterRow({ id: 'S8', status: 'active', current_level: 1 });
     assertEqual([intro.admitted_to_tournaments, intro.step2_date_known], [false, true], 'level 1 → not admitted, step2 null is known');
     assertEqual(L.studentRosterRow({ id: 'S7', current_level: 1 }, { ratings: { S7: { rating: 900 } } }).current_league, 'A', 'rating 900 → A');

@@ -429,6 +429,7 @@ tournaments are not linked to result uploads.
 | current_rating / current_rating_date / current_league | From `student_current_ratings`; league A > 800, B 450–800, C < 450 (migration 038); `null` without a rating |
 | razryad | `students.razryad` |
 | amocrm_customer_id | string or `null` |
+| student_created_at | `students.created_at` (ISO UTC) — when the card was created in this DB. Pre-launch students were bulk-imported around 2025-11-05, so for them it is a lower bound on study start, not the real start |
 | tournaments_total / tournaments_last_30d / last_tournament_date | Distinct uploads in `tournament_results` (all kinds); 30-day window = `tournament_date >= as_of date − 30 days` (UTC) |
 
 No phone or email fields are returned.
