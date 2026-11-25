@@ -117,6 +117,11 @@ components:
         phone: { type: [string, 'null'] }
         coach_id: { type: [string, 'null'], format: uuid, description: 'Assigned coach; always null in phone-lookup results' }
         coach: { type: [string, 'null'], description: 'Coach display name "First Last"; always null in phone-lookup results' }
+        date_of_birth:
+          type: [string, 'null']
+          format: date
+          example: '2016-05-20'
+          description: Date of birth, YYYY-MM-DD exactly as stored (no timezone conversion); null when unknown
     StudentSelector:
       type: object
       description: One selector; precedence student_code > student_id > amocrm_customer_id > phone
@@ -224,7 +229,8 @@ paths:
         that student (Buyer ID linked if it has none), several → 409 ambiguous, none → a new
         student. A matched frozen student is reactivated. Nothing is written on any 4xx.
         coach_id is only applied to a NEW student (an existing match never has its coach
-        written or overwritten) and must belong to branch_id.
+        written or overwritten) and must belong to branch_id. date_of_birth is likewise only
+        applied to a NEW student.
       requestBody:
         required: true
         content:
@@ -245,10 +251,35 @@ paths:
                     Optional coach (ids from action=coaches). Only applied when a NEW student is
                     created; ignored for an existing match. Must belong to branch_id
                     (coaches.branch_id or a coach_branches assignment). Absent / null / blank = no coach.
+                date_of_birth:
+                  type: [string, 'null']
+                  format: date
+                  example: '2016-05-20'
+                  description: >-
+                    Optional date of birth, YYYY-MM-DD — a real calendar date, year >= 1900, not in
+                    the future (Asia/Almaty). Only applied when a NEW student is created; never
+                    overwrites an existing student's date, even when it is empty (changing it is a
+                    separate operation). Stored and returned as the same string — no timezone
+                    conversion. Absent / null / blank = unknown.
+            examples:
+              with_date_of_birth:
+                value: { full_name: Ivan Ivanov, branch_id: 22222222-2222-4222-8222-222222222222, amocrm_customer_id: 123456, date_of_birth: '2016-05-20' }
       responses:
         '200': { description: 'Existing student {ok, existing:true, matched_by, student, linked?, reactivated?}' }
-        '201': { description: 'Created {ok, existing:false, student, status_history_id}' }
-        '400': { description: 'invalid_input (field: full_name, phone, branch_id, amocrm_customer_id, coach_id), invalid_branch, invalid_coach (no such coach) or coach_branch_mismatch (coach not in branch_id). Nothing is written.' }
+        '201':
+          description: 'Created {ok, existing:false, student, status_history_id}'
+          content:
+            application/json:
+              examples:
+                with_date_of_birth:
+                  value: { ok: true, existing: false, student: { id: 00000000-0000-4000-8000-00000000000f, student_code: CE-00456, name: Ivan Ivanov, status: active, amocrm_customer_id: 123456, phone: null, date_of_birth: '2016-05-20' }, status_history_id: 33333333-3333-4333-8333-333333333336 }
+        '400':
+          description: 'invalid_input (field: full_name, phone, branch_id, amocrm_customer_id, coach_id, date_of_birth), invalid_branch, invalid_coach (no such coach) or coach_branch_mismatch (coach not in branch_id). Nothing is written.'
+          content:
+            application/json:
+              examples:
+                invalid_date_of_birth:
+                  value: { ok: false, reason: invalid_input, field: date_of_birth, message: 'date_of_birth must be a real calendar date in YYYY-MM-DD format (e.g. 2016-05-20), not in the future' }
         '401': { $ref: '#/components/responses/Unauthorized' }
         '409': { description: 'ambiguous (candidates[]) or amocrm_customer_id_conflict' }
 
@@ -343,6 +374,9 @@ paths:
                 properties:
                   ok: { const: true }
                   students: { type: array, items: { $ref: '#/components/schemas/Student' } }
+              examples:
+                by_amocrm_customer_id:
+                  value: { ok: true, amocrm_customer_id: 123456, students: [{ id: 00000000-0000-4000-8000-00000000000f, student_code: CE-00456, name: Ivan Ivanov, status: active, amocrm_customer_id: 123456, phone: null, date_of_birth: '2016-05-20' }] }
         '400': { $ref: '#/components/responses/InvalidInput' }
         '401': { $ref: '#/components/responses/Unauthorized' }
 

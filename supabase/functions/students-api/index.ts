@@ -20,6 +20,8 @@
 //    same phone). A matched student that is frozen or left is reactivated.
 //  - create may set coach_id, but ONLY on a brand-new student (the coach must
 //    belong to the branch); an existing match never has its coach written.
+//  - create may set date_of_birth (YYYY-MM-DD, a real date, not in the future),
+//    likewise ONLY on a brand-new student; it is never parsed through Date.
 //  - Phones are E.164 (+<country code><number>, libphonenumber-validated);
 //    phone is optional on create when amocrm_customer_id is given.
 //  - 3-day manual guard: an API freeze/activate is refused (409) when the
@@ -126,11 +128,12 @@ function authorized(req: Request): boolean {
 
 // parent_phone is the ONLY phone-like column on students (verified against the
 // schema — there is no bare `phone` column); dedup/find match on it.
-const STUDENT_SELECT = 'id, student_code, first_name, last_name, status, branch_id, amocrm_customer_id, parent_phone, coach_id, branch:branches(name), coach:coaches(first_name, last_name)'
+const STUDENT_SELECT = 'id, student_code, first_name, last_name, status, branch_id, amocrm_customer_id, parent_phone, coach_id, date_of_birth, branch:branches(name), coach:coaches(first_name, last_name)'
 
 // Normalize both the direct-select row shape (branch:{name}) and the RPC row
 // shape (branch_name) into one public student object. The phone RPC has no
-// coach columns; findByPhone merges them in before shaping.
+// coach / date_of_birth columns; findByPhone merges them in before shaping.
+// date_of_birth is a Postgres DATE ("YYYY-MM-DD") passed through as-is.
 // deno-lint-ignore no-explicit-any
 function shape(row: any) {
   const branch = row.branch_name !== undefined
@@ -148,11 +151,13 @@ function shape(row: any) {
     amocrm_customer_id: row.amocrm_customer_id ?? null,
     phone: row.parent_phone ?? null,
     coach_id: row.coach_id ?? null,
+    date_of_birth: row.date_of_birth ?? null,
     coach: row.coach ? (`${row.coach.first_name || ''} ${row.coach.last_name || ''}`.trim() || null) : null,
   }
 }
 
 const PHONE_MESSAGE = 'phone must be a valid number in international format with its country code (E.164, e.g. +77001234567, +351912345678); KZ numbers may also be given as 8XXXXXXXXXX or 10 digits'
+const DATE_OF_BIRTH_MESSAGE = 'date_of_birth must be a real calendar date in YYYY-MM-DD format (e.g. 2016-05-20), not in the future'
 
 // deno-lint-ignore no-explicit-any
 interface Ctx { supabase: any; req: Request }
@@ -165,11 +170,11 @@ async function findByPhone(ctx: Ctx, e164: string): Promise<ReturnType<typeof sh
   if (error) throw error
   const rows = data || []
   if (rows.length === 0) return []
-  // The RPC returns no coach columns — fetch them for the matched ids so phone
-  // results carry the same coach_id / coach as every other student object.
+  // The RPC returns no coach / date_of_birth columns — fetch them for the
+  // matched ids so phone results carry the same fields as every other student.
   const { data: coachRows, error: coachErr } = await ctx.supabase
     .from('students')
-    .select('id, coach_id, coach:coaches(first_name, last_name)')
+    .select('id, coach_id, date_of_birth, coach:coaches(first_name, last_name)')
     .in('id', rows.map((r: { id: string }) => r.id))
   if (coachErr) throw coachErr
   // deno-lint-ignore no-explicit-any
@@ -178,7 +183,7 @@ async function findByPhone(ctx: Ctx, e164: string): Promise<ReturnType<typeof sh
   return rows.map((r: any) => {
     // deno-lint-ignore no-explicit-any
     const c: any = coachById.get(r.id)
-    return shape({ ...r, coach_id: c?.coach_id ?? null, coach: c?.coach ?? null })
+    return shape({ ...r, coach_id: c?.coach_id ?? null, date_of_birth: c?.date_of_birth ?? null, coach: c?.coach ?? null })
   })
 }
 
@@ -364,7 +369,10 @@ async function createStudent(ctx: Ctx): Promise<Response> {
   }
 
   const v = validateCreate(body)
-  if (!v.value) return err('invalid_input', 400, v.field === 'phone' ? { field: 'phone', message: PHONE_MESSAGE } : { field: v.field })
+  if (!v.value) {
+    const message = v.field === 'phone' ? PHONE_MESSAGE : v.field === 'date_of_birth' ? DATE_OF_BIRTH_MESSAGE : undefined
+    return err('invalid_input', 400, message ? { field: v.field, message } : { field: v.field })
+  }
 
   const r = await createStudentFlow({
     async branchExists(branchId: string) {
@@ -854,6 +862,7 @@ const OPENAPI_SPEC = {
           amocrm_customer_id: { type: 'integer', nullable: true },
           phone: { type: 'string', nullable: true, description: 'Stored parent phone (E.164 for writes through this API; null when none)' },
           coach_id: { type: 'string', format: 'uuid', nullable: true, description: 'Assigned coach (null when none)' },
+          date_of_birth: { type: 'string', format: 'date', nullable: true, example: '2016-05-20', description: 'Date of birth, YYYY-MM-DD exactly as stored (no timezone conversion); null when unknown' },
           coach: { type: 'string', nullable: true, description: 'Coach display name "First Last" (null when none)' },
         },
       },
@@ -874,12 +883,14 @@ const OPENAPI_SPEC = {
             branch_id: { type: 'string', format: 'uuid' },
             amocrm_customer_id: { type: 'integer', minimum: 1, nullable: true, description: 'amoCRM Buyer ID — unique per student (a numeric string is accepted)' },
             coach_id: { type: 'string', format: 'uuid', nullable: true, description: 'Optional coach (ids from action=coaches). Only applied when a NEW student is created; ignored for an existing match (an existing coach is never written or overwritten). Must belong to branch_id (coaches.branch_id or a coach_branches assignment). Absent / null / blank = no coach — never defaulted or guessed.' },
+            date_of_birth: { type: 'string', format: 'date', nullable: true, example: '2016-05-20', description: 'Optional date of birth, YYYY-MM-DD — a real calendar date, year >= 1900, not in the future (Asia/Almaty). Only applied when a NEW student is created; never overwrites an existing student\'s date, even when it is empty (changing it is a separate operation). Stored and returned as the same string — no timezone conversion. Absent / null / blank = unknown.' },
           },
         }, examples: {
           sibling_same_phone: { value: { full_name: 'Aru Sadykova', phone: '+7 700 123 45 67', branch_id: '22222222-2222-4222-8222-222222222222', amocrm_customer_id: 1002 } },
           international_phone: { value: { full_name: 'Maria Silva', phone: '+351 912 345 678', branch_id: '22222222-2222-4222-8222-222222222222', amocrm_customer_id: 1003 } },
           no_phone: { value: { full_name: 'Timur Akhmetov', branch_id: '22222222-2222-4222-8222-222222222222', amocrm_customer_id: 1004 } },
           with_coach: { value: { full_name: 'Dana Sadykova', phone: '+7 700 123 45 67', branch_id: '22222222-2222-4222-8222-222222222222', amocrm_customer_id: 1005, coach_id: '44444444-4444-4444-8444-444444444444' } },
+          with_date_of_birth: { value: { full_name: 'Ivan Ivanov', branch_id: '22222222-2222-4222-8222-222222222222', amocrm_customer_id: 123456, date_of_birth: '2016-05-20' } },
         } } } },
         responses: {
           '200': {
@@ -895,14 +906,16 @@ const OPENAPI_SPEC = {
               sibling_same_phone: { value: { ok: true, existing: false, student: { id: '00000000-0000-4000-8000-00000000000b', student_code: 'CE-00453', name: 'Aru Sadykova', status: 'active', amocrm_customer_id: 1002, phone: '+77001234567' }, status_history_id: '33333333-3333-4333-8333-333333333333' } },
               international_phone: { value: { ok: true, existing: false, student: { id: '00000000-0000-4000-8000-00000000000c', student_code: 'CE-00454', name: 'Maria Silva', status: 'active', amocrm_customer_id: 1003, phone: '+351912345678' }, status_history_id: '33333333-3333-4333-8333-333333333334' } },
               no_phone: { value: { ok: true, existing: false, student: { id: '00000000-0000-4000-8000-00000000000d', student_code: 'CE-00455', name: 'Timur Akhmetov', status: 'active', amocrm_customer_id: 1004, phone: null }, status_history_id: '33333333-3333-4333-8333-333333333335' } },
+              with_date_of_birth: { value: { ok: true, existing: false, student: { id: '00000000-0000-4000-8000-00000000000f', student_code: 'CE-00456', name: 'Ivan Ivanov', status: 'active', amocrm_customer_id: 123456, phone: null, date_of_birth: '2016-05-20' }, status_history_id: '33333333-3333-4333-8333-333333333336' } },
             } } },
           },
           '400': {
-            description: 'invalid_input (field names it: full_name, phone, branch_id, amocrm_customer_id, coach_id), invalid_branch, invalid_coach (no such coach) or coach_branch_mismatch (the coach does not belong to branch_id). Nothing is written.',
+            description: 'invalid_input (field names it: full_name, phone, branch_id, amocrm_customer_id, coach_id, date_of_birth), invalid_branch, invalid_coach (no such coach) or coach_branch_mismatch (the coach does not belong to branch_id). Nothing is written.',
             content: { 'application/json': { examples: {
               invalid_phone: { value: { ok: false, reason: 'invalid_input', field: 'phone', message: 'phone must be a valid number in international format with its country code (E.164, …)' } },
               phone_required_without_buyer_id: { value: { ok: false, reason: 'invalid_input', field: 'phone', message: '…' } },
               invalid_coach_id: { value: { ok: false, reason: 'invalid_input', field: 'coach_id' } },
+              invalid_date_of_birth: { value: { ok: false, reason: 'invalid_input', field: 'date_of_birth', message: 'date_of_birth must be a real calendar date in YYYY-MM-DD format (e.g. 2016-05-20), not in the future' } },
               invalid_coach: { value: { ok: false, reason: 'invalid_coach' } },
               coach_branch_mismatch: { value: { ok: false, reason: 'coach_branch_mismatch' } },
             } } },
@@ -1023,6 +1036,7 @@ const OPENAPI_SPEC = {
           '200': {
             description: '{ok, student_code, students[]}, {ok, amocrm_customer_id, students[]} or {ok, phone, students[]} — phone is the normalized E.164 value; students[] holds all matches',
             content: { 'application/json': { examples: {
+              by_amocrm_customer_id: { value: { ok: true, amocrm_customer_id: 123456, students: [{ id: '00000000-0000-4000-8000-00000000000f', student_code: 'CE-00456', name: 'Ivan Ivanov', status: 'active', amocrm_customer_id: 123456, phone: null, date_of_birth: '2016-05-20' }] } },
               shared_phone: { value: { ok: true, phone: '+77001234567', students: [{ id: '00000000-0000-4000-8000-00000000000a', student_code: 'CE-00452', name: 'Ali Sadykov', status: 'active', amocrm_customer_id: 1001, phone: '+77001234567' }, { id: '00000000-0000-4000-8000-00000000000b', student_code: 'CE-00453', name: 'Aru Sadykova', status: 'active', amocrm_customer_id: 1002, phone: '+77001234567' }] } },
             } } },
           },

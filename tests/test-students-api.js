@@ -159,8 +159,8 @@ assert(/ok\(\{ phone: norm, students: await findByPhone\(ctx, norm\) \}\)/.test(
   const fbp = INDEX.slice(INDEX.indexOf('async function findByPhone('), INDEX.indexOf('// Adapter for resolveStudentRef'));
   assert(/return rows\.map\(/.test(fbp) && /shape\(\{ \.\.\.r, coach_id:/.test(fbp),
     'findByPhone returns all RPC rows, shaped');
-  assert(/\.from\('students'\)\s*\.select\('id, coach_id, coach:coaches\(first_name, last_name\)'\)\s*\.in\('id',/.test(fbp),
-    'findByPhone merges coach_id / coach for the matched ids');
+  assert(/\.from\('students'\)\s*\.select\('id, coach_id, date_of_birth, coach:coaches\(first_name, last_name\)'\)\s*\.in\('id',/.test(fbp),
+    'findByPhone merges coach_id / date_of_birth / coach for the matched ids');
   assert(/if \(rows\.length === 0\) return \[\]/.test(fbp), 'findByPhone skips the coach query when nothing matched');
   assert(/if \(coachErr\) throw coachErr/.test(fbp), 'findByPhone surfaces coach-query errors');
   assert(!/always null in phone-lookup/.test(INDEX), 'OpenAPI no longer documents phone results as coachless');

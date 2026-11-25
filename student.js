@@ -11,6 +11,13 @@ function calculateAge(dateOfBirth) {
     return age;
 }
 
+// "YYYY-MM-DD" → "DD.MM.YYYY" by splitting the string (never via Date, so no
+// timezone can shift the day). Anything else → null.
+function formatDateOfBirth(dateOfBirth) {
+    const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(dateOfBirth || '');
+    return m ? `${m[3]}.${m[2]}.${m[1]}` : null;
+}
+
 // Update age display when date of birth changes
 function updateAgeDisplay(dateInputId, ageDisplayId) {
     const dateInput = document.getElementById(dateInputId);
@@ -1484,6 +1491,7 @@ async function renderProfile() {
                         ${t('student.age')}
                     </div>
                     <div class="info-value">${t('student.ageValue', { count: student.dateOfBirth ? calculateAge(student.dateOfBirth) : student.age })}</div>
+                    ${formatDateOfBirth(student.dateOfBirth) ? `<div class="info-date-of-birth" style="font-size: 0.8125rem; color: #64748b; margin-top: 0.25rem;">${t('student.dateOfBirth')}: ${formatDateOfBirth(student.dateOfBirth)}</div>` : ''}
                 </div>
 
                 <!-- Mobile order: 6. Branch -->

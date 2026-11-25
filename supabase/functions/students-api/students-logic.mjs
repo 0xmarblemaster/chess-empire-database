@@ -458,12 +458,35 @@ export function normalizeName(raw) {
     .normalize('NFC').trim().replace(/\s+/g, ' ').toLowerCase().replace(/ё/g, 'е');
 }
 
+// Today's calendar date in the school's timezone (Asia/Almaty), "YYYY-MM-DD".
+export function almatyToday(nowMs = Date.now()) {
+  return new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'Asia/Almaty', year: 'numeric', month: '2-digit', day: '2-digit',
+  }).format(new Date(nowMs));
+}
+
+// A real calendar date "YYYY-MM-DD", year >= 1900, not after `today`
+// ("YYYY-MM-DD"). Integer arithmetic only — never parsed via Date, so no
+// timezone can shift the day.
+export function isValidDateOfBirth(raw, today) {
+  if (typeof raw !== 'string') return false;
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(raw);
+  if (!m) return false;
+  const [y, mo, d] = [+m[1], +m[2], +m[3]];
+  if (y < 1900 || mo < 1 || mo > 12 || d < 1) return false;
+  const leap = (y % 4 === 0 && y % 100 !== 0) || y % 400 === 0;
+  const days = [31, leap ? 29 : 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31][mo - 1];
+  return d <= days && raw <= today;
+}
+
 // Validate a create body. phone is optional when amocrm_customer_id is given
 // (the Buyer ID is then the identity); absent = undefined / null / blank, and is
 // stored as null. A phone that is present but invalid is always rejected.
 // coach_id is optional (absent / null / blank → null) but must be a UUID when
-// given. Returns { value } or { field } naming the first invalid field.
-export function validateCreate(body) {
+// given. date_of_birth is optional (absent / null / blank → null) but must be
+// a valid YYYY-MM-DD date when given (see isValidDateOfBirth); it is returned
+// unchanged. Returns { value } or { field } naming the first invalid field.
+export function validateCreate(body, { today = almatyToday() } = {}) {
   const b = body && typeof body === 'object' ? body : {};
   const name = splitFullName(typeof b.full_name === 'string' ? b.full_name : '');
   if (!name) return { field: 'full_name' };
@@ -480,7 +503,10 @@ export function validateCreate(body) {
   const coachGiven = present(b.coach_id) && !(typeof b.coach_id === 'string' && b.coach_id.trim() === '');
   if (coachGiven && !isUuid(b.coach_id)) return { field: 'coach_id' };
   const coachId = coachGiven ? b.coach_id : null;
-  return { value: { ...name, full_name: b.full_name, phone, branch_id: b.branch_id, amocrm_customer_id: amo, coach_id: coachId } };
+  const dobGiven = present(b.date_of_birth) && !(typeof b.date_of_birth === 'string' && b.date_of_birth.trim() === '');
+  if (dobGiven && !isValidDateOfBirth(b.date_of_birth, today)) return { field: 'date_of_birth' };
+  const dob = dobGiven ? b.date_of_birth : null;
+  return { value: { ...name, full_name: b.full_name, phone, branch_id: b.branch_id, amocrm_customer_id: amo, coach_id: coachId, date_of_birth: dob } };
 }
 
 // Create flow for POST ?action=create, over an injected db adapter:
@@ -496,11 +522,11 @@ export function validateCreate(body) {
 // student (linking the Buyer ID when it has none; a different id → 409), several
 // → 409 ambiguous with candidates, none → (3) a NEW student with the same phone.
 // Nothing is written on any 4xx. A frozen or left match is reactivated (3-day guard
-// applies inside db.activate). coach_id is only applied to a NEW student — an
-// existing match never gets its coach written or overwritten (coaches win over
-// automation). Returns { status, body }.
+// applies inside db.activate). coach_id and date_of_birth are only applied to a
+// NEW student — an existing match never gets either written or overwritten
+// (coaches win over automation). Returns { status, body }.
 export async function createStudent(db, input) {
-  const { first_name, last_name, full_name, phone, branch_id, amocrm_customer_id: amo, coach_id = null } = input;
+  const { first_name, last_name, full_name, phone, branch_id, amocrm_customer_id: amo, coach_id = null, date_of_birth = null } = input;
   const conflict = (ownerId) => ({
     status: 409,
     body: { ok: false, reason: 'amocrm_customer_id_conflict', ...(ownerId ? { conflict_student_id: ownerId } : {}) },
@@ -554,7 +580,7 @@ export async function createStudent(db, input) {
   // New student. Defaults mirror the dashboard's addStudent() so NOT NULL
   // columns are satisfied; parent_phone stays null when no phone was given.
   const r = await db.insert({
-    first_name, last_name, branch_id, coach_id,
+    first_name, last_name, branch_id, coach_id, date_of_birth,
     parent_phone: phone,
     amocrm_customer_id: amo,
     status: 'active',
