@@ -3099,6 +3099,17 @@ async function submitEditStudent(event) {
         return;
     }
 
+    // Level can't change without the lesson number changing too
+    const levelCheck = validateLevelLessonChange(
+        { level: student.currentLevel, lesson: student.currentLesson },
+        { level: studentData.currentLevel, lesson: studentData.currentLesson }
+    );
+    if (!levelCheck.ok) {
+        showToast(t('admin.form.levelNeedsLesson'), 'warning', 6000);
+        flagLessonField('editCurrentLesson');
+        return;
+    }
+
     try {
         // Handle photo upload/removal
         const currentPhotoUrl = document.getElementById('editCurrentPhotoUrl').value;

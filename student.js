@@ -1971,6 +1971,17 @@ async function saveStudentEdits(event) {
         return;
     }
 
+    // Level can't change without the lesson number changing too
+    const levelCheck = validateLevelLessonChange(
+        { level: student.currentLevel, lesson: student.currentLesson },
+        { level: currentLevel, lesson: currentLesson }
+    );
+    if (!levelCheck.ok) {
+        showToast(t('admin.form.levelNeedsLesson'), 'warning', 6000);
+        flagLessonField('editCurrentLesson');
+        return;
+    }
+
     // Prepare student data (using camelCase for Supabase client)
     const studentData = {
         firstName: firstName,
